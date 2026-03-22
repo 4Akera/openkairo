@@ -113,6 +113,8 @@ function exampleDefs(userId: string): Omit<BlockDefinition, 'id' | 'created_at'>
       created_by: userId,
       is_universal: false,
       visible_to_roles: [],
+      default_visible_to_roles: [],
+      default_portal_visible: true,
     },
     {
       name: 'Fluid Balance Log',
@@ -152,6 +154,8 @@ function exampleDefs(userId: string): Omit<BlockDefinition, 'id' | 'created_at'>
       created_by: userId,
       is_universal: false,
       visible_to_roles: [],
+      default_visible_to_roles: [],
+      default_portal_visible: true,
     },
   ]
 }

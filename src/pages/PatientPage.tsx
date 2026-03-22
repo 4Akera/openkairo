@@ -17,7 +17,7 @@ import {
 } from '../components/ui'
 import {
   ArrowLeft, Plus, ChevronRight, Loader2, Activity, Clock,
-  CheckCircle2, XCircle, LayoutTemplate, Lock, Users, Globe,
+  CheckCircle2, XCircle, LayoutTemplate, Lock, Users,
 } from 'lucide-react'
 import PatientRecord from '../components/patient-record/PatientRecord'
 
