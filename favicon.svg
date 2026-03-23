@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="OpenKairo">
+  <rect width="32" height="32" rx="7" fill="#2563eb"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.5 8v16"/>
+    <path d="M10.5 16L22.5 8"/>
+    <path d="M10.5 16L22.5 24"/>
+  </g>
+</svg>
