@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { Button, Input, Label } from '../components/ui'
 import { Loader2 } from 'lucide-react'
+import Logo from '../components/Logo'
 
 export default function LoginPage() {
   const { user, signIn } = useAuthStore()
@@ -27,15 +28,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center gap-2.5 mb-8 justify-center">
-          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-            <svg viewBox="0 0 32 32" className="h-[22px] w-[22px]" fill="none" aria-hidden="true">
-              <g stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.5 8v16"/>
-                <path d="M10.5 16L22.5 8"/>
-                <path d="M10.5 16L22.5 24"/>
-              </g>
-            </svg>
-          </div>
+          <Logo size={36} className="rounded-lg shadow-lg shadow-blue-900/40" />
           <span className="text-xl font-semibold text-white tracking-tight">OpenKairo</span>
         </div>
 
@@ -93,7 +86,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-6">
-          EHR MVP · For authorized personnel only
+          OpenKairo · For authorized personnel only
         </p>
       </div>
     </div>

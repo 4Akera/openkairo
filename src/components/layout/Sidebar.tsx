@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils'
 import { Users, LogOut, Settings } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import ProfileModal from '../profile/ProfileModal'
+import Logo from '../Logo'
 
 const NAV = [
   { to: '/', label: 'Patients', icon: Users, end: true },
@@ -34,15 +35,7 @@ export default function Sidebar() {
 
         {/* Logo mark */}
         <div className="mb-6 shrink-0">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-900/40">
-            <svg viewBox="0 0 32 32" className="h-[22px] w-[22px]" fill="none" aria-hidden="true">
-              <g stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.5 8v16"/>
-                <path d="M10.5 16L22.5 8"/>
-                <path d="M10.5 16L22.5 24"/>
-              </g>
-            </svg>
-          </div>
+          <Logo size={36} className="rounded-xl shadow-lg shadow-blue-900/40" />
         </div>
 
         {/* Divider */}
