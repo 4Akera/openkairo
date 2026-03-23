@@ -76,6 +76,37 @@ begin
   -- 2. ROLE ASSIGNMENTS
   -- ============================================================
 
+  -- Ensure system roles exist (idempotent — safe even if schema.sql already ran)
+  insert into roles (name, slug, description, is_system, sort_order, permissions) values
+    ('System Admin', 'admin',
+     'Full access to all features including user and role management',
+     true, 10,
+     array['encounter.create','encounter.close','encounter.view_all',
+           'block.add','block.delete',
+           'patient.create','patient.edit_record','patient.view_all',
+           'admin.manage_users','admin.manage_roles',
+           'admin.manage_blocks','admin.manage_templates',
+           'admin.manage_patient_fields','template.create']),
+    ('Physician', 'physician',
+     'Full clinical access — create encounters, add all block types, edit patient records',
+     true, 20,
+     array['encounter.create','encounter.close','encounter.view_all',
+           'block.add','block.delete',
+           'patient.create','patient.edit_record','patient.view_all',
+           'template.create']),
+    ('Nurse', 'nurse',
+     'Can add blocks and view encounters; cannot create encounters or edit the master record',
+     true, 30,
+     array['encounter.view_all','block.add','patient.view_all']),
+    ('Receptionist', 'receptionist',
+     'Can register and view patients only',
+     true, 40,
+     array['patient.create','patient.view_all'])
+  on conflict (slug) do update set
+    name        = excluded.name,
+    description = excluded.description,
+    permissions = excluded.permissions;
+
   select id into v_role_admin     from roles where slug = 'admin';
   select id into v_role_physician from roles where slug = 'physician';
   select id into v_role_nurse     from roles where slug = 'nurse';
