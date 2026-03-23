@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { Button, Input, Label } from '../components/ui'
-import { Activity, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const { user, signIn } = useAuthStore()
@@ -28,9 +28,15 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex items-center gap-2.5 mb-8 justify-center">
           <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-            <Activity className="h-5 w-5 text-white" />
+            <svg viewBox="0 0 32 32" className="h-[22px] w-[22px]" fill="none" aria-hidden="true">
+              <g stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.5 8v16"/>
+                <path d="M10.5 16L22.5 8"/>
+                <path d="M10.5 16L22.5 24"/>
+              </g>
+            </svg>
           </div>
-          <span className="text-xl font-semibold text-white tracking-tight">EHR System</span>
+          <span className="text-xl font-semibold text-white tracking-tight">OpenKairo</span>
         </div>
 
         {/* Card */}
