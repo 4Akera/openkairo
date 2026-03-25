@@ -33,7 +33,7 @@ const FALLBACK_FIELD_DEFS: PatientFieldDefinition[] = [
 ]
 
 import {
-  calcAge, formatDate, formatDateWithPrecision, fullName,
+  calcAge, formatDate, formatDateTime, formatDateWithPrecision, fullName,
   generateMRN, getPatientDob, getPatientGender, ageToApproxDob, cn,
 } from '../lib/utils'
 import {
@@ -368,8 +368,8 @@ export default function DashboardPage() {
                   <th className="text-left px-6 py-2.5 font-medium">Patient</th>
                   <th className="text-left px-4 py-2.5 font-medium">MRN</th>
                   <th className="text-left px-4 py-2.5 font-medium">Age / Gender</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Blood Group</th>
                   <th className="text-left px-4 py-2.5 font-medium">DOB</th>
+                  <th className="text-left px-4 py-2.5 font-medium">Registered</th>
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
@@ -395,12 +395,17 @@ export default function DashboardPage() {
                       <td className="px-4 py-3 text-muted-foreground">
                         {calcAge(dob) || '—'}{gen ? ` · ${gen}` : ''}
                       </td>
-                      <td className="px-4 py-3">
-                        {pt.blood_group
-                          ? <Badge variant="outline">{pt.blood_group}</Badge>
-                          : <span className="text-muted-foreground">—</span>}
-                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(dob)}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {pt.updated_at !== pt.created_at ? (
+                          <span title={`Created: ${formatDateTime(pt.created_at)}`}>
+                            {formatDateTime(pt.updated_at)}
+                            <span className="ml-1 text-[10px] opacity-60">upd</span>
+                          </span>
+                        ) : (
+                          formatDateTime(pt.created_at)
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
                       </td>
