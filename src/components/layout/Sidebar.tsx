@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { cn } from '../../lib/utils'
-import { Users, LogOut, Settings } from 'lucide-react'
+import { Users, LogOut, Settings, Search } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import ProfileModal from '../profile/ProfileModal'
 import Logo from '../Logo'
@@ -12,7 +12,7 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: Settings, end: false },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void }) {
   const { user, profile, signOut } = useAuthStore()
   const navigate = useNavigate()
   const [profileOpen, setProfileOpen] = useState(false)
@@ -34,9 +34,26 @@ export default function Sidebar() {
       <aside className="w-[64px] flex flex-col items-center py-4 bg-sidebar border-r border-white/5 shrink-0 relative">
 
         {/* Logo mark */}
-        <div className="mb-6 shrink-0">
+        <div className="mb-4 shrink-0">
           <Logo size={36} className="rounded-xl shadow-lg shadow-blue-900/40" />
         </div>
+
+        {/* Search button */}
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              onClick={onSearchOpen}
+              className="flex items-center justify-center h-9 w-9 rounded-xl text-slate-500 hover:bg-white/8 hover:text-slate-200 transition-all duration-150 mb-2 shrink-0"
+            >
+              <Search className="h-[17px] w-[17px]" />
+              <span className="sr-only">Search patients</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="text-xs font-medium">
+            Search
+            <kbd className="ml-1.5 text-[10px] opacity-60">⌘K</kbd>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Divider */}
         <div className="w-8 h-px bg-white/10 mb-3 shrink-0" />
@@ -60,7 +77,6 @@ export default function Sidebar() {
                 >
                   {({ isActive }) => (
                     <>
-                      {/* Active pill indicator */}
                       {isActive && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-400 rounded-r-full" />
                       )}
@@ -79,7 +95,6 @@ export default function Sidebar() {
 
         {/* Bottom section */}
         <div className="flex flex-col items-center gap-1 w-full px-2.5">
-          {/* Divider */}
           <div className="w-8 h-px bg-white/10 mb-2" />
 
           {/* Avatar */}
@@ -90,7 +105,6 @@ export default function Sidebar() {
                 className="group relative flex items-center justify-center h-9 w-9 rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 text-white text-xs font-bold hover:from-blue-600 hover:to-blue-700 transition-all duration-150 shadow-md"
               >
                 {initials}
-                {/* Online dot */}
                 <span className="absolute bottom-0.5 right-0.5 h-2 w-2 bg-emerald-400 border-2 border-sidebar rounded-full" />
               </button>
             </TooltipTrigger>
