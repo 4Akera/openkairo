@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
-import { fullName, calcAge, getPatientDob, getPatientGender } from '../../lib/utils'
-import type { Patient } from '../../types'
-import { pushRecentPatient } from '../../pages/DashboardPage'
+import { supabase } from '../lib/supabase'
+import { fullName, calcAge, getPatientDob, getPatientGender } from '../lib/utils'
+import type { Patient } from '../types'
+import { pushRecentPatient } from '../pages/DashboardPage'
 import { Search, Loader2, Users } from 'lucide-react'
 
 interface GlobalSearchProps {
