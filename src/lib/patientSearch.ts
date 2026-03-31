@@ -1,7 +1,7 @@
-import type { PostgrestFilterBuilder } from '@supabase/postgrest-js'
+import { supabase } from './supabase'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = PostgrestFilterBuilder<any, any, any>
+type AnyQuery = ReturnType<typeof supabase.from<any, any>> extends { select: (...args: any[]) => infer R } ? R : never
 
 const THIS_YEAR = new Date().getFullYear()
 
