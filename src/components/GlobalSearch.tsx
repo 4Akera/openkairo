@@ -2,9 +2,11 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { fullName, calcAge, getPatientDob, getPatientGender } from '../lib/utils'
+import { parseSearchQuery } from '../lib/patientSearch'
 import type { Patient } from '../types'
-import { pushRecentPatient } from '../pages/DashboardPage'
-import { Search, Loader2, Users } from 'lucide-react'
+import { pushRecentPatient, getRecentPatients } from '../pages/DashboardPage'
+import type { RecentEntry } from '../pages/DashboardPage'
+import { Search, Loader2, Users, Clock } from 'lucide-react'
 
 interface GlobalSearchProps {
   open: boolean
@@ -18,14 +20,16 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const [results, setResults]   = useState<Patient[]>([])
   const [loading, setLoading]   = useState(false)
   const [active, setActive]     = useState(0)
+  const [recents, setRecents]   = useState<RecentEntry[]>([])
   const requestSeq = useRef(0)
 
-  // Focus input when opened
+  // Focus input and refresh recents when opened
   useEffect(() => {
     if (open) {
       setQuery('')
       setResults([])
       setActive(0)
+      setRecents(getRecentPatients())
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [open])
@@ -34,14 +38,19 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     if (!q.trim()) { setResults([]); setLoading(false); return }
     const req = ++requestSeq.current
     setLoading(true)
-    const { data } = await supabase
-      .from('patients')
-      .select('*')
-      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,mrn.ilike.%${q}%,phone.ilike.%${q}%`)
-      .order('created_at', { ascending: false })
-      .limit(8)
+
+    const { tokens, year } = parseSearchQuery(q)
+    const { data } = await supabase.rpc('search_patients', {
+      p_tokens: tokens && tokens.length > 0 ? tokens : null,
+      p_year:   year,
+      p_limit:  8,
+      p_offset: 0,
+    })
+
     if (req !== requestSeq.current) return
-    setResults(data ?? [])
+    type Row = Patient & { total_count: number }
+    const rows = (data ?? []) as Row[]
+    setResults(rows.map(({ total_count: _tc, ...pt }) => pt as Patient))
     setActive(0)
     setLoading(false)
   }, [])
@@ -57,10 +66,12 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     onClose()
   }
 
+  const activeList = query.trim() ? results : recents
+
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, results.length - 1)) }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, activeList.length - 1)) }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(a => Math.max(a - 1, 0)) }
-    if (e.key === 'Enter' && results[active]) go(results[active])
+    if (e.key === 'Enter' && activeList[active]) go(activeList[active] as Patient)
     if (e.key === 'Escape') onClose()
   }
 
@@ -132,6 +143,31 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             <Users className="h-6 w-6 opacity-40" />
             <p className="text-sm">No patients found</p>
           </div>
+        ) : !query.trim() && recents.length > 0 ? (
+          <ul>
+            <li className="px-4 pt-3 pb-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Clock className="h-3 w-3" /> Recent
+            </li>
+            {recents.map((pt, i) => (
+              <li key={pt.id}>
+                <button
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                    i === active ? 'bg-accent' : 'hover:bg-accent/50'
+                  }`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => go(pt as Patient)}
+                >
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-semibold text-xs shrink-0">
+                    {pt.first_name[0]}{pt.last_name[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{pt.first_name} {pt.last_name}</p>
+                    <p className="text-xs text-muted-foreground">{pt.mrn}</p>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
         ) : !query.trim() ? (
           <p className="text-xs text-muted-foreground text-center py-6">
             Start typing to search…

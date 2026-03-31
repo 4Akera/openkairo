@@ -8,9 +8,9 @@ import { PATIENT_REAL_COLUMNS } from '../types'
 const PAGE_SIZE = 50
 
 const RECENT_KEY = 'ok_recent_pts'
-type RecentEntry = Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
+export type RecentEntry = Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
 
-function getRecentPatients(): RecentEntry[] {
+export function getRecentPatients(): RecentEntry[] {
   try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') }
   catch { return [] }
 }
@@ -36,13 +36,14 @@ import {
   calcAge, formatDate, formatDateTime, formatDateWithPrecision, fullName,
   generateMRN, getPatientDob, getPatientGender, ageToApproxDob, cn,
 } from '../lib/utils'
+import { parseSearchQuery } from '../lib/patientSearch'
 import {
   Button, Input, Label, Badge,
   Dialog, DialogContent, DialogHeader, DialogTitle,
   ScrollArea,
 } from '../components/ui'
 import { ClinicalDatePicker } from '../components/ui/ClinicalDatePicker'
-import { Search, UserPlus, ChevronRight, Loader2, Users, Clock } from 'lucide-react'
+import { Search, UserPlus, ChevronRight, Loader2, Users, AlertTriangle } from 'lucide-react'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -59,8 +60,6 @@ export default function DashboardPage() {
   const [mineOnly, setMineOnly] = useState(false)
   const [openOnly, setOpenOnly] = useState(false)
 
-  const [recentPatients, setRecentPatients] = useState<RecentEntry[]>([])
-
   const [open, setOpen]       = useState(false)
   const [creating, setCreating] = useState(false)
 
@@ -75,12 +74,40 @@ export default function DashboardPage() {
   const [form, setForm]               = useState<Record<string, string>>({})
   const [formErrors, setFormErrors]   = useState<Record<string, string>>({})
 
-  // Load recent patients from localStorage
-  useEffect(() => {
-    setRecentPatients(getRecentPatients())
-  }, [])
+  // Duplicate detection
+  const [dupMatches, setDupMatches] = useState<Patient[]>([])
+  const [dupTotal, setDupTotal]     = useState(0)
+  const [dupLoading, setDupLoading] = useState(false)
+  const dupSeq = useRef(0)
 
-  // Auto-focus search on mount
+  useEffect(() => {
+    if (!open) return
+    const first = (form['first_name'] ?? '').trim()
+    const last  = (form['last_name']  ?? '').trim()
+    if (first.length < 2 || last.length < 2) {
+      setDupMatches([]); setDupTotal(0); return
+    }
+    const dob  = (form['date_of_birth'] ?? '').trim()
+    const year = dob ? new Date(dob).getFullYear() : null
+    const t = setTimeout(async () => {
+      const req = ++dupSeq.current
+      setDupLoading(true)
+      const { data } = await supabase.rpc('search_patients', {
+        p_tokens: [first, last],
+        p_year:   year,
+        p_limit:  5,
+        p_offset: 0,
+      })
+      if (req !== dupSeq.current) return
+      type Row = Patient & { total_count: number }
+      const rows = (data ?? []) as Row[]
+      setDupMatches(rows.map(({ total_count: _tc, ...pt }) => pt as Patient))
+      setDupTotal(rows[0]?.total_count ?? 0)
+      setDupLoading(false)
+    }, 500)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form['first_name'], form['last_name'], form['date_of_birth'], open])
   useEffect(() => {
     searchRef.current?.focus()
   }, [])
@@ -99,49 +126,24 @@ export default function DashboardPage() {
       setLoadingMore(true)
     }
 
-    // For open-encounter filter, first resolve which patient IDs have open encounters
-    let openIds: string[] | null = null
-    if (openEnc) {
-      const { data: encData } = await supabase
-        .from('encounters')
-        .select('patient_id')
-        .eq('status', 'open')
-      const ids = [...new Set((encData ?? []).map(e => e.patient_id).filter(Boolean))]
-      if (ids.length === 0) {
-        if (req !== requestSeq.current) return
-        setPatients([])
-        setTotalCount(0)
-        setHasMore(false)
-        setLoading(false)
-        setLoadingMore(false)
-        return
-      }
-      openIds = ids
-    }
+    const { tokens, year } = parseSearchQuery(q)
 
-    let query = supabase
-      .from('patients')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1)
+    const { data, error } = await supabase.rpc('search_patients', {
+      p_tokens:         tokens && tokens.length > 0 ? tokens : null,
+      p_year:           year,
+      p_created_by:     mine && user ? user.id : null,
+      p_open_encounter: openEnc,
+      p_limit:          PAGE_SIZE,
+      p_offset:         pageNum * PAGE_SIZE,
+    })
 
-    if (q.trim()) {
-      query = query.or(
-        `first_name.ilike.%${q}%,last_name.ilike.%${q}%,mrn.ilike.%${q}%,phone.ilike.%${q}%`,
-      )
-    }
-    if (mine && user) {
-      query = query.eq('created_by', user.id)
-    }
-    if (openIds) {
-      query = query.in('id', openIds)
-    }
-
-    const { data, error, count } = await query
     if (req !== requestSeq.current) return
     if (!error && data) {
-      setPatients(prev => append ? [...prev, ...data] : data)
-      const total = count ?? 0
+      type Row = Patient & { total_count: number }
+      const rows = data as Row[]
+      const total = rows[0]?.total_count ?? 0
+      const pts = rows.map(({ total_count: _tc, ...pt }) => pt as Patient)
+      setPatients(prev => append ? [...prev, ...pts] : pts)
       setTotalCount(total)
       setHasMore((pageNum + 1) * PAGE_SIZE < total)
     }
@@ -168,7 +170,6 @@ export default function DashboardPage() {
 
   const navigateToPatient = (pt: Patient) => {
     pushRecentPatient({ id: pt.id, first_name: pt.first_name, last_name: pt.last_name, mrn: pt.mrn })
-    setRecentPatients(getRecentPatients())
     navigate(`/patients/${pt.id}`)
   }
 
@@ -196,6 +197,7 @@ export default function DashboardPage() {
 
   const openDialog = () => {
     setFormErrors({})
+    setDupMatches([]); setDupTotal(0)
     setForm(prev =>
       Object.fromEntries(
         Object.keys(prev).map(k => [k, k.endsWith('_precision') ? 'full' : ''])
@@ -246,7 +248,6 @@ export default function DashboardPage() {
   // ─── Derived ────────────────────────────────────────────────────────────────
 
   const filtersActive = mineOnly || openOnly || search.trim() !== ''
-  const showRecent    = !filtersActive && recentPatients.length > 0
 
   return (
     <div className="h-full flex flex-col">
@@ -317,31 +318,6 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
-
-      {/* Recent patients strip */}
-      {showRecent && (
-        <div className="px-6 py-2.5 border-b bg-muted/30 shrink-0">
-          <div className="flex items-center gap-3 overflow-x-auto">
-            <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
-              <Clock className="h-3 w-3" />
-              Recent
-            </span>
-            {recentPatients.map(pt => (
-              <button
-                key={pt.id}
-                onClick={() => navigate(`/patients/${pt.id}`)}
-                className="flex items-center gap-1.5 text-xs bg-background border border-border rounded-full px-2.5 py-1 hover:border-primary/40 hover:text-primary transition-colors whitespace-nowrap shrink-0"
-              >
-                <span className="h-4 w-4 rounded-full bg-primary/10 text-primary font-bold text-[9px] flex items-center justify-center shrink-0">
-                  {pt.first_name[0]}{pt.last_name[0]}
-                </span>
-                {pt.first_name} {pt.last_name}
-                <span className="text-muted-foreground font-mono text-[10px]">{pt.mrn}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Table */}
       <ScrollArea className="flex-1">
@@ -507,14 +483,67 @@ export default function DashboardPage() {
                     </div>
                   ))}
 
+                {/* ── Duplicate warning ──────────────────────────────── */}
+                {(dupLoading || dupMatches.length > 0) && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                      {dupLoading
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                        : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+                      <p className="text-sm font-medium">
+                        {dupLoading
+                          ? 'Checking for existing patients…'
+                          : `${dupTotal} similar patient${dupTotal !== 1 ? 's' : ''} already exist${dupTotal === 1 ? 's' : ''}`}
+                      </p>
+                    </div>
+
+                    {!dupLoading && dupMatches.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {dupMatches.map(pt => {
+                          const dob = getPatientDob(pt)
+                          return (
+                            <li key={pt.id}>
+                              <button
+                                type="button"
+                                onClick={() => window.open(`/patients/${pt.id}`, '_blank')}
+                                className="w-full text-left flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-amber-500/10 transition-colors group"
+                              >
+                                <div className="h-6 w-6 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-700 dark:text-amber-400 font-semibold text-[10px] shrink-0">
+                                  {pt.first_name[0]}{pt.last_name[0]}
+                                </div>
+                                <span className="text-sm font-medium text-foreground flex-1 truncate">
+                                  {fullName(pt)}
+                                </span>
+                                <span className="text-xs text-muted-foreground shrink-0 font-mono">
+                                  {pt.mrn}
+                                </span>
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {formatDate(dob) || '—'}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0">
+                                  ↗
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                        {dupTotal > 5 && (
+                          <li className="text-xs text-muted-foreground px-2 pt-1">
+                            + {dupTotal - 5} more with similar name
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                   <Button onClick={onSubmit} disabled={creating}>
                     {creating && <Loader2 className="h-4 w-4 animate-spin" />}
                     Create Patient
                   </Button>
-                </div>
-              </div>
+                </div>              </div>
             </ScrollArea>
           )}
         </DialogContent>
