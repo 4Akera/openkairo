@@ -27,13 +27,38 @@
     --sidebar: 222 47% 11%;
     --sidebar-foreground: 210 40% 96%;
     --sidebar-accent: 217 33% 17%;
+    --mobile-nav-h: 56px;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 20% 95%;
+    --card: 222 35% 12%;
+    --card-foreground: 210 20% 95%;
+    --primary: 221 83% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 25% 18%;
+    --secondary-foreground: 210 20% 92%;
+    --muted: 215 25% 16%;
+    --muted-foreground: 215 20% 56%;
+    --accent: 215 25% 18%;
+    --accent-foreground: 210 20% 92%;
+    --destructive: 0 72% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 25% 21%;
+    --input: 215 25% 21%;
+    --ring: 221 83% 60%;
+    --radius: 0.5rem;
+    --sidebar: 222 47% 6%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-accent: 217 33% 12%;
+    --mobile-nav-h: 56px;
   }
 
   * {
     @apply border-border;
     box-sizing: border-box;
   }
-
   body {
     @apply bg-background text-foreground font-sans;
     -webkit-font-smoothing: antialiased;
@@ -64,5 +89,19 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: hsl(var(--border));
     border-radius: 3px;
+  }
+
+  /* Bottom safe-area for notched phones */
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+  }
+
+  /* Hide scrollbar but keep scrollability */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }

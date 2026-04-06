@@ -22,7 +22,8 @@ export default function AppLayout() {
     <TooltipProvider>
       <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar onSearchOpen={() => setSearchOpen(true)} />
-        <main className="flex-1 overflow-hidden">
+        {/* On mobile the sidebar is replaced by a fixed bottom nav; reserve space for it + home indicator */}
+        <main className="flex-1 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
           <Outlet />
         </main>
       </div>

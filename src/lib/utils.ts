@@ -4,7 +4,7 @@ import {
   format, parseISO, differenceInYears, differenceInMonths, differenceInDays,
   isValid, sub,
 } from 'date-fns'
-import type { DatePrecision } from '@/types'
+import type { DatePrecision, NameFormat } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -163,7 +163,13 @@ export function ageToApproxDob(
   return { iso, precision }
 }
 
-export function fullName(p: { first_name: string; last_name: string }): string {
+export function fullName(
+  p: { first_name: string; middle_name?: string | null; last_name: string },
+  format: NameFormat = 'two',
+): string {
+  if (format === 'three' && p.middle_name?.trim()) {
+    return `${p.first_name} ${p.middle_name} ${p.last_name}`
+  }
   return `${p.first_name} ${p.last_name}`
 }
 
@@ -174,7 +180,7 @@ export function generateMRN(): string {
 // Legacy map kept for BUILTIN_METADATA fallback in BlockWrapper
 export const BLOCK_LABELS: Record<string, string> = {
   hx_physical: 'History & Physical',
-  note:        'Clinical Note',
+  note:        'Note',
   med_orders:  'Medications',
   plan:        'Assessment & Plan',
   vitals:      'Vitals',
@@ -191,17 +197,23 @@ export interface DefinitionColors {
 }
 
 export const DEFINITION_COLORS: Record<string, DefinitionColors> = {
-  blue:   { border: 'border-l-blue-500',    iconBg: 'bg-blue-500',    badge: 'bg-blue-100 text-blue-800' },
-  purple: { border: 'border-l-purple-500',  iconBg: 'bg-purple-500',  badge: 'bg-purple-100 text-purple-800' },
-  green:  { border: 'border-l-emerald-500', iconBg: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-800' },
-  amber:  { border: 'border-l-amber-500',   iconBg: 'bg-amber-500',   badge: 'bg-amber-100 text-amber-800' },
-  red:    { border: 'border-l-red-500',     iconBg: 'bg-red-500',     badge: 'bg-red-100 text-red-800' },
-  slate:  { border: 'border-l-slate-400',   iconBg: 'bg-slate-400',   badge: 'bg-slate-100 text-slate-700' },
-  cyan:   { border: 'border-l-cyan-500',    iconBg: 'bg-cyan-500',    badge: 'bg-cyan-100 text-cyan-800' },
-  orange: { border: 'border-l-orange-500',  iconBg: 'bg-orange-500',  badge: 'bg-orange-100 text-orange-800' },
-  pink:   { border: 'border-l-pink-500',    iconBg: 'bg-pink-500',    badge: 'bg-pink-100 text-pink-800' },
-  indigo: { border: 'border-l-indigo-500',  iconBg: 'bg-indigo-500',  badge: 'bg-indigo-100 text-indigo-800' },
-  teal:   { border: 'border-l-teal-500',    iconBg: 'bg-teal-500',    badge: 'bg-teal-100 text-teal-800' },
+  blue:    { border: 'border-l-blue-500',    iconBg: 'bg-blue-500',    badge: 'bg-blue-100 text-blue-800' },
+  purple:  { border: 'border-l-purple-500',  iconBg: 'bg-purple-500',  badge: 'bg-purple-100 text-purple-800' },
+  violet:  { border: 'border-l-violet-500',  iconBg: 'bg-violet-500',  badge: 'bg-violet-100 text-violet-800' },
+  indigo:  { border: 'border-l-indigo-500',  iconBg: 'bg-indigo-500',  badge: 'bg-indigo-100 text-indigo-800' },
+  green:   { border: 'border-l-emerald-500', iconBg: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-800' },
+  emerald: { border: 'border-l-emerald-600', iconBg: 'bg-emerald-600', badge: 'bg-emerald-100 text-emerald-900' },
+  teal:    { border: 'border-l-teal-500',    iconBg: 'bg-teal-500',    badge: 'bg-teal-100 text-teal-800' },
+  cyan:    { border: 'border-l-cyan-500',    iconBg: 'bg-cyan-500',    badge: 'bg-cyan-100 text-cyan-800' },
+  sky:     { border: 'border-l-sky-500',     iconBg: 'bg-sky-500',     badge: 'bg-sky-100 text-sky-800' },
+  lime:    { border: 'border-l-lime-500',    iconBg: 'bg-lime-500',    badge: 'bg-lime-100 text-lime-800' },
+  amber:   { border: 'border-l-amber-500',   iconBg: 'bg-amber-500',   badge: 'bg-amber-100 text-amber-800' },
+  orange:  { border: 'border-l-orange-500',  iconBg: 'bg-orange-500',  badge: 'bg-orange-100 text-orange-800' },
+  red:     { border: 'border-l-red-500',     iconBg: 'bg-red-500',     badge: 'bg-red-100 text-red-800' },
+  rose:    { border: 'border-l-rose-500',    iconBg: 'bg-rose-500',    badge: 'bg-rose-100 text-rose-800' },
+  pink:    { border: 'border-l-pink-500',    iconBg: 'bg-pink-500',    badge: 'bg-pink-100 text-pink-800' },
+  fuchsia: { border: 'border-l-fuchsia-500', iconBg: 'bg-fuchsia-500', badge: 'bg-fuchsia-100 text-fuchsia-800' },
+  slate:   { border: 'border-l-slate-400',   iconBg: 'bg-slate-400',   badge: 'bg-slate-100 text-slate-700' },
 }
 
 export function getDefinitionColors(color: string): DefinitionColors {

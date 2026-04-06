@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Block } from '../../../types'
 import { Button, Input, Separator } from '../../ui'
 import { Loader2, Activity } from 'lucide-react'
@@ -36,12 +36,25 @@ const BP_FLAGS = [
   { id: 'on_pressor',   label: 'On pressor' },
 ]
 
-// Single-vital flags for PR / RR / Temp
-const SIMPLE_FLAGS = [
-  { id: 'unmeasured', label: 'Unmeasured' },
+const PR_FLAGS = [
+  { id: 'unmeasured',  label: 'Unmeasured' },
+  { id: 'irregular',   label: 'Irregular' },
+  { id: 'undetected',  label: 'Undetected' },
+  { id: 'weak',        label: 'Weak / thready' },
 ]
 
-// SpO2 oxygen delivery — mutually exclusive
+const RR_FLAGS = [
+  { id: 'unmeasured',  label: 'Unmeasured' },
+  { id: 'irregular',   label: 'Irregular' },
+  { id: 'agonal',      label: 'Agonal' },
+  { id: 'assisted',    label: 'Assisted' },
+]
+
+const TEMP_FLAGS = [
+  { id: 'unmeasured',   label: 'Unmeasured' },
+  { id: 'antipyretic',  label: 'On antipyretic' },
+]
+
 const SPO2_DELIVERY = [
   { id: 'unmeasured',    label: 'Unmeasured' },
   { id: 'room_air',      label: 'Room air' },
@@ -53,14 +66,14 @@ const SPO2_DELIVERY = [
 ]
 
 const AVPU_OPTIONS: { value: 'A' | 'V' | 'P' | 'U'; label: string; color: string }[] = [
-  { value: 'A', label: 'Alert',              color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-  { value: 'V', label: 'Voice',              color: 'bg-amber-100 text-amber-800 border-amber-300' },
-  { value: 'P', label: 'Pain',               color: 'bg-orange-100 text-orange-800 border-orange-300' },
-  { value: 'U', label: 'Unresponsive',       color: 'bg-red-100 text-red-800 border-red-300' },
+  { value: 'A', label: 'Alert',       color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+  { value: 'V', label: 'Voice',       color: 'bg-amber-100 text-amber-800 border-amber-300' },
+  { value: 'P', label: 'Pain',        color: 'bg-orange-100 text-orange-800 border-orange-300' },
+  { value: 'U', label: 'Unresponsive',color: 'bg-red-100 text-red-800 border-red-300' },
 ]
 
 // ============================================================
-// Empty / default content (all vitals start as Unmeasured)
+// Empty / default content
 // ============================================================
 
 export function emptyVitals(): VitalsContent {
@@ -154,22 +167,82 @@ export function computeNews2(c: VitalsContent): News2Result {
   const anyMeasured = rrMeasured || spo2Measured || bpMeasured || prMeasured || tempMeasured || avpuMeasured
 
   const breakdown: Record<string, number> = {
-    rr:   rrMeasured   ? scoreRR(c.resp_rate)                      : 0,
-    spo2: spo2Measured ? scoreSpo2(c.spo2)                         : 0,
+    rr:   rrMeasured   ? scoreRR(c.resp_rate)                   : 0,
+    spo2: spo2Measured ? scoreSpo2(c.spo2)                      : 0,
     o2:   (spo2Measured || !isUnmeasured(c.spo2_flags)) ? scoreOnO2(c.spo2_flags) : 0,
-    bp:   bpMeasured   ? scoreBP(c.bp_systolic, c.bp_flags)        : 0,
-    pr:   prMeasured   ? scorePR(c.pulse_rate)                     : 0,
-    temp: tempMeasured ? scoreTemp(c.temperature, c.temp_unit)     : 0,
-    avpu: avpuMeasured ? scoreAVPU(c.avpu)                         : 0,
+    bp:   bpMeasured   ? scoreBP(c.bp_systolic, c.bp_flags)     : 0,
+    pr:   prMeasured   ? scorePR(c.pulse_rate)                  : 0,
+    temp: tempMeasured ? scoreTemp(c.temperature, c.temp_unit)  : 0,
+    avpu: avpuMeasured ? scoreAVPU(c.avpu)                      : 0,
   }
   const total = Object.values(breakdown).reduce((s, v) => s + v, 0)
   return { total, breakdown, anyMeasured }
 }
 
 function news2Risk(total: number): { label: string; color: string; bg: string } {
-  if (total <= 4) return { label: 'Low',    color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' }
-  if (total <= 6) return { label: 'Medium', color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200' }
-  return             { label: 'High',   color: 'text-red-700',     bg: 'bg-red-50 border-red-200' }
+  if (total <= 4) return { label: 'Low',    color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800' }
+  if (total <= 6) return { label: 'Medium', color: 'text-amber-700 dark:text-amber-400',     bg: 'bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800' }
+  return             { label: 'High',   color: 'text-red-700 dark:text-red-400',       bg: 'bg-red-50 border-red-200 dark:bg-red-950/40 dark:border-red-800' }
+}
+
+// ============================================================
+// Clinical interpretation hints
+// ============================================================
+
+interface Hint { text: string; color: string }
+
+function prHint(val: number | null): Hint | null {
+  if (val === null) return null
+  if (val <= 40)  return { text: 'Bradycardic', color: 'text-red-600' }
+  if (val <= 50)  return { text: 'Low', color: 'text-amber-600' }
+  if (val <= 90)  return { text: 'Normal', color: 'text-emerald-600' }
+  if (val <= 110) return { text: 'Tachycardic', color: 'text-amber-600' }
+  if (val <= 130) return { text: 'Rapid', color: 'text-amber-600' }
+  return { text: 'Very rapid', color: 'text-red-600' }
+}
+
+function rrHint(val: number | null): Hint | null {
+  if (val === null) return null
+  if (val <= 8)  return { text: 'Very low', color: 'text-red-600' }
+  if (val <= 11) return { text: 'Low', color: 'text-amber-600' }
+  if (val <= 20) return { text: 'Normal', color: 'text-emerald-600' }
+  if (val <= 24) return { text: 'Elevated', color: 'text-amber-600' }
+  return { text: 'High', color: 'text-red-600' }
+}
+
+function spo2Hint(val: number | null): Hint | null {
+  if (val === null) return null
+  if (val <= 91) return { text: 'Critical', color: 'text-red-600' }
+  if (val <= 93) return { text: 'Low', color: 'text-red-500' }
+  if (val <= 95) return { text: 'Borderline', color: 'text-amber-600' }
+  return { text: 'Normal', color: 'text-emerald-600' }
+}
+
+function bpHint(sys: number | null, bpFlags: string[]): Hint | null {
+  if (bpFlags.includes('on_pressor')) return { text: 'On pressor', color: 'text-red-600' }
+  if (sys === null) return null
+  if (sys <= 90)  return { text: 'Hypotensive', color: 'text-red-600' }
+  if (sys <= 100) return { text: 'Low', color: 'text-amber-600' }
+  if (sys <= 110) return { text: 'Low-normal', color: 'text-amber-500' }
+  if (sys <= 140) return { text: 'Normal', color: 'text-emerald-600' }
+  if (sys <= 180) return { text: 'Elevated', color: 'text-amber-600' }
+  if (sys <= 219) return { text: 'Stage 2', color: 'text-red-500' }
+  return { text: 'Crisis', color: 'text-red-600' }
+}
+
+function tempHint(val: number | null, unit: 'C' | 'F'): Hint | null {
+  if (val === null) return null
+  const c = unit === 'F' ? (val - 32) * 5 / 9 : val
+  if (c <= 35.0) return { text: 'Hypothermic', color: 'text-red-600' }
+  if (c <= 36.0) return { text: 'Low', color: 'text-amber-600' }
+  if (c <= 38.0) return { text: 'Normal', color: 'text-emerald-600' }
+  if (c <= 39.0) return { text: 'Febrile', color: 'text-amber-600' }
+  return { text: 'High fever', color: 'text-red-600' }
+}
+
+function HintBadge({ hint }: { hint: Hint | null }) {
+  if (!hint) return null
+  return <span className={cn('text-[11px] font-medium', hint.color)}>{hint.text}</span>
 }
 
 // ============================================================
@@ -177,120 +250,167 @@ function news2Risk(total: number): { label: string; color: string; bg: string } 
 // ============================================================
 
 const ALL_FLAG_LABELS: Record<string, string> = Object.fromEntries(
-  [...BP_FLAGS, ...SPO2_DELIVERY, ...SIMPLE_FLAGS].map(f => [f.id, f.label])
+  [...BP_FLAGS, ...PR_FLAGS, ...RR_FLAGS, ...TEMP_FLAGS, ...SPO2_DELIVERY].map(f => [f.id, f.label])
 )
 
-/** Multi-select checkbox pill flags (BP) */
-function FlagCheckboxes({
-  flags,
-  selected,
+/** Compact dropdown for flag selection (single value) */
+function FlagSelect({
+  options,
+  value,
   onChange,
 }: {
-  flags: { id: string; label: string }[]
-  selected: string[]
-  onChange: (next: string[]) => void
-}) {
-  const toggle = (id: string) => {
-    if (id === 'unmeasured') { onChange(['unmeasured']); return }
-    const without = selected.filter(f => f !== 'unmeasured' && f !== id)
-    onChange(selected.includes(id) ? without : [...without, id])
-  }
-  return (
-    <div className="flex flex-wrap gap-1">
-      {flags.map(f => (
-        <button
-          key={f.id}
-          type="button"
-          onClick={() => toggle(f.id)}
-          className={cn(
-            'text-[11px] px-2 py-0.5 rounded border transition-colors',
-            selected.includes(f.id)
-              ? f.id === 'unmeasured'
-                ? 'bg-slate-200 border-slate-400 text-slate-700 font-semibold'
-                : 'bg-primary/15 border-primary/50 text-primary font-semibold'
-              : 'border-border/60 text-muted-foreground hover:bg-accent',
-          )}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/** Mutually-exclusive radio pill flags (SpO2 delivery) */
-function FlagRadio({
-  flags,
-  selected,
-  onChange,
-}: {
-  flags: { id: string; label: string }[]
-  selected: string
+  options: { id: string; label: string }[]
+  value: string
   onChange: (id: string) => void
 }) {
   return (
-    <div className="flex flex-wrap gap-1">
-      {flags.map(f => (
-        <button
-          key={f.id}
-          type="button"
-          onClick={() => onChange(f.id)}
-          className={cn(
-            'text-[11px] px-2 py-0.5 rounded border transition-colors',
-            selected === f.id
-              ? f.id === 'unmeasured'
-                ? 'bg-slate-200 border-slate-400 text-slate-700 font-semibold'
-                : 'bg-primary/15 border-primary/50 text-primary font-semibold'
-              : 'border-border/60 text-muted-foreground hover:bg-accent',
-          )}
-        >
-          {f.label}
-        </button>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="h-7 text-xs rounded border border-input bg-background px-1.5 text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+    >
+      {options.map(o => (
+        <option key={o.id} value={o.id}>{o.label}</option>
       ))}
-    </div>
+    </select>
   )
 }
 
-// Small numeric input
+// ============================================================
+// BP combined input ("120/80")
+// ============================================================
+
+function formatBpRaw(sys: number | null, dia: number | null): string {
+  if (sys !== null && dia !== null) return `${sys}/${dia}`
+  if (sys !== null) return `${sys}`
+  return ''
+}
+
+interface BpInputProps {
+  systolic: number | null
+  diastolic: number | null
+  onChangeSys: (v: number | null) => void
+  onChangeDia: (v: number | null) => void
+  onNext: () => void
+  inputRef?: React.Ref<HTMLInputElement>
+}
+
+function BpInput({ systolic, diastolic, onChangeSys, onChangeDia, onNext, inputRef }: BpInputProps) {
+  const [raw, setRaw] = useState(() => formatBpRaw(systolic, diastolic))
+  const isEditing = useRef(false)
+
+  // Sync when external changes reset values (e.g. flags → null)
+  useEffect(() => {
+    if (!isEditing.current) {
+      setRaw(formatBpRaw(systolic, diastolic))
+    }
+  }, [systolic, diastolic])
+
+  const parse = (val: string) => {
+    if (val.includes('/')) {
+      const [s, d] = val.split('/')
+      onChangeSys(s.trim() !== '' ? Number(s.trim()) : null)
+      onChangeDia(d.trim() !== '' ? Number(d.trim()) : null)
+    } else {
+      onChangeSys(val.trim() !== '' ? Number(val.trim()) : null)
+      onChangeDia(null)
+    }
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setRaw(val)
+    parse(val)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); onNext() }
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="numeric"
+      value={raw}
+      onChange={handleChange}
+      onKeyDown={handleKeyDown}
+      onFocus={() => { isEditing.current = true }}
+      onBlur={() => {
+        isEditing.current = false
+        // Normalise display on blur
+        setRaw(formatBpRaw(systolic, diastolic))
+      }}
+      placeholder="120/80"
+      className="h-8 w-28 rounded border border-input bg-background px-2 text-center text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+    />
+  )
+}
+
+// Standard numeric input for single-value vitals
 function NumInput({
   value,
   onChange,
+  onNext,
   placeholder,
   step,
   className,
+  inputRef,
 }: {
   value: number | null
   onChange: (v: number | null) => void
+  onNext?: () => void
   placeholder?: string
   step?: string
   className?: string
+  inputRef?: React.Ref<HTMLInputElement>
 }) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && onNext) { e.preventDefault(); onNext() }
+  }
   return (
     <Input
+      ref={inputRef}
       type="number"
       step={step ?? '1'}
       placeholder={placeholder ?? '—'}
       value={value ?? ''}
       onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}
-      className={cn('h-7 w-24 text-center text-sm', className)}
+      onKeyDown={handleKeyDown}
+      className={cn('h-8 w-24 text-center text-sm', className)}
     />
   )
 }
 
 // ============================================================
-// View
+// View — card grid with color-coded values
 // ============================================================
 
-function VitalRow({
+function scoreTextColor(score: number): string {
+  if (score >= 3) return 'text-red-600 dark:text-red-400'
+  if (score >= 1) return 'text-amber-600 dark:text-amber-400'
+  return ''
+}
+
+function scoreCardBg(score: number, unmeasured: boolean): string {
+  if (unmeasured) return 'bg-muted/30 border-border/50'
+  if (score >= 3) return 'bg-red-50 border-red-200 dark:bg-red-950/40 dark:border-red-800'
+  if (score >= 1) return 'bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800'
+  return 'bg-card border-border'
+}
+
+function VitalCard({
   label,
   value,
   unit,
+  score,
   flags,
   skipFlags = ['unmeasured'],
 }: {
   label: string
   value: string | null
   unit?: string
+  score: number
   flags: string[]
   skipFlags?: string[]
 }) {
@@ -298,21 +418,25 @@ function VitalRow({
   const visibleFlags = flags.filter(f => !skipFlags.includes(f))
 
   return (
-    <div className="flex items-baseline gap-2 py-0.5">
-      <span className="text-xs font-semibold text-muted-foreground w-10 shrink-0">{label}</span>
-      {unmeasured ? (
-        <span className="text-xs text-muted-foreground italic">—</span>
-      ) : (
-        <>
-          <span className="text-sm font-semibold tabular-nums">{value ?? '—'}</span>
-          {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
-          {visibleFlags.map(f => (
-            <span key={f} className="text-[10px] px-1.5 py-0 rounded border border-border bg-muted text-muted-foreground">
-              {ALL_FLAG_LABELS[f] ?? f}
+    <div className={cn('rounded border px-2 py-1 min-w-0 overflow-hidden', scoreCardBg(score, unmeasured))}>
+      <div className="flex items-baseline gap-1 flex-nowrap overflow-hidden">
+        <span className="text-[10px] font-semibold text-muted-foreground shrink-0">{label}</span>
+        {unmeasured ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : (
+          <>
+            <span className={cn('text-xs font-semibold tabular-nums shrink-0', scoreTextColor(score))}>
+              {value ?? '—'}
             </span>
-          ))}
-        </>
-      )}
+            {unit && <span className="text-[10px] text-muted-foreground shrink-0">{unit}</span>}
+            {visibleFlags.map(f => (
+              <span key={f} className="text-[9px] italic text-muted-foreground truncate min-w-0">
+                {ALL_FLAG_LABELS[f] ?? f}
+              </span>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -324,68 +448,104 @@ export function VitalsView({ block }: { block: Block }) {
 
   const bpStr = (!c.bp_flags.includes('unmeasured') && c.bp_systolic !== null && c.bp_diastolic !== null)
     ? `${c.bp_systolic}/${c.bp_diastolic}`
-    : null
+    : (!c.bp_flags.includes('unmeasured') && c.bp_systolic !== null)
+      ? `${c.bp_systolic}`
+      : null
 
   const avpuOpt = AVPU_OPTIONS.find(o => o.value === c.avpu)
+  const avpuUnmeasured = c.avpu === null
+  const avpuScore = news2.breakdown.avpu ?? 0
 
   return (
     <div className="space-y-2 text-sm">
-      <div className="grid grid-cols-2 gap-x-6">
-        <VitalRow label="BP"   value={bpStr}
-          unit="mmHg" flags={c.bp_flags}
-          skipFlags={['unmeasured']} />
-        <VitalRow label="PR"   value={c.pulse_rate !== null ? String(c.pulse_rate) : null}
-          unit="bpm"  flags={c.pr_flags} />
-        <VitalRow label="RR"   value={c.resp_rate !== null ? String(c.resp_rate) : null}
-          unit="/min" flags={c.rr_flags} />
-        <VitalRow label="Temp" value={c.temperature !== null ? String(c.temperature) : null}
-          unit={`°${c.temp_unit}`} flags={c.temp_flags} />
-        <VitalRow label="SpO₂" value={c.spo2 !== null ? `${c.spo2}%` : null}
-          flags={c.spo2_flags} skipFlags={['unmeasured', 'room_air']} />
-        <div className="flex items-baseline gap-2 py-0.5">
-          <span className="text-xs font-semibold text-muted-foreground w-10 shrink-0">AVPU</span>
-          {c.avpu ? (
-            <span className={cn('text-[11px] px-2 py-0 rounded border font-semibold', avpuOpt?.color)}>
-              {avpuOpt?.label ?? c.avpu}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground italic">—</span>
-          )}
+      <div className="grid grid-cols-3 gap-2">
+        <VitalCard
+          label="BP"
+          value={bpStr}
+          unit="mmHg"
+          score={news2.breakdown.bp}
+          flags={c.bp_flags}
+          skipFlags={['unmeasured']}
+        />
+        <VitalCard
+          label="PR"
+          value={c.pulse_rate !== null ? String(c.pulse_rate) : null}
+          unit="bpm"
+          score={news2.breakdown.pr}
+          flags={c.pr_flags}
+        />
+        <VitalCard
+          label="RR"
+          value={c.resp_rate !== null ? String(c.resp_rate) : null}
+          unit="/min"
+          score={news2.breakdown.rr}
+          flags={c.rr_flags}
+        />
+        <VitalCard
+          label="Temp"
+          value={c.temperature !== null ? String(c.temperature) : null}
+          unit={`°${c.temp_unit}`}
+          score={news2.breakdown.temp}
+          flags={c.temp_flags}
+        />
+        <VitalCard
+          label="SpO₂"
+          value={c.spo2 !== null ? `${c.spo2}%` : null}
+          score={news2.breakdown.spo2 + (news2.breakdown.o2 ?? 0)}
+          flags={c.spo2_flags}
+          skipFlags={['unmeasured', 'room_air']}
+        />
+        {/* AVPU card */}
+        <div className={cn('rounded border px-2 py-1 overflow-hidden', scoreCardBg(avpuScore, avpuUnmeasured))}>
+          <div className="flex items-baseline gap-1 flex-nowrap overflow-hidden">
+            <span className="text-[10px] font-semibold text-muted-foreground shrink-0">AVPU</span>
+            {avpuUnmeasured ? (
+              <span className="text-xs text-muted-foreground">—</span>
+            ) : (
+              <span className={cn('text-xs font-semibold truncate', scoreTextColor(avpuScore))}>
+                {avpuOpt?.label ?? c.avpu}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       {news2.anyMeasured && (
-        <>
-          <Separator />
-          <div className={cn('rounded border px-3 py-1.5 flex items-center justify-between', risk.bg)}>
-            <div className="flex items-center gap-1.5">
-              <Activity className={cn('h-3.5 w-3.5', risk.color)} />
-              <span className={cn('text-xs font-semibold', risk.color)}>NEWS2</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={cn('text-lg font-bold', risk.color)}>{news2.total}</span>
-              <span className={cn('text-[11px] font-semibold px-1.5 py-0 rounded border', risk.color, risk.bg)}>
-                {risk.label} Risk
-              </span>
-            </div>
+        <div className={cn('rounded border px-3 py-1.5 flex items-center justify-between', risk.bg)}>
+          <div className="flex items-center gap-1.5">
+            <Activity className={cn('h-3.5 w-3.5', risk.color)} />
+            <span className={cn('text-xs font-semibold', risk.color)}>NEWS2</span>
           </div>
-        </>
+          <div className="flex items-center gap-2">
+            <span className={cn('text-lg font-bold', risk.color)}>{news2.total}</span>
+            <span className={cn('text-[11px] font-semibold px-1.5 py-0 rounded border', risk.color, risk.bg)}>
+              {risk.label} Risk
+            </span>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
 // ============================================================
-// Edit
+// Edit — keyboard-navigable form
 // ============================================================
 
-// Compact vital row: label | input+unit | flags — defined at module level to keep stable identity
-function VRow({ label, input, flags }: { label: string; input: React.ReactNode; flags: React.ReactNode }) {
+function VRow({
+  label,
+  input,
+  flags,
+}: {
+  label: string
+  input: React.ReactNode
+  flags: React.ReactNode
+}) {
   return (
-    <div className="grid grid-cols-[6rem_auto_1fr] items-center gap-3 py-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-1 shrink-0">{input}</div>
-      <div>{flags}</div>
+    <div className="grid grid-cols-[7rem_auto_1fr] items-start gap-3 py-1">
+      <span className="text-xs font-medium text-muted-foreground pt-1.5">{label}</span>
+      <div className="flex items-center gap-1.5 shrink-0 flex-wrap">{input}</div>
+      <div className="pt-0.5">{flags}</div>
     </div>
   )
 }
@@ -402,6 +562,21 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
     ...(block.content as Partial<VitalsContent>),
   })
   const [saving, setSaving] = useState(false)
+
+  // Ordered refs for keyboard focus advancement
+  const refs = {
+    bp:   useRef<HTMLInputElement>(null),
+    pr:   useRef<HTMLInputElement>(null),
+    rr:   useRef<HTMLInputElement>(null),
+    temp: useRef<HTMLInputElement>(null),
+    spo2: useRef<HTMLInputElement>(null),
+  }
+  const focusOrder = ['bp', 'pr', 'rr', 'temp', 'spo2'] as const
+  const advance = (from: typeof focusOrder[number]) => {
+    const idx = focusOrder.indexOf(from)
+    const next = focusOrder[idx + 1]
+    if (next) refs[next].current?.focus()
+  }
 
   const setNum = useCallback((
     field: keyof VitalsContent,
@@ -437,94 +612,150 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
+      {/* Blood Pressure */}
       <VRow
         label="Blood Pressure"
         input={
           <>
-            <NumInput value={form.bp_systolic}  onChange={v => setNum('bp_systolic', 'bp_flags', v)} placeholder="Sys" className="w-20" />
-            <span className="text-muted-foreground text-sm">/</span>
-            <NumInput value={form.bp_diastolic} onChange={v => setNum('bp_diastolic', 'bp_flags', v)} placeholder="Dia" className="w-20" />
+            <BpInput
+              inputRef={refs.bp}
+              systolic={form.bp_systolic}
+              diastolic={form.bp_diastolic}
+              onChangeSys={v => setNum('bp_systolic',  'bp_flags', v)}
+              onChangeDia={v => setNum('bp_diastolic', 'bp_flags', v)}
+              onNext={() => advance('bp')}
+            />
             <span className="text-xs text-muted-foreground">mmHg</span>
+            <HintBadge hint={bpHint(form.bp_systolic, form.bp_flags)} />
           </>
         }
         flags={
-          <FlagCheckboxes flags={BP_FLAGS} selected={form.bp_flags}
-            onChange={next => setFlags('bp_flags', next)} />
+          <FlagSelect
+            options={BP_FLAGS}
+            value={
+              form.bp_flags.includes('unmeasured')   ? 'unmeasured'   :
+              form.bp_flags.includes('undetected')   ? 'undetected'   :
+              form.bp_flags.includes('cant_measure') ? 'cant_measure' :
+              form.bp_flags.includes('on_pressor')   ? 'on_pressor'   : 'unmeasured'
+            }
+            onChange={id => {
+              setFlags('bp_flags', [id])
+              if (id === 'unmeasured') {
+                setForm(f => ({ ...f, bp_systolic: null, bp_diastolic: null }))
+              }
+            }}
+          />
         }
       />
 
+      {/* Pulse Rate */}
       <VRow
         label="Pulse Rate"
         input={
           <>
-            <NumInput value={form.pulse_rate} onChange={v => setNum('pulse_rate', 'pr_flags', v)} placeholder="—" />
+            <NumInput
+              inputRef={refs.pr}
+              value={form.pulse_rate}
+              onChange={v => setNum('pulse_rate', 'pr_flags', v)}
+              onNext={() => advance('pr')}
+            />
             <span className="text-xs text-muted-foreground">bpm</span>
+            <HintBadge hint={prHint(form.pulse_rate)} />
           </>
         }
         flags={
-          <FlagCheckboxes flags={SIMPLE_FLAGS} selected={form.pr_flags}
-            onChange={next => setFlags('pr_flags', next)} />
+          <FlagSelect options={PR_FLAGS} value={form.pr_flags[0] ?? 'unmeasured'}
+            onChange={id => setFlags('pr_flags', [id])} />
         }
       />
 
+      {/* Respiratory Rate */}
       <VRow
         label="Resp. Rate"
         input={
           <>
-            <NumInput value={form.resp_rate} onChange={v => setNum('resp_rate', 'rr_flags', v)} placeholder="—" />
+            <NumInput
+              inputRef={refs.rr}
+              value={form.resp_rate}
+              onChange={v => setNum('resp_rate', 'rr_flags', v)}
+              onNext={() => advance('rr')}
+            />
             <span className="text-xs text-muted-foreground">/min</span>
+            <HintBadge hint={rrHint(form.resp_rate)} />
           </>
         }
         flags={
-          <FlagCheckboxes flags={SIMPLE_FLAGS} selected={form.rr_flags}
-            onChange={next => setFlags('rr_flags', next)} />
+          <FlagSelect options={RR_FLAGS} value={form.rr_flags[0] ?? 'unmeasured'}
+            onChange={id => setFlags('rr_flags', [id])} />
         }
       />
 
+      {/* Temperature */}
       <VRow
         label="Temperature"
         input={
           <>
-            <NumInput value={form.temperature} onChange={v => setNum('temperature', 'temp_flags', v)}
-              placeholder="—" step="0.1" className="w-20" />
-            <select
-              className="h-7 text-xs border border-input rounded px-1 bg-background"
-              value={form.temp_unit}
-              onChange={e => setForm(f => ({ ...f, temp_unit: e.target.value as 'C' | 'F' }))}
-            >
-              <option value="C">°C</option>
-              <option value="F">°F</option>
-            </select>
+            <div className="flex h-8 rounded border border-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
+              <input
+                ref={refs.temp}
+                type="number"
+                step="0.1"
+                placeholder="—"
+                value={form.temperature ?? ''}
+                onChange={e => setNum('temperature', 'temp_flags', e.target.value ? Number(e.target.value) : null)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); advance('temp') } }}
+                className="w-16 text-center text-sm bg-background px-2 border-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <select
+                value={form.temp_unit}
+                onChange={e => setForm(f => ({ ...f, temp_unit: e.target.value as 'C' | 'F' }))}
+                className="text-[11px] bg-muted border-l border-input px-1 text-muted-foreground focus:outline-none cursor-pointer"
+              >
+                <option value="C">°C</option>
+                <option value="F">°F</option>
+              </select>
+            </div>
+            <HintBadge hint={tempHint(form.temperature, form.temp_unit)} />
           </>
         }
         flags={
-          <FlagCheckboxes flags={SIMPLE_FLAGS} selected={form.temp_flags}
-            onChange={next => setFlags('temp_flags', next)} />
+          <FlagSelect options={TEMP_FLAGS} value={form.temp_flags[0] ?? 'unmeasured'}
+            onChange={id => setFlags('temp_flags', [id])} />
         }
       />
 
+      {/* SpO₂ */}
       <VRow
         label="SpO₂"
         input={
           <>
-            <NumInput value={form.spo2}
+            <NumInput
+              inputRef={refs.spo2}
+              value={form.spo2}
               onChange={v => setForm(f => ({
                 ...f, spo2: v,
                 spo2_flags: v !== null ? f.spo2_flags.filter(x => x !== 'unmeasured') : f.spo2_flags,
               }))}
-              placeholder="—" className="w-20" />
+              className="w-20"
+            />
             <span className="text-xs text-muted-foreground">%</span>
+            <HintBadge hint={spo2Hint(form.spo2)} />
           </>
         }
         flags={
-          <FlagRadio flags={SPO2_DELIVERY} selected={form.spo2_flags[0] ?? 'unmeasured'} onChange={setSpo2Flag} />
+          <FlagSelect
+            options={SPO2_DELIVERY}
+            value={form.spo2_flags[0] ?? 'unmeasured'}
+            onChange={setSpo2Flag}
+          />
         }
       />
 
       <Separator className="my-2" />
 
-      <div className="grid grid-cols-[6rem_1fr] items-center gap-3 py-1">
+      {/* AVPU */}
+      <div className="grid grid-cols-[7rem_1fr] items-center gap-3 py-1">
         <span className="text-xs font-medium text-muted-foreground">AVPU</span>
         <div className="flex gap-1.5">
           {AVPU_OPTIONS.map(opt => (
@@ -543,6 +774,7 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
         </div>
       </div>
 
+      {/* Live NEWS2 */}
       {news2.anyMeasured && (
         <div className={cn('rounded border px-3 py-1.5 flex items-center justify-between mt-2', risk.bg)}>
           <div className="flex items-center gap-1.5">
@@ -558,7 +790,7 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex justify-end gap-2 pt-3">
         <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
         <Button size="sm" onClick={handleSave} disabled={saving}>
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

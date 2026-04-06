@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase'
 import { fullName, calcAge, getPatientDob, getPatientGender } from '../lib/utils'
 import { parseSearchQuery } from '../lib/patientSearch'
 import type { Patient } from '../types'
-import { pushRecentPatient, getRecentPatients } from '../pages/DashboardPage'
-import type { RecentEntry } from '../pages/DashboardPage'
+import { pushRecentPatient, getRecentPatients } from '../lib/recentItems'
+import type { RecentEntry } from '../lib/recentItems'
+import { useSettingsStore } from '../stores/settingsStore'
 import { Search, Loader2, Users, Clock } from 'lucide-react'
 
 interface GlobalSearchProps {
@@ -22,6 +23,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const [active, setActive]     = useState(0)
   const [recents, setRecents]   = useState<RecentEntry[]>([])
   const requestSeq = useRef(0)
+  const { nameFormat } = useSettingsStore()
 
   // Focus input and refresh recents when opened
   useEffect(() => {
@@ -61,7 +63,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   }, [query, search])
 
   const go = (pt: Patient) => {
-    pushRecentPatient({ id: pt.id, first_name: pt.first_name, last_name: pt.last_name, mrn: pt.mrn })
+    pushRecentPatient({ id: pt.id, first_name: pt.first_name, middle_name: pt.middle_name, last_name: pt.last_name, mrn: pt.mrn })
     navigate(`/patients/${pt.id}`)
     onClose()
   }
@@ -121,10 +123,10 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                     onClick={() => go(pt)}
                   >
                     <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs shrink-0">
-                      {pt.first_name[0]}{pt.last_name[0]}
+                      {pt.first_name[0]}{nameFormat === 'three' && pt.middle_name ? pt.middle_name[0] : pt.last_name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{fullName(pt)}</p>
+                      <p className="text-sm font-medium truncate">{fullName(pt, nameFormat)}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {pt.mrn}
                         {calcAge(dob) ? ` · ${calcAge(dob)}` : ''}
@@ -158,10 +160,10 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                   onClick={() => go(pt as Patient)}
                 >
                   <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-semibold text-xs shrink-0">
-                    {pt.first_name[0]}{pt.last_name[0]}
+                    {pt.first_name[0]}{nameFormat === 'three' && pt.middle_name ? pt.middle_name[0] : pt.last_name[0]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{pt.first_name} {pt.last_name}</p>
+                    <p className="text-sm font-medium truncate">{fullName(pt, nameFormat)}</p>
                     <p className="text-xs text-muted-foreground">{pt.mrn}</p>
                   </div>
                 </button>

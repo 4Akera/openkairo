@@ -10,6 +10,11 @@ interface AuthState {
   loading: boolean
   permissions: Permission[]
   roleSlugs: string[]
+  roleNames: string[]
+  preferredBlocks: string[]   // IDs of blocks to show; empty = show all
+  pinnedBlocks: string[]      // IDs pinned to the top of the Add Block menu
+  inDept: boolean
+  hasBilling: boolean
   // Actions
   setUser: (user: User | null) => void
   setSession: (session: Session | null) => void
@@ -20,6 +25,8 @@ interface AuthState {
   signOut: () => Promise<void>
   fetchProfile: () => Promise<void>
   updateProfile: (data: Partial<Pick<Profile, 'full_name'>>) => Promise<{ error: string | null }>
+  updatePreferredBlocks: (ids: string[]) => Promise<{ error: string | null }>
+  updatePinnedBlocks: (ids: string[]) => Promise<{ error: string | null }>
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -29,6 +36,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: true,
   permissions: [],
   roleSlugs: [],
+  roleNames: [],
+  preferredBlocks: [],
+  pinnedBlocks: [],
+  inDept: false,
+  hasBilling: false,
 
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session }),
@@ -45,7 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut()
-    set({ user: null, session: null, profile: null, permissions: [], roleSlugs: [] })
+    set({ user: null, session: null, profile: null, permissions: [], roleSlugs: [], roleNames: [], inDept: false, hasBilling: false })
   },
 
   fetchProfile: async () => {
@@ -68,17 +80,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       profile = newProfile
     }
 
-    if (profile) set({ profile })
+    if (profile) set({ profile, preferredBlocks: profile.preferred_blocks ?? [], pinnedBlocks: profile.pinned_blocks ?? [] })
 
-    // Fetch permissions + role slugs (parallel)
-    const [permsResult, slugsResult] = await Promise.all([
+    // Fetch permissions + role slugs + role names + dept membership (parallel)
+    const [permsResult, slugsResult, deptResult] = await Promise.all([
       supabase.rpc('get_my_permissions'),
       supabase.rpc('get_my_role_slugs'),
+      supabase.from('department_members').select('id').eq('user_id', user.id).limit(1),
     ])
 
+    const slugs = (slugsResult.data ?? []) as string[]
+
+    let names: string[] = []
+    if (slugs.length > 0) {
+      const { data: rolesData } = await supabase
+        .from('roles')
+        .select('name, slug')
+        .in('slug', slugs)
+      if (rolesData) names = rolesData.map((r) => r.name)
+    }
+
+    const perms = (permsResult.data ?? []) as Permission[]
     set({
-      permissions: (permsResult.data ?? []) as Permission[],
-      roleSlugs: (slugsResult.data ?? []) as string[],
+      permissions: perms,
+      roleSlugs: slugs,
+      roleNames: names,
+      inDept: (deptResult.data?.length ?? 0) > 0,
+      hasBilling: perms.some(p => p.startsWith('billing.')),
     })
   },
 
@@ -95,6 +123,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (error) return { error: error.message }
     if (updated) set({ profile: updated })
+    return { error: null }
+  },
+
+  updatePreferredBlocks: async (ids) => {
+    const { user } = get()
+    if (!user) return { error: 'Not authenticated' }
+
+    const { data: updated, error } = await supabase
+      .from('profiles')
+      .update({ preferred_blocks: ids.length > 0 ? ids : null })
+      .eq('id', user.id)
+      .select()
+      .single()
+
+    if (error) return { error: error.message }
+    if (updated) set({ profile: updated, preferredBlocks: ids })
+    return { error: null }
+  },
+
+  updatePinnedBlocks: async (ids) => {
+    const { user } = get()
+    if (!user) return { error: 'Not authenticated' }
+
+    const { data: updated, error } = await supabase
+      .from('profiles')
+      .update({ pinned_blocks: ids.length > 0 ? ids : null })
+      .eq('id', user.id)
+      .select()
+      .single()
+
+    if (error) return { error: error.message }
+    if (updated) set({ profile: updated, pinnedBlocks: ids })
     return { error: null }
   },
 }))

@@ -33,7 +33,7 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-xl shadow-2xl p-8">
+        <div className="bg-card rounded-xl shadow-2xl p-8 border border-border/50">
           <div className="mb-6">
             <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
             <p className="text-sm text-muted-foreground mt-1">Access your clinical workspace</p>

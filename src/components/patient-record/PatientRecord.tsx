@@ -50,7 +50,7 @@ export default function PatientRecord({ patient, onPatientUpdate, encounterId }:
   const showSummary = ageVerbose != null || !!gender || activeProblems.length > 0
 
   return (
-    <div className="h-full flex flex-col border-l bg-card">
+    <div className="h-full w-full flex flex-col border-l bg-card">
       {/* Header */}
       <div className="px-3 py-2 border-b bg-sidebar shrink-0">
         <p className="text-xs font-semibold text-sidebar-foreground/70 uppercase tracking-wide">
@@ -58,7 +58,7 @@ export default function PatientRecord({ patient, onPatientUpdate, encounterId }:
         </p>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 [&>div>div]:!block">
         <div className="p-3 space-y-4">
           {/* Clinical Summary Banner */}
           {showSummary && (
@@ -94,8 +94,6 @@ export default function PatientRecord({ patient, onPatientUpdate, encounterId }:
 
           {/* Demographics */}
           <Demographics patient={patient} onUpdate={onPatientUpdate} />
-
-          <Separator />
 
           {/* Allergies */}
           <Allergies patientId={patient.id} />

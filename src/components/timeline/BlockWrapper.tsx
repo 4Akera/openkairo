@@ -1,8 +1,10 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, useLayoutEffect } from 'react'
+import { useSettingsStore } from '../../stores/settingsStore'
 import type {
   Block,
   BlockDefinition,
   BlockLock,
+  Charge,
 } from '../../types'
 import {
   formatDateTime,
@@ -10,19 +12,22 @@ import {
   getDefinitionColors,
   cn,
 } from '../../lib/utils'
-import { Badge, Button, Separator } from '../ui'
+import { Badge, Button, Separator, Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import {
   Edit2, History, Link2, Lock, ChevronDown, ChevronRight,
   FileText, ClipboardList, Stethoscope, AlertTriangle,
   Zap, ArrowRight, Clock, CheckCheck, Star, Activity,
   Pill, Brain, TestTube, FlaskConical, Camera, BarChart2,
   Clipboard, Heart, Layers, Pin, PinOff, EyeOff, Eye,
-  Users, BookOpen,
+  Users, BookOpen, MoreHorizontal, ShieldCheck, Loader2, Building2,
+  CheckCircle2, Ban, Copy, Trash2,
 } from 'lucide-react'
 import { BLOCK_REGISTRY } from './BlockRegistry'
 import { DynamicBlockView, DynamicBlockEdit } from './DynamicBlock'
 import { AttachmentTray } from './capabilities/AttachmentTray'
 import { TimeSeriesPanel } from './capabilities/TimeSeriesPanel'
+import { ActionPanel } from './capabilities/ActionPanel'
+import { AcknowledgmentPanel } from './capabilities/AcknowledgmentPanel'
 import { supabase } from '../../lib/supabase'
 
 // ============================================================
@@ -98,7 +103,7 @@ function CapabilityBadges({ definition }: { definition: BlockDefinition }) {
 
 const BUILTIN_METADATA: Record<string, { name: string; icon: string; color: string }> = {
   hx_physical: { name: 'History & Physical', icon: 'clipboard-list', color: 'purple' },
-  note:        { name: 'Clinical Note',      icon: 'file-text',      color: 'blue'   },
+  note:        { name: 'Note',               icon: 'file-text',      color: 'blue'   },
   med_orders:  { name: 'Medications',        icon: 'pill',           color: 'orange' },
   plan:        { name: 'Assessment & Plan',  icon: 'clipboard',      color: 'teal'   },
   vitals:      { name: 'Vitals',             icon: 'activity',       color: 'red'    },
@@ -118,16 +123,23 @@ interface Props {
   lock: BlockLock | undefined
   currentUserId: string
   encounterClosed: boolean
-  encounterPortalVisible: boolean
+  deptName?: string
+  charge?: Charge | null
   autoEdit?: boolean
   isUnsaved?: boolean
   onEdit: (block: Block, content: Record<string, unknown>) => Promise<void>
+  onDuplicate: (blockId: string) => Promise<void>
   onDiscard: (blockId: string) => Promise<void>
   onMask: (blockId: string) => Promise<void>
   onTogglePin: (blockId: string) => void
   onAcquireLock: (blockId: string) => Promise<boolean>
   onReleaseLock: (blockId: string) => void
   onViewHistory: (block: Block) => void
+  onApproveCharge?: (chargeId: string) => void
+  onVoidCharge?: (chargeId: string) => void
+  canCharge?: boolean
+  isAdmin?: boolean
+  onHardDelete?: (blockId: string) => Promise<void>
 }
 
 // ============================================================
@@ -142,36 +154,89 @@ export default function BlockWrapper({
   lock,
   currentUserId,
   encounterClosed,
-  encounterPortalVisible,
+  deptName,
+  charge,
   autoEdit,
   isUnsaved,
   onEdit,
+  onDuplicate,
   onDiscard,
   onMask,
   onTogglePin,
   onAcquireLock,
   onReleaseLock,
   onViewHistory,
+  onApproveCharge,
+  onVoidCharge,
+  canCharge,
+  isAdmin,
+  onHardDelete,
 }: Props) {
+  const { currencySymbol } = useSettingsStore()
   const [editing, setEditing] = useState(false)
-  const [expanded, setExpanded] = useState(
-    block.state === 'active' && !block.supersedes_block_id,
-  )
+  const [expanded, setExpanded] = useState(block.state === 'active')
+  const [orderSent, setOrderSent] = useState(false)
 
-  // Block privacy flags
-  const [rolesPopoverOpen, setRolesPopoverOpen] = useState(false)
+  // Block actions menu
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuTriggerRect, setMenuTriggerRect] = useState<{ triggerTop: number; triggerBottom: number; right: number } | null>(null)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const openMenu = () => {
+    if (menuTriggerRef.current) {
+      const r = menuTriggerRef.current.getBoundingClientRect()
+      setMenuTriggerRect({
+        triggerTop: r.top,
+        triggerBottom: r.bottom,
+        right: window.innerWidth - r.right,
+      })
+    }
+    setDraftRoles(block.visible_to_roles ?? [])
+    setHardDeleteConfirm(false)
+    setMenuOpen(true)
+  }
+
+  // After menu renders, measure actual height and clamp to viewport
+  useLayoutEffect(() => {
+    if (!menuOpen || !menuRef.current || !menuTriggerRect) return
+    const el = menuRef.current
+    const menuHeight = el.offsetHeight
+    const { triggerTop, triggerBottom, right } = menuTriggerRect
+    const spaceBelow = window.innerHeight - triggerBottom - 8
+    const spaceAbove = triggerTop - 8
+
+    el.style.right = `${right}px`
+
+    if (spaceBelow >= menuHeight) {
+      el.style.top = `${triggerBottom + 8}px`
+      el.style.bottom = 'auto'
+      el.style.maxHeight = ''
+    } else if (spaceAbove >= menuHeight) {
+      el.style.top = 'auto'
+      el.style.bottom = `${window.innerHeight - triggerTop + 8}px`
+      el.style.maxHeight = ''
+    } else if (spaceBelow >= spaceAbove) {
+      el.style.top = `${triggerBottom + 8}px`
+      el.style.bottom = 'auto'
+      el.style.maxHeight = `${spaceBelow}px`
+    } else {
+      el.style.top = '8px'
+      el.style.bottom = 'auto'
+      el.style.maxHeight = `${spaceAbove}px`
+    }
+  }, [menuOpen, menuTriggerRect])
+
+  // Block privacy — role restriction
   const [draftRoles, setDraftRoles] = useState<string[]>(block.visible_to_roles ?? [])
   const [savingRoles, setSavingRoles] = useState(false)
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState(false)
+  const [hardDeleting, setHardDeleting] = useState(false)
 
   const handleSaveRoles = async () => {
     setSavingRoles(true)
     await supabase.from('blocks').update({ visible_to_roles: draftRoles }).eq('id', block.id)
     setSavingRoles(false)
-    setRolesPopoverOpen(false)
-  }
-
-  const handleTogglePortalVisible = async () => {
-    await supabase.from('blocks').update({ portal_visible: !block.portal_visible }).eq('id', block.id)
   }
 
   const handleToggleShareToRecord = async () => {
@@ -191,7 +256,7 @@ export default function BlockWrapper({
   const isImmutable    = def?.cap_immutable ?? false
   const isMasked       = block.state === 'masked'
   // Immutable blocks are editable only on first insertion (isUnsaved); locked forever after first save
-  const canEdit        = !encounterClosed && (!isImmutable || !!isUnsaved) && !isMasked && !isLockedByOther
+  const canEdit        = !encounterClosed && (!isImmutable || !!isUnsaved) && !isMasked && !isLockedByOther && !orderSent
 
   // Auto-open in edit mode for template-seeded / freshly added blocks
   useEffect(() => {
@@ -235,7 +300,7 @@ export default function BlockWrapper({
     <div
       id={`block-${block.id}`}
       className={cn(
-        'border rounded-lg bg-card shadow-sm border-l-4 transition-opacity',
+        'border rounded-lg bg-card shadow-sm border-l-4 transition-opacity w-full overflow-hidden',
         colors.border,
         isMasked && 'opacity-50',
       )}
@@ -255,7 +320,7 @@ export default function BlockWrapper({
 
           <div
             className={cn(
-              'h-4.5 w-4.5 rounded-full flex items-center justify-center shrink-0',
+              'h-5 w-5 rounded flex items-center justify-center shrink-0',
               colors.iconBg,
             )}
           >
@@ -265,6 +330,67 @@ export default function BlockWrapper({
           <span className="text-[11px] font-semibold truncate">
             {headerMeta.name}
           </span>
+
+          {deptName && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800 shrink-0 whitespace-nowrap leading-none">
+              <Building2 className="h-2 w-2 shrink-0" />
+              {deptName}
+            </span>
+          )}
+
+          {charge && charge.status !== 'void' && charge.status !== 'waived' && (
+            <>
+              {/* Badge — Pending while awaiting approval, Approved permanently after that */}
+              <span
+                title={charge.description}
+                className={cn(
+                  'inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 whitespace-nowrap leading-none',
+                  charge.status === 'pending_approval'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
+                )}
+              >
+                <span className="opacity-70">{currencySymbol}</span>{(charge.quantity * charge.unit_price).toFixed(2)}
+                <span className="opacity-60 ml-0.5">· {charge.status === 'pending_approval' ? 'Pending' : 'Approved'}</span>
+              </span>
+
+              {/* Approve + cancel — only for pending_approval, only billing users */}
+              {charge.status === 'pending_approval' && canCharge && (
+                <span className="inline-flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                  {onApproveCharge && (
+                    <button
+                      type="button"
+                      onClick={() => onApproveCharge(charge.id)}
+                      title="Approve charge"
+                      className={cn(
+                        'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
+                        'bg-emerald-100 text-emerald-600 border border-emerald-300',
+                        'hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:scale-110',
+                        'dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-700',
+                      )}
+                    >
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                  {onVoidCharge && (
+                    <button
+                      type="button"
+                      onClick={() => onVoidCharge(charge.id)}
+                      title="Cancel charge"
+                      className={cn(
+                        'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
+                        'bg-red-50 text-red-400 border border-red-200',
+                        'hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-110',
+                        'dark:bg-red-950/30 dark:text-red-400 dark:border-red-800',
+                      )}
+                    >
+                      <Ban className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </span>
+              )}
+            </>
+          )}
 
           {def && <CapabilityBadges definition={def} />}
 
@@ -298,6 +424,12 @@ export default function BlockWrapper({
             </Badge>
           )}
 
+          {orderSent && !editing && (
+            <Badge variant="secondary" className="text-[10px] shrink-0 py-0 whitespace-nowrap text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+              Sent · locked
+            </Badge>
+          )}
+
           {!expanded && !editing && preview && (
             <p className="text-[11px] text-muted-foreground truncate min-w-0 italic">
               {preview}
@@ -323,26 +455,8 @@ export default function BlockWrapper({
           {!editing && (
             <>
               <div className="w-px h-3.5 bg-border mx-0.5 hidden sm:block" />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onTogglePin(block.id)}
-                title={block.is_pinned ? 'Unpin block' : 'Pin to HUD'}
-                className={cn('h-5 w-5', block.is_pinned && 'text-amber-500 hover:text-amber-600')}
-              >
-                {block.is_pinned
-                  ? <PinOff className="h-3 w-3" />
-                  : <Pin className="h-3 w-3" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onViewHistory(block)}
-                title="View version history"
-                className="h-5 w-5"
-              >
-                <History className="h-3 w-3" />
-              </Button>
+
+              {/* Edit — primary inline action */}
               {canEdit && (
                 <Button
                   variant="ghost"
@@ -354,102 +468,297 @@ export default function BlockWrapper({
                   <Edit2 className="h-3 w-3" />
                 </Button>
               )}
-              {!isMasked && canEdit && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onMask(block.id)}
-                  title="Mask block"
-                  className="h-5 w-5 hover:text-orange-500"
-                >
-                  <EyeOff className="h-3 w-3" />
-                </Button>
-              )}
-              {isMasked && !encounterClosed && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onMask(block.id)}
-                  title="Unmask block"
-                  className="h-5 w-5 hover:text-emerald-500"
-                >
-                  <Eye className="h-3 w-3" />
-                </Button>
-              )}
-              {isImmutable && !encounterClosed && (
-                <span title="This block cannot be edited" className="p-0.5">
-                  <Lock className="h-2.5 w-2.5 text-muted-foreground" />
-                </span>
-              )}
 
-              {/* Privacy flags */}
-              <div className="w-px h-3.5 bg-border mx-0.5" />
-
+              {/* Masked block: only show unmask button, skip full menu */}
+              {isMasked ? (
+                !encounterClosed && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onMask(block.id)}
+                    title="Unmask block"
+                    className="h-5 w-5 text-muted-foreground hover:text-emerald-600"
+                  >
+                    <Eye className="h-3 w-3" />
+                  </Button>
+                )
+              ) : (
               <div className="relative">
                 <Button
+                  ref={menuTriggerRef}
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => { setDraftRoles(block.visible_to_roles ?? []); setRolesPopoverOpen(o => !o) }}
-                  title="Restrict block visibility to specific roles"
-                  className={cn('h-5 w-5', (block.visible_to_roles?.length ?? 0) > 0 && 'text-amber-600')}
+                  onClick={openMenu}
+                  title="More options"
+                  className={cn(
+                    'h-5 w-5',
+                    (block.is_pinned || block.share_to_record || (block.visible_to_roles?.length ?? 0) > 0)
+                      && 'text-primary/70',
+                  )}
                 >
-                  <Users className="h-3 w-3" />
+                  <MoreHorizontal className="h-3 w-3" />
                 </Button>
-                {rolesPopoverOpen && (
-                  <div className="absolute right-0 top-full mt-1 z-[100] w-52 rounded-lg border bg-card shadow-lg p-3 space-y-2">
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Restrict to roles</p>
-                    <p className="text-[10px] text-muted-foreground leading-tight">
-                      Empty = visible to anyone who can see the encounter
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {BLOCK_ROLE_OPTIONS.map(role => (
-                        <button
-                          key={role}
-                          type="button"
-                          onClick={() =>
-                            setDraftRoles(prev =>
-                              prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role],
-                            )
-                          }
-                          className={cn(
-                            'text-[11px] px-2 py-0.5 rounded border capitalize transition-colors',
-                            draftRoles.includes(role)
-                              ? 'border-primary/50 bg-primary/5 text-primary font-medium'
-                              : 'border-border text-muted-foreground hover:border-primary/30',
+
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[90]" onClick={() => setMenuOpen(false)} />
+                    <div
+                      ref={menuRef}
+                      className="fixed z-[200] w-64 rounded-xl border bg-card shadow-xl overflow-hidden flex flex-col"
+                    >
+
+                      {/* Header */}
+                      <div className="px-3.5 py-2.5 border-b bg-muted/30 shrink-0">
+                        <p className="text-[11px] font-semibold">Block Options</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{headerMeta.name}</p>
+                      </div>
+
+                      <div className="overflow-y-auto flex-1 min-h-0">
+                        {/* ── Block actions ── */}
+                        <div className="p-2 space-y-0.5">
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-2 pb-1">Actions</p>
+
+                          {/* Pin */}
+                          <button
+                            type="button"
+                            onClick={() => { onTogglePin(block.id); setMenuOpen(false) }}
+                            className={cn(
+                              'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60',
+                              block.is_pinned && 'text-amber-600',
+                            )}
+                          >
+                            <div className={cn(
+                              'h-6 w-6 rounded-md flex items-center justify-center shrink-0',
+                              block.is_pinned ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-muted',
+                            )}>
+                              {block.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium">{block.is_pinned ? 'Unpin block' : 'Pin to HUD'}</p>
+                              <p className="text-[10px] text-muted-foreground">{block.is_pinned ? 'Remove from pinned panel' : 'Keep visible at top'}</p>
+                            </div>
+                          </button>
+
+                          {/* History */}
+                          <button
+                            type="button"
+                            onClick={() => { onViewHistory(block); setMenuOpen(false) }}
+                            className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60"
+                          >
+                            <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center shrink-0">
+                              <History className="h-3.5 w-3.5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium">Version history</p>
+                              <p className="text-[10px] text-muted-foreground">View past revisions</p>
+                            </div>
+                          </button>
+
+                          {/* Duplicate */}
+                          {!isMasked && !encounterClosed && (
+                            <button
+                              type="button"
+                              onClick={() => { onDuplicate(block.id); setMenuOpen(false) }}
+                              className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60"
+                            >
+                              <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                <Copy className="h-3.5 w-3.5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium">Duplicate block</p>
+                                <p className="text-[10px] text-muted-foreground">Copy to end of timeline</p>
+                              </div>
+                            </button>
                           )}
-                        >
-                          {role}
-                        </button>
-                      ))}
+
+                          {/* Mask / Unmask */}
+                          {!isMasked && canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => { onMask(block.id); setMenuOpen(false) }}
+                              className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-orange-50 dark:hover:bg-orange-950/20 text-orange-600 dark:text-orange-400"
+                            >
+                              <div className="h-6 w-6 rounded-md bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center shrink-0">
+                                <EyeOff className="h-3.5 w-3.5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium">Mask block</p>
+                                <p className="text-[10px] opacity-70">Hide from standard view</p>
+                              </div>
+                            </button>
+                          )}
+                          {isMasked && !encounterClosed && (
+                            <button
+                              type="button"
+                              onClick={() => { onMask(block.id); setMenuOpen(false) }}
+                              className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
+                            >
+                              <div className="h-6 w-6 rounded-md bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center shrink-0">
+                                <Eye className="h-3.5 w-3.5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium">Unmask block</p>
+                                <p className="text-[10px] opacity-70">Restore to view</p>
+                              </div>
+                            </button>
+                          )}
+                          {isImmutable && !encounterClosed && (
+                            <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-muted-foreground">
+                              <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                <Lock className="h-3.5 w-3.5" />
+                              </div>
+                              <p className="text-[11px]">Block is immutable</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ── Privacy & Sharing ── */}
+                        <div className="border-t p-2 space-y-0.5">
+                          <div className="flex items-center gap-1.5 px-2 pb-1">
+                            <ShieldCheck className="h-3 w-3 text-muted-foreground" />
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Privacy & Sharing</p>
+                          </div>
+
+                          {/* Share to Results & Reports */}
+                          <div className="rounded-lg border bg-muted/20 px-2.5 py-2 space-y-0">
+                            <button
+                              type="button"
+                              onClick={handleToggleShareToRecord}
+                              className="w-full flex items-center gap-2 text-left"
+                            >
+                              <BookOpen className={cn('h-3.5 w-3.5 shrink-0', block.share_to_record ? 'text-emerald-600' : 'text-muted-foreground')} />
+                              <div className="flex-1 min-w-0">
+                                <p className={cn('text-[11px] font-medium', block.share_to_record && 'text-emerald-700 dark:text-emerald-400')}>
+                                  Share to Results & Reports
+                                </p>
+                                <p className="text-[10px] text-muted-foreground leading-tight">Appear in patient record tab</p>
+                              </div>
+                              <div className={cn(
+                                'h-4 w-7 rounded-full transition-colors relative shrink-0',
+                                block.share_to_record ? 'bg-emerald-500' : 'bg-muted-foreground/30',
+                              )}>
+                                <div className={cn(
+                                  'absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform',
+                                  block.share_to_record ? 'translate-x-3.5' : 'translate-x-0.5',
+                                )} />
+                              </div>
+                            </button>
+                          </div>
+
+                          {/* Role restriction */}
+                          <div className="rounded-lg border bg-muted/20 px-2.5 py-2 space-y-2">
+                            <div className="flex items-start gap-2">
+                              <Users className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', (draftRoles.length > 0) ? 'text-amber-600' : 'text-muted-foreground')} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] font-medium">Restrict to roles</p>
+                                <p className="text-[10px] text-muted-foreground leading-tight">Empty = visible to all encounter viewers</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {BLOCK_ROLE_OPTIONS.map(role => (
+                                <button
+                                  key={role}
+                                  type="button"
+                                  onClick={() =>
+                                    setDraftRoles(prev =>
+                                      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role],
+                                    )
+                                  }
+                                  className={cn(
+                                    'text-[10px] px-2 py-0.5 rounded-full border capitalize transition-all font-medium',
+                                    draftRoles.includes(role)
+                                      ? 'border-amber-400 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
+                                      : 'border-border text-muted-foreground hover:border-amber-300',
+                                  )}
+                                >
+                                  {role}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-2" onClick={() => setDraftRoles(block.visible_to_roles ?? [])}>Reset</Button>
+                              <Button size="sm" className="h-5 text-[10px] px-2" onClick={handleSaveRoles} disabled={savingRoles}>
+                                {savingRoles ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── Admin: Danger zone ── */}
+                      {isAdmin && onHardDelete && (
+                        <div className="border-t border-rose-100 dark:border-rose-900/40 p-2 bg-rose-50/40 dark:bg-rose-950/10">
+                          <div className="flex items-center gap-1.5 px-2 pb-1.5">
+                            <div className="h-3.5 w-3.5 rounded-full bg-rose-500 flex items-center justify-center shrink-0">
+                              <Trash2 className="h-2 w-2 text-white" />
+                            </div>
+                            <p className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-widest">Admin only</p>
+                          </div>
+                          {!hardDeleteConfirm ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={() => setHardDeleteConfirm(true)}
+                                  className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all hover:bg-rose-100 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 group border border-transparent hover:border-rose-200 dark:hover:border-rose-800"
+                                >
+                                  <div className="h-7 w-7 rounded-md bg-rose-100 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center justify-center shrink-0 group-hover:bg-rose-200 dark:group-hover:bg-rose-900/60 transition-colors">
+                                    <Trash2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-semibold">Permanently delete block</p>
+                                    <p className="text-[10px] text-rose-500/70 dark:text-rose-400/60">Irreversible — removes block forever</p>
+                                  </div>
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="text-xs max-w-[180px] text-center">
+                                Admin action — permanently deletes this block and all its history
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <div className="rounded-lg border border-rose-300 dark:border-rose-700 bg-rose-100/80 dark:bg-rose-950/40 px-3 py-3 space-y-2.5">
+                              <div className="flex items-start gap-2">
+                                <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="text-[11px] font-bold text-rose-700 dark:text-rose-300">Permanently delete this block?</p>
+                                  <p className="text-[10px] text-rose-600/80 dark:text-rose-400/70 mt-0.5">This cannot be undone. All content and history will be lost.</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-[11px] px-3 flex-1 border-rose-200 dark:border-rose-800 hover:bg-white dark:hover:bg-rose-950/60"
+                                  onClick={() => setHardDeleteConfirm(false)}
+                                  disabled={hardDeleting}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-[11px] px-3 flex-1 bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600 text-white border-0 shadow-sm"
+                                  disabled={hardDeleting}
+                                  onClick={async () => {
+                                    setHardDeleting(true)
+                                    await onHardDelete(block.id)
+                                    setHardDeleting(false)
+                                    setMenuOpen(false)
+                                  }}
+                                >
+                                  {hardDeleting
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <><Trash2 className="h-3 w-3" /><span>Delete forever</span></>
+                                  }
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-end gap-1.5 border-t pt-2">
-                      <Button variant="ghost" size="sm" className="h-5 text-[11px]" onClick={() => setRolesPopoverOpen(false)}>Cancel</Button>
-                      <Button size="sm" className="h-5 text-[11px]" onClick={handleSaveRoles} disabled={savingRoles}>Save</Button>
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
-
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={handleToggleShareToRecord}
-                title={block.share_to_record ? 'Remove from Results & Reports' : 'Share to Results & Reports'}
-                className={cn('h-5 w-5', block.share_to_record && 'text-emerald-600')}
-              >
-                <BookOpen className="h-3 w-3" />
-              </Button>
-
-              {encounterPortalVisible && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={handleTogglePortalVisible}
-                  title={block.portal_visible ? 'Hide from patient portal' : 'Show in patient portal'}
-                  className={cn('h-5 w-5', block.portal_visible && 'text-blue-500')}
-                >
-                  <Eye className="h-3 w-3" />
-                </Button>
               )}
             </>
           )}
@@ -460,7 +769,7 @@ export default function BlockWrapper({
       {expanded && (
         <>
           <Separator />
-          <div className="px-4 py-3">
+          <div className="px-4 py-3 overflow-x-auto">
             {editing
               ? renderEdit(block, def, handleSave, handleCancel)
               : renderView(block, def)}
@@ -477,6 +786,22 @@ export default function BlockWrapper({
           blockId={block.id}
           definition={def}
           readOnly={encounterClosed}
+        />
+      )}
+      {def?.cap_co_sign && (
+        <AcknowledgmentPanel blockId={block.id} readOnly={encounterClosed || isMasked} />
+      )}
+
+      {/* ── Dept order action panel ──────────────────────── */}
+      {def?.config?.dept_role === 'order' && block.encounter_id && (
+        <ActionPanel
+          blockId={block.id}
+          encounterId={block.encounter_id}
+          patientId={_patientId}
+          definition={def}
+          blockContent={block.content as Record<string, unknown>}
+          readOnly={encounterClosed}
+          onSentChange={setOrderSent}
         />
       )}
     </div>

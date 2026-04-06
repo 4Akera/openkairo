@@ -57,17 +57,19 @@ export function applyPatientSearch(query: AnyQuery, raw: string): AnyQuery {
   } else if (tokens.length === 1) {
     const n = tokens[0]
     query = query.or(
-      `first_name.ilike.%${n}%,last_name.ilike.%${n}%,mrn.ilike.%${n}%,phone.ilike.%${n}%`,
+      `first_name.ilike.%${n}%,middle_name.ilike.%${n}%,last_name.ilike.%${n}%,mrn.ilike.%${n}%,phone.ilike.%${n}%`,
     )
   } else if (tokens.length === 2) {
     const [n1, n2] = tokens
     query = query.or(
       `and(first_name.ilike.%${n1}%,last_name.ilike.%${n2}%),` +
-      `and(first_name.ilike.%${n2}%,last_name.ilike.%${n1}%)`,
+      `and(first_name.ilike.%${n2}%,last_name.ilike.%${n1}%),` +
+      `and(first_name.ilike.%${n1}%,middle_name.ilike.%${n2}%),` +
+      `and(middle_name.ilike.%${n1}%,last_name.ilike.%${n2}%)`,
     )
   } else {
     for (const n of tokens) {
-      query = query.or(`first_name.ilike.%${n}%,last_name.ilike.%${n}%`)
+      query = query.or(`first_name.ilike.%${n}%,middle_name.ilike.%${n}%,last_name.ilike.%${n}%`)
     }
   }
 

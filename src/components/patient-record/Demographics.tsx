@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import type { Patient, PatientFieldDefinition, DatePrecision } from '../../types'
 import { PATIENT_REAL_COLUMNS } from '../../types'
 import { calcAge, formatDateWithPrecision, fullName, getPatientDob } from '../../lib/utils'
+import { useSettingsStore } from '../../stores/settingsStore'
 import {
   Badge,
   Button,
@@ -16,6 +17,7 @@ import {
 } from '../ui'
 import { ClinicalDatePicker } from '../ui/ClinicalDatePicker'
 import { Edit2, Loader2, Camera } from 'lucide-react'
+import { cn } from '../../lib/utils'
 
 interface Props {
   patient: Patient
@@ -49,6 +51,7 @@ export default function Demographics({ patient, onUpdate }: Props) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [form, setForm] = useState<Record<string, string>>({})
   const fileRef = useRef<HTMLInputElement>(null)
+  const { nameFormat } = useSettingsStore()
 
   const loadDefs = useCallback(async () => {
     const { data } = await supabase
@@ -141,15 +144,30 @@ export default function Demographics({ patient, onUpdate }: Props) {
 
   // Split fields for view: skip name + DOB (DOB shown once with Age above)
   const viewFields = fieldDefs.filter(
-    d => !['first_name', 'last_name', 'date_of_birth'].includes(d.slug)
+    d => !['first_name', 'middle_name', 'last_name', 'date_of_birth'].includes(d.slug)
   )
 
   const dob = getPatientDob(patient)
   const age = calcAge(dob)
 
+  // #region agent log
+  const _dbgDemoRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = _dbgDemoRef.current
+    if (!el) return
+    const t = setTimeout(() => {
+      const parent = el.parentElement
+      const grandparent = parent?.parentElement
+      const grid = el.querySelector('.grid')
+      fetch('http://127.0.0.1:7743/ingest/6aa0f9fa-a258-4e9d-993c-a718e7315704',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'60830c'},body:JSON.stringify({sessionId:'60830c',location:'Demographics.tsx:widths',message:'demographics widths',data:{demoW:el.offsetWidth,demoScrollW:el.scrollWidth,parentW:parent?.offsetWidth,parentScrollW:parent?.scrollWidth,parentTag:parent?.tagName,parentClass:parent?.className?.slice(0,80),grandparentW:grandparent?.offsetWidth,grandparentScrollW:grandparent?.scrollWidth,grandparentTag:grandparent?.tagName,grandparentStyle:grandparent?getComputedStyle(grandparent).display:null,gridW:grid?.clientWidth,gridScrollW:grid?.scrollWidth},timestamp:Date.now()})}).catch(()=>{})
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [patient.id])
+  // #endregion
+
   return (
     <>
-      <div className="p-3 space-y-2">
+      <div ref={_dbgDemoRef} className="rounded-md border bg-muted/20 p-3 space-y-2">
         {/* Avatar + name */}
         <div className="flex items-center gap-3">
           {/* Photo avatar with upload overlay */}
@@ -162,11 +180,11 @@ export default function Demographics({ patient, onUpdate }: Props) {
               {patient.photo_url ? (
                 <img
                   src={patient.photo_url}
-                  alt={fullName(patient)}
+                  alt={fullName(patient, nameFormat)}
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <span>{patient.first_name[0]}{patient.last_name[0]}</span>
+                <span>{patient.first_name[0]}{nameFormat === 'three' && patient.middle_name ? patient.middle_name[0] : patient.last_name[0]}</span>
               )}
             </div>
             <div
@@ -188,7 +206,7 @@ export default function Demographics({ patient, onUpdate }: Props) {
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{fullName(patient)}</p>
+            <p className="font-semibold text-sm truncate">{fullName(patient, nameFormat)}</p>
             <p className="text-xs text-muted-foreground font-mono">{patient.mrn}</p>
           </div>
           <Button variant="ghost" size="icon-sm" onClick={openEdit}>
@@ -250,10 +268,10 @@ export default function Demographics({ patient, onUpdate }: Props) {
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-3 mt-2 pr-2">
-              {/* System name fields side by side */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* System name fields: 2 or 3 depending on format */}
+              <div className={cn('grid gap-3', nameFormat === 'three' ? 'grid-cols-3' : 'grid-cols-2')}>
                 {fieldDefs
-                  .filter(d => d.slug === 'first_name' || d.slug === 'last_name')
+                  .filter(d => d.slug === 'first_name' || (nameFormat === 'three' && d.slug === 'middle_name') || d.slug === 'last_name')
                   .map(def => (
                     <div key={def.slug} className="space-y-1">
                       <Label>
@@ -270,7 +288,7 @@ export default function Demographics({ patient, onUpdate }: Props) {
 
               {/* All other active fields */}
               {fieldDefs
-                .filter(d => !['first_name', 'last_name'].includes(d.slug))
+                .filter(d => !['first_name', 'middle_name', 'last_name'].includes(d.slug))
                 .map(def => (
                   <DynamicField
                     key={def.slug}

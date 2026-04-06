@@ -31,7 +31,11 @@ export function AcknowledgmentPanel({
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setAcks((prev) => [...prev, payload.new as BlockAcknowledgment])
+            setAcks((prev) => {
+              const incoming = payload.new as BlockAcknowledgment
+              if (prev.some((a) => a.id === incoming.id)) return prev
+              return [...prev, incoming]
+            })
           }
         },
       )

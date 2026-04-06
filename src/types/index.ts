@@ -3,37 +3,27 @@
 // ============================================================
 
 export const PERMISSIONS = [
-  'encounter.create',
-  'encounter.close',
-  'encounter.view_all',
   'block.add',
-  'block.delete',
-  'patient.create',
-  'patient.edit_record',
-  'patient.view_all',
   'admin.manage_users',
-  'admin.manage_roles',
   'admin.manage_blocks',
   'admin.manage_templates',
   'template.create',
+  'billing.charge',
+  'billing.payment',
+  'billing.manage_fees',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
 
 export const PERMISSION_LABELS: Record<Permission, { label: string; category: string }> = {
-  'encounter.create':    { label: 'Create encounters',        category: 'Encounters' },
-  'encounter.close':     { label: 'Close / discharge',        category: 'Encounters' },
-  'encounter.view_all':  { label: 'View all encounters',      category: 'Encounters' },
-  'block.add':           { label: 'Add blocks to timeline',   category: 'Blocks' },
-  'block.delete':        { label: 'Delete / mask blocks',     category: 'Blocks' },
-  'patient.create':      { label: 'Register new patients',    category: 'Patients' },
-  'patient.edit_record': { label: 'Edit master patient record', category: 'Patients' },
-  'patient.view_all':    { label: 'View all patients',        category: 'Patients' },
-  'admin.manage_users':      { label: 'Manage users & role assignments', category: 'Administration' },
-  'admin.manage_roles':      { label: 'Create & edit roles',            category: 'Administration' },
-  'admin.manage_blocks':     { label: 'Create standard block types',   category: 'Administration' },
-  'admin.manage_templates':  { label: 'Create standard templates',     category: 'Administration' },
-  'template.create':         { label: 'Create personal templates',      category: 'Templates' },
+  'block.add':               { label: 'Add blocks to timeline',            category: 'Blocks' },
+  'admin.manage_users':      { label: 'Manage users & role assignments',   category: 'Administration' },
+  'admin.manage_blocks':     { label: 'Create & edit block types',         category: 'Administration' },
+  'admin.manage_templates':  { label: 'Create & edit standard templates',  category: 'Administration' },
+  'template.create':         { label: 'Create personal templates',         category: 'Templates' },
+  'billing.charge':          { label: 'Add and void charges',              category: 'Billing' },
+  'billing.payment':         { label: 'Record payments and deposits',      category: 'Billing' },
+  'billing.manage_fees':     { label: 'Manage service item catalog',       category: 'Billing' },
 }
 
 export interface Role {
@@ -66,6 +56,21 @@ export interface Profile {
   id: string
   full_name: string
   role: string
+  preferred_blocks: string[] | null
+  pinned_blocks: string[] | null
+  encounter_fee: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UserBlockTemplate {
+  id: string
+  user_id: string
+  definition_id: string
+  name: string
+  content: Record<string, unknown>
+  is_default: boolean
+  sort_order: number
   created_at: string
   updated_at: string
 }
@@ -95,14 +100,17 @@ export interface PatientFieldDefinition {
 
 // Slugs that map to real columns on the patients table (not custom_fields JSONB)
 export const PATIENT_REAL_COLUMNS = new Set([
-  'first_name', 'last_name', 'date_of_birth',
+  'first_name', 'middle_name', 'last_name', 'date_of_birth',
   'gender', 'phone', 'blood_group', 'photo_url', 'mrn',
 ])
+
+export type NameFormat = 'two' | 'three'
 
 export interface Patient {
   id: string
   mrn: string
   first_name: string
+  middle_name: string | null
   last_name: string
   date_of_birth: string | null
   date_of_birth_precision: DatePrecision
@@ -115,6 +123,47 @@ export interface Patient {
   created_at: string
   updated_at: string
   updated_by?: string | null
+}
+
+// ============================================================
+// Departments
+// ============================================================
+
+export interface Department {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  icon: string
+  color: string
+  can_receive_orders: boolean
+  can_create_direct: boolean
+  active: boolean
+  sort_order: number
+  created_by: string | null
+  created_at: string
+}
+
+export interface DepartmentBlockType {
+  id: string
+  department_id: string
+  name: string
+  description: string | null
+  order_block_def_id: string | null
+  entry_block_def_id: string | null
+  built_in_type: string | null
+  service_item_id: string | null
+  charge_mode: 'auto' | 'confirm'
+  active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface DepartmentMember {
+  id: string
+  department_id: string
+  user_id: string
+  created_at: string
 }
 
 export type DatePrecision = 'year' | 'month' | 'full'
@@ -260,26 +309,32 @@ export interface Encounter {
   status: 'open' | 'closed'
   visibility: 'staff' | 'restricted' | 'private'
   visible_to_roles: string[]
-  portal_visible: boolean
+  assigned_to: string | null
   created_by: string | null
   created_at: string
   updated_at: string
   closed_at: string | null
   created_profile?: { full_name: string } | null
+  assigned_profile?: { full_name: string } | null
 }
 
 // ============================================================
 // Block Content Types
 // ============================================================
 
-export type RosSystemState  = { items: Record<string, boolean>; notes: string }
-export type ExamSystemState = { items: Record<string, boolean>; notes: string }
+export type RosItemState  = 'positive' | 'denied'
+export type ExamItemState = 'present'  | 'absent'
+
+export type RosSystemState  = { items: Record<string, RosItemState>;  notes: string }
+export type ExamSystemState = { items: Record<string, ExamItemState>; notes: string }
 
 export interface HxPhysicalContent {
   chief_complaint: string
-  hpi: string
-  ros:  Record<string, RosSystemState>
-  exam: Record<string, ExamSystemState>
+  hpi:             string
+  ros:             Record<string, RosSystemState>
+  ros_notes:       string
+  exam:            Record<string, ExamSystemState>
+  exam_notes:      string
 }
 
 export interface NoteContent {
@@ -302,9 +357,11 @@ export interface MedOrdersContent {
 }
 
 export interface PlanProblem {
-  id: string
-  problem: string
-  plan: string
+  id:               string
+  problem:          string
+  plan:             string
+  importance:       'high' | 'medium' | 'low' | null
+  chart_problem_id: string | null
 }
 
 export interface PlanContent {
@@ -329,12 +386,116 @@ export interface VitalsContent {
   spo2_flags:   string[]
 }
 
-export type BlockType = 'hx_physical' | 'vitals' | 'note' | 'med_orders' | 'plan' | string
+// ============================================================
+// Lab
+// ============================================================
+
+export type LabFlag = 'HH' | 'H' | 'L' | 'LL' | ''
+
+export interface LabResult {
+  value:   string
+  flag:    LabFlag
+  comment: string
+}
+
+/** Content stored in the ordering clinician's lab_order block */
+export interface LabOrderContent {
+  panels:     string[]   // e.g. ['cbc', 'metabolic', 'tft']
+  custom:     { name: string; unit: string; ref_low: string; ref_high: string }[]
+  indication: string
+  urgency:    'routine' | 'urgent' | 'stat' | ''
+  specimen:   string
+}
+
+/** Content stored in the lab technician's lab_result block */
+export type LabResultStatus = 'collected' | 'processing' | 'resulted' | 'verified'
+
+export interface LabResultContent {
+  panels:         string[]   // panels to report on (pre-populated from the order)
+  custom_defs:    { name: string; unit: string; ref_low: string; ref_high: string }[]
+  results:        Record<string, LabResult>  // key = "panelId.testId"
+  custom_results: LabResult[]
+  notes:          string
+  status:         LabResultStatus
+  reported_at:    string | null
+}
+
+export type BlockType = 'hx_physical' | 'vitals' | 'note' | 'med_orders' | 'plan' | 'lab_order' | 'lab_result' | 'nurse_note' | 'consultation' | 'dc_note' | 'meds' | string
 export type BlockState = 'active' | 'masked'
+
+// ============================================================
+// Nurse Note
+// ============================================================
+
+export interface NurseNoteEntry {
+  id:        string
+  timestamp: string
+  text:      string
+  author?:   string
+}
+
+export interface NurseNoteContent {
+  entries: NurseNoteEntry[]
+}
+
+// ============================================================
+// Consultation
+// ============================================================
+
+export interface ConsultationContent {
+  service:          string
+  urgency:          'routine' | 'urgent' | 'stat' | ''
+  reason:           string
+  clinical_summary: string
+  question:         string
+  status:           'requested' | 'acknowledged' | 'answered'
+  answer:           string
+  answered_by:      string
+  answered_at:      string | null
+}
+
+// ============================================================
+// Discharge Note
+// ============================================================
+
+export interface DCNoteContent {
+  diagnoses:        { text: string; primary: boolean }[]
+  admission_reason: string
+  hospital_course:  string
+  condition:        'improved' | 'stable' | 'critical' | 'deceased' | ''
+  discharge_meds:   { name: string; dose: string; route: string; freq: string; notes: string }[]
+  instructions:     string
+  followup:         string
+  pending:          string
+}
+
+// ============================================================
+// Medications
+// ============================================================
+
+export type MedStatus = 'active' | 'held' | 'discontinued'
+
+export interface MedItem {
+  id:         string
+  name:       string
+  dose:       string
+  route:      string
+  freq:       string
+  duration:   string
+  indication: string
+  status:     MedStatus
+}
+
+export interface MedsContent {
+  meds: MedItem[]
+}
 
 export interface Block {
   id: string
-  encounter_id: string
+  encounter_id: string | null
+  department_id: string | null
+  department_block_type_id: string | null
+  patient_id: string | null
   type: BlockType
   content: HxPhysicalContent | VitalsContent | NoteContent | MedOrdersContent | PlanContent | Record<string, unknown>
   state: BlockState
@@ -347,7 +508,6 @@ export interface Block {
   is_template_seed: boolean
   is_pinned: boolean
   visible_to_roles: string[]
-  portal_visible: boolean
   share_to_record: boolean
   created_by: string | null
   created_at: string
@@ -402,6 +562,7 @@ export interface ScoreInterpretation {
 }
 
 export interface BlockDefinitionConfig {
+  dept_role?: 'order' | 'result'  // 'order' = doctor places it; ActionPanel renders; 'result' = dept fills via department portal
   score?: {
     label: string
     fields: string[]
@@ -445,10 +606,12 @@ export interface BlockDefinition {
   // Metadata
   is_builtin: boolean
   is_universal: boolean
+  is_dept_only: boolean
   visible_to_roles: string[]
-  // Default privacy applied to blocks when this type is inserted
   default_visible_to_roles: string[]
-  default_portal_visible: boolean
+  // Billing
+  service_item_id: string | null
+  charge_mode: 'auto' | 'confirm' | null
   active: boolean
   sort_order: number
   created_by: string | null
@@ -536,6 +699,104 @@ export interface BlockAcknowledgment {
   acked_by: string
   acker_name: string | null
   acked_at: string
+}
+
+// ============================================================
+// Billing
+// ============================================================
+
+export interface ServiceItem {
+  id: string
+  code: string
+  name: string
+  category: string | null
+  default_price: number
+  active: boolean
+  sort_order: number
+  created_by: string | null
+  created_at: string
+}
+
+export type ChargeStatus = 'pending' | 'pending_approval' | 'pending_insurance' | 'invoiced' | 'paid' | 'waived' | 'void'
+export type ChargeSource = 'manual' | 'block_auto' | 'encounter_close' | 'department'
+
+export interface Charge {
+  id: string
+  patient_id: string
+  encounter_id: string | null
+  block_id: string | null
+  service_item_id: string | null
+  invoice_id: string | null
+  description: string
+  quantity: number
+  unit_price: number
+  status: ChargeStatus
+  voided_reason: string | null
+  source: ChargeSource
+  created_by: string | null
+  created_at: string
+}
+
+export interface Payment {
+  id: string
+  patient_id: string
+  invoice_id: string | null
+  amount: number
+  method: 'cash' | 'card' | 'mobile_money' | 'insurance' | 'bank_transfer' | 'deposit'
+  reference: string | null
+  payer_name: string | null
+  notes: string | null
+  received_by: string | null
+  created_at: string
+}
+
+export interface PatientDeposit {
+  id: string
+  patient_id: string
+  amount: number
+  remaining: number
+  method: string | null
+  reference: string | null
+  notes: string | null
+  received_by: string | null
+  created_at: string
+}
+
+export interface Invoice {
+  id: string
+  patient_id: string
+  invoice_number: string
+  subtotal: number
+  discount: number
+  total: number
+  status: 'draft' | 'issued' | 'partial' | 'paid' | 'overdue' | 'cancelled'
+  issued_at: string | null
+  due_date: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface PatientInsurance {
+  id: string
+  patient_id: string
+  payer_name: string
+  policy_number: string | null
+  copay_percent: number | null
+  coverage_limit: number | null
+  is_active: boolean
+  valid_from: string | null
+  valid_to: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PatientBalance {
+  patient_id: string
+  total_charges: number
+  total_payments: number
+  deposit_balance: number
+  balance: number
 }
 
 // ============================================================

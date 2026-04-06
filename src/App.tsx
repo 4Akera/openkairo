@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
+import { useSettingsStore } from './stores/settingsStore'
+import { useThemeStore } from './stores/themeStore'
 
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
@@ -9,6 +11,8 @@ import DashboardPage from './pages/DashboardPage'
 import PatientPage from './pages/PatientPage'
 import EncounterPage from './pages/EncounterPage'
 import SettingsPage from './pages/SettingsPage'
+import DeptPortal from './pages/DeptPortal'
+import BillingPage from './pages/BillingPage'
 import ProfileModal from './components/profile/ProfileModal'
 
 function ProtectedRoute() {
@@ -40,19 +44,31 @@ function ProtectedRoute() {
 
 export default function App() {
   const { setUser, setSession, setLoading, fetchProfile } = useAuthStore()
+  const { fetchSettings } = useSettingsStore()
+  const initTheme = useThemeStore(s => s.init)
+
+  useEffect(() => {
+    initTheme()
+  }, [initTheme])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
-      if (session?.user) fetchProfile()
+      if (session?.user) {
+        fetchProfile()
+        fetchSettings()
+      }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) fetchProfile()
+      if (session?.user) {
+        fetchProfile()
+        fetchSettings()
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -63,10 +79,12 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
+          <Route path="portal" element={<DeptPortal />} />
           <Route element={<AppLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="patients/:patientId" element={<PatientPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="billing" element={<BillingPage />} />
           </Route>
           <Route
             path="patients/:patientId/encounters/:encounterId"

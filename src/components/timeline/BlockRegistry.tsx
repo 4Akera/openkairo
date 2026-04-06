@@ -15,22 +15,27 @@
  */
 
 import type { Block } from '../../types'
-import {
-  HxPhysicalView,
-  HxPhysicalEdit,
-  emptyHxPhysical,
-  type HxPhysicalContent,
-} from './blocks/HxPhysicalBlock'
-import {
-  VitalsView,
-  VitalsEdit,
-  emptyVitals,
-  type VitalsContent,
-} from './blocks/VitalsBlock'
+import { VitalsView, VitalsEdit, emptyVitals, type VitalsContent } from './blocks/VitalsBlock'
 import { NoteView, NoteEdit, emptyNote } from './blocks/NoteBlock'
-import { MedsView, MedsEdit, emptyMedOrders } from './blocks/MedsBlock'
+import type { NoteContent } from '../../types'
+import { HxPhysicalView, HxPhysicalEdit, emptyHxPhysical } from './blocks/HxPhysicalBlock'
+import type { HxPhysicalContent } from '../../types'
 import { PlanView, PlanEdit, emptyPlan } from './blocks/PlanBlock'
-import type { NoteContent, MedOrdersContent, PlanContent } from '../../types'
+import type { PlanContent } from '../../types'
+import { LabOrderView, LabOrderEdit, emptyLabOrder } from './blocks/LabOrderBlock'
+import type { LabOrderContent, LabResultContent, NurseNoteContent, ConsultationContent, DCNoteContent, MedsContent } from '../../types'
+import { LabResultView, LabResultEdit, emptyLabResult } from './blocks/LabResultBlock'
+import { NurseNoteView, NurseNoteEdit, emptyNurseNote } from './blocks/NurseNoteBlock'
+import { ConsultationView, ConsultationEdit, emptyConsultation } from './blocks/ConsultationBlock'
+import { DCNoteView, DCNoteEdit, emptyDCNote } from './blocks/DCNoteBlock'
+import { MedsView, MedsEdit, emptyMeds } from './blocks/MedsBlock'
+import { MediaView, MediaEdit, emptyMedia, type MediaContent } from './blocks/MediaBlock'
+import { ScoreView, ScoreEdit, emptyScore, type ScoreContent } from './blocks/ScoreBlock'
+import { TourView, TourEdit, emptyTour, type TourContent } from './blocks/TourBlock'
+import { ProcedureNoteView, ProcedureNoteEdit, emptyProcedureNote, type ProcedureNoteContent } from './blocks/ProcedureNoteBlock'
+import { AnaestheticNoteView, AnaestheticNoteEdit, emptyAnaesthetic, type AnaestheticContent } from './blocks/AnaestheticNoteBlock'
+import { PainAssessmentView, PainAssessmentEdit, emptyPainAssessment, type PainAssessmentContent } from './blocks/PainAssessmentBlock'
+import { WoundCareView, WoundCareEdit, emptyWoundCare, type WoundCareContent } from './blocks/WoundCareBlock'
 
 // ============================================================
 // Registry interface
@@ -52,108 +57,53 @@ export interface BlockRenderer {
 }
 
 // ============================================================
-// Built-in adapter components
-// (thin wrappers that bridge the typed content ↔ generic callback)
+// Adapter helpers (bridge typed content ↔ generic callback)
 // ============================================================
 
-const HxPhysicalViewAdapter: React.FC<{ block: Block }> = ({ block }) => (
-  <HxPhysicalView block={block} />
-)
-
-const HxPhysicalEditAdapter: React.FC<EditProps> = ({ block, onSave, onCancel }) => (
-  <HxPhysicalEdit
-    block={block}
-    onSave={(c: HxPhysicalContent) => onSave(c as unknown as Record<string, unknown>)}
-    onCancel={onCancel}
-  />
-)
-
-const VitalsViewAdapter: React.FC<{ block: Block }> = ({ block }) => (
-  <VitalsView block={block} />
-)
-
-const VitalsEditAdapter: React.FC<EditProps> = ({ block, onSave, onCancel }) => (
-  <VitalsEdit
-    block={block}
-    onSave={(c: VitalsContent) => onSave(c as unknown as Record<string, unknown>)}
-    onCancel={onCancel}
-  />
-)
-
-const NoteViewAdapter: React.FC<{ block: Block }> = ({ block }) => (
-  <NoteView block={block} />
-)
-
-const NoteEditAdapter: React.FC<EditProps> = ({ block, onSave, onCancel }) => (
-  <NoteEdit
-    block={block}
-    onSave={(c: NoteContent) => onSave(c as unknown as Record<string, unknown>)}
-    onCancel={onCancel}
-  />
-)
-
-const MedsViewAdapter: React.FC<{ block: Block }> = ({ block }) => (
-  <MedsView block={block} />
-)
-
-const MedsEditAdapter: React.FC<EditProps> = ({ block, onSave, onCancel }) => (
-  <MedsEdit
-    block={block}
-    onSave={(c: MedOrdersContent) => onSave(c as unknown as Record<string, unknown>)}
-    onCancel={onCancel}
-  />
-)
-
-const PlanViewAdapter: React.FC<{ block: Block }> = ({ block }) => (
-  <PlanView block={block} />
-)
-
-const PlanEditAdapter: React.FC<EditProps> = ({ block, onSave, onCancel }) => (
-  <PlanEdit
-    block={block}
-    onSave={(c: PlanContent) => onSave(c as unknown as Record<string, unknown>)}
-    onCancel={onCancel}
-  />
-)
+function makeAdapter<C>(
+  ViewComp: React.ComponentType<{ block: Block }>,
+  EditComp: React.ComponentType<{ block: Block; onSave: (c: C) => Promise<void>; onCancel: () => void }>,
+  empty: () => C,
+): BlockRenderer {
+  const View: React.FC<{ block: Block }> = ({ block }) => <ViewComp block={block} />
+  const Edit: React.FC<EditProps> = ({ block, onSave, onCancel }) => (
+    <EditComp
+      block={block}
+      onSave={(c: C) => onSave(c as unknown as Record<string, unknown>)}
+      onCancel={onCancel}
+    />
+  )
+  return {
+    View,
+    Edit,
+    emptyContent: () => empty() as unknown as Record<string, unknown>,
+  }
+}
 
 // ============================================================
 // Registry
 // ============================================================
 
 export const BLOCK_REGISTRY: Record<string, BlockRenderer> = {
-  hx_physical: {
-    View: HxPhysicalViewAdapter,
-    Edit: HxPhysicalEditAdapter,
-    emptyContent: () => emptyHxPhysical() as unknown as Record<string, unknown>,
-  },
-
-  vitals: {
-    View: VitalsViewAdapter,
-    Edit: VitalsEditAdapter,
-    emptyContent: () => emptyVitals() as unknown as Record<string, unknown>,
-  },
-
-  note: {
-    View: NoteViewAdapter,
-    Edit: NoteEditAdapter,
-    emptyContent: () => emptyNote() as unknown as Record<string, unknown>,
-  },
-
-  med_orders: {
-    View: MedsViewAdapter,
-    Edit: MedsEditAdapter,
-    emptyContent: () => emptyMedOrders() as unknown as Record<string, unknown>,
-  },
-
-  plan: {
-    View: PlanViewAdapter,
-    Edit: PlanEditAdapter,
-    emptyContent: () => emptyPlan() as unknown as Record<string, unknown>,
-  },
+  vitals:           makeAdapter<VitalsContent>(VitalsView, VitalsEdit, emptyVitals),
+  note:             makeAdapter<NoteContent>(NoteView, NoteEdit, emptyNote),
+  hx_physical:      makeAdapter<HxPhysicalContent>(HxPhysicalView, HxPhysicalEdit, emptyHxPhysical),
+  plan:             makeAdapter<PlanContent>(PlanView, PlanEdit, emptyPlan),
+  media:            makeAdapter<MediaContent>(MediaView, MediaEdit, emptyMedia),
+  score:            makeAdapter<ScoreContent>(ScoreView, ScoreEdit, emptyScore),
+  tour:             makeAdapter<TourContent>(TourView, TourEdit, emptyTour),
+  procedure_note:   makeAdapter<ProcedureNoteContent>(ProcedureNoteView, ProcedureNoteEdit, emptyProcedureNote),
+  anaesthetic_note: makeAdapter<AnaestheticContent>(AnaestheticNoteView, AnaestheticNoteEdit, emptyAnaesthetic),
+  pain_assessment:  makeAdapter<PainAssessmentContent>(PainAssessmentView, PainAssessmentEdit, emptyPainAssessment),
+  wound_care:       makeAdapter<WoundCareContent>(WoundCareView, WoundCareEdit, emptyWoundCare),
+  lab_order:        makeAdapter<LabOrderContent>(LabOrderView, LabOrderEdit, emptyLabOrder),
+  lab_result:       makeAdapter<LabResultContent>(LabResultView, LabResultEdit, emptyLabResult),
+  nurse_note:       makeAdapter<NurseNoteContent>(NurseNoteView, NurseNoteEdit, emptyNurseNote),
+  consultation:     makeAdapter<ConsultationContent>(ConsultationView, ConsultationEdit, emptyConsultation),
+  dc_note:          makeAdapter<DCNoteContent>(DCNoteView, DCNoteEdit, emptyDCNote),
+  meds:             makeAdapter<MedsContent>(MedsView, MedsEdit, emptyMeds),
 
   // ── Add new hardcoded block types here ───────────────────────
-  // Example:
-  // vitals_flow: { View: VitalsFlowView, Edit: VitalsFlowEdit, emptyContent: () => ({...}) },
 }
 
 /** Returns true if the slug has a hardcoded renderer */
