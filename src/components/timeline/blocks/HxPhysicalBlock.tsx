@@ -65,8 +65,8 @@ function mergeRos(saved: Record<string, unknown>): Record<string, RosSystemState
     if (!s) continue
     const normalised: Record<string, RosItemState> = {}
     for (const [item, val] of Object.entries(s.items ?? {})) {
-      if (val === 'positive' || val === true)  normalised[item] = 'positive'
-      else if (val === 'denied')               normalised[item] = 'denied'
+      if (val === 'positive' || (val as unknown) === true)  normalised[item] = 'positive'
+      else if (val === 'denied')                            normalised[item] = 'denied'
     }
     base[key] = { items: normalised, notes: s.notes ?? '' }
   }
@@ -80,9 +80,8 @@ function mergeExam(saved: Record<string, unknown>): Record<string, ExamSystemSta
     if (!s) continue
     const normalised: Record<string, ExamItemState> = {}
     for (const [item, val] of Object.entries(s.items ?? {})) {
-      // handle legacy boolean (true → present, false → absent)
-      if (val === 'present' || val === true)  normalised[item] = 'present'
-      else if (val === 'absent' || val === false) normalised[item] = 'absent'
+      if (val === 'present' || (val as unknown) === true)       normalised[item] = 'present'
+      else if (val === 'absent' || (val as unknown) === false)  normalised[item] = 'absent'
     }
     base[key] = { items: normalised, notes: s.notes ?? '' }
   }
@@ -99,7 +98,7 @@ function mergeExam(saved: Record<string, unknown>): Record<string, ExamSystemSta
 function CyclePill<T extends string>({
   label,
   state,
-  states,
+  states: _states,
   colorFn,
   prefix,
   onClick,

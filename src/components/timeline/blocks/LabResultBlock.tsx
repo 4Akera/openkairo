@@ -6,7 +6,7 @@ import { cn } from '../../../lib/utils'
 import {
   PANELS, PANEL_MAP,
   flagColor, flagRowBg, FlagBadge,
-  autoFlag, ResultRow, ResultTable,
+  ResultRow, ResultTable,
 } from './labShared.tsx'
 
 // ============================================================

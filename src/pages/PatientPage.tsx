@@ -281,7 +281,7 @@ export default function PatientPage() {
       user.id,
       roleSlugs,
       hasRole,
-      can,
+      can as (p: string) => boolean,
     )
 
     if (canOpenNow) {
@@ -437,7 +437,7 @@ export default function PatientPage() {
                           <EncounterCard
                             key={enc.id}
                             encounter={enc}
-                            canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can)}
+                            canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
                             onNavigate={() => navigate(`/patients/${patientId}/encounters/${enc.id}`)}
                             isAdmin={isAdmin}
                             onDelete={() => setEncToDelete(enc)}
@@ -458,7 +458,7 @@ export default function PatientPage() {
                           <EncounterCard
                             key={enc.id}
                             encounter={enc}
-                            canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can)}
+                            canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
                             onNavigate={() => navigate(`/patients/${patientId}/encounters/${enc.id}`)}
                             isAdmin={isAdmin}
                             onDelete={() => setEncToDelete(enc)}

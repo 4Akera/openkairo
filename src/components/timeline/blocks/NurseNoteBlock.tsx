@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import type { Block, NurseNoteContent, NurseNoteEntry } from '../../../types'
 import { Button, Textarea } from '../../ui'
 import { Loader2, ClipboardList, Plus } from 'lucide-react'
-import { cn } from '../../../lib/utils'
 
 // ============================================================
 // Empty

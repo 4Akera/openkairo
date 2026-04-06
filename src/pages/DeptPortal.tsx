@@ -78,8 +78,7 @@ function EntryModal({
   onDone: (chargeMsg?: string | null) => void
 }) {
   const { user, profile } = useAuthStore()
-  const { nameFormat, billingEnabled, currencySymbol } = useSettingsStore()
-  const { can } = useAuthStore()
+  const { nameFormat, currencySymbol } = useSettingsStore()
   const [blockTypes, setBlockTypes] = useState<DepartmentBlockType[]>([])
   const [chosenBTId, setChosenBTId] = useState<string>(selectedBTId ?? '')
   const [entryDef, setEntryDef]     = useState<BlockDefinition | null>(null)
@@ -295,6 +294,11 @@ function EntryModal({
                 visible_to_roles: [],
                 is_template_seed: false,
                 is_pinned: false,
+                supersedes_block_id: null,
+                locked_by: null,
+                locked_at: null,
+                created_by: null,
+                updated_at: '',
               } as import('../types').Block
               return <Renderer block={stub} onSave={submitBuiltIn} onCancel={onClose} />
             })()
@@ -478,7 +482,6 @@ function OrderCard({
   onClaim: () => void
   onFulfill: () => void
 }) {
-  const { can } = useAuthStore()
   const { nameFormat } = useSettingsStore()
   const [expanded, setExpanded] = useState(false)
   const badge        = STATUS_BADGE[order.status] ?? STATUS_BADGE.pending
@@ -594,7 +597,12 @@ function OrderCard({
                 visible_to_roles: [],
                 is_template_seed: false,
                 is_pinned: false,
-              } as import('../types').Block
+                supersedes_block_id: null,
+                locked_by: null,
+                locked_at: null,
+                created_by: null,
+                updated_at: '',
+                } as import('../types').Block
               return <Renderer block={stub} />
             })()
           ) : def ? (
@@ -717,7 +725,7 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
             </span>
           )}
           {shareToRecord && (
-            <BookOpen className="h-3 w-3 text-emerald-600" title="Shared to patient record" />
+            <BookOpen className="h-3 w-3 text-emerald-600" aria-label="Shared to patient record" />
           )}
           <span className={cn(
             'text-[9px] px-1.5 py-0.5 rounded border font-medium',
@@ -764,6 +772,11 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
                   visible_to_roles: [],
                   is_template_seed: false,
                   is_pinned: false,
+                  supersedes_block_id: null,
+                  locked_by: null,
+                  locked_at: null,
+                  created_by: null,
+                  updated_at: '',
                 } as import('../types').Block
                 return <Renderer block={stub} />
               })()
@@ -1061,7 +1074,7 @@ function DeptTab({ dept }: { dept: Department }) {
             </Button>
           )}
           {dept.can_create_direct && (
-            <Button size="sm" variant="outline" onClick={handleNewEntry}>
+            <Button size="sm" variant="outline" onClick={() => handleNewEntry()}>
               <Plus className="h-3.5 w-3.5" /> New Entry
             </Button>
           )}
@@ -1260,7 +1273,6 @@ function DeptTab({ dept }: { dept: Department }) {
 
 export default function DeptPortal() {
   const { user, profile, signOut } = useAuthStore()
-  const { nameFormat } = useSettingsStore()
   const navigate = useNavigate()
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading]         = useState(true)

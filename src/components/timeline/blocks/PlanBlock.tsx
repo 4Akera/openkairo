@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import type { Block, PlanContent, PlanProblem, Problem } from '../../../types'
 import { Button, Label, Input, Textarea, Separator } from '../../ui'
@@ -365,8 +365,9 @@ export function PlanEdit({ block, onSave, onCancel }: EditProps) {
   const [assessment, setAssessment] = useState(existing.assessment ?? '')
   const [problems, setProblems]     = useState<PlanProblem[]>(
     (existing.problems ?? []).map(p => ({
-      importance: null, chart_problem_id: null,
       ...p,
+      importance: p.importance ?? null,
+      chart_problem_id: p.chart_problem_id ?? null,
     }))
   )
   const [followup, setFollowup] = useState(existing.followup ?? '')

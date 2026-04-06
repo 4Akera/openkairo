@@ -108,7 +108,6 @@ export default function BillingPage() {
   const [voidReason, setVoidReason]   = useState('')
   const [saving, setSaving]           = useState(false)
   const [approvingId, setApprovingId] = useState<string | null>(null)
-  const [claimingId, setClaimingId]   = useState<string | null>(null)
 
   // Insurance claim dialog
   const [claimOpen, setClaimOpen]             = useState(false)
