@@ -1,6 +1,16 @@
 # OpenKairo
 
-OpenKairo is an open-source EHR. A visit isn’t one giant form or one undifferentiated note—it’s a timeline of **blocks**. Each block has a type with its own fields. You add only what matters for that patient and that encounter, and the information stays structured instead of mixed together in the same generic boxes. That makes documentation easier to read, search, and reuse over time than traditional free-text charting.
+> An open-source EHR built around how clinicians actually think 
+
+![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6-646cff?style=flat-square&logo=vite&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ecf8e?style=flat-square&logo=supabase&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?style=flat-square&logo=tailwindcss&logoColor=white)
+
+Most EHRs force clinicians into a rigid form: fill in the boxes, hit save, move on. The structure is decided upfront and rarely matches what's happening with the patient in front of you.
+
+OpenKairo works differently. Every visit is a **timeline of blocks**. You pick the blocks that matter for this patient, this visit — vitals, medications, a procedure note, a wound photo, a lab result — and each block has the right fields for its purpose. Nothing is buried in a generic text box. The record stays readable, structured, and easy to search long after the visit is over.
 
 ## Features
 
