@@ -21,7 +21,11 @@ OpenKairo works differently. Every visit is a **timeline of blocks**. You pick t
 | Role-based access | Physicians, nurses, lab techs, receptionists, and billing each see only what they need |
 | Patient record | Demographics, problem list, results, and reports in one place |
 
-## Demo login
+## Demo
+
+**[https://ehr-app-five.vercel.app](https://ehr-app-five.vercel.app)**
+
+### Demo login
 
 Sign in with **password `Demo123!`** for every demo user. Example:
 
