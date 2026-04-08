@@ -323,6 +323,7 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
           locked_at: null,
         })
         .eq('id', block.id)
+      updateBlock({ ...block, content: newContent, author_name: authorName, is_template_seed: false, locked_by: null, locked_at: null })
       setJustAddedId(null)
       return
     }
@@ -333,8 +334,9 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       .from('blocks')
       .update({ state: 'masked', locked_by: null, locked_at: null })
       .eq('id', block.id)
+    maskBlock(block.id)
 
-    await supabase.from('blocks').insert({
+    const { data } = await supabase.from('blocks').insert({
       encounter_id: encounterId,
       patient_id: patientId,
       type: block.type,
@@ -345,9 +347,10 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       author_name: authorName,
       definition_id: block.definition_id,
       created_by: user.id,
-    })
+    }).select().single()
+    if (data) appendBlock(data as Block)
     setJustAddedId(null)
-  }, [user, profile, encounterId, getNextSequence, justAddedId])
+  }, [user, profile, encounterId, getNextSequence, justAddedId, updateBlock, maskBlock, appendBlock])
 
   // Discard unsaved (empty, never-saved) block
   const handleDiscard = useCallback(async (blockId: string) => {
