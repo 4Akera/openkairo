@@ -31,7 +31,10 @@ export const useEncounterStore = create<EncounterState>((set, get) => ({
   setBlocks: (blocks) => set({ blocks }),
 
   appendBlock: (block) =>
-    set((state) => ({ blocks: [...state.blocks, block] })),
+    set((state) => {
+      if (state.blocks.some(b => b.id === block.id)) return state
+      return { blocks: [...state.blocks, block] }
+    }),
 
   updateBlock: (block) =>
     set((state) => ({

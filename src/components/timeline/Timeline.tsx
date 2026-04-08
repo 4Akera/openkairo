@@ -268,6 +268,7 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
     }).select().single()
     if (data) {
       const newBlock = data as Block
+      appendBlock(newBlock)
       setJustAddedId(newBlock.id)
 
       if (billingEnabled && def?.service_item_id && def.charge_mode && can('billing.charge')) {
@@ -300,7 +301,7 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
         }
       }
     }
-  }, [user, profile, encounterId, patientId, getNextSequence, definitionMap, billingEnabled, can])
+  }, [user, profile, encounterId, patientId, getNextSequence, definitionMap, billingEnabled, can, appendBlock])
 
   // Edit block: mask old, append new revision
   const handleEditBlock = useCallback(async (
@@ -381,9 +382,11 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       visible_to_roles: block.visible_to_roles ?? [],
     }).select().single()
     if (data) {
-      setJustAddedId((data as Block).id)
+      const newBlock = data as Block
+      appendBlock(newBlock)
+      setJustAddedId(newBlock.id)
     }
-  }, [user, profile, blocks, encounterId, patientId, getNextSequence])
+  }, [user, profile, blocks, encounterId, patientId, getNextSequence, appendBlock])
 
   // Mask/unmask an existing block
   const handleMask = useCallback(async (blockId: string) => {
