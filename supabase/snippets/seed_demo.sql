@@ -535,7 +535,7 @@ end;
 $$;
 
 -- ============================================================
--- 6. LAB DEPARTMENT — Definitions, Services, Order/Result Demo
+-- 6. LAB DEPARTMENT — Services, Order/Result Demo (built-in blocks)
 -- ============================================================
 
 do $$
@@ -545,22 +545,10 @@ declare
   v_lab     uuid := '00000000-0000-0000-0000-000000000005';
 
   -- Fixed UUIDs
-  v_dept_lab          uuid := 'aaaaaaaa-0000-0000-0000-000000000003';
-
-  -- CBC block definitions
-  v_def_cbc_order     uuid := 'bbbbbbbb-0000-0000-0000-000000000010';
-  v_def_cbc_result    uuid := 'bbbbbbbb-0000-0000-0000-000000000011';
-  -- BMP block definitions
-  v_def_bmp_order     uuid := 'bbbbbbbb-0000-0000-0000-000000000012';
-  v_def_bmp_result    uuid := 'bbbbbbbb-0000-0000-0000-000000000013';
-  -- HbA1c & Lipids block definitions
-  v_def_hba1c_order   uuid := 'bbbbbbbb-0000-0000-0000-000000000016';
-  v_def_hba1c_result  uuid := 'bbbbbbbb-0000-0000-0000-000000000017';
-
-  -- Department block type IDs
-  v_dbt_cbc    uuid := 'cccccccc-0000-0000-0000-000000000010';
-  v_dbt_bmp    uuid := 'cccccccc-0000-0000-0000-000000000011';
-  v_dbt_hba1c  uuid := 'cccccccc-0000-0000-0000-000000000013';
+  v_dept_lab  uuid := 'aaaaaaaa-0000-0000-0000-000000000003';
+  v_dbt_cbc   uuid := 'cccccccc-0000-0000-0000-000000000010';
+  v_dbt_bmp   uuid := 'cccccccc-0000-0000-0000-000000000011';
+  v_dbt_hba1c uuid := 'cccccccc-0000-0000-0000-000000000013';
 
   -- Resolved patient / encounter IDs
   v_pt1  uuid;
@@ -586,87 +574,6 @@ begin
   select id into v_enc1 from encounters where patient_id = v_pt1 and title ilike '%Pneumonia%';
   select id into v_enc2 from encounters where patient_id = v_pt2 and title ilike '%T2DM%';
 
-  -- ── Block definitions ────────────────────────────────────────
-
-  insert into block_definitions (id, name, slug, icon, color, description, is_builtin, is_universal, is_dept_only, config, fields, created_by) values
-
-    (v_def_cbc_order, 'CBC Order', 'lab_cbc_order', 'flask-conical', 'teal',
-     'Complete Blood Count — order form', false, true, false,
-     '{"dept_role":"order"}'::jsonb,
-     '[
-       {"id":"urgency","label":"Urgency","type":"select","required":true,
-        "options":[{"value":"routine","label":"Routine"},{"value":"urgent","label":"Urgent"},{"value":"stat","label":"STAT"}]},
-       {"id":"clinical_indication","label":"Clinical Indication","type":"textarea","required":true}
-     ]'::jsonb, v_admin),
-
-    (v_def_cbc_result, 'CBC Result', 'lab_cbc_result', 'test-tube', 'teal',
-     'Complete Blood Count — result form', false, true, true,
-     '{"dept_role":"result"}'::jsonb,
-     '[
-       {"id":"wbc",         "label":"WBC (×10⁹/L)",       "type":"text","required":true},
-       {"id":"rbc",         "label":"RBC (×10¹²/L)",      "type":"text","required":false},
-       {"id":"hgb",         "label":"Haemoglobin (g/dL)", "type":"text","required":true},
-       {"id":"hct",         "label":"Haematocrit (%)",    "type":"text","required":false},
-       {"id":"plt",         "label":"Platelets (×10⁹/L)", "type":"text","required":true},
-       {"id":"neutrophils", "label":"Neutrophils (×10⁹/L)","type":"text","required":false},
-       {"id":"lymphocytes", "label":"Lymphocytes (×10⁹/L)","type":"text","required":false},
-       {"id":"interpretation","label":"Interpretation","type":"textarea","required":false},
-       {"id":"reported_by","label":"Reported By","type":"text","required":false}
-     ]'::jsonb, v_admin),
-
-    (v_def_bmp_order, 'BMP Order', 'lab_bmp_order', 'flask-conical', 'teal',
-     'Basic Metabolic Panel — order form', false, true, false,
-     '{"dept_role":"order"}'::jsonb,
-     '[
-       {"id":"urgency","label":"Urgency","type":"select","required":true,
-        "options":[{"value":"routine","label":"Routine"},{"value":"urgent","label":"Urgent"},{"value":"stat","label":"STAT"}]},
-       {"id":"clinical_indication","label":"Clinical Indication","type":"textarea","required":true}
-     ]'::jsonb, v_admin),
-
-    (v_def_bmp_result, 'BMP Result', 'lab_bmp_result', 'test-tube', 'teal',
-     'Basic Metabolic Panel — result form', false, true, true,
-     '{"dept_role":"result"}'::jsonb,
-     '[
-       {"id":"sodium",      "label":"Sodium (mmol/L)",      "type":"text","required":true},
-       {"id":"potassium",   "label":"Potassium (mmol/L)",   "type":"text","required":true},
-       {"id":"chloride",    "label":"Chloride (mmol/L)",    "type":"text","required":false},
-       {"id":"bicarbonate", "label":"Bicarbonate (mmol/L)", "type":"text","required":false},
-       {"id":"bun",         "label":"BUN (mg/dL)",          "type":"text","required":true},
-       {"id":"creatinine",  "label":"Creatinine (mg/dL)",   "type":"text","required":true},
-       {"id":"glucose",     "label":"Glucose (mmol/L)",     "type":"text","required":true},
-       {"id":"interpretation","label":"Interpretation","type":"textarea","required":false},
-       {"id":"reported_by","label":"Reported By","type":"text","required":false}
-     ]'::jsonb, v_admin),
-
-    (v_def_hba1c_order, 'HbA1c & Lipids Order', 'lab_hba1c_order', 'flask-conical', 'teal',
-     'HbA1c and lipid panel — order form', false, true, false,
-     '{"dept_role":"order"}'::jsonb,
-     '[
-       {"id":"urgency","label":"Urgency","type":"select","required":true,
-        "options":[{"value":"routine","label":"Routine"},{"value":"urgent","label":"Urgent"}]},
-       {"id":"panels","label":"Panels Requested","type":"textarea","required":true},
-       {"id":"fasting","label":"Fasting?","type":"select","required":false,
-        "options":[{"value":"yes","label":"Yes — fasting sample"},{"value":"no","label":"No — random sample"}]}
-     ]'::jsonb, v_admin),
-
-    (v_def_hba1c_result, 'HbA1c & Lipids Result', 'lab_hba1c_result', 'test-tube', 'teal',
-     'HbA1c and lipid panel — result form', false, true, true,
-     '{"dept_role":"result"}'::jsonb,
-     '[
-       {"id":"hba1c",          "label":"HbA1c (%)",                     "type":"text","required":true},
-       {"id":"fasting_glucose","label":"Fasting Glucose (mmol/L)",      "type":"text","required":false},
-       {"id":"total_chol",     "label":"Total Cholesterol (mmol/L)",    "type":"text","required":false},
-       {"id":"ldl",            "label":"LDL (mmol/L)",                  "type":"text","required":false},
-       {"id":"hdl",            "label":"HDL (mmol/L)",                  "type":"text","required":false},
-       {"id":"triglycerides",  "label":"Triglycerides (mmol/L)",        "type":"text","required":false},
-       {"id":"egfr",           "label":"eGFR (mL/min/1.73m²)",         "type":"text","required":false},
-       {"id":"urine_acr",      "label":"Urine ACR (mg/mmol)",           "type":"text","required":false},
-       {"id":"interpretation", "label":"Interpretation","type":"textarea","required":false},
-       {"id":"reported_by",    "label":"Reported By","type":"text","required":false}
-     ]'::jsonb, v_admin)
-
-  on conflict (id) do nothing;
-
   -- ── Laboratory Department ────────────────────────────────────
 
   insert into departments (id, name, slug, description, icon, color, can_receive_orders, can_create_direct, sort_order, created_by) values
@@ -675,12 +582,12 @@ begin
      'flask-conical', 'teal', true, true, 20, v_admin)
   on conflict (id) do nothing;
 
-  -- ── Department Block Types ────────────────────────────────────
+  -- ── Department Block Types (built-in lab_result renderer) ────
 
-  insert into department_block_types (id, department_id, name, description, order_block_def_id, entry_block_def_id, sort_order) values
-    (v_dbt_cbc,   v_dept_lab, 'Complete Blood Count',  'FBC / CBC — haematological panel',          v_def_cbc_order,   v_def_cbc_result,   10),
-    (v_dbt_bmp,   v_dept_lab, 'Basic Metabolic Panel', 'Electrolytes, renal function, glucose',      v_def_bmp_order,   v_def_bmp_result,   20),
-    (v_dbt_hba1c, v_dept_lab, 'HbA1c & Lipid Panel',  'Glycated Hb + full lipid panel + eGFR + ACR', v_def_hba1c_order, v_def_hba1c_result, 30)
+  insert into department_block_types (id, department_id, name, description, built_in_type, sort_order) values
+    (v_dbt_cbc,   v_dept_lab, 'Complete Blood Count',  'FBC / CBC — haematological panel',           'lab_result', 10),
+    (v_dbt_bmp,   v_dept_lab, 'Basic Metabolic Panel', 'Electrolytes, renal function, glucose',       'lab_result', 20),
+    (v_dbt_hba1c, v_dept_lab, 'HbA1c & Lipid Panel',  'Glycated Hb + lipid panel + eGFR',            'lab_result', 30)
   on conflict (id) do nothing;
 
   -- ── Department Member ─────────────────────────────────────────
@@ -691,20 +598,35 @@ begin
 
   -- ── CBC Order/Result — Robert Mitchell (enc1) ─────────────────
 
-  insert into blocks (id, encounter_id, patient_id, type, definition_id, content, state, sequence_order, author_name, created_by)
+  insert into blocks (id, encounter_id, patient_id, type, content, state, sequence_order, author_name, created_by)
   values (
-    v_cbc_order_block, v_enc1, v_pt1,
-    'lab_cbc_order', v_def_cbc_order,
-    '{"urgency":"urgent","clinical_indication":"Community-acquired pneumonia — assess WBC for leukocytosis, haemoglobin, and platelet count."}'::jsonb,
+    v_cbc_order_block, v_enc1, v_pt1, 'lab_order',
+    '{"panels":["cbc"],"custom":[],"indication":"Community-acquired pneumonia — assess WBC for leukocytosis, haemoglobin, and platelet count.","urgency":"urgent","specimen":"venous blood"}'::jsonb,
     'active', 25, 'Dr. Emily Carter', v_emily
   );
 
-  insert into blocks (id, encounter_id, patient_id, department_id, department_block_type_id, type, definition_id, content, state, sequence_order, share_to_record, author_name, created_by)
+  insert into blocks (id, encounter_id, patient_id, department_id, department_block_type_id, type, content, state, sequence_order, share_to_record, author_name, created_by)
   values (
     v_cbc_result_block, null, v_pt1,
-    v_dept_lab, v_dbt_cbc,
-    'lab_cbc_result', v_def_cbc_result,
-    '{"wbc":"16.8","rbc":"4.2","hgb":"12.9","hct":"38","plt":"420","neutrophils":"14.2","lymphocytes":"1.8","interpretation":"Leukocytosis with marked neutrophilia — consistent with active bacterial infection. Mild anaemia, likely anaemia of acute illness. Reactive thrombocytosis noted. Findings support diagnosis of community-acquired pneumonia.","reported_by":"Thomas Wright"}'::jsonb,
+    v_dept_lab, v_dbt_cbc, 'lab_result',
+    jsonb_build_object(
+      'panels', '["cbc"]'::jsonb,
+      'custom_defs', '[]'::jsonb,
+      'results', jsonb_build_object(
+        'cbc.wbc',  jsonb_build_object('value','16.8','flag','H','comment','Leukocytosis — neutrophilia'),
+        'cbc.rbc',  jsonb_build_object('value','4.2', 'flag','L','comment',''),
+        'cbc.hb',   jsonb_build_object('value','12.9','flag','L','comment','Mild anaemia of acute illness'),
+        'cbc.hct',  jsonb_build_object('value','38',  'flag','', 'comment',''),
+        'cbc.mcv',  jsonb_build_object('value','85',  'flag','', 'comment',''),
+        'cbc.plt',  jsonb_build_object('value','420', 'flag','H','comment','Reactive thrombocytosis'),
+        'cbc.neut', jsonb_build_object('value','14.2','flag','H','comment','Marked neutrophilia'),
+        'cbc.lymph',jsonb_build_object('value','1.8', 'flag','', 'comment','')
+      ),
+      'custom_results', '[]'::jsonb,
+      'notes', 'Leukocytosis with marked neutrophilia — consistent with active bacterial infection. Mild anaemia of acute illness. Reactive thrombocytosis. Findings support community-acquired pneumonia.',
+      'status', 'verified',
+      'reported_at', now()
+    ),
     'active', 0, true, 'Thomas Wright', v_lab
   );
 
@@ -712,26 +634,41 @@ begin
   values (
     v_cbc_action, v_cbc_order_block, v_enc1, v_pt1,
     'lab',
-    jsonb_build_object('block_type_id', v_dbt_cbc, 'service', 'Complete Blood Count', 'urgency', 'urgent'),
+    jsonb_build_object('block_type_id', v_dbt_cbc, 'panels', '["cbc"]'::jsonb, 'urgency', 'urgent'),
     'completed', v_cbc_result_block, v_emily, now()
   );
 
   -- ── BMP Order/Result — Robert Mitchell (enc1) ─────────────────
 
-  insert into blocks (id, encounter_id, patient_id, type, definition_id, content, state, sequence_order, author_name, created_by)
+  insert into blocks (id, encounter_id, patient_id, type, content, state, sequence_order, author_name, created_by)
   values (
-    v_bmp_order_block, v_enc1, v_pt1,
-    'lab_bmp_order', v_def_bmp_order,
-    '{"urgency":"urgent","clinical_indication":"Pneumonia admission — baseline renal function, electrolytes, and glucose. Patient on Amlodipine."}'::jsonb,
+    v_bmp_order_block, v_enc1, v_pt1, 'lab_order',
+    '{"panels":["metabolic"],"custom":[],"indication":"Pneumonia admission — baseline renal function, electrolytes, and glucose. Patient on Amlodipine.","urgency":"urgent","specimen":"venous blood"}'::jsonb,
     'active', 26, 'Dr. Emily Carter', v_emily
   );
 
-  insert into blocks (id, encounter_id, patient_id, department_id, department_block_type_id, type, definition_id, content, state, sequence_order, share_to_record, author_name, created_by)
+  insert into blocks (id, encounter_id, patient_id, department_id, department_block_type_id, type, content, state, sequence_order, share_to_record, author_name, created_by)
   values (
     v_bmp_result_block, null, v_pt1,
-    v_dept_lab, v_dbt_bmp,
-    'lab_bmp_result', v_def_bmp_result,
-    '{"sodium":"138","potassium":"3.9","chloride":"102","bicarbonate":"23","bun":"22","creatinine":"1.1","glucose":"6.4","interpretation":"Electrolytes within normal limits. Creatinine mildly elevated at 1.1 mg/dL — eGFR estimated 68. No significant acid-base disturbance. Glucose 6.4 mmol/L — borderline, likely stress hyperglycaemia. Recommend monitoring creatinine trend — hydration and avoid nephrotoxins.","reported_by":"Thomas Wright"}'::jsonb,
+    v_dept_lab, v_dbt_bmp, 'lab_result',
+    jsonb_build_object(
+      'panels', '["metabolic"]'::jsonb,
+      'custom_defs', '[]'::jsonb,
+      'results', jsonb_build_object(
+        'metabolic.na',   jsonb_build_object('value','138', 'flag','', 'comment',''),
+        'metabolic.k',    jsonb_build_object('value','3.9', 'flag','', 'comment',''),
+        'metabolic.cl',   jsonb_build_object('value','102', 'flag','', 'comment',''),
+        'metabolic.hco3', jsonb_build_object('value','23',  'flag','', 'comment',''),
+        'metabolic.urea', jsonb_build_object('value','7.8', 'flag','', 'comment',''),
+        'metabolic.cr',   jsonb_build_object('value','97',  'flag','', 'comment','Mild elevation — monitor'),
+        'metabolic.gluc', jsonb_build_object('value','6.4', 'flag','H','comment','Likely stress hyperglycaemia'),
+        'metabolic.egfr', jsonb_build_object('value','68',  'flag','L','comment','Stage G2 CKD — mild reduction')
+      ),
+      'custom_results', '[]'::jsonb,
+      'notes', 'Electrolytes within normal limits. Creatinine mildly elevated — eGFR 68. Glucose 6.4 mmol/L borderline, likely stress hyperglycaemia. Recommend monitoring creatinine trend.',
+      'status', 'verified',
+      'reported_at', now()
+    ),
     'active', 0, true, 'Thomas Wright', v_lab
   );
 
@@ -739,26 +676,39 @@ begin
   values (
     v_bmp_action, v_bmp_order_block, v_enc1, v_pt1,
     'lab',
-    jsonb_build_object('block_type_id', v_dbt_bmp, 'service', 'Basic Metabolic Panel', 'urgency', 'urgent'),
+    jsonb_build_object('block_type_id', v_dbt_bmp, 'panels', '["metabolic"]'::jsonb, 'urgency', 'urgent'),
     'completed', v_bmp_result_block, v_emily, now()
   );
 
   -- ── HbA1c & Lipids Order/Result — Jennifer Walsh (enc2) ───────
 
-  insert into blocks (id, encounter_id, patient_id, type, definition_id, content, state, sequence_order, author_name, created_by)
+  insert into blocks (id, encounter_id, patient_id, type, content, state, sequence_order, author_name, created_by)
   values (
-    v_hba1c_order_block, v_enc2, v_pt2,
-    'lab_hba1c_order', v_def_hba1c_order,
-    '{"urgency":"routine","panels":"HbA1c, Fasting Glucose, Lipid Panel (Total Chol / LDL / HDL / TG), eGFR, Urine ACR","fasting":"yes"}'::jsonb,
+    v_hba1c_order_block, v_enc2, v_pt2, 'lab_order',
+    '{"panels":["lipids","metabolic"],"custom":[{"name":"HbA1c","unit":"%","ref_low":"4.0","ref_high":"5.7"},{"name":"Urine ACR","unit":"mg/mmol","ref_low":"","ref_high":"3.0"}],"indication":"T2DM follow-up — HbA1c, fasting glucose, lipid panel, eGFR, urine ACR.","urgency":"routine","specimen":"fasting venous blood + spot urine"}'::jsonb,
     'active', 35, 'Dr. James Harrison', v_admin
   );
 
-  insert into blocks (id, encounter_id, patient_id, department_id, department_block_type_id, type, definition_id, content, state, sequence_order, share_to_record, author_name, created_by)
+  insert into blocks (id, encounter_id, patient_id, department_id, department_block_type_id, type, content, state, sequence_order, share_to_record, author_name, created_by)
   values (
     v_hba1c_result_block, null, v_pt2,
-    v_dept_lab, v_dbt_hba1c,
-    'lab_hba1c_result', v_def_hba1c_result,
-    '{"hba1c":"8.1","fasting_glucose":"9.2","total_chol":"5.6","ldl":"3.2","hdl":"1.1","triglycerides":"2.1","egfr":"72","urine_acr":"4.2","interpretation":"HbA1c 8.1% — above target (<7%). Fasting glucose 9.2 mmol/L — elevated. LDL 3.2 mmol/L — above target for diabetic patient (<2.6). HDL 1.1 mmol/L — borderline low. Triglycerides mildly elevated at 2.1 mmol/L. eGFR 72 — Stage G2 CKD (mild reduction). Urine ACR 4.2 mg/mmol — within normal range. Suggest medication review and dietary reinforcement.","reported_by":"Thomas Wright"}'::jsonb,
+    v_dept_lab, v_dbt_hba1c, 'lab_result',
+    jsonb_build_object(
+      'panels', '["lipids","metabolic"]'::jsonb,
+      'custom_defs', '[{"name":"HbA1c","unit":"%","ref_low":"4.0","ref_high":"5.7"},{"name":"Urine ACR","unit":"mg/mmol","ref_low":"","ref_high":"3.0"}]'::jsonb,
+      'results', jsonb_build_object(
+        'lipids.tchol', jsonb_build_object('value','5.6', 'flag','H','comment','Above target for diabetic patient'),
+        'lipids.ldl',   jsonb_build_object('value','3.2', 'flag','H','comment','Above target <2.6'),
+        'lipids.hdl',   jsonb_build_object('value','1.1', 'flag','', 'comment','Borderline low'),
+        'lipids.tg',    jsonb_build_object('value','2.1', 'flag','H','comment','Mildly elevated'),
+        'metabolic.gluc',jsonb_build_object('value','9.2','flag','H','comment','Fasting glucose elevated'),
+        'metabolic.egfr',jsonb_build_object('value','72', 'flag','L','comment','Stage G2 CKD — mild reduction')
+      ),
+      'custom_results', '[{"value":"8.1","flag":"H","comment":"Above target <7%"},{"value":"4.2","flag":"","comment":"Within normal range"}]'::jsonb,
+      'notes', 'HbA1c 8.1% — above target. Fasting glucose 9.2 mmol/L elevated. LDL 3.2 above target for diabetic patient. Suggest medication review and dietary reinforcement.',
+      'status', 'verified',
+      'reported_at', now()
+    ),
     'active', 0, true, 'Thomas Wright', v_lab
   );
 
@@ -766,7 +716,7 @@ begin
   values (
     v_hba1c_action, v_hba1c_order_block, v_enc2, v_pt2,
     'lab',
-    jsonb_build_object('block_type_id', v_dbt_hba1c, 'service', 'HbA1c & Lipid Panel', 'urgency', 'routine'),
+    jsonb_build_object('block_type_id', v_dbt_hba1c, 'panels', '["lipids","metabolic"]'::jsonb, 'urgency', 'routine'),
     'completed', v_hba1c_result_block, v_admin, now()
   );
 
