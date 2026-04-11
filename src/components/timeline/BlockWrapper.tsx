@@ -969,7 +969,9 @@ export default function BlockWrapper({
                 charges={chargeList}
                 allowFeeEdits={Boolean(canCharge && !encounterClosed && !isMasked)}
                 onVoidCharge={onVoidCharge}
-                onPosted={() => onRefreshBlockCharges?.(block.id)}
+                onPosted={async () => {
+                  await onRefreshBlockCharges?.(block.id)
+                }}
               />
             </>
           )}

@@ -22,7 +22,7 @@ import type {
   RadiologyRequestContent,
   RadiologyResultContent,
 } from '@/types'
-import { PANELS, PANEL_MAP, autoFlag } from '../components/timeline/blocks/labShared.tsx'
+import { PANEL_MAP, autoFlag } from '../components/timeline/blocks/labShared.tsx'
 import {
   RADIOLOGY_STUDY_MAP,
   formatRadiologyCustomLabel,
@@ -102,10 +102,6 @@ function labeledProse(label: string, text: string | null | undefined): string {
 
 function emptyState(msg: string): string {
   return `<p style="${S.muted}">${esc(msg)}</p>`
-}
-
-function badge(text: string, style: string): string {
-  return `<span style="${style}">${esc(text)}</span>`
 }
 
 function chip(text: string): string {
@@ -998,6 +994,10 @@ function renderDynamic(content: Record<string, unknown>, def: BlockDefinition): 
 // Main dispatch
 // ============================================================
 
+function asBlockContent<T>(c: Record<string, unknown>): T {
+  return c as unknown as T
+}
+
 export function renderBlockContentHtml(
   block: Block,
   def: BlockDefinition | null,
@@ -1014,41 +1014,41 @@ export function renderBlockContentHtml(
     case 'vitals':
       return renderVitals({ ...emptyVitals(), ...content } as VitalsContent)
     case 'note':
-      return renderNote(content as NoteContent)
+      return renderNote(asBlockContent<NoteContent>(content))
     case 'hx_physical':
-      return renderHxPhysical(content as HxPhysicalContent)
+      return renderHxPhysical(asBlockContent<HxPhysicalContent>(content))
     case 'plan':
-      return renderPlan(content as PlanContent)
+      return renderPlan(asBlockContent<PlanContent>(content))
     case 'meds':
-      return renderMeds(content as MedsContent)
+      return renderMeds(asBlockContent<MedsContent>(content))
     case 'nurse_note':
-      return renderNurseNote(content as NurseNoteContent)
+      return renderNurseNote(asBlockContent<NurseNoteContent>(content))
     case 'tour':
-      return renderTour(content as TourContent)
+      return renderTour(asBlockContent<TourContent>(content))
     case 'consultation':
-      return renderConsultation(content as ConsultationContent)
+      return renderConsultation(asBlockContent<ConsultationContent>(content))
     case 'dc_note':
-      return renderDCNote(content as DCNoteContent)
+      return renderDCNote(asBlockContent<DCNoteContent>(content))
     case 'score':
-      return renderScore(content as ScoreContent)
+      return renderScore(asBlockContent<ScoreContent>(content))
     case 'lab_order':
-      return renderLabOrder(content as LabOrderContent)
+      return renderLabOrder(asBlockContent<LabOrderContent>(content))
     case 'lab_result':
-      return renderLabResult(content as LabResultContent)
+      return renderLabResult(asBlockContent<LabResultContent>(content))
     case 'radiology_request':
-      return renderRadiologyRequest(content as RadiologyRequestContent)
+      return renderRadiologyRequest(asBlockContent<RadiologyRequestContent>(content))
     case 'radiology_result':
-      return renderRadiologyResult(content as RadiologyResultContent)
+      return renderRadiologyResult(asBlockContent<RadiologyResultContent>(content))
     case 'procedure_note':
-      return renderProcedureNote(content as ProcedureNoteContent)
+      return renderProcedureNote(asBlockContent<ProcedureNoteContent>(content))
     case 'anaesthetic_note':
-      return renderAnaesthetic(content as AnaestheticContent)
+      return renderAnaesthetic(asBlockContent<AnaestheticContent>(content))
     case 'pain_assessment':
-      return renderPainAssessment(content as PainAssessmentContent)
+      return renderPainAssessment(asBlockContent<PainAssessmentContent>(content))
     case 'wound_care':
-      return renderWoundCare(content as WoundCareContent)
+      return renderWoundCare(asBlockContent<WoundCareContent>(content))
     case 'pharmacy_fulfillment':
-      return renderPharmacyFulfillment(content as PharmacyFulfillmentContent)
+      return renderPharmacyFulfillment(asBlockContent<PharmacyFulfillmentContent>(content))
     case 'media':
       return `<p style="${S.muted}">Attachments are not included in the HTML export.</p>`
     default:

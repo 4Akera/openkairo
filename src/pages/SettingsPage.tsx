@@ -456,7 +456,7 @@ function BlockDefinitionModal({
     if (!initial) return
     setForm(applyBuiltinBillingDefaults(initial, !!isBuiltin))
     setShowTsFields(!!initial.cap_time_series)
-  }, [initial.id, isBuiltin])
+  }, [initial?.id, isBuiltin])
 
   const blockAddRoles = useMemo(
     () => (allRoles ?? []).filter((r) => r.permissions.includes('block.add')),

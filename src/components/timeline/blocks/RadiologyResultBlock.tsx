@@ -170,10 +170,12 @@ export function RadiologyResultEdit({ block, onSave, onCancel }: EditProps) {
     }
     let cancelled = false
     setSvcPricesLoading(true)
-    supabase
-      .from('service_items')
-      .select('id, default_price')
-      .in('id', ids)
+    Promise.resolve(
+      supabase
+        .from('service_items')
+        .select('id, default_price')
+        .in('id', ids),
+    )
       .then(({ data }) => {
         if (cancelled) return
         const next: Record<string, number> = {}
