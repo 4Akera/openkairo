@@ -13,7 +13,8 @@ const NAV = [
 ]
 
 export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void }) {
-  const { user, profile, signOut, inDept, hasBilling } = useAuthStore()
+  const { user, profile, signOut, inDept, hasBilling, permissions } = useAuthStore()
+  const isDeptOnly = inDept && permissions.length === 0
   const { theme, toggle } = useThemeStore()
   const navigate = useNavigate()
 
@@ -41,28 +42,30 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
         </div>
 
         {/* Search button */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              onClick={onSearchOpen}
-              className="flex items-center justify-center h-9 w-9 rounded-xl text-slate-500 hover:bg-white/8 hover:text-slate-200 transition-all duration-150 mb-2 shrink-0"
-            >
-              <Search className="h-[17px] w-[17px]" />
-              <span className="sr-only">Search patients</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="text-xs font-medium">
-            Search
-            <kbd className="ml-1.5 text-[10px] opacity-60">⌘K</kbd>
-          </TooltipContent>
-        </Tooltip>
+        {!isDeptOnly && (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onSearchOpen}
+                className="flex items-center justify-center h-9 w-9 rounded-xl text-slate-500 hover:bg-white/8 hover:text-slate-200 transition-all duration-150 mb-2 shrink-0"
+              >
+                <Search className="h-[17px] w-[17px]" />
+                <span className="sr-only">Search patients</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs font-medium">
+              Search
+              <kbd className="ml-1.5 text-[10px] opacity-60">⌘K</kbd>
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {/* Divider */}
         <div className="w-8 h-px bg-white/10 mb-3 shrink-0" />
 
         {/* Nav links */}
         <nav className="flex-1 flex flex-col gap-0.5 w-full px-2.5">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {!isDeptOnly && NAV.map(({ to, label, icon: Icon, end }) => (
             <Tooltip key={to} delayDuration={200}>
               <TooltipTrigger asChild>
                 <NavLink
@@ -214,32 +217,36 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
       {/* ── Mobile bottom nav (< md) ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-white/10 flex items-center justify-around h-14 px-2 pb-safe">
         {/* Patients */}
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            cn(
-              'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
-              isActive ? 'text-white' : 'text-slate-500',
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Users className={cn('h-5 w-5', isActive && 'text-blue-400')} />
-              <span className="text-xs font-medium">Patients</span>
-            </>
-          )}
-        </NavLink>
+        {!isDeptOnly && (
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) =>
+              cn(
+                'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
+                isActive ? 'text-white' : 'text-slate-500',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Users className={cn('h-5 w-5', isActive && 'text-blue-400')} />
+                <span className="text-xs font-medium">Patients</span>
+              </>
+            )}
+          </NavLink>
+        )}
 
         {/* Search */}
-        <button
-          onClick={onSearchOpen}
-          className="flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg text-slate-500 transition-colors active:text-white"
-        >
-          <Search className="h-5 w-5" />
-          <span className="text-xs font-medium">Search</span>
-        </button>
+        {!isDeptOnly && (
+          <button
+            onClick={onSearchOpen}
+            className="flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg text-slate-500 transition-colors active:text-white"
+          >
+            <Search className="h-5 w-5" />
+            <span className="text-xs font-medium">Search</span>
+          </button>
+        )}
 
         {/* Settings */}
         <NavLink

@@ -8,7 +8,8 @@
  *   1. Create  src/components/timeline/blocks/MyBlock.tsx
  *              exporting MyBlockView + MyBlockEdit
  *   2. Add an entry below
- *   3. Seed its metadata in supabase/schema.sql (name, icon, color, cap_* flags)
+ *   3. Seed its metadata in supabase/schema.sql (name, icon, color, cap_* flags;
+ *      include slug in the built-in delete guard list below the insert)
  *
  * Unknown slugs (not in this registry) fall back to DynamicBlock,
  * which renders from the block_definitions.fields JSONB schema.
@@ -23,8 +24,10 @@ import type { HxPhysicalContent } from '../../types'
 import { PlanView, PlanEdit, emptyPlan } from './blocks/PlanBlock'
 import type { PlanContent } from '../../types'
 import { LabOrderView, LabOrderEdit, emptyLabOrder } from './blocks/LabOrderBlock'
-import type { LabOrderContent, LabResultContent, NurseNoteContent, ConsultationContent, DCNoteContent, MedsContent } from '../../types'
+import type { LabOrderContent, LabResultContent, NurseNoteContent, ConsultationContent, DCNoteContent, MedsContent, RadiologyRequestContent, RadiologyResultContent } from '../../types'
 import { LabResultView, LabResultEdit, emptyLabResult } from './blocks/LabResultBlock'
+import { RadiologyRequestView, RadiologyRequestEdit, emptyRadiologyRequest } from './blocks/RadiologyRequestBlock'
+import { RadiologyResultView, RadiologyResultEdit, emptyRadiologyResult } from './blocks/RadiologyResultBlock'
 import { NurseNoteView, NurseNoteEdit, emptyNurseNote } from './blocks/NurseNoteBlock'
 import { ConsultationView, ConsultationEdit, emptyConsultation } from './blocks/ConsultationBlock'
 import { DCNoteView, DCNoteEdit, emptyDCNote } from './blocks/DCNoteBlock'
@@ -36,6 +39,8 @@ import { ProcedureNoteView, ProcedureNoteEdit, emptyProcedureNote, type Procedur
 import { AnaestheticNoteView, AnaestheticNoteEdit, emptyAnaesthetic, type AnaestheticContent } from './blocks/AnaestheticNoteBlock'
 import { PainAssessmentView, PainAssessmentEdit, emptyPainAssessment, type PainAssessmentContent } from './blocks/PainAssessmentBlock'
 import { WoundCareView, WoundCareEdit, emptyWoundCare, type WoundCareContent } from './blocks/WoundCareBlock'
+import { PharmacyFulfillmentView, PharmacyFulfillmentEdit, emptyPharmacyFulfillment } from './blocks/PharmacyFulfillmentBlock'
+import type { PharmacyFulfillmentContent } from '../../types'
 
 // ============================================================
 // Registry interface
@@ -98,10 +103,13 @@ export const BLOCK_REGISTRY: Record<string, BlockRenderer> = {
   wound_care:       makeAdapter<WoundCareContent>(WoundCareView, WoundCareEdit, emptyWoundCare),
   lab_order:        makeAdapter<LabOrderContent>(LabOrderView, LabOrderEdit, emptyLabOrder),
   lab_result:       makeAdapter<LabResultContent>(LabResultView, LabResultEdit, emptyLabResult),
+  radiology_request: makeAdapter<RadiologyRequestContent>(RadiologyRequestView, RadiologyRequestEdit, emptyRadiologyRequest),
+  radiology_result:  makeAdapter<RadiologyResultContent>(RadiologyResultView, RadiologyResultEdit, emptyRadiologyResult),
   nurse_note:       makeAdapter<NurseNoteContent>(NurseNoteView, NurseNoteEdit, emptyNurseNote),
   consultation:     makeAdapter<ConsultationContent>(ConsultationView, ConsultationEdit, emptyConsultation),
   dc_note:          makeAdapter<DCNoteContent>(DCNoteView, DCNoteEdit, emptyDCNote),
   meds:             makeAdapter<MedsContent>(MedsView, MedsEdit, emptyMeds),
+  pharmacy_fulfillment: makeAdapter<PharmacyFulfillmentContent>(PharmacyFulfillmentView, PharmacyFulfillmentEdit, emptyPharmacyFulfillment),
 
   // ── Add new hardcoded block types here ───────────────────────
 }
@@ -109,4 +117,21 @@ export const BLOCK_REGISTRY: Record<string, BlockRenderer> = {
 /** Returns true if the slug has a hardcoded renderer */
 export function isRegistered(slug: string): boolean {
   return slug in BLOCK_REGISTRY
+}
+
+/** Resolve which registry key to use for View/Edit/preview (variants use a distinct `slug` + `registry_slug`). */
+export function registryRenderKey(def: { slug: string; registry_slug?: string | null }): string {
+  const r = def.registry_slug?.trim()
+  return r || def.slug
+}
+
+/**
+ * When `block_definitions` was deleted, `blocks.definition_id` becomes null but `type` remains.
+ * Duplicate flow uses slugs like `note__copy`, `note__copy2` — map those back to a registry key
+ * so hardcoded View/Edit still resolve (best-effort; custom slugs unchanged).
+ */
+export function orphanRegistryRenderKey(type: string): string {
+  const stripped = type.replace(/__copy\d*$/, '')
+  if (stripped !== type && stripped in BLOCK_REGISTRY) return stripped
+  return type
 }

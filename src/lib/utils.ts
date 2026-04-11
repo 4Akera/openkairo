@@ -56,7 +56,14 @@ export function formatDate(date: string | null | undefined, fmt = 'MMM d, yyyy')
 }
 
 export function formatDateTime(date: string | null | undefined): string {
-  return formatDate(date, 'MMM d, yyyy · h:mm a')
+  if (date == null || String(date).trim() === '') return '—'
+  try {
+    const parsed = parseISO(String(date))
+    if (!isValid(parsed)) return '—'
+    return format(parsed, 'MMM d, yyyy · h:mm a')
+  } catch {
+    return '—'
+  }
 }
 
 /** Prefer `patients.date_of_birth`, fall back to `custom_fields.date_of_birth` (YYYY-MM-DD). */
@@ -220,17 +227,23 @@ export function getDefinitionColors(color: string): DefinitionColors {
   return DEFINITION_COLORS[color] ?? DEFINITION_COLORS.slate
 }
 
-export function getBlockPreview(block: { type: string; content: Record<string, unknown> }): string {
+export function getBlockPreview(
+  block: { type: string; content: Record<string, unknown> },
+  /** When set (e.g. from `registry_slug`), preview uses this registry key instead of `block.type`. */
+  renderType?: string | null,
+): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c = block.content as Record<string, any>
-  switch (block.type) {
+  const t = (renderType?.trim() || block.type)
+  switch (t) {
     case 'hx_physical':
       return (c.chief_complaint as string)?.trim()
         ? `CC: ${(c.chief_complaint as string).trim().slice(0, 90)}`
         : (c.hpi as string)?.trim().slice(0, 90) || ''
     case 'note':
       return (c.body as string)?.trim().slice(0, 120) || ''
-    case 'med_orders': {
+    case 'med_orders':
+    case 'meds': {
       const items = (c.items as Array<{ name: string }> | undefined) ?? []
       if (items.length === 0) return ''
       const names = items.slice(0, 4).map(i => i.name).filter(Boolean)

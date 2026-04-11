@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { Patient, PatientFieldDefinition, DatePrecision } from '../../types'
 import { PATIENT_REAL_COLUMNS } from '../../types'
 import { calcAge, formatDateWithPrecision, fullName, getPatientDob } from '../../lib/utils'
+import {
+  filterPatientFieldsBeforeBloodGroup,
+  PATIENT_NAME_HEADER_SLUGS,
+} from '../../lib/patientFieldVisibility'
 import { useSettingsStore } from '../../stores/settingsStore'
 import {
-  Badge,
   Button,
   Input,
   Label,
@@ -142,32 +145,25 @@ export default function Demographics({ patient, onUpdate }: Props) {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  // Split fields for view: skip name + DOB (DOB shown once with Age above)
-  const viewFields = fieldDefs.filter(
-    d => !['first_name', 'middle_name', 'last_name', 'date_of_birth'].includes(d.slug)
+  const defsBeforeBlood = useMemo(() => filterPatientFieldsBeforeBloodGroup(fieldDefs), [fieldDefs])
+
+  // View grid: skip name + DOB header row; hide Blood Group and all lower-priority fields
+  const viewFields = useMemo(
+    () => defsBeforeBlood.filter(d => !PATIENT_NAME_HEADER_SLUGS.includes(d.slug as (typeof PATIENT_NAME_HEADER_SLUGS)[number])),
+    [defsBeforeBlood],
+  )
+
+  const editOtherFields = useMemo(
+    () => defsBeforeBlood.filter(d => !['first_name', 'middle_name', 'last_name'].includes(d.slug)),
+    [defsBeforeBlood],
   )
 
   const dob = getPatientDob(patient)
   const age = calcAge(dob)
 
-  // #region agent log
-  const _dbgDemoRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const el = _dbgDemoRef.current
-    if (!el) return
-    const t = setTimeout(() => {
-      const parent = el.parentElement
-      const grandparent = parent?.parentElement
-      const grid = el.querySelector('.grid')
-      fetch('http://127.0.0.1:7743/ingest/6aa0f9fa-a258-4e9d-993c-a718e7315704',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'60830c'},body:JSON.stringify({sessionId:'60830c',location:'Demographics.tsx:widths',message:'demographics widths',data:{demoW:el.offsetWidth,demoScrollW:el.scrollWidth,parentW:parent?.offsetWidth,parentScrollW:parent?.scrollWidth,parentTag:parent?.tagName,parentClass:parent?.className?.slice(0,80),grandparentW:grandparent?.offsetWidth,grandparentScrollW:grandparent?.scrollWidth,grandparentTag:grandparent?.tagName,grandparentStyle:grandparent?getComputedStyle(grandparent).display:null,gridW:grid?.clientWidth,gridScrollW:grid?.scrollWidth},timestamp:Date.now()})}).catch(()=>{})
-    }, 2500)
-    return () => clearTimeout(t)
-  }, [patient.id])
-  // #endregion
-
   return (
     <>
-      <div ref={_dbgDemoRef} className="rounded-md border bg-muted/20 p-3 space-y-2">
+      <div className="rounded-md border bg-muted/20 p-3 space-y-2">
         {/* Avatar + name */}
         <div className="flex items-center gap-3">
           {/* Photo avatar with upload overlay */}
@@ -246,13 +242,7 @@ export default function Demographics({ patient, onUpdate }: Props) {
                   className={def.field_type === 'textarea' ? 'col-span-2' : undefined}
                 >
                   <span className="text-muted-foreground">{def.label}</span>
-                  {def.slug === 'blood_group' ? (
-                    <div className="font-medium">
-                      <Badge variant="outline" className="text-xs py-0 px-1">{val}</Badge>
-                    </div>
-                  ) : (
-                    <p className="font-medium">{val}</p>
-                  )}
+                  <p className="font-medium">{val}</p>
                 </div>
               )
             })}
@@ -286,10 +276,8 @@ export default function Demographics({ patient, onUpdate }: Props) {
                   ))}
               </div>
 
-              {/* All other active fields */}
-              {fieldDefs
-                .filter(d => !['first_name', 'middle_name', 'last_name'].includes(d.slug))
-                .map(def => (
+              {/* Other fields (Blood Group and below omitted from schema order) */}
+              {editOtherFields.map(def => (
                   <DynamicField
                     key={def.slug}
                     def={def}

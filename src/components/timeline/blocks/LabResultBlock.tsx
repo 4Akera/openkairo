@@ -1,8 +1,17 @@
-import { useState, useCallback } from 'react'
-import type { Block, LabResultContent, LabResult } from '../../../types'
+import { useState, useCallback, useMemo, useEffect } from 'react'
+import type { Block, BlockDefinition, LabResultContent, LabResult } from '../../../types'
+import { supabase } from '../../../lib/supabase'
 import { Button, Input, Label, Separator, Textarea } from '../../ui'
-import { Loader2, TestTube, Plus, X, CheckCircle2, Clock } from 'lucide-react'
+import { Loader2, TestTube, Plus, X, Check } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { useEncounterStore } from '../../../stores/encounterStore'
+import {
+  computeActiveRuleIdsForLabResult,
+  getCustomChargeRules,
+  partitionLabBillingRules,
+  projectedLabBillingTotal,
+  usesCustomChargeRules,
+} from '../../../lib/blockBilling'
 import {
   PANELS, PANEL_MAP,
   flagColor, flagRowBg, FlagBadge,
@@ -26,44 +35,6 @@ export function emptyLabResult(): LabResultContent {
 }
 
 // ============================================================
-// Status tracker
-// ============================================================
-
-const STATUS_STEPS: { key: LabResultContent['status']; label: string }[] = [
-  { key: 'collected',  label: 'Collected'  },
-  { key: 'processing', label: 'Processing' },
-  { key: 'resulted',   label: 'Resulted'   },
-  { key: 'verified',   label: 'Verified'   },
-]
-
-function StatusTracker({ status }: { status: LabResultContent['status'] }) {
-  const idx = STATUS_STEPS.findIndex(s => s.key === status)
-  return (
-    <div className="flex items-center gap-1 flex-wrap">
-      {STATUS_STEPS.map((s, i) => (
-        <div key={s.key} className="flex items-center gap-1">
-          <div className={cn(
-            'flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded',
-            i < idx   ? 'text-muted-foreground' :
-            i === idx ? (status === 'verified'
-              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
-              : 'bg-primary/10 text-primary')
-            : 'text-muted-foreground/40',
-          )}>
-            {i === idx && status === 'verified' && <CheckCircle2 className="h-2.5 w-2.5" />}
-            {i === idx && status !== 'verified' && <Clock className="h-2.5 w-2.5 animate-pulse" />}
-            {s.label}
-          </div>
-          {i < STATUS_STEPS.length - 1 && (
-            <div className={cn('h-px w-3 shrink-0', i < idx ? 'bg-border' : 'bg-border/30')} />
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ============================================================
 // View
 // ============================================================
 
@@ -74,16 +45,18 @@ export function LabResultView({ block }: { block: Block }) {
       (PANEL_MAP[pid]?.tests ?? []).some(t => c.results[`${pid}.${t.id}`]?.value?.trim())
     ) || c.custom_results.some(r => r.value?.trim())
 
-  if (!hasAnyResult && c.status === 'collected') {
-    return <p className="text-sm text-muted-foreground italic">Specimen collected — results pending.</p>
+  if (!hasAnyResult) {
+    const label =
+      c.status === 'collected' ? 'Specimen collected — results pending.' :
+      c.status === 'processing' ? 'Analysis in progress — results pending.' :
+      'No results recorded.'
+    return <p className="text-sm text-muted-foreground italic">{label}</p>
   }
 
   return (
-    <div className="space-y-3 text-sm">
-      <StatusTracker status={c.status} />
-
+    <div className="space-y-1.5">
       {hasAnyResult && (
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           {c.panels.map(pid => (
             <ResultTable key={pid} panelId={pid} results={c.results} />
           ))}
@@ -91,8 +64,8 @@ export function LabResultView({ block }: { block: Block }) {
           {/* Custom test results */}
           {c.custom_defs.length > 0 && c.custom_results.some(r => r.value?.trim()) && (
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Custom Tests</p>
-              <table className="w-full text-xs">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">Custom Tests</p>
+              <table className="w-full text-[11px]">
                 <tbody>
                   {c.custom_defs.map((def, i) => {
                     const r = c.custom_results[i]
@@ -118,7 +91,7 @@ export function LabResultView({ block }: { block: Block }) {
           {c.notes?.trim() && (
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">Notes</p>
-              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{c.notes}</p>
+              <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{c.notes}</p>
             </div>
           )}
           {c.reported_at && (
@@ -161,6 +134,103 @@ export function LabResultEdit({ block, onSave, onCancel }: EditProps) {
   const ex = block.content as Partial<LabResultContent>
   const [form, setForm] = useState<LabResultContent>({ ...emptyLabResult(), ...ex })
   const [saving, setSaving] = useState(false)
+
+  const definitions = useEncounterStore(s => s.definitions)
+  const definitionMap = useEncounterStore(s => s.definitionMap)
+  const [fetchedDef, setFetchedDef] = useState<BlockDefinition | null>(null)
+
+  useEffect(() => {
+    if (!block.definition_id) {
+      setFetchedDef(null)
+      return
+    }
+    if (definitions.some(d => d.id === block.definition_id)) {
+      setFetchedDef(null)
+      return
+    }
+    let cancelled = false
+    supabase
+      .from('block_definitions')
+      .select('*')
+      .eq('id', block.definition_id)
+      .single()
+      .then(({ data }) => {
+        if (!cancelled && data) setFetchedDef(data as BlockDefinition)
+      })
+    return () => { cancelled = true }
+  }, [block.definition_id, definitions])
+
+  const blockDef = useMemo(() => {
+    if (block.definition_id) {
+      return definitions.find(d => d.id === block.definition_id) ?? fetchedDef ?? null
+    }
+    return definitionMap[block.type] ?? null
+  }, [block.definition_id, block.type, definitions, definitionMap, fetchedDef])
+
+  const billingRules = useMemo(
+    () => (blockDef && usesCustomChargeRules(blockDef) ? getCustomChargeRules(blockDef) : []),
+    [blockDef],
+  )
+  const { addOnOnly } = useMemo(() => partitionLabBillingRules(billingRules), [billingRules])
+  const extraIds = form.billing_extra_rule_ids ?? []
+
+  const [svcPrices, setSvcPrices] = useState<Record<string, number>>({})
+  const [svcPricesLoading, setSvcPricesLoading] = useState(false)
+  useEffect(() => {
+    if (billingRules.length === 0) {
+      setSvcPrices({})
+      setSvcPricesLoading(false)
+      return
+    }
+    const ids = [...new Set(billingRules.map(r => r.service_item_id).filter(Boolean))]
+    if (ids.length === 0) {
+      setSvcPricesLoading(false)
+      return
+    }
+    let cancelled = false
+    setSvcPricesLoading(true)
+    supabase
+      .from('service_items')
+      .select('id, default_price')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (cancelled) return
+        const next: Record<string, number> = {}
+        for (const row of (data ?? []) as { id: string; default_price: number }[]) {
+          next[row.id] = Number(row.default_price) || 0
+        }
+        setSvcPrices(next)
+      })
+      .finally(() => {
+        if (!cancelled) setSvcPricesLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [billingRules])
+
+  const billingPreviewTotal = useMemo(
+    () =>
+      billingRules.length === 0
+        ? 0
+        : projectedLabBillingTotal(billingRules, form.panels, form.billing_extra_rule_ids, svcPrices),
+    [billingRules, form.panels, form.billing_extra_rule_ids, svcPrices],
+  )
+
+  const activeBillingLineCount = useMemo(() => {
+    if (billingRules.length === 0) return 0
+    return computeActiveRuleIdsForLabResult(
+      form.panels,
+      billingRules,
+      form.billing_extra_rule_ids,
+    ).length
+  }, [billingRules, form.panels, form.billing_extra_rule_ids])
+
+  const toggleExtraRule = useCallback((id: string) => {
+    setForm(f => {
+      const cur = f.billing_extra_rule_ids ?? []
+      const has = cur.includes(id)
+      return { ...f, billing_extra_rule_ids: has ? cur.filter(x => x !== id) : [...cur, id] }
+    })
+  }, [])
 
   const togglePanel = useCallback((id: string) => {
     setForm(f => {
@@ -211,28 +281,6 @@ export function LabResultEdit({ block, onSave, onCancel }: EditProps) {
   return (
     <div className="space-y-4">
 
-      {/* Status */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Status</Label>
-        <div className="flex gap-1 flex-wrap">
-          {STATUS_STEPS.map(s => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => setForm(f => ({ ...f, status: s.key }))}
-              className={cn(
-                'text-xs px-2.5 py-1 rounded-md border transition-colors',
-                form.status === s.key
-                  ? 'border-primary bg-primary/10 text-primary font-medium'
-                  : 'border-border hover:bg-accent',
-              )}
-            >{s.label}</button>
-          ))}
-        </div>
-      </div>
-
-      <Separator />
-
       {/* Panel selector */}
       <div className="space-y-2">
         <Label className="text-xs">Panels</Label>
@@ -247,6 +295,61 @@ export function LabResultEdit({ block, onSave, onCancel }: EditProps) {
           ))}
         </div>
       </div>
+
+      {billingRules.length > 0 && addOnOnly.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-xs">Add-on charges</Label>
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            Optional lines billed with this result when selected. Panel charges follow the panels you tick above.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {addOnOnly.map(r => {
+              const checked = extraIds.includes(r.id)
+              const qty = Math.max(1, r.quantity ?? 1)
+              const unit = svcPrices[r.service_item_id] ?? 0
+              const line = unit * qty
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  aria-pressed={checked}
+                  onClick={() => toggleExtraRule(r.id)}
+                  className={cn(
+                    'flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-all',
+                    checked
+                      ? 'border-emerald-500/55 bg-emerald-500/[0.12] shadow-sm ring-1 ring-emerald-500/15 dark:bg-emerald-500/10 dark:ring-emerald-400/20'
+                      : 'border-border/80 bg-muted/20 hover:border-emerald-400/35 hover:bg-muted/40',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors',
+                      checked
+                        ? 'border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500'
+                        : 'border-muted-foreground/25 bg-background',
+                    )}
+                    aria-hidden
+                  >
+                    {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+                  </span>
+                  <span className="min-w-0 flex-1 space-y-0.5">
+                    <span className="block text-xs font-medium leading-tight text-foreground">{r.label}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {qty > 1 ? `${qty} × ` : ''}
+                      Add-on
+                    </span>
+                  </span>
+                  {unit > 0 && (
+                    <span className="shrink-0 text-xs font-mono tabular-nums text-emerald-800 dark:text-emerald-300">
+                      {line.toFixed(2)}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Custom test defs */}
       <div className="space-y-2">
@@ -358,6 +461,30 @@ export function LabResultEdit({ block, onSave, onCancel }: EditProps) {
           className="text-sm resize-none"
         />
       </div>
+
+      {billingRules.length > 0 && (
+        <div className="rounded-xl border border-emerald-300/60 bg-gradient-to-br from-emerald-50/90 to-emerald-100/40 px-4 py-3 dark:border-emerald-800/70 dark:from-emerald-950/50 dark:to-emerald-950/20">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800/90 dark:text-emerald-300/90">
+                Current balance (preview)
+              </p>
+              <p className="text-[10px] text-emerald-900/70 dark:text-emerald-200/60 mt-0.5">
+                {activeBillingLineCount === 0
+                  ? 'Select panels or add-ons to include charge lines.'
+                  : `${activeBillingLineCount} line${activeBillingLineCount === 1 ? '' : 's'} — posts when you save`}
+              </p>
+            </div>
+            <p className="text-xl font-semibold font-mono tabular-nums tracking-tight text-emerald-900 dark:text-emerald-100 min-w-[5rem] text-right">
+              {svcPricesLoading && activeBillingLineCount > 0 ? (
+                <span className="text-sm font-normal text-emerald-800/70 dark:text-emerald-200/70">…</span>
+              ) : (
+                billingPreviewTotal.toFixed(2)
+              )}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-1">
         <Button variant="outline" size="sm" type="button" onClick={onCancel}>Cancel</Button>

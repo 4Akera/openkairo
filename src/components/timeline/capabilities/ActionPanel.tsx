@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Zap, Clock, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Zap, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, Flame } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../stores/authStore'
 import type { BlockAction, BlockDefinition } from '../../../types'
@@ -26,7 +26,9 @@ export function ActionPanel({
   definition,
   blockContent,
   readOnly = false,
+  allowSendOrder = true,
   onSentChange,
+  onOrderFulfilledPreferCollapsed,
 }: {
   blockId: string
   encounterId: string
@@ -34,14 +36,25 @@ export function ActionPanel({
   definition: BlockDefinition
   blockContent?: Record<string, unknown>
   readOnly?: boolean
+  /** False until the block is saved (not draft/template) and not actively being edited */
+  allowSendOrder?: boolean
   onSentChange?: (sent: boolean) => void
+  /** When results are linked (completed + result_block_id) and nothing is in-flight, parent may collapse the request block */
+  onOrderFulfilledPreferCollapsed?: () => void
 }) {
   const { user } = useAuthStore()
   const [actions, setActions]       = useState<BlockAction[]>([])
   const [triggering, setTriggering] = useState(false)
+  const [sendError, setSendError]   = useState<string | null>(null)
   const [deptName, setDeptName]     = useState<string | null>(null)
   const [deptSlug, setDeptSlug]     = useState<string | null>(null)
   const [btId, setBtId]             = useState<string | null>(null)
+  const [deptChecked, setDeptChecked] = useState(false)
+  const [priority, setPriority]     = useState<'stat' | 'routine'>('routine')
+  /** Synchronous guard — React state updates too late to prevent double-submit */
+  const sendInFlightRef = useRef(false)
+  /** Tracks pending pipeline for one-time collapse when results land */
+  const prevHasPendingForCollapseRef = useRef<boolean | null>(null)
 
   // Look up dept + block type from department_block_types.order_block_def_id
   useEffect(() => {
@@ -63,16 +76,28 @@ export function ActionPanel({
           setDeptSlug(dept?.slug ?? null)
           setBtId(row.id)
         }
+        setDeptChecked(true)
       })
   }, [definition.id])
 
+  const [actionsReady, setActionsReady] = useState(false)
   const loadActions = useCallback(async () => {
-    const { data } = await supabase
-      .from('block_actions')
-      .select('*')
-      .eq('block_id', blockId)
-      .order('triggered_at', { ascending: false })
-    if (data) setActions(data as BlockAction[])
+    try {
+      const { data } = await supabase
+        .from('block_actions')
+        .select('*')
+        .eq('block_id', blockId)
+        .order('triggered_at', { ascending: false })
+      if (data) setActions(data as BlockAction[])
+      else setActions([])
+    } finally {
+      setActionsReady(true)
+    }
+  }, [blockId])
+
+  useEffect(() => {
+    setActionsReady(false)
+    prevHasPendingForCollapseRef.current = null
   }, [blockId])
 
   useEffect(() => {
@@ -89,35 +114,72 @@ export function ActionPanel({
   }, [blockId, loadActions])
 
   const triggerAction = async () => {
-    if (!user || !deptSlug) return
+    if (!user || !deptSlug || !allowSendOrder) return
+    if (sendInFlightRef.current) return
+    sendInFlightRef.current = true
     setTriggering(true)
+    setSendError(null)
 
-    // Extract order-side data to pre-populate the result block (e.g. panels for lab_result)
+    // Extract order-side data to pre-populate the result block (lab: panels; radiology: studies)
     const orderPanels  = (blockContent?.panels  as string[]  | undefined) ?? undefined
+    const orderStudies = (blockContent?.studies as string[]  | undefined) ?? undefined
     const orderCustom  = (blockContent?.custom   as unknown[] | undefined) ?? undefined
 
-    await supabase.from('block_actions').insert({
-      block_id:       blockId,
-      encounter_id:   encounterId,
-      patient_id:     patientId,
-      action_type:    deptSlug,
-      action_payload: {
-        block_type_id: btId,
-        module:        definition.config?.action?.module,
-        ...(orderPanels !== undefined  && { panels:  orderPanels }),
-        ...(orderCustom !== undefined  && { custom:  orderCustom }),
-      },
-      status:         'pending',
-      triggered_by:   user.id,
-    })
-    setTriggering(false)
+    try {
+      const { error } = await supabase.from('block_actions').insert({
+        block_id:       blockId,
+        encounter_id:   encounterId,
+        patient_id:     patientId,
+        action_type:    deptSlug,
+        action_payload: {
+          block_type_id: btId,
+          module:        definition.config?.action?.module,
+          priority,
+          ...(orderPanels !== undefined  && { panels:  orderPanels }),
+          ...(orderStudies !== undefined && { studies: orderStudies }),
+          ...(orderCustom !== undefined  && { custom:  orderCustom }),
+        },
+        status:         'pending',
+        triggered_by:   user.id,
+      })
+      if (error) {
+        setSendError(error.message || 'Could not send order. Try again or check your connection.')
+      } else {
+        // Refresh before dropping the in-flight UI so Send stays hidden (avoids second click gap)
+        await loadActions()
+      }
+    } finally {
+      sendInFlightRef.current = false
+      setTriggering(false)
+    }
   }
 
-  const hasPending  = actions.some(a => ['pending', 'submitted', 'in_progress'].includes(a.status))
-  const sendLabel   = deptName ? `Send to ${deptName}` : null  // null = not linked to any dept
+  const hasPending  = actions.some(a => ['pending', 'submitted', 'acknowledged', 'in_progress'].includes(a.status))
+  const hasCompletedOrder = actions.some(a => a.status === 'completed')
+  const sendLabel   = deptName ? `Send to ${deptName}` : null
 
-  // Notify parent when order is sent (locks editing in BlockWrapper)
-  useEffect(() => { onSentChange?.(hasPending) }, [hasPending, onSentChange])
+  const completedWithResult = useMemo(
+    () => actions.some(a => a.status === 'completed' && Boolean(a.result_block_id)),
+    [actions],
+  )
+
+  // In-flight or completed → treat as sent (locks editing; hides Send after fulfilment)
+  useEffect(() => {
+    onSentChange?.(hasPending || hasCompletedOrder)
+  }, [hasPending, hasCompletedOrder, onSentChange])
+
+  /** Collapse request block once results exist: first snapshot after load, or pending → idle transition */
+  useEffect(() => {
+    if (!actionsReady || !onOrderFulfilledPreferCollapsed) return
+    const prev = prevHasPendingForCollapseRef.current
+    if (!hasPending && completedWithResult && (prev === null || prev === true)) {
+      onOrderFulfilledPreferCollapsed()
+    }
+    prevHasPendingForCollapseRef.current = hasPending
+  }, [actionsReady, hasPending, completedWithResult, onOrderFulfilledPreferCollapsed])
+
+  // Not a department-linked order block and no history → render nothing
+  if (deptChecked && !deptName && actions.length === 0) return null
 
   return (
     <>
@@ -129,21 +191,57 @@ export function ActionPanel({
             <span className="text-xs font-medium text-amber-800 dark:text-amber-400 flex-1">
               {deptName ? `Order → ${deptName}` : 'Order Block'}
             </span>
-            {!readOnly && !hasPending && sendLabel && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 text-xs"
-                onClick={triggerAction}
-                disabled={triggering}
-              >
-                {triggering ? <><Loader2 className="h-3 w-3 animate-spin" /> Sending…</> : sendLabel}
-              </Button>
-            )}
             {!readOnly && !hasPending && !sendLabel && (
               <span className="text-[10px] text-muted-foreground italic">Not linked to a department</span>
             )}
           </div>
+
+          {/* Priority + Send row — hide once an order exists (in-flight or completed) */}
+          {!readOnly && !hasPending && !hasCompletedOrder && sendLabel && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {allowSendOrder ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setPriority(p => p === 'stat' ? 'routine' : 'stat')}
+                    disabled={triggering}
+                    className={cn(
+                      'flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors',
+                      priority === 'stat'
+                        ? 'bg-red-100 border-red-300 text-red-700 dark:bg-red-950/40 dark:border-red-700 dark:text-red-400'
+                        : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted',
+                      triggering && 'opacity-50 pointer-events-none',
+                    )}
+                  >
+                    <Flame className="w-3 h-3" />
+                    STAT
+                  </button>
+                  <span className="text-[10px] text-muted-foreground flex-1 min-w-[120px]">
+                    {priority === 'stat' ? 'Urgent — top of queue' : 'Routine priority'}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-xs"
+                    onClick={triggerAction}
+                    disabled={triggering}
+                  >
+                    {triggering ? <><Loader2 className="h-3 w-3 animate-spin" /> Sending…</> : sendLabel}
+                  </Button>
+                </>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  Save this block before sending to the department.
+                </p>
+              )}
+              {sendError && (
+                <p className="flex items-center gap-1 w-full text-[11px] text-red-600 dark:text-red-400">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  {sendError}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Action history */}
           {actions.length > 0 && (
@@ -151,6 +249,7 @@ export function ActionPanel({
               {actions.map(action => {
                 const cfg  = STATUS_CONFIG[action.status] ?? STATUS_CONFIG.pending
                 const Icon = cfg.icon
+                const isStat = action.action_payload?.priority === 'stat'
                 return (
                   <div
                     key={action.id}
@@ -159,6 +258,11 @@ export function ActionPanel({
                     <Icon className={cn('w-3 h-3 mt-0.5 shrink-0', cfg.color)} />
                     <div className="flex-1 min-w-0">
                       <span className={cn('font-medium', cfg.color)}>{cfg.label}</span>
+                      {isStat && (
+                        <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">
+                          <Flame className="w-2.5 h-2.5" /> STAT
+                        </span>
+                      )}
                       <span className="text-muted-foreground ml-1">
                         · {formatDateTime(action.triggered_at)}
                       </span>
@@ -166,6 +270,11 @@ export function ActionPanel({
                         <span className="ml-1 text-emerald-600 dark:text-emerald-400">
                           · result ↓ below
                         </span>
+                      )}
+                      {action.status === 'cancelled' && action.cancel_reason && (
+                        <p className="mt-0.5 text-[10px] text-red-600 dark:text-red-400">
+                          Reason: {action.cancel_reason}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -176,7 +285,9 @@ export function ActionPanel({
 
           {actions.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              No orders sent yet.{sendLabel && ` Click "${sendLabel}" to send.`}
+              No orders sent yet.
+              {sendLabel && allowSendOrder && ` Click "${sendLabel}" to send.`}
+              {sendLabel && !allowSendOrder && !readOnly && ' Save the block first, then send.'}
             </p>
           )}
         </div>

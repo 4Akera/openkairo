@@ -1,12 +1,25 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
-import type { ServiceItem, Charge, Payment, PatientDeposit, Invoice, PatientInsurance, PatientBalance } from '../types'
+import type {
+  ServiceItem,
+  InsuranceProvider,
+  Charge,
+  Payment,
+  PatientDeposit,
+  Invoice,
+  PatientInsurance,
+  PatientBalance,
+} from '../types'
 
 interface BillingState {
   // Service item catalog
   serviceItems: ServiceItem[]
   loadingItems: boolean
   fetchServiceItems: () => Promise<void>
+
+  insuranceProviders: InsuranceProvider[]
+  loadingInsuranceProviders: boolean
+  fetchInsuranceProviders: () => Promise<void>
 
   // Per-patient billing state
   charges: Charge[]
@@ -74,11 +87,18 @@ interface BillingState {
   // Service item CRUD
   upsertServiceItem: (item: Partial<ServiceItem> & { code: string; name: string; default_price: number }) => Promise<boolean>
   deleteServiceItem: (id: string) => Promise<boolean>
+
+  upsertInsuranceProvider: (
+    row: Partial<InsuranceProvider> & { name: string },
+  ) => Promise<boolean>
+  deleteInsuranceProvider: (id: string) => Promise<boolean>
 }
 
 export const useBillingStore = create<BillingState>((set, get) => ({
   serviceItems: [],
   loadingItems: false,
+  insuranceProviders: [],
+  loadingInsuranceProviders: false,
   charges: [],
   payments: [],
   deposits: [],
@@ -95,6 +115,19 @@ export const useBillingStore = create<BillingState>((set, get) => ({
       .select('*')
       .order('sort_order')
     set({ serviceItems: (data ?? []) as ServiceItem[], loadingItems: false })
+  },
+
+  fetchInsuranceProviders: async () => {
+    set({ loadingInsuranceProviders: true })
+    const { data } = await supabase
+      .from('insurance_providers')
+      .select('*')
+      .order('sort_order')
+      .order('name')
+    set({
+      insuranceProviders: (data ?? []) as InsuranceProvider[],
+      loadingInsuranceProviders: false,
+    })
   },
 
   fetchPatientBilling: async (patientId) => {
@@ -244,40 +277,31 @@ export const useBillingStore = create<BillingState>((set, get) => ({
     const user = (await supabase.auth.getUser()).data.user
     if (!user) return false
 
-    // Deduct from deposit if method is 'deposit'
-    let depositDeducted = false
     if (payment.method === 'deposit') {
-      const { data: deps } = await supabase
-        .from('patient_deposits')
-        .select('*')
-        .eq('patient_id', payment.patient_id)
-        .gt('remaining', 0)
-        .order('created_at', { ascending: true })
-      if (deps && deps.length > 0) {
-        let remaining = payment.amount
-        for (const dep of deps as import('../types').PatientDeposit[]) {
-          if (remaining <= 0) break
-          const deduct = Math.min(dep.remaining, remaining)
-          await supabase.from('patient_deposits').update({ remaining: dep.remaining - deduct }).eq('id', dep.id)
-          remaining -= deduct
-        }
-        depositDeducted = true
-      }
-    }
-
-    const { error } = await supabase
-      .from('payments')
-      .insert({
-        patient_id:  payment.patient_id,
-        invoice_id:  payment.invoice_id ?? null,
-        amount:      payment.amount,
-        method:      payment.method,
-        reference:   payment.reference ?? null,
-        payer_name:  payment.payer_name ?? null,
-        notes:       payment.notes ?? null,
-        received_by: user.id,
+      const { error } = await supabase.rpc('record_payment_from_deposit', {
+        p_patient_id: payment.patient_id,
+        p_amount: payment.amount,
+        p_invoice_id: payment.invoice_id ?? null,
+        p_reference: payment.reference ?? null,
+        p_payer_name: payment.payer_name ?? null,
+        p_notes: payment.notes ?? null,
       })
-    if (error) return false
+      if (error) return false
+    } else {
+      const { error } = await supabase
+        .from('payments')
+        .insert({
+          patient_id:  payment.patient_id,
+          invoice_id:  payment.invoice_id ?? null,
+          amount:      payment.amount,
+          method:      payment.method,
+          reference:   payment.reference ?? null,
+          payer_name:  payment.payer_name ?? null,
+          notes:       payment.notes ?? null,
+          received_by: user.id,
+        })
+      if (error) return false
+    }
 
     // Mark selected charges as paid
     if (payment.chargeIds && payment.chargeIds.length > 0) {
@@ -314,7 +338,6 @@ export const useBillingStore = create<BillingState>((set, get) => ({
       }
     }
 
-    void depositDeducted
     return true
   },
 
@@ -373,6 +396,42 @@ export const useBillingStore = create<BillingState>((set, get) => ({
     const { error } = await supabase.from('service_items').delete().eq('id', id)
     if (error) return false
     set((s) => ({ serviceItems: s.serviceItems.filter((i) => i.id !== id) }))
+    return true
+  },
+
+  upsertInsuranceProvider: async (row) => {
+    if (row.id) {
+      const { error } = await supabase
+        .from('insurance_providers')
+        .update({
+          name: row.name.trim(),
+          default_copay_percent: row.default_copay_percent ?? null,
+          default_coverage_limit: row.default_coverage_limit ?? null,
+          active: row.active ?? true,
+          sort_order: row.sort_order ?? 0,
+        })
+        .eq('id', row.id)
+      if (error) return false
+    } else {
+      const { error } = await supabase.from('insurance_providers').insert({
+        name: row.name.trim(),
+        default_copay_percent: row.default_copay_percent ?? null,
+        default_coverage_limit: row.default_coverage_limit ?? null,
+        active: row.active ?? true,
+        sort_order: row.sort_order ?? 0,
+      })
+      if (error) return false
+    }
+    await get().fetchInsuranceProviders()
+    return true
+  },
+
+  deleteInsuranceProvider: async (id) => {
+    const { error } = await supabase.from('insurance_providers').delete().eq('id', id)
+    if (error) return false
+    set((s) => ({
+      insuranceProviders: s.insuranceProviders.filter((p) => p.id !== id),
+    }))
     return true
   },
 

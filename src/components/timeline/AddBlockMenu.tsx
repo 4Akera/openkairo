@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { BlockDefinition, UserBlockTemplate } from '../../types'
 import { useEncounterStore } from '../../stores/encounterStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -9,9 +9,11 @@ import {
   Activity, Heart, Brain, TestTube, Zap, Clock, AlertTriangle,
   ArrowRight, Camera, BarChart2, Clipboard, FlaskConical, Pill,
   Star, Layers, CheckCheck, Search, Loader2, ChevronRight, ChevronLeft,
-  Calculator, Scissors, BookOpen, MessageSquare, LogOut,
+  Calculator, Scissors, BookOpen, MessageSquare,   LogOut,
+  Scan,
 } from 'lucide-react'
 import { getDefinitionColors, cn } from '../../lib/utils'
+import { groupDefinitionsForAddMenu, flattenGroupedSections } from '../../lib/addBlockMenuGroups'
 
 // ─── Icon map ────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   'book-open':      BookOpen,
   'message-square': MessageSquare,
   'log-out':        LogOut,
+  scan:             Scan,
 }
 
 function DefIcon({ slug, className }: { slug: string; className?: string }) {
@@ -90,17 +93,16 @@ export default function AddBlockMenu({ onAdd, disabled }: Props) {
   }, [open, user])
 
   // ── Visible pool ──────────────────────────────────────────────────────────
-  const visibleDefs = definitions.filter((d) => {
-    if (d.is_dept_only) return false
-    if (d.is_universal && !d.is_builtin) {
-      if (
-        d.visible_to_roles.length > 0 &&
-        !d.visible_to_roles.some((r) => roleSlugs.includes(r))
-      ) return false
-    }
-    if (preferredBlocks.length > 0 && !preferredBlocks.includes(d.id)) return false
-    return true
-  })
+  const visibleDefs = useMemo(
+    () =>
+      definitions.filter((d) => {
+        if (d.is_dept_only) return false
+        if (d.visible_to_roles.length > 0 && !d.visible_to_roles.some((r) => roleSlugs.includes(r))) return false
+        if (preferredBlocks.length > 0 && !preferredBlocks.includes(d.id)) return false
+        return true
+      }),
+    [definitions, roleSlugs, preferredBlocks],
+  )
 
   const pinnedSet  = new Set(pinnedBlocks)
   const tplsByDef  = templates.reduce<Record<string, UserBlockTemplate[]>>((acc, t) => {
@@ -110,18 +112,25 @@ export default function AddBlockMenu({ onAdd, disabled }: Props) {
 
   const pinnedDefs = visibleDefs.filter((d) => pinnedSet.has(d.id))
 
-  // ── Search-filtered list ──────────────────────────────────────────────────
-  const filtered = (() => {
+  // ── Grouped list (search still filters; order = group headers + sort_order within group)
+  const { menuSections, orderedDefs } = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (q) return visibleDefs.filter((d) =>
-      d.name.toLowerCase().includes(q) ||
-      (d.description ?? '').toLowerCase().includes(q),
-    )
-    return [
-      ...visibleDefs.filter((d) => pinnedSet.has(d.id)),
-      ...visibleDefs.filter((d) => !pinnedSet.has(d.id)),
-    ]
-  })()
+    const base = q
+      ? visibleDefs.filter(
+          (d) =>
+            d.name.toLowerCase().includes(q) ||
+            (d.description ?? '').toLowerCase().includes(q),
+        )
+      : visibleDefs
+    const menuSections = groupDefinitionsForAddMenu(base)
+    return { menuSections, orderedDefs: flattenGroupedSections(menuSections) }
+  }, [visibleDefs, query])
+
+  const defIndexById = useMemo(() => {
+    const m = new Map<string, number>()
+    orderedDefs.forEach((d, i) => m.set(d.id, i))
+    return m
+  }, [orderedDefs])
 
   useEffect(() => { setActiveIdx(0) }, [query])
 
@@ -178,13 +187,13 @@ export default function AddBlockMenu({ onAdd, disabled }: Props) {
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActiveIdx((i) => Math.min(i + 1, filtered.length - 1))
+      setActiveIdx((i) => Math.min(i + 1, orderedDefs.length - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setActiveIdx((i) => Math.max(i - 1, 0))
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      const def = filtered[activeIdx]
+      const def = orderedDefs[activeIdx]
       if (def && adding === null) handleSelectDef(def)
     }
   }
@@ -267,88 +276,99 @@ export default function AddBlockMenu({ onAdd, disabled }: Props) {
                   <div className="flex justify-center py-6">
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   </div>
-                ) : filtered.length === 0 ? (
+                ) : orderedDefs.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-6">
                     {query ? `No blocks matching "${query}"` : 'No block types available.'}
                   </p>
                 ) : (
-                  filtered.map((def, idx) => {
-                    const colors   = getDefinitionColors(def.color)
-                    const isActive = idx === activeIdx
-                    const isPinned = pinnedSet.has(def.id)
-                    const isAdding = adding === def.id
-                    const isSaving = savingPin === def.id
-                    const tpls     = tplsByDef[def.id] ?? []
-                    const hasTpls  = tpls.length > 0
-                    const hasDefault = tpls.some((t) => t.is_default)
-
-                    return (
+                  menuSections.map((section, sIdx) => (
+                    <div key={section.id}>
                       <div
-                        key={def.id}
-                        data-active={isActive}
                         className={cn(
-                          'group flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors',
-                          isActive ? 'bg-accent' : 'hover:bg-accent/60',
+                          'px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/40 border-b border-border/60',
+                          sIdx === 0 && 'border-t-0',
                         )}
-                        onMouseEnter={() => setActiveIdx(idx)}
-                        onClick={() => !isAdding && handleSelectDef(def)}
                       >
-                        <div className={cn('h-7 w-7 rounded-md flex items-center justify-center shrink-0', colors.iconBg)}>
-                          {isAdding
-                            ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
-                            : <DefIcon slug={def.icon} className="w-3.5 h-3.5 text-white" />
-                          }
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium leading-tight">{def.name}</p>
-                          {def.description && (
-                            <p className="text-[11px] text-muted-foreground truncate leading-tight">{def.description}</p>
-                          )}
-                        </div>
-
-                        {/* Template indicator / sub-menu access */}
-                        {hasTpls && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setSelectedDef(def) }}
-                            title="Choose template"
-                            className={cn(
-                              'flex items-center gap-0.5 text-[9px] border rounded px-1 py-px shrink-0 transition-colors',
-                              hasDefault
-                                ? 'text-primary border-primary/30 bg-primary/5 hover:bg-primary/10'
-                                : 'text-muted-foreground border-border hover:border-primary/40 hover:text-primary',
-                            )}
-                          >
-                            {hasDefault && <Zap className="h-2.5 w-2.5 fill-current" />}
-                            {tpls.length} tpl{tpls.length !== 1 ? 's' : ''}
-                          </button>
-                        )}
-
-                        {/* Chevron for templates, or pin toggle */}
-                        {!hasTpls && (
-                          <button
-                            type="button"
-                            disabled={isSaving}
-                            onClick={(e) => handleTogglePin(e, def)}
-                            title={isPinned ? 'Unpin' : 'Pin to favourites'}
-                            className={cn(
-                              'shrink-0 p-1 rounded transition-all',
-                              isPinned
-                                ? 'text-amber-400 hover:text-amber-500 opacity-100'
-                                : 'text-muted-foreground/30 hover:text-muted-foreground opacity-0 group-hover:opacity-100',
-                              isSaving && 'opacity-50 cursor-wait',
-                            )}
-                          >
-                            {isSaving
-                              ? <Loader2 className="h-3 w-3 animate-spin" />
-                              : <Star className={cn('h-3 w-3', isPinned && 'fill-current')} />
-                            }
-                          </button>
-                        )}
+                        {section.label}
                       </div>
-                    )
-                  })
+                      {section.defs.map((def) => {
+                        const idx = defIndexById.get(def.id) ?? 0
+                        const colors   = getDefinitionColors(def.color)
+                        const isActive = idx === activeIdx
+                        const isPinned = pinnedSet.has(def.id)
+                        const isAdding = adding === def.id
+                        const isSaving = savingPin === def.id
+                        const tpls     = tplsByDef[def.id] ?? []
+                        const hasTpls  = tpls.length > 0
+                        const hasDefault = tpls.some((t) => t.is_default)
+
+                        return (
+                          <div
+                            key={def.id}
+                            data-active={isActive}
+                            className={cn(
+                              'group flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors',
+                              isActive ? 'bg-accent' : 'hover:bg-accent/60',
+                            )}
+                            onMouseEnter={() => setActiveIdx(idx)}
+                            onClick={() => !isAdding && handleSelectDef(def)}
+                          >
+                            <div className={cn('h-7 w-7 rounded-md flex items-center justify-center shrink-0', colors.iconBg)}>
+                              {isAdding
+                                ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                                : <DefIcon slug={def.icon} className="w-3.5 h-3.5 text-white" />
+                              }
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium leading-tight">{def.name}</p>
+                              {def.description && (
+                                <p className="text-[11px] text-muted-foreground truncate leading-tight">{def.description}</p>
+                              )}
+                            </div>
+
+                            {hasTpls && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setSelectedDef(def) }}
+                                title="Choose template"
+                                className={cn(
+                                  'flex items-center gap-0.5 text-[9px] border rounded px-1 py-px shrink-0 transition-colors',
+                                  hasDefault
+                                    ? 'text-primary border-primary/30 bg-primary/5 hover:bg-primary/10'
+                                    : 'text-muted-foreground border-border hover:border-primary/40 hover:text-primary',
+                                )}
+                              >
+                                {hasDefault && <Zap className="h-2.5 w-2.5 fill-current" />}
+                                {tpls.length} tpl{tpls.length !== 1 ? 's' : ''}
+                              </button>
+                            )}
+
+                            {!hasTpls && (
+                              <button
+                                type="button"
+                                disabled={isSaving}
+                                onClick={(e) => handleTogglePin(e, def)}
+                                title={isPinned ? 'Unpin' : 'Pin to favourites'}
+                                className={cn(
+                                  'shrink-0 p-1 rounded transition-all',
+                                  isPinned
+                                    ? 'text-amber-400 hover:text-amber-500 opacity-100'
+                                    : 'text-muted-foreground/30 hover:text-muted-foreground opacity-0 group-hover:opacity-100',
+                                  isSaving && 'opacity-50 cursor-wait',
+                                )}
+                              >
+                                {isSaving
+                                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                                  : <Star className={cn('h-3 w-3', isPinned && 'fill-current')} />
+                                }
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))
                 )}
               </div>
 

@@ -244,11 +244,11 @@ export function ResultTable({
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border/60">
-            <th className="text-left font-semibold text-muted-foreground pb-0.5 pr-3 w-36">Test</th>
-            <th className="text-right font-semibold text-muted-foreground pb-0.5 pr-2">Result</th>
-            <th className="text-left font-semibold text-muted-foreground pb-0.5 pr-3 w-16">Unit</th>
-            <th className="text-left font-semibold text-muted-foreground pb-0.5 w-24">Ref range</th>
-            <th className="w-8" />
+            <th className="text-left font-semibold text-muted-foreground pb-0.5 pr-3 whitespace-nowrap">Test</th>
+            <th className="text-right font-semibold text-muted-foreground pb-0.5 pr-2 whitespace-nowrap">Result</th>
+            <th className="text-left font-semibold text-muted-foreground pb-0.5 pr-3 whitespace-nowrap">Unit</th>
+            <th className="text-left font-semibold text-muted-foreground pb-0.5 whitespace-nowrap">Ref range</th>
+            <th className="w-6" />
           </tr>
         </thead>
         <tbody>

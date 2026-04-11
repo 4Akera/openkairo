@@ -1,14 +1,37 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useEncounterStore } from '../../stores/encounterStore'
 import type { Block, BlockDefinition, Charge } from '../../types'
 import { ScrollArea, Badge, Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui'
-import { Loader2, Eye, EyeOff, History, Pin, PinOff, FileText } from 'lucide-react'
+import {
+  Loader2,
+  Eye,
+  EyeOff,
+  History,
+  Pin,
+  PinOff,
+  FileText,
+  UserCog,
+  Shield,
+  CheckCircle,
+  Type,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react'
 import BlockWrapper from './BlockWrapper'
 import AddBlockMenu from './AddBlockMenu'
 import { formatDateTime, getDefinitionColors, cn } from '../../lib/utils'
+import { registryRenderKey, orphanRegistryRenderKey } from './BlockRegistry'
+import {
+  usesCustomChargeRules,
+  syncLabResultBlockCharges,
+  syncRadiologyResultBlockCharges,
+  fetchActiveChargesForBlock,
+} from '../../lib/blockBilling'
+import type { LabResultContent, RadiologyResultContent } from '../../types'
+import { format, isToday, isYesterday, parseISO } from 'date-fns'
 
 interface Props {
   encounterId: string
@@ -16,7 +39,37 @@ interface Props {
   encounterStatus: 'open' | 'closed'
 }
 
-export default function Timeline({ encounterId, patientId, encounterStatus }: Props) {
+type AuditEntry = {
+  id: string
+  actor_id: string | null
+  action: string
+  old_value: string | null
+  new_value: string | null
+  created_at: string
+  actorName?: string
+}
+
+export type TimelineHandle = {
+  refreshAuditLog: () => Promise<void>
+}
+
+// ── Day-grouping helpers ─────────────────────────────────────────────────────
+
+function dayKey(iso: string) {
+  return iso.slice(0, 10) // YYYY-MM-DD
+}
+
+function dayLabel(key: string) {
+  const d = parseISO(key)
+  if (isToday(d))     return 'Today'
+  if (isYesterday(d)) return 'Yesterday'
+  return format(d, 'd MMMM yyyy')
+}
+
+const Timeline = forwardRef<TimelineHandle, Props>(function Timeline(
+  { encounterId, patientId, encounterStatus }: Props,
+  ref,
+) {
   const { user, profile, can, hasRole } = useAuthStore()
   const { billingEnabled } = useSettingsStore()
   const {
@@ -24,19 +77,33 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
     removeBlock, maskBlock,
     showMasked, setShowMasked,
     lockMap, applyLock, releaseLock,
+    definitions,
     definitionMap, setDefinitions,
     togglePin,
   } = useEncounterStore()
+
+  const definitionById = useMemo(() => {
+    const m: Record<string, BlockDefinition> = {}
+    for (const d of definitions) {
+      m[d.id] = d
+    }
+    return m
+  }, [definitions])
+
+  const resolveBlockDefinition = useCallback(
+    (block: Block): BlockDefinition | undefined =>
+      definitionMap[block.type] ?? (block.definition_id ? definitionById[block.definition_id] : undefined),
+    [definitionMap, definitionById],
+  )
 
   const [loading, setLoading] = useState(true)
   const [historyBlock, setHistoryBlock] = useState<Block | null>(null)
   const [blockVersions, setBlockVersions] = useState<Block[]>([])
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [deptNameMap, setDeptNameMap] = useState<Record<string, string>>({})
-  const [chargeMap, setChargeMap] = useState<Record<string, Charge>>({}) // blockId → charge
+  const [chargeMap, setChargeMap] = useState<Record<string, Charge[]>>({}) // blockId → charges
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
-  // scrollAreaRef reserved for future auto-scroll use
-  void useRef<HTMLDivElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const lockChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
@@ -52,7 +119,40 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       })
   }, [setDefinitions])
 
-  // Fetch blocks — encounter blocks + any dept result blocks linked via block_actions
+  // Standalone audit log refresh — exposed to EncounterPage via ref
+  const fetchAuditLog = useCallback(async () => {
+    const { data: logs } = await supabase
+      .from('encounter_audit_log')
+      .select('*')
+      .eq('encounter_id', encounterId)
+      .order('created_at', { ascending: true })
+    if (!logs || logs.length === 0) { setAuditLogs([]); return }
+    const toResolve = new Set<string>()
+    for (const l of logs as AuditEntry[]) {
+      if (l.actor_id) toResolve.add(l.actor_id)
+      if (l.action === 'assignment') {
+        if (l.old_value) toResolve.add(l.old_value)
+        if (l.new_value) toResolve.add(l.new_value)
+      }
+    }
+    const ids = [...toResolve]
+    const { data: profs } = ids.length
+      ? await supabase.from('profiles').select('id, full_name').in('id', ids)
+      : { data: [] }
+    const profMap = Object.fromEntries(
+      ((profs ?? []) as { id: string; full_name: string }[]).map(p => [p.id, p.full_name]),
+    )
+    setAuditLogs((logs as AuditEntry[]).map(l => ({
+      ...l,
+      actorName: l.actor_id ? (profMap[l.actor_id] ?? 'Unknown') : 'System',
+      old_value: l.action === 'assignment' && l.old_value ? (profMap[l.old_value] ?? l.old_value) : l.old_value,
+      new_value: l.action === 'assignment' && l.new_value ? (profMap[l.new_value] ?? l.new_value) : l.new_value,
+    })))
+  }, [encounterId])
+
+  useImperativeHandle(ref, () => ({ refreshAuditLog: fetchAuditLog }), [fetchAuditLog])
+
+  // Fetch blocks + charges + audit log
   const fetchBlocks = useCallback(async () => {
     const [{ data: encounterBlocks }, { data: actions }] = await Promise.all([
       supabase
@@ -99,33 +199,36 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
           .select('id, block_id, description, quantity, unit_price, status, source, created_by')
           .in('block_id', blockIds)
           .not('status', 'in', '(void,waived)')
-        if (ch) {
-          // Priority: pending_approval > pending > paid > pending_insurance
-          const priority: Record<string, number> = {
-            pending_approval: 0, pending: 1, paid: 2, pending_insurance: 3,
-          }
-          const map: Record<string, Charge> = {}
-          for (const c of ch as Charge[]) {
-            if (!c.block_id) continue
-            const existing = map[c.block_id]
-            if (!existing || (priority[c.status] ?? 9) < (priority[existing.status] ?? 9)) {
-              map[c.block_id] = c as Charge
-            }
-          }
-          setChargeMap(map)
+        const map: Record<string, Charge[]> = {}
+        for (const c of (ch ?? []) as Charge[]) {
+          if (!c.block_id) continue
+          if (!map[c.block_id]) map[c.block_id] = []
+          map[c.block_id].push(c)
         }
+        setChargeMap(map)
+      } else {
+        setChargeMap({})
       }
+    } else {
+      setChargeMap({})
     }
 
     setLoading(false)
-  }, [encounterId, setBlocks])
+    await fetchAuditLog()
+  }, [encounterId, setBlocks, billingEnabled, can, fetchAuditLog])
+
+  // Stable ref for fetchBlocks so the channel useEffect doesn't depend on it
+  const fetchBlocksRef = useRef(fetchBlocks)
+  useEffect(() => { fetchBlocksRef.current = fetchBlocks }, [fetchBlocks])
 
   const handleApproveCharge = useCallback(async (chargeId: string) => {
     await supabase.from('charges').update({ status: 'pending' }).eq('id', chargeId).eq('status', 'pending_approval')
     setChargeMap(prev => {
       const next = { ...prev }
       for (const key of Object.keys(next)) {
-        if (next[key].id === chargeId) next[key] = { ...next[key], status: 'pending' as const }
+        next[key] = next[key].map(c =>
+          c.id === chargeId ? { ...c, status: 'pending' as const } : c,
+        )
       }
       return next
     })
@@ -136,10 +239,24 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
     setChargeMap(prev => {
       const next = { ...prev }
       for (const key of Object.keys(next)) {
-        if (next[key].id === chargeId) next[key] = { ...next[key], status: 'void' as const }
+        next[key] = next[key].map(c =>
+          c.id === chargeId ? { ...c, status: 'void' as const } : c,
+        )
       }
       return next
     })
+  }, [])
+
+  const reloadBlockCharges = useCallback(async (blockId: string) => {
+    const { data: ch } = await supabase
+      .from('charges')
+      .select('id, block_id, description, quantity, unit_price, status, source, created_by')
+      .eq('block_id', blockId)
+      .not('status', 'in', '(void,waived)')
+    setChargeMap(prev => ({
+      ...prev,
+      [blockId]: (ch ?? []) as Charge[],
+    }))
   }, [])
 
   const getNextSequence = useCallback(() => {
@@ -147,33 +264,31 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
     return Math.max(...blocks.map((b) => b.sequence_order)) + 10
   }, [blocks])
 
-  const actionsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
-
-  // Realtime subscriptions
+  // Realtime subscriptions — only re-created when encounterId changes
   useEffect(() => {
-    fetchBlocks()
+    fetchBlocksRef.current()
 
+    // Single channel for all postgres_changes (blocks INSERT/UPDATE + block_actions UPDATE)
     channelRef.current = supabase
-      .channel(`encounter-blocks:${encounterId}`)
+      .channel(`encounter-rt:${encounterId}`, { config: { private: true } })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'blocks', filter: `encounter_id=eq.${encounterId}` },
-        (payload) => {
-          appendBlock(payload.new as Block)
+        async (payload) => {
+          const { data } = await supabase.from('blocks').select('*').eq('id', (payload.new as Block).id).single()
+          if (!data) return
+          appendBlock(data as Block)
           setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
         },
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'blocks', filter: `encounter_id=eq.${encounterId}` },
-        (payload) => updateBlock(payload.new as Block),
+        async (payload) => {
+          const { data } = await supabase.from('blocks').select('*').eq('id', (payload.new as Block).id).single()
+          if (data) updateBlock(data as Block)
+        },
       )
-      .subscribe()
-
-    // Listen for block_actions updates on this encounter — when a result_block_id appears,
-    // fetch the result block and append it to the timeline
-    actionsChannelRef.current = supabase
-      .channel(`encounter-actions:${encounterId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'block_actions', filter: `encounter_id=eq.${encounterId}` },
@@ -193,6 +308,7 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       )
       .subscribe()
 
+    // Broadcast channel for lock/unlock (no RLS overhead)
     lockChannelRef.current = supabase
       .channel(`encounter-locks:${encounterId}`)
       .on('broadcast', { event: 'lock' }, ({ payload }) => {
@@ -205,10 +321,9 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
 
     return () => {
       channelRef.current?.unsubscribe()
-      actionsChannelRef.current?.unsubscribe()
       lockChannelRef.current?.unsubscribe()
     }
-  }, [encounterId, fetchBlocks, appendBlock, updateBlock, applyLock, releaseLock])
+  }, [encounterId, appendBlock, updateBlock, applyLock, releaseLock])
 
   // Lock management
   const acquireLock = useCallback(async (blockId: string): Promise<boolean> => {
@@ -271,7 +386,13 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       appendBlock(newBlock)
       setJustAddedId(newBlock.id)
 
-      if (billingEnabled && def?.service_item_id && def.charge_mode && can('billing.charge')) {
+      if (
+        billingEnabled &&
+        def?.service_item_id &&
+        def.charge_mode &&
+        can('billing.charge') &&
+        !usesCustomChargeRules(def)
+      ) {
         const { data: svc } = await supabase
           .from('service_items')
           .select('*')
@@ -296,7 +417,7 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
             .select()
             .single()
           if (chargeRow) {
-            setChargeMap(prev => ({ ...prev, [newBlock.id]: chargeRow as Charge }))
+            setChargeMap(prev => ({ ...prev, [newBlock.id]: [chargeRow as Charge] }))
           }
         }
       }
@@ -325,6 +446,38 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
         .eq('id', block.id)
       updateBlock({ ...block, content: newContent, author_name: authorName, is_template_seed: false, locked_by: null, locked_at: null })
       setJustAddedId(null)
+
+      const defFirst = resolveBlockDefinition({ ...block, content: newContent })
+      const regKeyFirst = defFirst ? registryRenderKey(defFirst) : orphanRegistryRenderKey(block.type)
+      if (
+        billingEnabled &&
+        can('billing.charge') &&
+        defFirst &&
+        usesCustomChargeRules(defFirst) &&
+        (regKeyFirst === 'lab_result' || regKeyFirst === 'radiology_result')
+      ) {
+        if (regKeyFirst === 'lab_result') {
+          await syncLabResultBlockCharges({
+            blockId: block.id,
+            patientId,
+            encounterId,
+            userId: user.id,
+            definition: defFirst,
+            content: newContent as unknown as LabResultContent,
+          })
+        } else {
+          await syncRadiologyResultBlockCharges({
+            blockId: block.id,
+            patientId,
+            encounterId,
+            userId: user.id,
+            definition: defFirst,
+            content: newContent as unknown as RadiologyResultContent,
+          })
+        }
+        const rows = await fetchActiveChargesForBlock(block.id)
+        setChargeMap(prev => ({ ...prev, [block.id]: rows }))
+      }
       return
     }
 
@@ -347,10 +500,58 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       author_name: authorName,
       definition_id: block.definition_id,
       created_by: user.id,
+      visible_to_roles: block.visible_to_roles ?? [],
+      share_to_record: block.share_to_record ?? false,
+      is_pinned: block.is_pinned ?? false,
     }).select().single()
-    if (data) appendBlock(data as Block)
+    if (data) {
+      const newBlock = data as Block
+      appendBlock(newBlock)
+      await supabase.from('charges').update({ block_id: newBlock.id }).eq('block_id', block.id)
+
+      const defNew = resolveBlockDefinition(newBlock)
+      const regKeyNew = defNew ? registryRenderKey(defNew) : orphanRegistryRenderKey(newBlock.type)
+      if (
+        billingEnabled &&
+        can('billing.charge') &&
+        defNew &&
+        usesCustomChargeRules(defNew) &&
+        (regKeyNew === 'lab_result' || regKeyNew === 'radiology_result')
+      ) {
+        if (regKeyNew === 'lab_result') {
+          await syncLabResultBlockCharges({
+            blockId: newBlock.id,
+            patientId,
+            encounterId,
+            userId: user.id,
+            definition: defNew,
+            content: newContent as unknown as LabResultContent,
+          })
+        } else {
+          await syncRadiologyResultBlockCharges({
+            blockId: newBlock.id,
+            patientId,
+            encounterId,
+            userId: user.id,
+            definition: defNew,
+            content: newContent as unknown as RadiologyResultContent,
+          })
+        }
+      }
+
+      const rowsNew = await fetchActiveChargesForBlock(newBlock.id)
+      setChargeMap(prev => {
+        const next = { ...prev }
+        delete next[block.id]
+        next[newBlock.id] = rowsNew
+        return next
+      })
+    }
     setJustAddedId(null)
-  }, [user, profile, encounterId, getNextSequence, justAddedId, updateBlock, maskBlock, appendBlock])
+  }, [
+    user, profile, encounterId, patientId, getNextSequence, justAddedId, updateBlock, maskBlock, appendBlock,
+    billingEnabled, can, resolveBlockDefinition,
+  ])
 
   // Discard unsaved (empty, never-saved) block
   const handleDiscard = useCallback(async (blockId: string) => {
@@ -418,13 +619,80 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
     setBlockVersions(versions)
   }, [])
 
-  const visibleBlocks = showMasked
-    ? blocks
-    : blocks.filter((b) => b.state === 'active')
+  const visibleBlocks = useMemo(
+    () => showMasked ? blocks : blocks.filter((b) => b.state === 'active'),
+    [blocks, showMasked],
+  )
 
-  const maskedCount = blocks.filter((b) => b.state === 'masked').length
-  const activeCount = blocks.filter((b) => b.state === 'active').length
-  const pinnedBlocks = blocks.filter((b) => b.state === 'active' && b.is_pinned)
+  const maskedCount = useMemo(() => blocks.filter((b) => b.state === 'masked').length, [blocks])
+  const activeCount = useMemo(() => blocks.filter((b) => b.state === 'active').length, [blocks])
+  const pinnedBlocks = useMemo(() => blocks.filter((b) => b.state === 'active' && b.is_pinned), [blocks])
+
+  // ── Merged, day-grouped timeline items ──────────────────────────────────────
+  type TimelineItem =
+    | { kind: 'day-header'; label: string; key: string }
+    | { kind: 'block';      block: Block }
+    | { kind: 'audit';      log: AuditEntry }
+
+  const timelineItems = useMemo<TimelineItem[]>(() => {
+    const items: Array<{ ts: string; item: Omit<TimelineItem, 'kind'> & { kind: TimelineItem['kind'] } }> = [
+      ...visibleBlocks.map(b => ({ ts: b.created_at, item: { kind: 'block' as const, block: b } })),
+      ...auditLogs.map(l  => ({ ts: l.created_at,   item: { kind: 'audit' as const, log: l } })),
+    ]
+    items.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+
+    const result: TimelineItem[] = []
+    let lastDay = ''
+    for (const { ts, item } of items) {
+      const dk = dayKey(ts)
+      if (dk !== lastDay) {
+        result.push({ kind: 'day-header', label: dayLabel(dk), key: dk })
+        lastDay = dk
+      }
+      result.push(item as TimelineItem)
+    }
+    return result
+  }, [visibleBlocks, auditLogs])
+
+  type TimelineDayRow = Extract<TimelineItem, { kind: 'block' | 'audit' }>
+
+  const timelineDayGroups = useMemo(() => {
+    const groups: Array<{ dayKey: string; label: string; rows: TimelineDayRow[] }> = []
+    for (const item of timelineItems) {
+      if (item.kind === 'day-header') {
+        groups.push({ dayKey: item.key, label: item.label, rows: [] })
+      } else {
+        groups[groups.length - 1]?.rows.push(item)
+      }
+    }
+    return groups
+  }, [timelineItems])
+
+  const [dayOpenOverrides, setDayOpenOverrides] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    setDayOpenOverrides({})
+  }, [encounterId])
+
+  const isDaySectionOpen = useCallback(
+    (dayKey: string) => {
+      if (Object.prototype.hasOwnProperty.call(dayOpenOverrides, dayKey)) {
+        return dayOpenOverrides[dayKey]
+      }
+      // Default expanded so blocks are visible (not only "today")
+      return true
+    },
+    [dayOpenOverrides],
+  )
+
+  const toggleDaySection = useCallback((dayKey: string) => {
+    setDayOpenOverrides((prev) => {
+      const wasOpen = Object.prototype.hasOwnProperty.call(prev, dayKey)
+        ? prev[dayKey]
+        : true
+      return { ...prev, [dayKey]: !wasOpen }
+    })
+  }, [])
 
   const scrollToBlock = (blockId: string) => {
     const el = document.getElementById(`block-${blockId}`)
@@ -451,30 +719,37 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
               <Pin className="h-3 w-3 text-amber-500 shrink-0" />
               <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto min-w-0 flex-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {pinnedBlocks.map((block) => {
-                  const def = definitionMap[block.type]
+                  const def = resolveBlockDefinition(block)
                   const colors = getDefinitionColors(def?.color ?? 'slate')
                   return (
-                    <button
+                    <div
                       key={block.id}
-                      onClick={() => scrollToBlock(block.id)}
+                      role="group"
                       className={cn(
                         'flex items-center gap-1 text-[11px] border rounded-full px-2 py-0.5 bg-background',
-                        'hover:border-amber-400 hover:bg-amber-50 transition-colors whitespace-nowrap shrink-0',
+                        'whitespace-nowrap shrink-0',
                         colors.border,
                       )}
                     >
-                      <div className={cn('h-3 w-3 rounded flex items-center justify-center shrink-0', colors.iconBg)}>
-                        <FileText className="w-1.5 h-1.5 text-white" />
-                      </div>
-                      <span className="font-medium">{def?.name ?? block.type}</span>
                       <button
-                        onClick={(e) => { e.stopPropagation(); togglePin(block.id) }}
+                        type="button"
+                        onClick={() => scrollToBlock(block.id)}
+                        className="flex items-center gap-1 hover:text-amber-600 transition-colors"
+                      >
+                        <div className={cn('h-3 w-3 rounded flex items-center justify-center shrink-0', colors.iconBg)}>
+                          <FileText className="w-1.5 h-1.5 text-white" />
+                        </div>
+                        <span className="font-medium">{def?.name ?? block.type}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => togglePin(block.id)}
                         title="Unpin"
                         className="ml-0.5 text-muted-foreground hover:text-red-500 transition-colors"
                       >
                         <PinOff className="h-2 w-2" />
                       </button>
-                    </button>
+                    </div>
                   )
                 })}
               </div>
@@ -504,52 +779,89 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
         {/* Timeline */}
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-3 w-full min-w-0">
-            {visibleBlocks.length === 0 ? (
+            {timelineItems.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
                 <p className="text-sm">No blocks yet</p>
                 <p className="text-xs mt-1">Add your first block below</p>
               </div>
             ) : (
-              visibleBlocks.map((block) => (
-                <div key={block.id} className="w-full min-w-0">
-                  {block.state === 'masked' && (
-                    <div className="flex items-center gap-1.5 mb-1 px-1 w-full min-w-0">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-xs text-muted-foreground shrink-0">superseded version</span>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                  )}
-                  <BlockWrapper
-                    block={block}
-                    definition={definitionMap[block.type]}
-                    encounterId={encounterId}
-                    patientId={patientId}
-                    lock={lockMap[block.id]}
-                    currentUserId={user?.id ?? ''}
-                    encounterClosed={encounterStatus === 'closed'}
-                    deptName={deptNameMap[block.id]}
-                    charge={chargeMap[block.id] ?? null}
-                    autoEdit={
-                      encounterStatus === 'open' &&
-                      (block.is_template_seed === true || block.id === justAddedId)
-                    }
-                    isUnsaved={block.id === justAddedId}
-                    onEdit={handleEditBlock}
-                    onDuplicate={handleDuplicate}
-                    onDiscard={handleDiscard}
-                    onMask={handleMask}
-                    onTogglePin={togglePin}
-                    onAcquireLock={acquireLock}
-                    onReleaseLock={releaseLockFn}
-                    onViewHistory={handleViewHistory}
-                    canCharge={billingEnabled && can('billing.charge')}
-                    onApproveCharge={handleApproveCharge}
-                    onVoidCharge={handleVoidCharge}
-                    isAdmin={hasRole('admin')}
-                    onHardDelete={handleHardDeleteBlock}
-                  />
-                </div>
-              ))
+              timelineDayGroups.map((group) => {
+                const open = isDaySectionOpen(group.dayKey)
+                return (
+                  <div key={`day-${group.dayKey}`} className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleDaySection(group.dayKey)}
+                      aria-expanded={open}
+                      className="flex w-full items-center gap-2 py-1 select-none text-left rounded-md -mx-1 px-1 hover:bg-muted/50 transition-colors"
+                    >
+                      <span className="shrink-0 text-muted-foreground/80" aria-hidden>
+                        {open ? (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        )}
+                      </span>
+                      <div className="h-px flex-1 bg-border/60 min-w-[1rem]" />
+                      <span className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider shrink-0">
+                        {group.label}
+                      </span>
+                      <div className="h-px flex-1 bg-border/60 min-w-[1rem]" />
+                    </button>
+
+                    {open &&
+                      group.rows.map((item) => {
+                        if (item.kind === 'audit') {
+                          return <AuditRow key={`audit-${item.log.id}`} log={item.log} />
+                        }
+
+                        const block = item.block
+                        return (
+                          <div key={block.id} className="w-full min-w-0">
+                            {block.state === 'masked' && (
+                              <div className="flex items-center gap-1.5 mb-1 px-1 w-full min-w-0">
+                                <div className="h-px flex-1 bg-border" />
+                                <span className="text-xs text-muted-foreground shrink-0">superseded version</span>
+                                <div className="h-px flex-1 bg-border" />
+                              </div>
+                            )}
+                            <BlockWrapper
+                              block={block}
+                              definition={resolveBlockDefinition(block)}
+                              encounterId={encounterId}
+                              patientId={patientId}
+                              lock={lockMap[block.id]}
+                              currentUserId={user?.id ?? ''}
+                              encounterClosed={encounterStatus === 'closed'}
+                              deptName={deptNameMap[block.id]}
+                              charges={chargeMap[block.id] ?? null}
+                              autoEdit={
+                                encounterStatus === 'open' &&
+                                (block.is_template_seed === true || block.id === justAddedId)
+                              }
+                              isUnsaved={block.id === justAddedId}
+                              onEdit={handleEditBlock}
+                              onDuplicate={handleDuplicate}
+                              onDiscard={handleDiscard}
+                              onMask={handleMask}
+                              onTogglePin={togglePin}
+                              onAcquireLock={acquireLock}
+                              onReleaseLock={releaseLockFn}
+                              onViewHistory={handleViewHistory}
+                              canCharge={billingEnabled && can('billing.charge')}
+                              billingEnabled={billingEnabled}
+                              onRefreshBlockCharges={reloadBlockCharges}
+                              onApproveCharge={handleApproveCharge}
+                              onVoidCharge={handleVoidCharge}
+                              isAdmin={hasRole('admin')}
+                              onHardDelete={handleHardDeleteBlock}
+                            />
+                          </div>
+                        )
+                      })}
+                  </div>
+                )
+              })
             )}
 
             {encounterStatus === 'open' && (
@@ -581,7 +893,7 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
             <DialogTitle className="flex items-center gap-2">
               <History className="h-4 w-4" />
               Version History ·{' '}
-              {historyBlock && (definitionMap[historyBlock.type]?.name ?? historyBlock.type)}
+              {historyBlock && (resolveBlockDefinition(historyBlock)?.name ?? historyBlock.type)}
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-96">
@@ -612,6 +924,52 @@ export default function Timeline({ encounterId, patientId, encounterStatus }: Pr
       </Dialog>
     </>
   )
+})
+
+export default Timeline
+
+function AuditRow({ log }: { log: AuditEntry }) {
+  const actionMeta: Record<string, { icon: React.ReactNode; label: (e: AuditEntry) => string; color: string }> = {
+    assignment: {
+      icon: <UserCog className="h-3 w-3" />,
+      label: (e) => e.new_value
+        ? `Assigned to ${e.new_value}`
+        : 'Physician unassigned',
+      color: 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800',
+    },
+    visibility: {
+      icon: <Shield className="h-3 w-3" />,
+      label: (e) => `Visibility changed${e.old_value ? ` from ${e.old_value}` : ''} → ${e.new_value ?? '—'}`,
+      color: 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800',
+    },
+    status: {
+      icon: <CheckCircle className="h-3 w-3" />,
+      label: (e) => e.new_value === 'closed' ? 'Encounter closed' : `Status changed to ${e.new_value ?? '—'}`,
+      color: 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
+    },
+    title: {
+      icon: <Type className="h-3 w-3" />,
+      label: (e) => `Title changed${e.new_value ? ` to "${e.new_value}"` : ''}`,
+      color: 'text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700',
+    },
+  }
+  const meta = actionMeta[log.action] ?? {
+    icon: <Shield className="h-3 w-3" />,
+    label: (e: AuditEntry) => e.action,
+    color: 'text-muted-foreground bg-muted border-border',
+  }
+
+  return (
+    <div className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2 text-xs w-full min-w-0', meta.color)}>
+      <div className="shrink-0 mt-0.5">{meta.icon}</div>
+      <div className="flex-1 min-w-0 break-words leading-snug">
+        <span className="font-medium">{log.actorName ?? 'System'}</span>
+        <span className="mx-1 opacity-60">·</span>
+        <span>{meta.label(log)}</span>
+      </div>
+      <span className="shrink-0 opacity-60 text-[10px] whitespace-nowrap pt-0.5">{formatDateTime(log.created_at)}</span>
+    </div>
+  )
 }
 
 function VersionPreview({ block }: { block: Block }) {
@@ -633,7 +991,7 @@ function VersionPreview({ block }: { block: Block }) {
       </p>
     )
   }
-  if (block.type === 'med_orders') {
+  if (block.type === 'med_orders' || block.type === 'meds') {
     const items = (c.items as Array<{ name: string }> | undefined) ?? []
     return (
       <p className="text-xs text-muted-foreground">

@@ -4,8 +4,7 @@ import { supabase } from '../lib/supabase'
 import { fullName, calcAge, getPatientDob, getPatientGender } from '../lib/utils'
 import { parseSearchQuery } from '../lib/patientSearch'
 import type { Patient } from '../types'
-import { pushRecentPatient, getRecentPatients } from '../lib/recentItems'
-import type { RecentEntry } from '../lib/recentItems'
+import { pushRecentPatientId, getRecentPatientIds } from '../lib/recentItems'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Search, Loader2, Users, Clock } from 'lucide-react'
 
@@ -21,19 +20,25 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const [results, setResults]   = useState<Patient[]>([])
   const [loading, setLoading]   = useState(false)
   const [active, setActive]     = useState(0)
-  const [recents, setRecents]   = useState<RecentEntry[]>([])
+  const [recents, setRecents]   = useState<Patient[]>([])
   const requestSeq = useRef(0)
   const { nameFormat } = useSettingsStore()
 
-  // Focus input and refresh recents when opened
+  // Focus input and fetch recent patients (by ID, through RLS) when opened
   useEffect(() => {
-    if (open) {
-      setQuery('')
-      setResults([])
-      setActive(0)
-      setRecents(getRecentPatients())
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
+    if (!open) return
+    setQuery('')
+    setResults([])
+    setActive(0)
+    setTimeout(() => inputRef.current?.focus(), 50)
+
+    const ids = getRecentPatientIds().map(r => r.id)
+    if (!ids.length) { setRecents([]); return }
+    supabase.from('patients').select('*').in('id', ids).then(({ data }) => {
+      if (!data) { setRecents([]); return }
+      const map = Object.fromEntries((data as Patient[]).map(p => [p.id, p]))
+      setRecents(ids.map(id => map[id]).filter(Boolean) as Patient[])
+    })
   }, [open])
 
   const search = useCallback(async (q: string) => {
@@ -63,7 +68,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   }, [query, search])
 
   const go = (pt: Patient) => {
-    pushRecentPatient({ id: pt.id, first_name: pt.first_name, middle_name: pt.middle_name, last_name: pt.last_name, mrn: pt.mrn })
+    pushRecentPatientId(pt.id)
     navigate(`/patients/${pt.id}`)
     onClose()
   }

@@ -7,6 +7,7 @@ export const PERMISSIONS = [
   'admin.manage_users',
   'admin.manage_blocks',
   'admin.manage_templates',
+  'admin.manage_settings',
   'template.create',
   'billing.charge',
   'billing.payment',
@@ -16,14 +17,15 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number]
 
 export const PERMISSION_LABELS: Record<Permission, { label: string; category: string }> = {
-  'block.add':               { label: 'Add blocks to timeline',            category: 'Blocks' },
-  'admin.manage_users':      { label: 'Manage users & role assignments',   category: 'Administration' },
-  'admin.manage_blocks':     { label: 'Create & edit block types',         category: 'Administration' },
-  'admin.manage_templates':  { label: 'Create & edit standard templates',  category: 'Administration' },
-  'template.create':         { label: 'Create personal templates',         category: 'Templates' },
-  'billing.charge':          { label: 'Add and void charges',              category: 'Billing' },
-  'billing.payment':         { label: 'Record payments and deposits',      category: 'Billing' },
-  'billing.manage_fees':     { label: 'Manage service item catalog',       category: 'Billing' },
+  'block.add':                { label: 'Add blocks to timeline',            category: 'Blocks' },
+  'admin.manage_users':       { label: 'Manage users & role assignments',   category: 'Administration' },
+  'admin.manage_blocks':      { label: 'Create & edit block types',         category: 'Administration' },
+  'admin.manage_templates':   { label: 'Create & edit standard templates',  category: 'Administration' },
+  'admin.manage_settings':    { label: 'Edit organisation settings',        category: 'Administration' },
+  'template.create':          { label: 'Create personal templates',         category: 'Templates' },
+  'billing.charge':           { label: 'Add and void charges',              category: 'Billing' },
+  'billing.payment':          { label: 'Record payments and deposits',      category: 'Billing' },
+  'billing.manage_fees':      { label: 'Manage service item catalog',       category: 'Billing' },
 }
 
 export interface Role {
@@ -403,7 +405,6 @@ export interface LabOrderContent {
   panels:     string[]   // e.g. ['cbc', 'metabolic', 'tft']
   custom:     { name: string; unit: string; ref_low: string; ref_high: string }[]
   indication: string
-  urgency:    'routine' | 'urgent' | 'stat' | ''
   specimen:   string
 }
 
@@ -418,9 +419,40 @@ export interface LabResultContent {
   notes:          string
   status:         LabResultStatus
   reported_at:    string | null
+  /** Optional add-on charge rule ids (rules with no match_panel_id), when block uses custom_rules billing */
+  billing_extra_rule_ids?: string[]
 }
 
-export type BlockType = 'hx_physical' | 'vitals' | 'note' | 'med_orders' | 'plan' | 'lab_order' | 'lab_result' | 'nurse_note' | 'consultation' | 'dc_note' | 'meds' | string
+// ============================================================
+// Radiology / imaging
+// ============================================================
+
+/** Ordering clinician's radiology_request block */
+export interface RadiologyRequestContent {
+  studies:        string[]
+  /** Free-text studies; optional modality groups the label (e.g. CT + user-entered exam). */
+  custom:         { name: string; modality?: string }[]
+  indication:     string
+  contrast_note:  string
+  /** Extra clinical detail (comparisons, implants, comorbidities). */
+  notes_clinical:    string
+  /** Logistics / coordination (contact, ward, transport, isolation). */
+  notes_coordination: string
+}
+
+/** Radiologist / imaging tech radiology_result block */
+export interface RadiologyResultContent {
+  studies:         string[]
+  custom_defs:     { name: string; modality?: string }[]
+  technique:       string
+  findings:        string
+  impression:      string
+  recommendations: string
+  /** Optional add-on charge rule ids (rules with no match_panel_id), when block uses custom_rules billing */
+  billing_extra_rule_ids?: string[]
+}
+
+export type BlockType = 'hx_physical' | 'vitals' | 'note' | 'med_orders' | 'plan' | 'lab_order' | 'lab_result' | 'radiology_request' | 'radiology_result' | 'nurse_note' | 'consultation' | 'dc_note' | 'meds' | string
 export type BlockState = 'active' | 'masked'
 
 // ============================================================
@@ -561,6 +593,35 @@ export interface ScoreInterpretation {
   color: string
 }
 
+/** How a block type maps to fee schedule lines when using custom rules */
+export interface BlockChargeRule {
+  id: string
+  label: string
+  service_item_id: string
+  /** Bill units per save (default 1) */
+  quantity?: number
+  /** Lab panel id (e.g. cbc, metabolic) — auto-included when that panel is selected on the result block */
+  match_panel_id?: string | null
+}
+
+export type BlockBillingStrategy = 'single_service' | 'custom_rules'
+
+export interface BlockDefinitionBillingConfig {
+  strategy?: BlockBillingStrategy
+  rules?: BlockChargeRule[]
+  /** When true, admin can choose single vs custom rules; timeline respects custom only if strategy + rules match */
+  supports_custom_rules?: boolean
+  /**
+   * Registry key for the charge-rules admin UI (e.g. lab_panels for per-panel lab billing).
+   * Required when supports_custom_rules is true.
+   */
+  settings_ui?: string | null
+  /**
+   * When true, encounter timeline shows the expandable manual / multi-line fee panel on each block of this type (org billing on).
+   */
+  allow_manual_block_fees?: boolean
+}
+
 export interface BlockDefinitionConfig {
   dept_role?: 'order' | 'result'  // 'order' = doctor places it; ActionPanel renders; 'result' = dept fills via department portal
   score?: {
@@ -584,12 +645,15 @@ export interface BlockDefinitionConfig {
     endpoint: string
     method: 'GET' | 'POST'
   }
+  billing?: BlockDefinitionBillingConfig
 }
 
 export interface BlockDefinition {
   id: string
   name: string
   slug: string
+  /** When set, `BLOCK_REGISTRY` and previews use this slug; `slug` remains the stable id for blocks.type / menus */
+  registry_slug: string | null
   icon: string
   color: string
   description: string | null
@@ -686,11 +750,28 @@ export interface BlockAction {
   action_type: string
   action_payload: Record<string, unknown>
   status: BlockActionStatus
+  cancel_reason: string | null
   result_block_id: string | null
   result_data: Record<string, unknown> | null
   triggered_by: string | null
   triggered_at: string
   completed_at: string | null
+}
+
+// ============================================================
+// Pharmacy Fulfillment block content
+// ============================================================
+export interface PharmacyFulfillmentItem {
+  name: string
+  quantity: string
+  dispensed: boolean
+  out_of_stock: boolean
+  note: string
+}
+
+export interface PharmacyFulfillmentContent {
+  items: PharmacyFulfillmentItem[]
+  notes: string
 }
 
 export interface BlockAcknowledgment {
@@ -714,6 +795,17 @@ export interface ServiceItem {
   active: boolean
   sort_order: number
   created_by: string | null
+  created_at: string
+}
+
+/** Org-wide reusable payer names for billing / patient insurance */
+export interface InsuranceProvider {
+  id: string
+  name: string
+  default_copay_percent: number | null
+  default_coverage_limit: number | null
+  active: boolean
+  sort_order: number
   created_at: string
 }
 

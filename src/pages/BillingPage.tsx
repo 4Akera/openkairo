@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
-import type { Patient, Charge, PatientInsurance } from '../types'
+import type { Patient, Charge, PatientInsurance, InsuranceProvider } from '../types'
 import { fullName, formatDateTime, cn } from '../lib/utils'
 import {
   Button, Input, Badge, Label,
@@ -50,7 +50,7 @@ const PAYMENT_METHODS = [
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  const { user, can } = useAuthStore()
+  const { user, can, hasBilling } = useAuthStore()
   const { nameFormat, currencySymbol } = useSettingsStore()
   const {
     serviceItems, fetchServiceItems,
@@ -59,6 +59,8 @@ export default function BillingPage() {
     addCharge, voidCharge, approveCharge, fileInsuranceClaim,
     addPayment, addDeposit,
     upsertInsurance, deleteInsurance,
+    insuranceProviders, loadingInsuranceProviders, fetchInsuranceProviders,
+    upsertInsuranceProvider, deleteInsuranceProvider,
   } = useBillingStore()
 
   // ── Patient search ──────────────────────────────────────────────────────
@@ -73,6 +75,16 @@ export default function BillingPage() {
     lastCharge: { description: string; status: string; amount: number; created_at: string }
   }[]>([])
   const [loadingRecent, setLoadingRecent] = useState(true)
+
+  /** Patients with at least one charge in pending payment or pending insurance */
+  const [actionQueuePatients, setActionQueuePatients] = useState<{
+    patient: Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
+    pendingCount: number
+    insuranceCount: number
+    pendingTotal: number
+    insuranceTotal: number
+  }[]>([])
+  const [loadingActionQueue, setLoadingActionQueue] = useState(false)
 
   useEffect(() => {
     setLoadingRecent(true)
@@ -99,6 +111,66 @@ export default function BillingPage() {
         setLoadingRecent(false)
       })
   }, [])
+
+  useEffect(() => {
+    if (selectedPatient !== null) return
+    let cancelled = false
+    setLoadingActionQueue(true)
+    supabase
+      .from('charges')
+      .select('patient_id, status, unit_price, quantity, patients(id, first_name, last_name, mrn)')
+      .in('status', ['pending', 'pending_insurance'])
+      .then(({ data }) => {
+        if (cancelled) return
+        setLoadingActionQueue(false)
+        if (!data) {
+          setActionQueuePatients([])
+          return
+        }
+        const map = new Map<
+          string,
+          {
+            patient: Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
+            pendingCount: number
+            insuranceCount: number
+            pendingTotal: number
+            insuranceTotal: number
+          }
+        >()
+        for (const row of data as any[]) {
+          const p = row.patients
+          if (!p?.id) continue
+          const pid = row.patient_id as string
+          const amt = Number(row.quantity) * Number(row.unit_price)
+          let agg = map.get(pid)
+          if (!agg) {
+            agg = { patient: p, pendingCount: 0, insuranceCount: 0, pendingTotal: 0, insuranceTotal: 0 }
+            map.set(pid, agg)
+          }
+          if (row.status === 'pending') {
+            agg.pendingCount += 1
+            agg.pendingTotal += amt
+          } else if (row.status === 'pending_insurance') {
+            agg.insuranceCount += 1
+            agg.insuranceTotal += amt
+          }
+        }
+        const list = [...map.values()].sort((a, b) => {
+          const ta = a.pendingTotal + a.insuranceTotal
+          const tb = b.pendingTotal + b.insuranceTotal
+          if (tb !== ta) return tb - ta
+          return `${a.patient.last_name} ${a.patient.first_name}`.localeCompare(
+            `${b.patient.last_name} ${b.patient.first_name}`,
+            undefined,
+            { sensitivity: 'base' },
+          )
+        })
+        setActionQueuePatients(list)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedPatient])
 
   // ── Dialogs state ───────────────────────────────────────────────────────
   const [chargeOpen, setChargeOpen]   = useState(false)
@@ -128,9 +200,21 @@ export default function BillingPage() {
   const [insFrom, setInsFrom]     = useState('')
   const [insTo, setInsTo]         = useState('')
   const [insActive, setInsActive] = useState(true)
+  const [insTemplateId, setInsTemplateId] = useState('')
+
+  // Reusable insurance provider directory (billing)
+  const [provOpen, setProvOpen] = useState(false)
+  const [provEdit, setProvEdit] = useState<InsuranceProvider | null>(null)
+  const [provName, setProvName] = useState('')
+  const [provCopay, setProvCopay] = useState('')
+  const [provLimit, setProvLimit] = useState('')
+  const [provSaving, setProvSaving] = useState(false)
 
   // Charge selection for payment
   const [selectedChargeIds, setSelectedChargeIds] = useState<Set<string>>(new Set())
+
+  /** When false, pending_approval charges are hidden from the list until toggled */
+  const [showPendingApprovalCharges, setShowPendingApprovalCharges] = useState(false)
 
   // Payment form
   const [payAmount, setPayAmount] = useState('')
@@ -138,6 +222,7 @@ export default function BillingPage() {
   const [payRef, setPayRef]       = useState('')
   const [payPayer, setPayPayer]   = useState('')
   const [payNotes, setPayNotes]   = useState('')
+  const [payError, setPayError]   = useState('')
 
   // Receipt state
   const [receiptOpen, setReceiptOpen] = useState(false)
@@ -161,7 +246,10 @@ export default function BillingPage() {
   const [chargeQty, setChargeQty]           = useState(1)
   const [chargePrice, setChargePrice]       = useState('')
 
-  useEffect(() => { fetchServiceItems() }, [fetchServiceItems])
+  useEffect(() => {
+    fetchServiceItems()
+    fetchInsuranceProviders()
+  }, [fetchServiceItems, fetchInsuranceProviders])
 
   const handleSearch = useCallback(async () => {
     const q = query.trim()
@@ -183,6 +271,7 @@ export default function BillingPage() {
     setSearchResults([])
     setQuery('')
     setSelectedChargeIds(new Set())
+    setShowPendingApprovalCharges(false)
     fetchPatientBilling(pt.id)
   }
 
@@ -267,6 +356,11 @@ export default function BillingPage() {
     .filter(c => selectedChargeIds.has(c.id))
     .reduce((sum, c) => sum + c.quantity * c.unit_price, 0)
 
+  const depositAvailable = useMemo(
+    () => deposits.reduce((s, d) => s + Math.max(0, Number(d.remaining)), 0),
+    [deposits],
+  )
+
   const handleOpenPayment = () => {
     // Pre-fill amount from selected charges if any
     setPayAmount(selectedChargeIds.size > 0 ? selectedTotal.toFixed(2) : '')
@@ -274,16 +368,19 @@ export default function BillingPage() {
     setPayRef('')
     setPayPayer('')
     setPayNotes('')
+    setPayError('')
     setPaymentOpen(true)
   }
 
   const handlePayment = async () => {
     if (!selectedPatient) return
+    setPayError('')
     setSaving(true)
     const chargesPaidNow = charges.filter(c => selectedChargeIds.has(c.id))
-    await addPayment({
+    const amountNum = parseFloat(payAmount) || 0
+    const ok = await addPayment({
       patient_id:    selectedPatient.id,
-      amount:        parseFloat(payAmount) || 0,
+      amount:        amountNum,
       method:        payMethod,
       reference:     payRef || undefined,
       payer_name:    payPayer || undefined,
@@ -292,6 +389,14 @@ export default function BillingPage() {
       chargesTotal:  chargesPaidNow.length > 0 ? selectedTotal : undefined,
     })
     setSaving(false)
+    if (!ok) {
+      setPayError(
+        payMethod === 'deposit'
+          ? 'Could not apply deposit. Ensure available deposit balance covers the amount.'
+          : 'Could not record payment.',
+      )
+      return
+    }
     setPaymentOpen(false)
     setSelectedChargeIds(new Set())
 
@@ -300,7 +405,7 @@ export default function BillingPage() {
       setReceiptData({
         patient: selectedPatient,
         chargesPaid: chargesPaidNow,
-        payment: { amount: parseFloat(payAmount) || 0, method: payMethod, reference: payRef, payer_name: payPayer },
+        payment: { amount: amountNum, method: payMethod, reference: payRef, payer_name: payPayer },
       })
       setReceiptOpen(true)
     }
@@ -323,6 +428,16 @@ export default function BillingPage() {
     fetchPatientBilling(selectedPatient.id)
   }
 
+  const applyInsuranceTemplate = (id: string) => {
+    setInsTemplateId(id)
+    if (!id) return
+    const p = insuranceProviders.find(x => x.id === id)
+    if (!p) return
+    setInsPayer(p.name)
+    setInsCopay(p.default_copay_percent != null ? String(p.default_copay_percent) : '')
+    setInsLimit(p.default_coverage_limit != null ? String(p.default_coverage_limit) : '')
+  }
+
   const openInsForm = (ins?: PatientInsurance) => {
     setInsEdit(ins ?? null)
     setInsPayer(ins?.payer_name ?? '')
@@ -332,7 +447,36 @@ export default function BillingPage() {
     setInsFrom(ins?.valid_from ?? '')
     setInsTo(ins?.valid_to ?? '')
     setInsActive(ins?.is_active ?? true)
+    setInsTemplateId('')
     setInsOpen(true)
+  }
+
+  const openProvForm = (p?: InsuranceProvider) => {
+    setProvEdit(p ?? null)
+    setProvName(p?.name ?? '')
+    setProvCopay(p?.default_copay_percent != null ? String(p.default_copay_percent) : '')
+    setProvLimit(p?.default_coverage_limit != null ? String(p.default_coverage_limit) : '')
+    setProvOpen(true)
+  }
+
+  const handleSaveProvider = async () => {
+    const n = provName.trim()
+    if (!n) return
+    setProvSaving(true)
+    const ok = await upsertInsuranceProvider({
+      id: provEdit?.id,
+      name: n,
+      default_copay_percent: provCopay ? parseFloat(provCopay) : undefined,
+      default_coverage_limit: provLimit ? parseFloat(provLimit) : undefined,
+      active: provEdit?.active ?? true,
+    })
+    setProvSaving(false)
+    if (ok) setProvOpen(false)
+  }
+
+  const handleDeleteProvider = async (id: string) => {
+    if (!confirm('Remove this insurance provider from the shared list?')) return
+    await deleteInsuranceProvider(id)
   }
 
   const handleSaveInsurance = async () => {
@@ -369,6 +513,20 @@ export default function BillingPage() {
 
   const canCharge = can('billing.charge')
   const canPay    = can('billing.payment')
+  const canEditInsuranceDirectory = canCharge || canPay || can('billing.manage_fees')
+
+  const pendingApprovalCount = useMemo(
+    () => charges.filter(c => c.status === 'pending_approval').length,
+    [charges],
+  )
+
+  const displayedCharges = useMemo(
+    () =>
+      showPendingApprovalCharges
+        ? charges
+        : charges.filter(c => c.status !== 'pending_approval'),
+    [charges, showPendingApprovalCharges],
+  )
 
   // Charges eligible for selection (pending payment or pending_insurance)
   const selectableStatuses = new Set(['pending', 'pending_insurance'])
@@ -439,7 +597,73 @@ export default function BillingPage() {
             )}
 
             {!query && (
-              <div className="space-y-3">
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Pending payment &amp; insurance
+                    </p>
+                  </div>
+                  {loadingActionQueue ? (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : actionQueuePatients.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg bg-muted/20">
+                      No patients with pending payment or insurance charges.
+                    </p>
+                  ) : (
+                    <div className="border rounded-lg divide-y overflow-hidden border-emerald-200/60 dark:border-emerald-900/40">
+                      {actionQueuePatients.map(
+                        ({ patient: pt, pendingCount, insuranceCount, pendingTotal, insuranceTotal }) => {
+                          const grand = pendingTotal + insuranceTotal
+                          return (
+                            <button
+                              key={pt.id}
+                              type="button"
+                              onClick={() => selectPatient(pt as Patient)}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors"
+                            >
+                              <div className="h-8 w-8 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-xs shrink-0">
+                                {pt.first_name[0]}
+                                {pt.last_name[0]}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">{fullName(pt, nameFormat)}</p>
+                                <p className="text-xs text-muted-foreground font-mono truncate">{pt.mrn}</p>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                  {pendingCount > 0 && (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn('text-[9px] py-0 px-1.5 font-medium', CHARGE_STATUS_COLORS.pending)}
+                                    >
+                                      {pendingCount} pending payment
+                                    </Badge>
+                                  )}
+                                  {insuranceCount > 0 && (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn('text-[9px] py-0 px-1.5 font-medium', CHARGE_STATUS_COLORS.pending_insurance)}
+                                    >
+                                      {insuranceCount} insurance
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-sm font-mono font-semibold tabular-nums">{grand.toFixed(2)}</p>
+                                <p className="text-[10px] text-muted-foreground">{currencySymbol} total</p>
+                              </div>
+                            </button>
+                          )
+                        },
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recent Charges</p>
@@ -474,6 +698,92 @@ export default function BillingPage() {
                         </div>
                       </button>
                     ))}
+                  </div>
+                )}
+                </div>
+
+                {hasBilling && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ShieldCheck className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+                          Common insurance providers
+                        </p>
+                      </div>
+                      {canEditInsuranceDirectory && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs gap-1 shrink-0"
+                          onClick={() => openProvForm()}
+                        >
+                          <Plus className="h-3 w-3" /> Add
+                        </Button>
+                      )}
+                    </div>
+                    {loadingInsuranceProviders ? (
+                      <div className="flex justify-center py-6">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : insuranceProviders.filter(p => p.active).length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg bg-muted/20">
+                        {canEditInsuranceDirectory
+                          ? 'Add payers you use often — they appear here and when adding patient insurance.'
+                          : 'No shared insurance providers yet.'}
+                      </p>
+                    ) : (
+                      <div className="border rounded-lg divide-y overflow-hidden border-purple-200/50 dark:border-purple-900/40">
+                        {insuranceProviders
+                          .filter(p => p.active)
+                          .map(p => (
+                            <div
+                              key={p.id}
+                              className="flex items-center gap-2 px-3 py-2.5 text-sm"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{p.name}</p>
+                                {(p.default_copay_percent != null || p.default_coverage_limit != null) && (
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    {p.default_copay_percent != null && (
+                                      <span>{p.default_copay_percent}% patient copay (default)</span>
+                                    )}
+                                    {p.default_copay_percent != null && p.default_coverage_limit != null && ' · '}
+                                    {p.default_coverage_limit != null && (
+                                      <span>limit {p.default_coverage_limit.toFixed(2)} (default)</span>
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                              {canEditInsuranceDirectory && (
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="h-7 w-7"
+                                    onClick={() => openProvForm(p)}
+                                    title="Edit"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                    onClick={() => handleDeleteProvider(p.id)}
+                                    title="Remove from list"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -614,25 +924,52 @@ export default function BillingPage() {
 
                 {/* Charges list */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Charges ({charges.length})
+                      <span>
+                        {`Charges (${displayedCharges.length})`}
+                      </span>
+                      {pendingApprovalCount > 0 && !showPendingApprovalCharges && (
+                        <span className="ml-1.5 font-normal normal-case text-muted-foreground/90">
+                          · {pendingApprovalCount} awaiting approval hidden
+                        </span>
+                      )}
                     </p>
-                    {selectedChargeIds.size > 0 && (
-                      <button
-                        type="button"
-                        className="text-[11px] text-muted-foreground hover:text-foreground"
-                        onClick={() => setSelectedChargeIds(new Set())}
-                      >
-                        Clear selection
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {pendingApprovalCount > 0 && (
+                        <Button
+                          type="button"
+                          variant={showPendingApprovalCharges ? 'secondary' : 'outline'}
+                          size="sm"
+                          className="h-7 text-[11px] gap-1.5"
+                          onClick={() => setShowPendingApprovalCharges(v => !v)}
+                        >
+                          <Clock className="h-3 w-3" />
+                          {showPendingApprovalCharges
+                            ? 'Hide awaiting approval'
+                            : `Show awaiting approval (${pendingApprovalCount})`}
+                        </Button>
+                      )}
+                      {selectedChargeIds.size > 0 && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={() => setSelectedChargeIds(new Set())}
+                        >
+                          Clear selection
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {charges.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">No charges</p>
+                  ) : displayedCharges.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">
+                      All charges are awaiting approval. Use the button above to show them.
+                    </p>
                   ) : (
                     <div className="border rounded-lg divide-y overflow-hidden">
-                      {charges.map(c => {
+                      {displayedCharges.map(c => {
                         const isSelectable = selectableStatuses.has(c.status)
                         const isSelected   = selectedChargeIds.has(c.id)
                         return (
@@ -789,6 +1126,41 @@ export default function BillingPage() {
           </div>
         </ScrollArea>
       )}
+
+      {/* ── Insurance provider directory (shared list) ── */}
+      <Dialog open={provOpen} onOpenChange={o => { if (!o) setProvOpen(false) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{provEdit?.id ? 'Edit provider' : 'Add insurance provider'}</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-1">
+            Saved for everyone on billing. Picking one when adding patient insurance fills payer and optional defaults.
+          </p>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Payer / company name *</Label>
+              <Input value={provName} onChange={e => setProvName(e.target.value)} placeholder="e.g. NHIF, AAR" autoFocus />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Default patient copay %</Label>
+                <Input type="number" min={0} max={100} value={provCopay} onChange={e => setProvCopay(e.target.value)} placeholder="optional" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Default coverage limit</Label>
+                <Input type="number" value={provLimit} onChange={e => setProvLimit(e.target.value)} placeholder="optional" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setProvOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveProvider} disabled={provSaving || !provName.trim()}>
+                {provSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Insurance Claim Dialog ── */}
       <Dialog open={claimOpen} onOpenChange={o => { if (!o) setClaimOpen(false) }}>
@@ -965,9 +1337,32 @@ export default function BillingPage() {
             <DialogTitle>{insEdit?.id ? 'Edit Insurance' : 'Add Insurance'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {insuranceProviders.filter(p => p.active).length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Fill from directory</Label>
+                <select
+                  value={insTemplateId}
+                  onChange={e => applyInsuranceTemplate(e.target.value)}
+                  className="w-full h-9 text-sm rounded-lg border border-border bg-background px-3 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Type manually or choose…</option>
+                  {insuranceProviders.filter(p => p.active).map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Payer / Company *</Label>
-              <Input value={insPayer} onChange={e => setInsPayer(e.target.value)} placeholder="NHIF, AAR, Jubilee…" autoFocus />
+              <Input
+                value={insPayer}
+                onChange={e => {
+                  setInsPayer(e.target.value)
+                  setInsTemplateId('')
+                }}
+                placeholder="NHIF, AAR, Jubilee…"
+                autoFocus
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -1075,7 +1470,13 @@ export default function BillingPage() {
       </Dialog>
 
       {/* ── Record Payment Dialog ── */}
-      <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+      <Dialog
+        open={paymentOpen}
+        onOpenChange={o => {
+          setPaymentOpen(o)
+          if (!o) setPayError('')
+        }}
+      >
         <DialogContent className="max-w-sm h-[90vh] !flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-1">
@@ -1112,7 +1513,16 @@ export default function BillingPage() {
 
             <div className="space-y-1.5">
               <Label>Amount</Label>
-              <Input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" autoFocus />
+              <Input
+                type="number"
+                value={payAmount}
+                onChange={e => {
+                  setPayAmount(e.target.value)
+                  setPayError('')
+                }}
+                placeholder="0.00"
+                autoFocus
+              />
               {selectedChargeIds.size > 0 && (() => {
                 const amt = parseFloat(payAmount) || 0
                 const rem = Math.round((selectedTotal - amt) * 100) / 100
@@ -1132,7 +1542,10 @@ export default function BillingPage() {
                   <button
                     key={m.value}
                     type="button"
-                    onClick={() => setPayMethod(m.value)}
+                    onClick={() => {
+                      setPayMethod(m.value)
+                      setPayError('')
+                    }}
                     className={cn(
                       'text-xs px-3 py-1.5 rounded-lg border transition-colors',
                       payMethod === m.value
@@ -1155,18 +1568,65 @@ export default function BillingPage() {
                 <Input value={payPayer} onChange={e => setPayPayer(e.target.value)} placeholder={activeInsurance?.payer_name ?? 'Insurance company'} />
               </div>
             )}
+            {payMethod === 'deposit' && (
+              <div
+                className={cn(
+                  'rounded-lg border p-3 text-xs space-y-1',
+                  depositAvailable > 0
+                    ? 'border-blue-200 bg-blue-50 dark:bg-blue-950/20'
+                    : 'border-amber-200 bg-amber-50 dark:bg-amber-950/20',
+                )}
+              >
+                <p className="font-semibold text-foreground">Pay from deposit balance</p>
+                <p className="text-muted-foreground">
+                  Available: <strong className="text-foreground font-mono tabular-nums">{depositAvailable.toFixed(2)}</strong>
+                  {' '}· Oldest deposits are used first.
+                </p>
+                {depositAvailable <= 0 && (
+                  <p className="text-amber-800 dark:text-amber-200">This patient has no remaining deposit to apply.</p>
+                )}
+                {depositAvailable > 0 && (() => {
+                  const amtC = Math.round((parseFloat(payAmount) || 0) * 100)
+                  const availC = Math.round(depositAvailable * 100)
+                  if (amtC > availC)
+                    return (
+                      <p className="text-amber-800 dark:text-amber-200">
+                        Amount exceeds available deposit by <strong className="font-mono tabular-nums">{((amtC - availC) / 100).toFixed(2)}</strong>.
+                      </p>
+                    )
+                  return null
+                })()}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input value={payNotes} onChange={e => setPayNotes(e.target.value)} placeholder="Additional notes" />
             </div>
           </div>
           {/* Footer — sticky outside scroll area */}
-          <div className="flex justify-end gap-2 pt-3 border-t mt-1 shrink-0">
+          <div className="space-y-2 pt-3 border-t mt-1 shrink-0">
+            {payError && (
+              <p className="text-sm text-destructive">{payError}</p>
+            )}
+            <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setPaymentOpen(false)}>Cancel</Button>
-            <Button onClick={handlePayment} disabled={saving || !payAmount || parseFloat(payAmount) <= 0}>
+            <Button
+              onClick={handlePayment}
+              disabled={(() => {
+                const amt = parseFloat(payAmount) || 0
+                if (saving || !payAmount || amt <= 0) return true
+                if (payMethod === 'deposit') {
+                  const amtC = Math.round(amt * 100)
+                  const availC = Math.round(depositAvailable * 100)
+                  return availC <= 0 || amtC > availC
+                }
+                return false
+              })()}
+            >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5" />}
               Record Payment
             </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1201,8 +1661,8 @@ export default function BillingPage() {
 
       {/* ── Receipt Dialog ── */}
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90vh,44rem)] w-[calc(100%-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <DialogHeader className="shrink-0 space-y-1.5 border-b border-border px-6 pb-4 pt-6 pr-14">
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="h-4 w-4" />
               Payment Receipt
@@ -1210,66 +1670,70 @@ export default function BillingPage() {
           </DialogHeader>
           {receiptData && (
             <>
-              <div ref={printRef} className="space-y-4 print:p-6">
-                {/* Header */}
-                <div className="text-center space-y-1 print:block">
-                  <p className="text-base font-bold">Payment Receipt</p>
-                  <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
-                </div>
-
-                {/* Patient */}
-                <div className="border rounded-lg p-3 space-y-1">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Patient</p>
-                  <p className="text-sm font-medium">{fullName(receiptData.patient, nameFormat)}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{receiptData.patient.mrn}</p>
-                </div>
-
-                {/* Charges */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/30 px-3 py-1.5">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Charges Paid</p>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4">
+                <div ref={printRef} className="space-y-4 print:p-6">
+                  {/* Header */}
+                  <div className="text-center space-y-1 print:block">
+                    <p className="text-base font-bold">Payment Receipt</p>
+                    <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
                   </div>
-                  <div className="divide-y">
-                    {receiptData.chargesPaid.map(c => (
-                      <div key={c.id} className="flex justify-between px-3 py-2 text-sm">
-                        <span className="truncate mr-2">{c.description}</span>
-                        <span className="font-mono shrink-0">{(c.quantity * c.unit_price).toFixed(2)}</span>
+
+                  {/* Patient */}
+                  <div className="border rounded-lg p-3 space-y-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Patient</p>
+                    <p className="text-sm font-medium">{fullName(receiptData.patient, nameFormat)}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{receiptData.patient.mrn}</p>
+                  </div>
+
+                  {/* Charges */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted/30 px-3 py-1.5">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Charges Paid</p>
+                    </div>
+                    <div className="divide-y">
+                      {receiptData.chargesPaid.map(c => (
+                        <div key={c.id} className="flex justify-between gap-3 px-3 py-2 text-sm">
+                          <span className="min-w-0 break-words">{c.description}</span>
+                          <span className="font-mono shrink-0 tabular-nums">{(c.quantity * c.unit_price).toFixed(2)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between px-3 py-2 text-sm font-bold border-t bg-muted/20">
+                        <span>Total</span>
+                        <span className="font-mono tabular-nums">{receiptData.chargesPaid.reduce((s, c) => s + c.quantity * c.unit_price, 0).toFixed(2)}</span>
                       </div>
-                    ))}
-                    <div className="flex justify-between px-3 py-2 text-sm font-bold border-t bg-muted/20">
-                      <span>Total</span>
-                      <span className="font-mono">{receiptData.chargesPaid.reduce((s, c) => s + c.quantity * c.unit_price, 0).toFixed(2)}</span>
                     </div>
                   </div>
-                </div>
 
-                {/* Payment details */}
-                <div className="border rounded-lg p-3 space-y-1">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Payment</p>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Amount paid</span>
-                    <span className="font-mono font-semibold text-green-700">{receiptData.payment.amount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Method</span>
-                    <span className="capitalize">{receiptData.payment.method.replace('_', ' ')}</span>
-                  </div>
-                  {receiptData.payment.reference && (
+                  {/* Payment details */}
+                  <div className="border rounded-lg p-3 space-y-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Payment</p>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Reference</span>
-                      <span className="font-mono">{receiptData.payment.reference}</span>
+                      <span className="text-muted-foreground">Amount paid</span>
+                      <span className="font-mono font-semibold text-green-700 tabular-nums">
+                        <span className="opacity-70">{currencySymbol}</span>{receiptData.payment.amount.toFixed(2)}
+                      </span>
                     </div>
-                  )}
-                  {receiptData.payment.payer_name && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Payer</span>
-                      <span>{receiptData.payment.payer_name}</span>
+                      <span className="text-muted-foreground">Method</span>
+                      <span className="capitalize">{receiptData.payment.method.replace('_', ' ')}</span>
                     </div>
-                  )}
+                    {receiptData.payment.reference && (
+                      <div className="flex justify-between gap-2 text-sm">
+                        <span className="text-muted-foreground shrink-0">Reference</span>
+                        <span className="font-mono break-all text-right">{receiptData.payment.reference}</span>
+                      </div>
+                    )}
+                    {receiptData.payment.payer_name && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Payer</span>
+                        <span className="text-right">{receiptData.payment.payer_name}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-muted/20 px-6 py-4">
                 <Button variant="outline" onClick={() => setReceiptOpen(false)}>Close</Button>
                 <Button onClick={handlePrint}>
                   <Printer className="h-3.5 w-3.5" /> Print

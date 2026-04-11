@@ -14,7 +14,6 @@ export function emptyLabOrder(): LabOrderContent {
     panels:     [],
     custom:     [],
     indication: '',
-    urgency:    '',
     specimen:   'venous blood',
   }
 }
@@ -22,12 +21,6 @@ export function emptyLabOrder(): LabOrderContent {
 // ============================================================
 // Constants
 // ============================================================
-
-const URGENCY_OPTS = [
-  { v: 'routine', l: 'Routine' },
-  { v: 'urgent',  l: 'Urgent'  },
-  { v: 'stat',    l: 'STAT'    },
-]
 
 const SPECIMEN_OPTS = [
   'Venous blood', 'Arterial blood', 'Capillary blood',
@@ -41,11 +34,6 @@ const SPECIMEN_OPTS = [
 export function LabOrderView({ block }: { block: Block }) {
   const c = { ...emptyLabOrder(), ...(block.content as Partial<LabOrderContent>) }
 
-  const urgencyColor =
-    c.urgency === 'stat'   ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
-    c.urgency === 'urgent' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
-    c.urgency === 'routine'? 'bg-muted text-muted-foreground' : ''
-
   const panelLabels  = c.panels.map(id => PANEL_MAP[id]?.label ?? id)
   const hasCustom    = c.custom.some(cu => cu.name.trim())
 
@@ -55,13 +43,7 @@ export function LabOrderView({ block }: { block: Block }) {
 
   return (
     <div className="space-y-2 text-sm">
-      {/* Urgency + specimen + indication row */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        {c.urgency && (
-          <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded', urgencyColor)}>
-            {c.urgency.toUpperCase()}
-          </span>
-        )}
         {c.specimen && <span className="text-muted-foreground">{c.specimen}</span>}
         {c.indication && <span className="text-muted-foreground italic">· {c.indication}</span>}
       </div>
@@ -128,36 +110,19 @@ export function LabOrderEdit({ block, onSave, onCancel }: EditProps) {
 
   const handleSave = async () => {
     setSaving(true)
-    await onSave(form)
+    await onSave({
+      panels: form.panels,
+      custom: form.custom,
+      indication: form.indication,
+      specimen: form.specimen,
+    })
     setSaving(false)
   }
 
   return (
     <div className="space-y-4">
 
-      {/* Urgency + Specimen */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Urgency</Label>
-          <div className="flex gap-1.5">
-            {URGENCY_OPTS.map(o => (
-              <button
-                key={o.v}
-                type="button"
-                onClick={() => setForm(f => ({ ...f, urgency: f.urgency === o.v ? '' : o.v as LabOrderContent['urgency'] }))}
-                className={cn(
-                  'text-xs px-2.5 py-1 rounded-md border transition-colors',
-                  form.urgency === o.v
-                    ? o.v === 'stat'   ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400 font-semibold'
-                    : o.v === 'urgent' ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 font-semibold'
-                    : 'border-primary bg-primary/10 text-primary font-medium'
-                    : 'border-border hover:bg-accent',
-                )}
-              >{o.l}</button>
-            ))}
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Specimen</Label>
           <select
@@ -169,7 +134,7 @@ export function LabOrderEdit({ block, onSave, onCancel }: EditProps) {
           </select>
         </div>
 
-        <div className="col-span-2 space-y-1">
+        <div className="space-y-1">
           <Label className="text-xs">Clinical indication</Label>
           <Input
             placeholder="e.g. Sepsis workup, thyroid monitoring…"

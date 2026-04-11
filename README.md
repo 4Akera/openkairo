@@ -35,7 +35,7 @@ Sign in with **password `Demo123!`** for every demo user. Example:
 | `dr.emily@demo.com` | Physician (internal medicine) |
 | `dr.michael@demo.com` | Physician (general surgery) |
 | `nurse.sarah@demo.com` | Nurse |
-| `lab.tech@demo.com` | Lab technician |
+| `lab.tech@demo.com` | Nurse (demo lab staff; department portal access via dept membership) |
 | `reception@demo.com` | Receptionist |
 | `billing@demo.com` | Billing |
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useLayoutEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, useLayoutEffect, useCallback } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type {
   Block,
@@ -22,13 +22,17 @@ import {
   Users, BookOpen, MoreHorizontal, ShieldCheck, Loader2, Building2,
   CheckCircle2, Ban, Copy, Trash2,
 } from 'lucide-react'
-import { BLOCK_REGISTRY } from './BlockRegistry'
+import { BLOCK_REGISTRY, orphanRegistryRenderKey, registryRenderKey } from './BlockRegistry'
 import { DynamicBlockView, DynamicBlockEdit } from './DynamicBlock'
 import { AttachmentTray } from './capabilities/AttachmentTray'
 import { TimeSeriesPanel } from './capabilities/TimeSeriesPanel'
 import { ActionPanel } from './capabilities/ActionPanel'
+import { BlockManualFeesPanel } from './capabilities/BlockManualFeesPanel'
 import { AcknowledgmentPanel } from './capabilities/AcknowledgmentPanel'
 import { supabase } from '../../lib/supabase'
+import { useAuthStore } from '../../stores/authStore'
+import { useEncounterStore } from '../../stores/encounterStore'
+import { blockAllowsManualBlockFees } from '../../lib/blockBilling'
 
 // ============================================================
 // Icon registry (slug → component)
@@ -105,6 +109,7 @@ const BUILTIN_METADATA: Record<string, { name: string; icon: string; color: stri
   hx_physical: { name: 'History & Physical', icon: 'clipboard-list', color: 'purple' },
   note:        { name: 'Note',               icon: 'file-text',      color: 'blue'   },
   med_orders:  { name: 'Medications',        icon: 'pill',           color: 'orange' },
+  meds:        { name: 'Medications',        icon: 'pill',           color: 'lime'   },
   plan:        { name: 'Assessment & Plan',  icon: 'clipboard',      color: 'teal'   },
   vitals:      { name: 'Vitals',             icon: 'activity',       color: 'red'    },
 }
@@ -124,7 +129,8 @@ interface Props {
   currentUserId: string
   encounterClosed: boolean
   deptName?: string
-  charge?: Charge | null
+  /** All non-void charges for this block; badge shows sum */
+  charges?: Charge[] | null
   autoEdit?: boolean
   isUnsaved?: boolean
   onEdit: (block: Block, content: Record<string, unknown>) => Promise<void>
@@ -138,6 +144,9 @@ interface Props {
   onApproveCharge?: (chargeId: string) => void
   onVoidCharge?: (chargeId: string) => void
   canCharge?: boolean
+  /** When true, show per-block catalogue fee panel (still requires canCharge to add lines) */
+  billingEnabled?: boolean
+  onRefreshBlockCharges?: (blockId: string) => Promise<void>
   isAdmin?: boolean
   onHardDelete?: (blockId: string) => Promise<void>
 }
@@ -155,7 +164,7 @@ export default function BlockWrapper({
   currentUserId,
   encounterClosed,
   deptName,
-  charge,
+  charges,
   autoEdit,
   isUnsaved,
   onEdit,
@@ -169,13 +178,74 @@ export default function BlockWrapper({
   onApproveCharge,
   onVoidCharge,
   canCharge,
+  billingEnabled,
+  onRefreshBlockCharges,
   isAdmin,
   onHardDelete,
 }: Props) {
   const { currencySymbol } = useSettingsStore()
+
+  const chargeList = useMemo(() => {
+    if (!charges?.length) return []
+    return charges.filter(c => c.status !== 'void' && c.status !== 'waived')
+  }, [charges])
+
+  const chargeLinesAwaitingApproval = useMemo(
+    () => chargeList.filter(c => c.status === 'pending_approval'),
+    [chargeList],
+  )
+
+  const chargeLinesPosted = useMemo(
+    () => chargeList.filter(c => c.status !== 'pending_approval'),
+    [chargeList],
+  )
+
+  const totalPosted = useMemo(
+    () => chargeLinesPosted.reduce((s, c) => s + c.quantity * c.unit_price, 0),
+    [chargeLinesPosted],
+  )
+
+  const totalAwaitingApproval = useMemo(
+    () => chargeLinesAwaitingApproval.reduce((s, c) => s + c.quantity * c.unit_price, 0),
+    [chargeLinesAwaitingApproval],
+  )
+
+  const postedChargeTooltip = useMemo(
+    () =>
+      chargeLinesPosted
+        .map(
+          c =>
+            `${c.description} · ${c.quantity}× ${currencySymbol}${c.unit_price.toFixed(2)} · ${c.source} · ${c.status}`,
+        )
+        .join('\n'),
+    [chargeLinesPosted, currencySymbol],
+  )
+
+  const approvalChargeTooltip = useMemo(
+    () =>
+      chargeLinesAwaitingApproval
+        .map(
+          c =>
+            `${c.description} · ${c.quantity}× ${currencySymbol}${c.unit_price.toFixed(2)} · ${c.source} · ${c.status}`,
+        )
+        .join('\n'),
+    [chargeLinesAwaitingApproval, currencySymbol],
+  )
+
+  const anyPendingApproval = chargeLinesAwaitingApproval.length > 0
+  const { roleSlugs } = useAuthStore()
+  const updateBlock = useEncounterStore((s) => s.updateBlock)
   const [editing, setEditing] = useState(false)
+  const editingRef = useRef(editing)
+  useEffect(() => { editingRef.current = editing }, [editing])
+
   const [expanded, setExpanded] = useState(block.state === 'active')
   const [orderSent, setOrderSent] = useState(false)
+
+  const collapseOrderBlockAfterResults = useCallback(() => {
+    if (editingRef.current) return
+    setExpanded(false)
+  }, [])
 
   // Block actions menu
   const [menuOpen, setMenuOpen] = useState(false)
@@ -193,6 +263,7 @@ export default function BlockWrapper({
       })
     }
     setDraftRoles(block.visible_to_roles ?? [])
+    setRolesSaveError(null)
     setHardDeleteConfirm(false)
     setMenuOpen(true)
   }
@@ -230,21 +301,45 @@ export default function BlockWrapper({
   // Block privacy — role restriction
   const [draftRoles, setDraftRoles] = useState<string[]>(block.visible_to_roles ?? [])
   const [savingRoles, setSavingRoles] = useState(false)
+  const [rolesSaveError, setRolesSaveError] = useState<string | null>(null)
   const [hardDeleteConfirm, setHardDeleteConfirm] = useState(false)
+
+  // Optimistic local share state — syncs from prop after realtime arrives
+  const [localShare, setLocalShare] = useState(block.share_to_record)
+  useEffect(() => { setLocalShare(block.share_to_record) }, [block.share_to_record])
+
+  useEffect(() => {
+    if (!menuOpen) setDraftRoles(block.visible_to_roles ?? [])
+  }, [block.visible_to_roles, menuOpen])
   const [hardDeleting, setHardDeleting] = useState(false)
 
   const handleSaveRoles = async () => {
     setSavingRoles(true)
-    await supabase.from('blocks').update({ visible_to_roles: draftRoles }).eq('id', block.id)
+    setRolesSaveError(null)
+    const { error } = await supabase.from('blocks').update({ visible_to_roles: draftRoles }).eq('id', block.id)
     setSavingRoles(false)
+    if (error) {
+      setRolesSaveError(error.message)
+      return
+    }
+    updateBlock({ ...block, visible_to_roles: draftRoles })
+    setMenuOpen(false)
   }
 
   const handleToggleShareToRecord = async () => {
-    await supabase.from('blocks').update({ share_to_record: !block.share_to_record }).eq('id', block.id)
+    const newVal = !localShare
+    setLocalShare(newVal)
+    const { error } = await supabase
+      .from('blocks')
+      .update({ share_to_record: newVal })
+      .eq('id', block.id)
+    if (error) setLocalShare(!newVal) // revert on failure
   }
 
   // Use DB definition when available; fall back to BUILTIN_METADATA for the header
   const def = definition ?? null
+  /** Department-originated blocks on the encounter timeline: charges/fees are managed in the department portal */
+  const hideDeptBlockChargeUi = Boolean(block.department_id)
   const headerMeta = useMemo(() => {
     if (definition) return { name: definition.name, icon: definition.icon, color: definition.color }
     return BUILTIN_METADATA[block.type] ?? { name: block.type, icon: 'file', color: 'slate' }
@@ -255,8 +350,17 @@ export default function BlockWrapper({
   const isLockedByMe   = lock && lock.locked_by === currentUserId
   const isImmutable    = def?.cap_immutable ?? false
   const isMasked       = block.state === 'masked'
+  // Match DB triggers: only roles allowed to add a block type may edit it (admins always).
+  // If we have no definition row (unknown type / RLS / inactive), deny mutation except admin.
+  const mayMutateBlockType = useMemo(() => {
+    if (isAdmin) return true
+    if (!def) return false
+    const gate = def.visible_to_roles
+    if (!gate || gate.length === 0) return true
+    return gate.some((r) => roleSlugs.includes(r))
+  }, [def, roleSlugs, isAdmin])
   // Immutable blocks are editable only on first insertion (isUnsaved); locked forever after first save
-  const canEdit        = !encounterClosed && (!isImmutable || !!isUnsaved) && !isMasked && !isLockedByOther && !orderSent
+  const canEdit        = mayMutateBlockType && !encounterClosed && (!isImmutable || !!isUnsaved) && !isMasked && !isLockedByOther && !orderSent
 
   // Auto-open in edit mode for template-seeded / freshly added blocks
   useEffect(() => {
@@ -268,10 +372,13 @@ export default function BlockWrapper({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // intentionally run once on mount
 
-  const preview = getBlockPreview({
-    type: block.type,
-    content: block.content as Record<string, unknown>,
-  })
+  const preview = getBlockPreview(
+    {
+      type: block.type,
+      content: block.content as Record<string, unknown>,
+    },
+    def ? registryRenderKey(def) : orphanRegistryRenderKey(block.type),
+  )
 
   const handleEditClick = async () => {
     if (!canEdit) return
@@ -338,54 +445,121 @@ export default function BlockWrapper({
             </span>
           )}
 
-          {charge && charge.status !== 'void' && charge.status !== 'waived' && (
+          {!hideDeptBlockChargeUi && chargeList.length > 0 && (
             <>
-              {/* Badge — Pending while awaiting approval, Approved permanently after that */}
-              <span
-                title={charge.description}
-                className={cn(
-                  'inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 whitespace-nowrap leading-none',
-                  charge.status === 'pending_approval'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800'
-                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
+              <span className="inline-flex items-center gap-1 shrink-0 flex-wrap leading-none">
+                {totalPosted > 0 && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap',
+                      'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
+                    )}
+                    title={postedChargeTooltip || undefined}
+                  >
+                    <span className="opacity-70">{currencySymbol}</span>
+                    {totalPosted.toFixed(2)}
+                    <span className="opacity-60 font-medium">
+                      {chargeLinesPosted.length > 1 ? ` · ${chargeLinesPosted.length} lines` : ''}
+                      · Active
+                    </span>
+                  </span>
                 )}
-              >
-                <span className="opacity-70">{currencySymbol}</span>{(charge.quantity * charge.unit_price).toFixed(2)}
-                <span className="opacity-60 ml-0.5">· {charge.status === 'pending_approval' ? 'Pending' : 'Approved'}</span>
+                {totalAwaitingApproval > 0 && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap',
+                      'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800',
+                    )}
+                    title={approvalChargeTooltip || undefined}
+                  >
+                    <span className="opacity-70">{currencySymbol}</span>
+                    {totalAwaitingApproval.toFixed(2)}
+                    <span className="opacity-60 font-medium">
+                      {chargeLinesAwaitingApproval.length > 1
+                        ? ` · ${chargeLinesAwaitingApproval.length} lines`
+                        : ''}
+                      · Approval
+                    </span>
+                  </span>
+                )}
               </span>
 
-              {/* Approve + cancel — only for pending_approval, only billing users */}
-              {charge.status === 'pending_approval' && canCharge && (
+              {anyPendingApproval && canCharge && (
                 <span className="inline-flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
-                  {onApproveCharge && (
-                    <button
-                      type="button"
-                      onClick={() => onApproveCharge(charge.id)}
-                      title="Approve charge"
-                      className={cn(
-                        'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
-                        'bg-emerald-100 text-emerald-600 border border-emerald-300',
-                        'hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:scale-110',
-                        'dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-700',
+                  {chargeLinesAwaitingApproval.length === 1 ? (
+                    <>
+                      {onApproveCharge && (
+                        <button
+                          type="button"
+                          onClick={() => onApproveCharge(chargeLinesAwaitingApproval[0]!.id)}
+                          title={`Approve: ${chargeLinesAwaitingApproval[0]!.description}`}
+                          className={cn(
+                            'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
+                            'bg-emerald-100 text-emerald-600 border border-emerald-300',
+                            'hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:scale-110',
+                            'dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-700',
+                          )}
+                        >
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                        </button>
                       )}
-                    >
-                      <CheckCircle2 className="h-2.5 w-2.5" />
-                    </button>
-                  )}
-                  {onVoidCharge && (
-                    <button
-                      type="button"
-                      onClick={() => onVoidCharge(charge.id)}
-                      title="Cancel charge"
-                      className={cn(
-                        'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
-                        'bg-red-50 text-red-400 border border-red-200',
-                        'hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-110',
-                        'dark:bg-red-950/30 dark:text-red-400 dark:border-red-800',
+                      {onVoidCharge && (
+                        <button
+                          type="button"
+                          onClick={() => onVoidCharge(chargeLinesAwaitingApproval[0]!.id)}
+                          title={`Void: ${chargeLinesAwaitingApproval[0]!.description}`}
+                          className={cn(
+                            'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
+                            'bg-red-50 text-red-400 border border-red-200',
+                            'hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-110',
+                            'dark:bg-red-950/30 dark:text-red-400 dark:border-red-800',
+                          )}
+                        >
+                          <Ban className="h-2.5 w-2.5" />
+                        </button>
                       )}
-                    >
-                      <Ban className="h-2.5 w-2.5" />
-                    </button>
+                    </>
+                  ) : (
+                    <>
+                      {onApproveCharge && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            for (const c of chargeLinesAwaitingApproval) {
+                              await Promise.resolve(onApproveCharge(c.id))
+                            }
+                          }}
+                          title={`Approve all ${chargeLinesAwaitingApproval.length} charges`}
+                          className={cn(
+                            'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
+                            'bg-emerald-100 text-emerald-600 border border-emerald-300',
+                            'hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:scale-110',
+                            'dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-700',
+                          )}
+                        >
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                        </button>
+                      )}
+                      {onVoidCharge && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            for (const c of chargeLinesAwaitingApproval) {
+                              await Promise.resolve(onVoidCharge(c.id))
+                            }
+                          }}
+                          title={`Void all ${chargeLinesAwaitingApproval.length} charges`}
+                          className={cn(
+                            'h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 transition-all',
+                            'bg-red-50 text-red-400 border border-red-200',
+                            'hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-110',
+                            'dark:bg-red-950/30 dark:text-red-400 dark:border-red-800',
+                          )}
+                        >
+                          <Ban className="h-2.5 w-2.5" />
+                        </button>
+                      )}
+                    </>
                   )}
                 </span>
               )}
@@ -492,7 +666,7 @@ export default function BlockWrapper({
                   title="More options"
                   className={cn(
                     'h-5 w-5',
-                    (block.is_pinned || block.share_to_record || (block.visible_to_roles?.length ?? 0) > 0)
+                    (block.is_pinned || localShare || (block.visible_to_roles?.length ?? 0) > 0)
                       && 'text-primary/70',
                   )}
                 >
@@ -521,10 +695,12 @@ export default function BlockWrapper({
                           {/* Pin */}
                           <button
                             type="button"
+                            disabled={!mayMutateBlockType}
                             onClick={() => { onTogglePin(block.id); setMenuOpen(false) }}
                             className={cn(
                               'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60',
                               block.is_pinned && 'text-amber-600',
+                              !mayMutateBlockType && 'opacity-50',
                             )}
                           >
                             <div className={cn(
@@ -555,7 +731,7 @@ export default function BlockWrapper({
                           </button>
 
                           {/* Duplicate */}
-                          {!isMasked && !encounterClosed && (
+                          {!isMasked && !encounterClosed && mayMutateBlockType && (
                             <button
                               type="button"
                               onClick={() => { onDuplicate(block.id); setMenuOpen(false) }}
@@ -587,7 +763,7 @@ export default function BlockWrapper({
                               </div>
                             </button>
                           )}
-                          {isMasked && !encounterClosed && (
+                          {isMasked && !encounterClosed && mayMutateBlockType && (
                             <button
                               type="button"
                               onClick={() => { onMask(block.id); setMenuOpen(false) }}
@@ -612,7 +788,8 @@ export default function BlockWrapper({
                           )}
                         </div>
 
-                        {/* ── Privacy & Sharing ── */}
+                        {/* ── Privacy & Sharing — creator or admin, and role must be allowed to mutate this block type ── */}
+                        {(isAdmin || currentUserId === block.created_by) && mayMutateBlockType && (
                         <div className="border-t p-2 space-y-0.5">
                           <div className="flex items-center gap-1.5 px-2 pb-1">
                             <ShieldCheck className="h-3 w-3 text-muted-foreground" />
@@ -626,20 +803,20 @@ export default function BlockWrapper({
                               onClick={handleToggleShareToRecord}
                               className="w-full flex items-center gap-2 text-left"
                             >
-                              <BookOpen className={cn('h-3.5 w-3.5 shrink-0', block.share_to_record ? 'text-emerald-600' : 'text-muted-foreground')} />
+                              <BookOpen className={cn('h-3.5 w-3.5 shrink-0', localShare ? 'text-emerald-600' : 'text-muted-foreground')} />
                               <div className="flex-1 min-w-0">
-                                <p className={cn('text-[11px] font-medium', block.share_to_record && 'text-emerald-700 dark:text-emerald-400')}>
+                                <p className={cn('text-[11px] font-medium', localShare && 'text-emerald-700 dark:text-emerald-400')}>
                                   Share to Results & Reports
                                 </p>
                                 <p className="text-[10px] text-muted-foreground leading-tight">Appear in patient record tab</p>
                               </div>
                               <div className={cn(
                                 'h-4 w-7 rounded-full transition-colors relative shrink-0',
-                                block.share_to_record ? 'bg-emerald-500' : 'bg-muted-foreground/30',
+                                localShare ? 'bg-emerald-500' : 'bg-muted-foreground/30',
                               )}>
                                 <div className={cn(
                                   'absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform',
-                                  block.share_to_record ? 'translate-x-3.5' : 'translate-x-0.5',
+                                  localShare ? 'translate-x-3.5' : 'translate-x-0.5',
                                 )} />
                               </div>
                             </button>
@@ -651,7 +828,7 @@ export default function BlockWrapper({
                               <Users className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', (draftRoles.length > 0) ? 'text-amber-600' : 'text-muted-foreground')} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-[11px] font-medium">Restrict to roles</p>
-                                <p className="text-[10px] text-muted-foreground leading-tight">Empty = visible to all encounter viewers</p>
+                                <p className="text-[10px] text-muted-foreground leading-tight">This block only — empty means all encounter viewers can see it</p>
                               </div>
                             </div>
                             <div className="flex flex-wrap gap-1">
@@ -676,13 +853,17 @@ export default function BlockWrapper({
                               ))}
                             </div>
                             <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-2" onClick={() => setDraftRoles(block.visible_to_roles ?? [])}>Reset</Button>
+                              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-2" onClick={() => { setDraftRoles(block.visible_to_roles ?? []); setRolesSaveError(null) }}>Reset</Button>
                               <Button size="sm" className="h-5 text-[10px] px-2" onClick={handleSaveRoles} disabled={savingRoles}>
                                 {savingRoles ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
                               </Button>
                             </div>
+                            {rolesSaveError && (
+                              <p className="text-[10px] text-red-600 dark:text-red-400 leading-snug">{rolesSaveError}</p>
+                            )}
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* ── Admin: Danger zone ── */}
@@ -774,6 +955,24 @@ export default function BlockWrapper({
               ? renderEdit(block, def, handleSave, handleCancel)
               : renderView(block, def)}
           </div>
+          {billingEnabled &&
+            !hideDeptBlockChargeUi &&
+            blockAllowsManualBlockFees(def) &&
+            (canCharge || chargeList.length > 0) && (
+            <>
+              <Separator />
+              <BlockManualFeesPanel
+                blockId={block.id}
+                patientId={_patientId}
+                encounterId={block.encounter_id}
+                definition={def}
+                charges={chargeList}
+                allowFeeEdits={Boolean(canCharge && !encounterClosed && !isMasked)}
+                onVoidCharge={onVoidCharge}
+                onPosted={() => onRefreshBlockCharges?.(block.id)}
+              />
+            </>
+          )}
         </>
       )}
 
@@ -793,7 +992,7 @@ export default function BlockWrapper({
       )}
 
       {/* ── Dept order action panel ──────────────────────── */}
-      {def?.config?.dept_role === 'order' && block.encounter_id && (
+      {def && block.definition_id && block.encounter_id && (
         <ActionPanel
           blockId={block.id}
           encounterId={block.encounter_id}
@@ -801,7 +1000,14 @@ export default function BlockWrapper({
           definition={def}
           blockContent={block.content as Record<string, unknown>}
           readOnly={encounterClosed}
+          allowSendOrder={
+            !encounterClosed &&
+            !isUnsaved &&
+            !editing &&
+            !block.is_template_seed
+          }
           onSentChange={setOrderSent}
+          onOrderFulfilledPreferCollapsed={collapseOrderBlockAfterResults}
         />
       )}
     </div>
@@ -813,7 +1019,8 @@ export default function BlockWrapper({
 // ============================================================
 
 function renderView(block: Block, def: BlockDefinition | null) {
-  const renderer = BLOCK_REGISTRY[block.type]
+  const key = def ? registryRenderKey(def) : orphanRegistryRenderKey(block.type)
+  const renderer = BLOCK_REGISTRY[key]
   if (renderer) return <renderer.View block={block} />
 
   // Unknown / bespoke block → DynamicBlock (reads field schema from definition)
@@ -838,7 +1045,8 @@ function renderEdit(
   onSave: (c: Record<string, unknown>) => Promise<void>,
   onCancel: () => void,
 ) {
-  const renderer = BLOCK_REGISTRY[block.type]
+  const key = def ? registryRenderKey(def) : orphanRegistryRenderKey(block.type)
+  const renderer = BLOCK_REGISTRY[key]
   if (renderer) return <renderer.Edit block={block} onSave={onSave} onCancel={onCancel} />
 
   // Unknown / bespoke block → DynamicBlock
@@ -884,7 +1092,11 @@ function DynamicBlockEditWrapper({
           disabled={saving}
           onClick={async () => {
             setSaving(true)
-            await onSave(content)
+            try {
+              await onSave(content)
+            } finally {
+              setSaving(false)
+            }
           }}
         >
           {saving ? 'Saving…' : 'Save'}

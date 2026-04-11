@@ -59,7 +59,7 @@ export default function PatientRecord({ patient, onPatientUpdate, encounterId }:
       </div>
 
       <ScrollArea className="flex-1 [&>div>div]:!block">
-        <div className="p-3 space-y-4">
+        <div className="p-3 space-y-4 min-w-0 w-full overflow-x-hidden">
           {/* Clinical Summary Banner */}
           {showSummary && (
             <div className="rounded-md border bg-muted/40 px-3 py-2">

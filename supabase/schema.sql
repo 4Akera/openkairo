@@ -72,6 +72,16 @@ create table if not exists user_roles (
   primary key (user_id, role_id)
 );
 
+-- Role hierarchy: child_slug inherits all access rights of parent_slug.
+-- e.g. respiratory_physician → physician means any privacy check that
+-- passes for 'physician' will also pass for 'respiratory_physician'.
+create table if not exists role_parents (
+  child_slug  text not null references roles(slug) on delete cascade,
+  parent_slug text not null references roles(slug) on delete cascade,
+  primary key (child_slug, parent_slug),
+  check (child_slug <> parent_slug)
+);
+
 -- ============================================================
 -- 3. PATIENT MASTER RECORD & FIELD DEFINITIONS
 -- ============================================================
@@ -242,11 +252,16 @@ create table if not exists block_definitions (
   fields                   jsonb not null default '[]',
   time_series_fields       jsonb not null default '[]',
   config                   jsonb not null default '{}',
+  -- When set, UI resolves hardcoded renderer via this slug; row.slug stays unique (blocks.type / menus).
+  registry_slug            text,
   active                   boolean not null default true,
   sort_order               integer not null default 0,
   created_by               uuid references auth.users(id),
   created_at               timestamptz default now()
 );
+
+comment on column block_definitions.registry_slug is
+  'When set, UI resolves hardcoded renderer via this slug; row.slug stays unique (blocks.type / menus).';
 
 -- ============================================================
 -- 6. DEPARTMENTS
@@ -310,7 +325,7 @@ create table if not exists blocks (
   locked_by                uuid references auth.users(id),
   locked_at                timestamptz,
   author_name              text,
-  definition_id            uuid references block_definitions(id),
+  definition_id            uuid references block_definitions(id) on delete set null,
   is_template_seed         boolean not null default false,
   is_pinned                boolean not null default false,
   visible_to_roles         text[] not null default '{}',
@@ -319,6 +334,22 @@ create table if not exists blocks (
   created_at               timestamptz default now(),
   updated_at               timestamptz default now()
 );
+
+-- Replace default NO ACTION FK so deleting a block_definitions row is allowed:
+-- blocks keep type (slug) and content; definition_id is cleared.
+do $$ begin
+  alter table blocks drop constraint if exists blocks_definition_id_fkey;
+exception
+  when undefined_table then null;
+end $$;
+
+do $$ begin
+  alter table blocks
+    add constraint blocks_definition_id_fkey
+    foreign key (definition_id) references block_definitions(id) on delete set null;
+exception
+  when duplicate_object then null;
+end $$;
 
 create table if not exists block_entries (
   id          uuid primary key default gen_random_uuid(),
@@ -427,6 +458,8 @@ create index if not exists idx_block_acks_block             on block_acknowledgm
 -- Roles
 create index if not exists idx_roles_slug                   on roles(slug);
 create index if not exists idx_user_roles_user              on user_roles(user_id);
+create index if not exists idx_role_parents_child           on role_parents(child_slug);
+create index if not exists idx_role_parents_parent          on role_parents(parent_slug);
 
 -- Templates
 create index if not exists idx_templates_universal          on encounter_templates(is_universal) where is_universal = true;
@@ -480,6 +513,93 @@ create trigger roles_updated_at
 create trigger templates_updated_at
   before update on encounter_templates  for each row execute function update_updated_at();
 
+-- Enforce created_by / received_by from the session, not the client payload
+create or replace function set_created_by()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  -- Only fill created_by when the caller did not supply one explicitly.
+  -- This preserves seed / migration values while still auto-assigning for
+  -- rows inserted via PostgREST (which never send created_by in the payload).
+  if NEW.created_by is null then
+    NEW.created_by = auth.uid();
+  end if;
+  return NEW;
+end;
+$$;
+
+create or replace function set_received_by()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  NEW.received_by = auth.uid();
+  return NEW;
+end;
+$$;
+
+drop trigger if exists set_created_by_patients           on patients;
+drop trigger if exists set_created_by_encounters         on encounters;
+drop trigger if exists set_created_by_blocks             on blocks;
+drop trigger if exists enforce_block_def_visibility_ins  on blocks;
+drop trigger if exists enforce_block_def_visibility_upd    on blocks;
+drop trigger if exists set_created_by_block_entries      on block_entries;
+drop trigger if exists set_created_by_block_definitions  on block_definitions;
+drop trigger if exists set_created_by_encounter_templates on encounter_templates;
+drop trigger if exists set_created_by_charges            on charges;
+drop trigger if exists set_created_by_invoices           on invoices;
+drop trigger if exists set_received_by_payments          on payments;
+drop trigger if exists set_received_by_deposits          on patient_deposits;
+
+create trigger set_created_by_patients
+  before insert on patients             for each row execute function set_created_by();
+create trigger set_created_by_encounters
+  before insert on encounters           for each row execute function set_created_by();
+create trigger set_created_by_blocks
+  before insert on blocks               for each row execute function set_created_by();
+create trigger set_created_by_block_entries
+  before insert on block_entries        for each row execute function set_created_by();
+create trigger set_created_by_block_definitions
+  before insert on block_definitions    for each row execute function set_created_by();
+create trigger set_created_by_encounter_templates
+  before insert on encounter_templates  for each row execute function set_created_by();
+create trigger set_created_by_charges
+  before insert on charges              for each row execute function set_created_by();
+create trigger set_created_by_invoices
+  before insert on invoices             for each row execute function set_created_by();
+create trigger set_received_by_payments
+  before insert on payments             for each row execute function set_received_by();
+create trigger set_received_by_deposits
+  before insert on patient_deposits     for each row execute function set_received_by();
+
+-- Guard: only the block creator or an admin may change visible_to_roles / share_to_record
+create or replace function restrict_block_sensitive_fields()
+returns trigger language plpgsql
+-- No security definer — caller context is preserved so auth.uid() reads
+-- correctly from the JWT claims set by PostgREST. has_role_in() is itself
+-- security definer and handles its own access to user_roles.
+set search_path = public
+as $$
+begin
+  if old.visible_to_roles is distinct from new.visible_to_roles
+     or old.share_to_record is distinct from new.share_to_record then
+    -- Allow: caller is the block creator
+    -- Allow: caller is an admin
+    -- Deny: everyone else (including blocks with null creator — admin-only)
+    if not (auth.uid() = old.created_by or has_role_in(array['admin'])) then
+      raise exception 'Only the block creator or an admin can change role restrictions or record sharing';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists block_sensitive_fields_guard on blocks;
+create trigger block_sensitive_fields_guard
+  before update on blocks
+  for each row execute function restrict_block_sensitive_fields();
+
 -- ============================================================
 -- 11. SCHEMA EVOLUTION (idempotent for existing deployments)
 -- Fresh installs do NOT need these — all columns already exist above.
@@ -504,6 +624,9 @@ alter table blocks alter column encounter_id drop not null;
 alter table blocks add column if not exists department_id            uuid references departments(id) on delete set null;
 alter table blocks add column if not exists patient_id               uuid references patients(id) on delete cascade;
 alter table blocks add column if not exists department_block_type_id uuid references department_block_types(id) on delete set null;
+
+-- Order cancel reason and priority (stored in action_payload)
+alter table block_actions add column if not exists cancel_reason text;
 
 -- User preferred standard blocks
 alter table profiles add column if not exists preferred_blocks uuid[] default null;
@@ -562,6 +685,8 @@ alter table charges add constraint charges_status_check
 -- Link block definitions & dept block types to service items (columns added before table for idempotency)
 alter table block_definitions      add column if not exists service_item_id uuid;
 alter table block_definitions      add column if not exists charge_mode     text check (charge_mode in ('auto','confirm'));
+-- When set, UI resolves hardcoded renderer via registry_slug; row.slug stays unique (menu / blocks.type).
+alter table block_definitions      add column if not exists registry_slug   text;
 alter table department_block_types add column if not exists service_item_id uuid;
 
 -- Service item catalog (admin-managed fee schedule)
@@ -693,7 +818,7 @@ create table if not exists patient_deposits (
 );
 
 -- Patient balance view
-create or replace view patient_balance as
+create or replace view patient_balance with (security_invoker = on) as
 select
   p.id as patient_id,
   coalesce(sum(c.quantity * c.unit_price) filter (where c.status not in ('void','waived','pending_approval','pending_insurance')), 0) as total_charges,
@@ -719,6 +844,19 @@ create index if not exists idx_patient_insurance_pt   on patient_insurance(patie
 create index if not exists idx_patient_deposits_pt    on patient_deposits(patient_id);
 create index if not exists idx_service_items_active   on service_items(active, sort_order);
 
+-- Reusable insurance payer names (billing quick-pick / defaults)
+create table if not exists insurance_providers (
+  id                     uuid primary key default gen_random_uuid(),
+  name                   text not null unique,
+  default_copay_percent  numeric(5,2),
+  default_coverage_limit numeric(12,2),
+  active                 boolean not null default true,
+  sort_order             integer not null default 0,
+  created_at             timestamptz default now()
+);
+
+create index if not exists idx_insurance_providers_active on insurance_providers(active, sort_order);
+
 -- Billing triggers
 drop trigger if exists patient_insurance_updated_at on patient_insurance;
 create trigger patient_insurance_updated_at
@@ -728,9 +866,156 @@ create trigger patient_insurance_updated_at
 -- 12. ROW LEVEL SECURITY
 -- ============================================================
 
+-- has_permission must exist before any policy that references it.
+-- Only permissions on roles the user is directly assigned — no role_parents walk.
+-- Child roles store a copy of parent permissions (enforced in admin UI).
+create or replace function has_permission(p text)
+returns boolean language sql security definer stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from user_roles ur
+    join roles r on r.id = ur.role_id
+    where ur.user_id = auth.uid()
+    and r.permissions && array[p]
+  )
+$$;
+
+-- has_role_in: true if the current user holds any of the given role slugs,
+-- or holds a child role that inherits from one of those slugs.
+-- The recursive CTE walks role_parents upward so that e.g. a user with only
+-- 'respiratory_physician' will pass a check against 'physician'.
+-- Must be security definer so it can read user_roles / role_parents regardless
+-- of the restrictive RLS policies on those tables.
+create or replace function has_role_in(role_slugs text[])
+returns boolean language sql security definer stable
+set search_path = public
+as $$
+  with recursive role_tree as (
+    -- the slugs the user is directly assigned
+    select r.slug
+    from user_roles ur
+    join roles r on r.id = ur.role_id
+    where ur.user_id = auth.uid()
+
+    union
+
+    -- walk up to every ancestor
+    select rp.parent_slug
+    from role_tree rt
+    join role_parents rp on rp.child_slug = rt.slug
+  )
+  select exists (
+    select 1 from role_tree where slug = any(role_slugs)
+  )
+$$;
+
+-- Prevent staff from inserting block types their role is not allowed to add
+-- (block_definitions.visible_to_roles). Timeline inserts use this; department
+-- portal inserts set department_id and are exempt so lab/radiology/pharmacy
+-- workflows keep working.
+create or replace function enforce_block_definition_visibility_on_insert()
+returns trigger language plpgsql
+set search_path = public
+as $$
+declare
+  def_roles text[];
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  if has_role_in(array['admin']) then
+    return new;
+  end if;
+  if new.department_id is not null then
+    return new;
+  end if;
+
+  if new.definition_id is not null then
+    select bd.visible_to_roles into def_roles
+    from block_definitions bd where bd.id = new.definition_id;
+  elsif new.type is not null and new.type <> '' then
+    select bd.visible_to_roles into def_roles
+    from block_definitions bd
+    where bd.slug = new.type and bd.active = true
+    order by bd.sort_order
+    limit 1;
+  else
+    return new;
+  end if;
+
+  if def_roles is null or array_length(def_roles, 1) is null then
+    return new;
+  end if;
+
+  if not has_role_in(def_roles) then
+    raise exception 'Your role cannot add this block type';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_block_def_visibility_ins on blocks;
+create trigger enforce_block_def_visibility_ins
+  before insert on blocks for each row execute function enforce_block_definition_visibility_on_insert();
+
+-- Same role gate for updates (edit, pin, mask, share flags, etc.)
+create or replace function enforce_block_definition_visibility_on_update()
+returns trigger language plpgsql
+set search_path = public
+as $$
+declare
+  def_roles text[];
+  def_id uuid;
+  typ text;
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  if has_role_in(array['admin']) then
+    return new;
+  end if;
+  if coalesce(new.department_id, old.department_id) is not null then
+    return new;
+  end if;
+
+  def_id := coalesce(new.definition_id, old.definition_id);
+  typ := coalesce(nullif(new.type, ''), nullif(old.type, ''));
+
+  if def_id is not null then
+    select bd.visible_to_roles into def_roles
+    from block_definitions bd where bd.id = def_id;
+  elsif typ is not null then
+    select bd.visible_to_roles into def_roles
+    from block_definitions bd
+    where bd.slug = typ and bd.active = true
+    order by bd.sort_order
+    limit 1;
+  else
+    return new;
+  end if;
+
+  if def_roles is null or array_length(def_roles, 1) is null then
+    return new;
+  end if;
+
+  if not has_role_in(def_roles) then
+    raise exception 'Your role cannot edit this block type';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_block_def_visibility_upd on blocks;
+create trigger enforce_block_def_visibility_upd
+  before update on blocks for each row execute function enforce_block_definition_visibility_on_update();
+
 alter table profiles                   enable row level security;
 alter table roles                      enable row level security;
 alter table user_roles                 enable row level security;
+alter table role_parents               enable row level security;
 alter table app_settings               enable row level security;
 alter table patients                   enable row level security;
 alter table patient_field_definitions  enable row level security;
@@ -762,128 +1047,269 @@ drop policy if exists "profiles_insert"                  on profiles;
 drop policy if exists "profiles_update"                  on profiles;
 drop policy if exists "roles_select"                     on roles;
 drop policy if exists "user_roles_select"                on user_roles;
+drop policy if exists "role_parents_select"              on role_parents;
+drop policy if exists "role_parents_admin_write"         on role_parents;
+-- patients (old all-in-one + new split names)
 drop policy if exists "auth_all_patients"                on patients;
+drop policy if exists "patients_select"                  on patients;
+drop policy if exists "patients_mutate"                  on patients;
+-- patient sub-tables
+drop policy if exists "auth_all_problems"                on patient_problems;
+drop policy if exists "problems_select"                  on patient_problems;
+drop policy if exists "problems_mutate"                  on patient_problems;
+drop policy if exists "auth_all_problem_history"         on patient_problem_history;
+drop policy if exists "problem_history_select"           on patient_problem_history;
+drop policy if exists "problem_history_mutate"           on patient_problem_history;
+drop policy if exists "auth_all_medications"             on patient_medications;
+drop policy if exists "meds_select"                      on patient_medications;
+drop policy if exists "meds_mutate"                      on patient_medications;
+drop policy if exists "auth_all_med_history"             on patient_medication_history;
+drop policy if exists "med_history_select"               on patient_medication_history;
+drop policy if exists "med_history_mutate"               on patient_medication_history;
+drop policy if exists "auth_all_allergies"               on patient_allergies;
+drop policy if exists "allergies_select"                 on patient_allergies;
+drop policy if exists "allergies_mutate"                 on patient_allergies;
+drop policy if exists "auth_all_archive"                 on patient_archive;
+drop policy if exists "archive_select"                   on patient_archive;
+drop policy if exists "archive_mutate"                   on patient_archive;
 drop policy if exists "read_patient_fields"              on patient_field_definitions;
 drop policy if exists "admin_mutate_patient_fields"      on patient_field_definitions;
-drop policy if exists "auth_all_problems"                on patient_problems;
-drop policy if exists "auth_all_problem_history"         on patient_problem_history;
-drop policy if exists "auth_all_medications"             on patient_medications;
-drop policy if exists "auth_all_med_history"             on patient_medication_history;
-drop policy if exists "auth_all_allergies"               on patient_allergies;
-drop policy if exists "auth_all_archive"                 on patient_archive;
+-- encounters
 drop policy if exists "encounter_staff_access"           on encounters;
+drop policy if exists "encounter_select"                 on encounters;
+drop policy if exists "encounter_insert"                 on encounters;
+drop policy if exists "encounter_update"                 on encounters;
+drop policy if exists "encounter_delete"                 on encounters;
+-- block definitions
 drop policy if exists "select_block_defs"                on block_definitions;
 drop policy if exists "insert_block_defs"                on block_definitions;
 drop policy if exists "update_block_defs"                on block_definitions;
 drop policy if exists "delete_block_defs"                on block_definitions;
+-- blocks
 drop policy if exists "block_staff_access"               on blocks;
+drop policy if exists "block_delete_restrict"            on blocks;
+-- block sub-tables
 drop policy if exists "auth_all_block_entries"           on block_entries;
+drop policy if exists "block_entries_access"             on block_entries;
 drop policy if exists "auth_all_block_attachments"       on block_attachments;
+drop policy if exists "block_attachments_access"         on block_attachments;
 drop policy if exists "auth_all_block_actions"           on block_actions;
+drop policy if exists "block_actions_access"             on block_actions;
 drop policy if exists "auth_all_block_acks"              on block_acknowledgments;
+drop policy if exists "block_acks_access"                on block_acknowledgments;
+-- templates
 drop policy if exists "select_templates"                 on encounter_templates;
 drop policy if exists "insert_templates"                 on encounter_templates;
 drop policy if exists "update_templates"                 on encounter_templates;
 drop policy if exists "delete_templates"                 on encounter_templates;
+-- departments
 drop policy if exists "auth_all_departments"             on departments;
 drop policy if exists "auth_all_department_block_types"  on department_block_types;
 drop policy if exists "auth_all_department_members"      on department_members;
+drop policy if exists "admin_mutate_departments"             on departments;
+drop policy if exists "admin_mutate_department_block_types"  on department_block_types;
+drop policy if exists "admin_mutate_department_members"      on department_members;
 
 -- Profiles
 create policy "app_settings_read"        on app_settings for select using (auth.uid() is not null);
-create policy "app_settings_admin_write" on app_settings for all    using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "app_settings_admin_write" on app_settings for all
+  using (has_permission('admin.manage_settings'))
+  with check (has_permission('admin.manage_settings'));
 
 create policy "profiles_select" on profiles for select using (auth.uid() is not null);
-create policy "profiles_insert" on profiles for insert with check (true);
+create policy "profiles_insert" on profiles for insert with check (id = auth.uid());
 create policy "profiles_update" on profiles for update using (id = auth.uid());
 
 -- Roles: read-only via RLS; admin writes via service-role key
-create policy "roles_select"      on roles      for select using (auth.uid() is not null);
-create policy "user_roles_select" on user_roles for select using (auth.uid() is not null);
+create policy "roles_select"        on roles        for select using (auth.uid() is not null);
+create policy "user_roles_select"   on user_roles   for select using (has_permission('admin.manage_users'));
 
--- Clinical data
-create policy "auth_all_patients"        on patients               for all using (auth.uid() is not null);
-create policy "auth_all_problems"        on patient_problems       for all using (auth.uid() is not null);
-create policy "auth_all_problem_history" on patient_problem_history for all using (auth.uid() is not null);
-create policy "auth_all_medications"     on patient_medications    for all using (auth.uid() is not null);
-create policy "auth_all_med_history"     on patient_medication_history for all using (auth.uid() is not null);
-create policy "auth_all_allergies"       on patient_allergies      for all using (auth.uid() is not null);
-create policy "auth_all_archive"         on patient_archive        for all using (auth.uid() is not null);
+-- Role hierarchy: any authenticated user can read (needed for has_role_in CTE);
+-- only admins may mutate.
+create policy "role_parents_select"      on role_parents for select using (auth.uid() is not null);
+create policy "role_parents_admin_write" on role_parents for all    using (has_permission('admin.manage_users'))
+  with check (has_permission('admin.manage_users'));
+
+-- ── Clinical data ────────────────────────────────────────────────────────────
+-- Pattern: SELECT open to all authenticated staff; INSERT/UPDATE/DELETE gated
+-- by role so billing/lab-only users cannot mutate patient records.
+
+-- Patients: receptionists need to register patients; physicians/nurses update them
+create policy "patients_select" on patients for select using (auth.uid() is not null);
+create policy "patients_mutate" on patients for all
+  using (has_permission('block.add') or has_role_in(array['receptionist', 'admin']))
+  with check (has_permission('block.add') or has_role_in(array['receptionist', 'admin']));
+
+-- Patient problems / history — clinical staff (block.add) or admin
+create policy "problems_select"       on patient_problems       for select using (auth.uid() is not null);
+create policy "problems_mutate"       on patient_problems       for all
+  using (has_permission('block.add') or has_role_in(array['admin']))
+  with check (has_permission('block.add') or has_role_in(array['admin']));
+
+create policy "problem_history_select" on patient_problem_history for select using (auth.uid() is not null);
+create policy "problem_history_mutate" on patient_problem_history for all
+  using (has_permission('block.add') or has_role_in(array['admin']))
+  with check (has_permission('block.add') or has_role_in(array['admin']));
+
+-- Medications / history
+create policy "meds_select"      on patient_medications        for select using (auth.uid() is not null);
+create policy "meds_mutate"      on patient_medications        for all
+  using (has_permission('block.add') or has_role_in(array['admin']))
+  with check (has_permission('block.add') or has_role_in(array['admin']));
+
+create policy "med_history_select" on patient_medication_history for select using (auth.uid() is not null);
+create policy "med_history_mutate" on patient_medication_history for all
+  using (has_permission('block.add') or has_role_in(array['admin']))
+  with check (has_permission('block.add') or has_role_in(array['admin']));
+
+-- Allergies
+create policy "allergies_select" on patient_allergies for select using (auth.uid() is not null);
+create policy "allergies_mutate" on patient_allergies for all
+  using (has_permission('block.add') or has_role_in(array['admin']))
+  with check (has_permission('block.add') or has_role_in(array['admin']));
+
+-- Archive
+create policy "archive_select"  on patient_archive for select using (auth.uid() is not null);
+create policy "archive_mutate"  on patient_archive for all
+  using (has_permission('block.add') or has_role_in(array['admin']))
+  with check (has_permission('block.add') or has_role_in(array['admin']));
+
 create policy "read_patient_fields"         on patient_field_definitions for select using (auth.uid() is not null);
-create policy "admin_mutate_patient_fields" on patient_field_definitions for all    using (auth.uid() is not null);
+create policy "admin_mutate_patient_fields" on patient_field_definitions for all
+  using (has_permission('admin.manage_settings'))
+  with check (has_permission('admin.manage_settings'));
 
--- Encounters: staff visibility
-create policy "encounter_staff_access" on encounters for all using (
+-- ── Encounters ───────────────────────────────────────────────────────────────
+-- SELECT: visibility-based (staff / restricted / private / owner / assigned)
+-- Admin can see all encounters for oversight; otherwise assigned_to is the gate.
+create policy "encounter_select" on encounters for select using (
   auth.uid() is not null and (
     visibility = 'staff'
-    or created_by = auth.uid()
     or assigned_to = auth.uid()
-    or (visibility = 'private' and created_by = auth.uid())
+    or has_role_in(array['admin'])
     or (visibility = 'restricted' and (
-      created_by = auth.uid()
-      or assigned_to = auth.uid()
-      or exists (
-        select 1 from user_roles ur join roles r on r.id = ur.role_id
-        where ur.user_id = auth.uid() and r.slug = any(visible_to_roles)
-      )
+      assigned_to = auth.uid()
+      or has_role_in(visible_to_roles)
     ))
   )
 );
 
--- Block definitions: builtins + universals visible to all; custom scoped to creator
-create policy "select_block_defs" on block_definitions for select
-  using (is_builtin = true or is_universal = true or created_by = auth.uid());
-create policy "insert_block_defs" on block_definitions for insert
-  with check (auth.uid() is not null);
-create policy "update_block_defs" on block_definitions for update
-  using (created_by = auth.uid());
-create policy "delete_block_defs" on block_definitions for delete
-  using (created_by = auth.uid());
-
--- Blocks
-create policy "block_staff_access" on blocks for all using (
+-- INSERT: role-gated (physicians/nurses/receptionists must assign; admin free)
+create policy "encounter_insert" on encounters for insert with check (
   auth.uid() is not null
-  -- Must have clinical permission to see block contents
-  and exists (
-    select 1 from user_roles ur
-    join roles r on r.id = ur.role_id
-    where ur.user_id = auth.uid()
-    and r.permissions && array['block.add', 'encounter.view_all']
-  )
-  -- Must have access to the parent encounter (or be a department entry with no encounter)
   and (
-    blocks.encounter_id is null
-    or exists (
-      select 1 from encounters e where e.id = blocks.encounter_id
-      and (
-        e.visibility = 'staff'
-        or e.created_by = auth.uid()
-        or e.assigned_to = auth.uid()
-        or (e.visibility = 'restricted' and (
-          e.created_by = auth.uid()
-          or e.assigned_to = auth.uid()
-          or exists (
-            select 1 from user_roles ur2 join roles r2 on r2.id = ur2.role_id
-            where ur2.user_id = auth.uid() and r2.slug = any(e.visible_to_roles)
-          )
-        ))
-      )
-    )
-  )
-  -- Block-level role restriction
-  and (
-    array_length(visible_to_roles, 1) is null
-    or created_by = auth.uid()
-    or exists (
-      select 1 from user_roles ur join roles r on r.id = ur.role_id
-      where ur.user_id = auth.uid() and r.slug = any(visible_to_roles)
+    has_role_in(array['admin'])
+    or (
+      has_role_in(array['physician', 'nurse', 'receptionist'])
+      and assigned_to is not null
     )
   )
 );
-create policy "auth_all_block_entries"     on block_entries         for all using (auth.uid() is not null);
-create policy "auth_all_block_attachments" on block_attachments     for all using (auth.uid() is not null);
-create policy "auth_all_block_actions"     on block_actions         for all using (auth.uid() is not null);
-create policy "auth_all_block_acks"        on block_acknowledgments for all using (auth.uid() is not null);
+
+-- UPDATE: anyone who can see the encounter can reassign it.
+-- Access gate mirrors encounter_select, plus requires clinical permission
+-- so billing/lab-only users cannot mutate even on staff-visibility encounters.
+-- WITH CHECK (true) because USING already controls actor authorisation;
+-- the new-row check just needs to pass unconditionally.
+create policy "encounter_update" on encounters for update
+  using (
+    auth.uid() is not null
+    and (has_permission('block.add') or has_role_in(array['admin']))
+    and (
+      visibility = 'staff'
+      or assigned_to = auth.uid()
+      or has_role_in(array['admin'])
+      or (visibility = 'restricted' and (
+        assigned_to = auth.uid()
+        or has_role_in(visible_to_roles)
+      ))
+    )
+  )
+  with check (true);
+
+-- DELETE: admin only
+create policy "encounter_delete" on encounters for delete
+  using (has_role_in(array['admin']));
+
+-- Block definitions: builtins + universals visible to all authenticated users.
+-- Mutations are admin-only (admin.manage_blocks); the service-role key used by
+-- adminUsers.ts bypasses RLS entirely, so these policies are belt-and-suspenders.
+create policy "select_block_defs" on block_definitions for select
+  using (auth.uid() is not null and (is_builtin = true or is_universal = true));
+create policy "insert_block_defs" on block_definitions for insert
+  with check (has_permission('admin.manage_blocks'));
+create policy "update_block_defs" on block_definitions for update
+  using (has_permission('admin.manage_blocks'));
+create policy "delete_block_defs" on block_definitions for delete
+  using (has_permission('admin.manage_blocks'));
+
+-- Blocks
+-- Clinical staff: block.add / encounter.view_all + encounter access (or encounter_id null).
+-- Department portal: members of blocks.department_id may insert/update/select dept result blocks
+-- (encounter_id null, department_id set) without block.add.
+create policy "block_staff_access" on blocks for all using (
+  auth.uid() is not null
+  and (
+    (
+      (has_permission('block.add') or has_permission('encounter.view_all'))
+      and (
+        blocks.encounter_id is null
+        or exists (
+          select 1 from encounters e where e.id = blocks.encounter_id
+          and (
+            e.visibility = 'staff'
+            or e.assigned_to = auth.uid()
+            or has_role_in(array['admin'])
+            or (e.visibility = 'restricted' and (
+              e.assigned_to = auth.uid()
+              or has_role_in(e.visible_to_roles)
+            ))
+          )
+        )
+      )
+    )
+    or (
+      blocks.encounter_id is null
+      and blocks.department_id is not null
+      and exists (
+        select 1 from department_members dm
+        where dm.department_id = blocks.department_id
+          and dm.user_id = auth.uid()
+      )
+    )
+  )
+  -- Block-level role restriction (instance visible_to_roles — not the definition add-gate).
+  -- Admins always pass; creators do not bypass, so restricted blocks stay restricted.
+  and (
+    array_length(visible_to_roles, 1) is null
+    or has_role_in(visible_to_roles)
+    or has_role_in(array['admin'])
+  )
+);
+
+-- Hard-delete requires creator ownership or admin; RESTRICTIVE so it ANDs with
+-- the permissive block_staff_access policy above.
+create policy "block_delete_restrict" on blocks as restrictive for delete
+  using (created_by = auth.uid() or has_role_in(array['admin']));
+
+-- Block sub-tables: clinical permission (block.add) by default; billing/lab-only users stay out.
+-- block_actions: department members may fulfill orders where action_type matches their dept slug.
+create policy "block_entries_access"     on block_entries         for all using (auth.uid() is not null and (has_permission('block.add') or has_role_in(array['admin'])));
+create policy "block_attachments_access" on block_attachments     for all using (auth.uid() is not null and (has_permission('block.add') or has_role_in(array['admin'])));
+create policy "block_actions_access"     on block_actions         for all using (
+  auth.uid() is not null
+  and (
+    has_permission('block.add')
+    or has_role_in(array['admin'])
+    or exists (
+      select 1
+      from departments d
+      join department_members dm on dm.department_id = d.id and dm.user_id = auth.uid()
+      where d.slug = block_actions.action_type
+    )
+  )
+);
+create policy "block_acks_access"        on block_acknowledgments for all using (auth.uid() is not null and (has_permission('block.add') or has_role_in(array['admin'])));
 
 -- Templates
 create policy "select_templates" on encounter_templates for select
@@ -895,10 +1321,16 @@ create policy "update_templates" on encounter_templates for update
 create policy "delete_templates" on encounter_templates for delete
   using (created_by = auth.uid() and is_universal = false);
 
--- Departments: all authenticated users can read/write (admin-guarded in UI)
-create policy "auth_all_departments"            on departments            for all to authenticated using (true) with check (true);
-create policy "auth_all_department_block_types" on department_block_types for all to authenticated using (true) with check (true);
-create policy "auth_all_department_members"     on department_members     for all to authenticated using (true) with check (true);
+-- Departments: read open to all staff; mutations require admin.manage_settings
+create policy "auth_all_departments"            on departments            for select to authenticated using (true);
+create policy "auth_all_department_block_types" on department_block_types for select to authenticated using (true);
+create policy "auth_all_department_members"     on department_members     for select to authenticated using (true);
+create policy "admin_mutate_departments"            on departments            for all
+  using (has_permission('admin.manage_settings')) with check (has_permission('admin.manage_settings'));
+create policy "admin_mutate_department_block_types" on department_block_types for all
+  using (has_permission('admin.manage_settings')) with check (has_permission('admin.manage_settings'));
+create policy "admin_mutate_department_members"     on department_members     for all
+  using (has_permission('admin.manage_settings')) with check (has_permission('admin.manage_settings'));
 
 -- ============================================================
 -- 12b. BILLING RLS
@@ -953,12 +1385,76 @@ as $$
   )
 $$;
 
+-- Atomically deduct from patient deposits (FIFO) and insert a payment row (method = deposit).
+create or replace function record_payment_from_deposit(
+  p_patient_id uuid,
+  p_amount numeric,
+  p_invoice_id uuid default null,
+  p_reference text default null,
+  p_payer_name text default null,
+  p_notes text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payment_id uuid;
+  v_remaining numeric;
+  r record;
+  v_deduct numeric;
+  v_available numeric;
+begin
+  if not can_billing_payment() then
+    raise exception 'permission denied' using errcode = '42501';
+  end if;
+
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'invalid amount';
+  end if;
+
+  select coalesce(sum(remaining), 0) into v_available
+  from patient_deposits
+  where patient_id = p_patient_id and remaining > 0;
+
+  if v_available < p_amount then
+    raise exception 'insufficient deposit balance';
+  end if;
+
+  v_remaining := p_amount;
+
+  for r in
+    select id, remaining
+    from patient_deposits
+    where patient_id = p_patient_id and remaining > 0
+    order by created_at asc
+    for update
+  loop
+    exit when v_remaining <= 0;
+    v_deduct := least(r.remaining, v_remaining);
+    update patient_deposits set remaining = remaining - v_deduct where id = r.id;
+    v_remaining := v_remaining - v_deduct;
+  end loop;
+
+  if v_remaining > 0 then
+    raise exception 'deposit deduction incomplete';
+  end if;
+
+  insert into payments (patient_id, invoice_id, amount, method, reference, payer_name, notes, received_by)
+  values (p_patient_id, p_invoice_id, p_amount, 'deposit', p_reference, p_payer_name, p_notes, auth.uid())
+  returning id into v_payment_id;
+
+  return v_payment_id;
+end;
+$$;
+
 alter table service_items      enable row level security;
 alter table charges            enable row level security;
 alter table payments           enable row level security;
 alter table patient_deposits   enable row level security;
 alter table invoices           enable row level security;
 alter table patient_insurance  enable row level security;
+alter table insurance_providers enable row level security;
 
 -- Drop billing policies (idempotent)
 drop policy if exists "billing_read_service_items"    on service_items;
@@ -974,6 +1470,8 @@ drop policy if exists "billing_update_deposits"       on patient_deposits;
 drop policy if exists "billing_read_invoices"         on invoices;
 drop policy if exists "billing_mutate_invoices"       on invoices;
 drop policy if exists "billing_all_insurance"         on patient_insurance;
+drop policy if exists "billing_read_insurance_providers"   on insurance_providers;
+drop policy if exists "billing_manage_insurance_providers"   on insurance_providers;
 
 -- SERVICE ITEMS: anyone with billing access can read; only fee managers can mutate
 create policy "billing_read_service_items" on service_items
@@ -982,17 +1480,10 @@ create policy "billing_manage_service_items" on service_items
   for all using (can_manage_fees()) with check (can_manage_fees());
 
 -- CHARGES: anyone with billing access can read; chargers can insert/update
---           dept auto-charges (source='block_auto' or 'department') are allowed for any authenticated user
 create policy "billing_read_charges" on charges
-  for select using (
-    has_billing_access()
-    OR source IN ('block_auto', 'department')
-  );
+  for select using (has_billing_access());
 create policy "billing_insert_charges" on charges
-  for insert with check (
-    can_billing_charge()
-    OR source IN ('block_auto', 'department')
-  );
+  for insert with check (can_billing_charge());
 create policy "billing_update_charges" on charges
   for update using (can_billing_charge());
 
@@ -1020,44 +1511,62 @@ create policy "billing_mutate_invoices" on invoices
 create policy "billing_all_insurance" on patient_insurance
   for all using (has_billing_access()) with check (has_billing_access());
 
+-- INSURANCE PROVIDERS: shared directory for payer names / default copay hints
+create policy "billing_read_insurance_providers" on insurance_providers
+  for select using (has_billing_access());
+create policy "billing_manage_insurance_providers" on insurance_providers
+  for all using (has_billing_access()) with check (has_billing_access());
+
 -- ============================================================
 -- 13. SEED DATA (idempotent — safe to re-run)
 -- ============================================================
 
 -- Built-in block definitions
-insert into block_definitions (name, slug, icon, color, description, is_builtin, cap_media, cap_immutable, sort_order, fields)
+-- visible_to_roles: who may add/edit this block type (enforced by triggers + UI).
+-- default_visible_to_roles: initial blocks.visible_to_roles on NEW blocks only
+--   (per-instance privacy). Keep '{}' so new blocks are visible to all encounter
+--   viewers unless the clinician tightens "Restrict to roles" on the block.
+insert into block_definitions (name, slug, icon, color, description, is_builtin, cap_media, cap_immutable, sort_order, fields, visible_to_roles, default_visible_to_roles)
 values
-  ('Note',               'note',             'file-text',      'blue',    'Free-text note with file and photo attachments',          true, true,  false,  10, '[]'::jsonb),
-  ('Vitals',             'vitals',           'activity',       'red',     'Immutable vital signs record with NEWS2 scoring',         true, false, true,   20, '[]'::jsonb),
-  ('H&P',                'hx_physical',      'stethoscope',    'violet',  'History and Physical — CC, HPI, ROS, Exam',               true, false, false,  15, '[]'::jsonb),
-  ('Assessment & Plan',  'plan',             'clipboard-list', 'emerald', 'Problem-based plan with chart problem import',            true, false, false,  25, '[]'::jsonb),
-  ('Media',              'media',            'camera',         'cyan',    'Photo and file attachments with optional caption',        true, true,  false,  30, '[]'::jsonb),
-  ('Clinical Score',     'score',            'calculator',     'indigo',  'GCS, CURB-65, Wells DVT/PE, HEART — calculated scores',  true, false, true,   35, '[]'::jsonb),
-  ('Ward Round Note',    'tour',             'clipboard',      'teal',    'SOAP ward round note with task list',                    true, false, false,  40, '[]'::jsonb),
-  ('Procedure Note',     'procedure_note',   'scissors',       'orange',  'Structured operative and procedural note',               true, true,  true,   45, '[]'::jsonb),
-  ('Anaesthetic Note',   'anaesthetic_note', 'zap',            'rose',    'General, regional, spinal, epidural anaesthetic record', true, false, true,   50, '[]'::jsonb),
-  ('Pain Assessment',    'pain_assessment',  'heart',          'pink',    '0–10 pain score with character, location, intervention', true, false, false,  55, '[]'::jsonb),
-  ('Wound Care',         'wound_care',       'layers',         'amber',   'Wound assessment, appearance, dressing, and plan',       true, true,  false,  60, '[]'::jsonb),
-  ('Lab Order',          'lab_order',        'flask-conical',  'sky',     'Order a lab panel — routed to the laboratory department',      true, false, false, 22, '[]'::jsonb),
-  ('Lab Result',         'lab_result',       'test-tube',      'green',   'Enter structured lab results with auto ref-range flagging',    true, false, false, 23, '[]'::jsonb),
-  ('Nurse Note',         'nurse_note',       'book-open',      'purple',  'Chronological nursing observation and care log',               true, false, false, 30, '[]'::jsonb),
-  ('Consultation',       'consultation',     'message-square', 'fuchsia', 'Specialist consultation request with question and response',   true, false, false, 35, '[]'::jsonb),
-  ('Discharge Note',     'dc_note',          'log-out',        'slate',   'Structured discharge summary with diagnoses and instructions', true, false, false, 90, '[]'::jsonb),
-  ('Medications',        'meds',             'pill',           'lime',    'Active medication list with dose, route, frequency and status',true, false, false, 15, '[]'::jsonb)
+  ('Note',               'note',             'file-text',      'blue',    'Free-text note with file and photo attachments',                    true, true,  false,  10, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Vitals',             'vitals',           'activity',       'red',     'Vital signs record with NEWS2 scoring',                             true, false, false,  20, '[]'::jsonb, '{}',                      '{}'),
+  ('H&P',                'hx_physical',      'stethoscope',    'violet',  'History and Physical — CC, HPI, ROS, Exam',                         true, false, false,  15, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Assessment & Plan',  'plan',             'clipboard-list', 'emerald', 'Problem-based plan with chart problem import',                      true, false, false,  25, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Media',              'media',            'camera',         'cyan',    'Photo and file attachments with optional caption',                  true, true,  false,  30, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Clinical Score',     'score',            'calculator',     'indigo',  'GCS, CURB-65, Wells DVT/PE, HEART — calculated scores',             true, false, false,  35, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Ward Round Note',    'tour',             'clipboard',      'teal',    'SOAP ward round note with task list',                               true, false, false,  40, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Procedure Note',     'procedure_note',   'scissors',       'orange',  'Structured operative and procedural note',                          true, true,  true,   45, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Anaesthetic Note',   'anaesthetic_note', 'zap',            'rose',    'General, regional, spinal, epidural anaesthetic record',            true, false, true,   50, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Pain Assessment',    'pain_assessment',  'heart',          'pink',    '0–10 pain score with character, location, intervention',            true, false, false,  55, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Wound Care',         'wound_care',       'layers',         'amber',   'Wound assessment, appearance, dressing, and plan',                  true, true,  false,  60, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Lab Order',          'lab_order',        'flask-conical',  'sky',     'Order a lab panel — routed to the laboratory department',           true, false, false,  22, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Lab Result',         'lab_result',       'test-tube',      'green',   'Enter structured lab results with auto ref-range flagging',         true, false, false,  23, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Radiology Request',  'radiology_request','scan',           'violet',  'Order imaging studies — routed to the radiology department',          true, false, false,  21, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Radiology Result',   'radiology_result', 'scan',           'purple',  'Structured radiology report — technique, findings, and impression',   true, false, false,  24, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Nurse Note',         'nurse_note',       'book-open',      'purple',  'Chronological nursing observation and care log',                    true, false, false,  30, '[]'::jsonb, '{}',                      '{}'),
+  ('Consultation',       'consultation',     'message-square', 'fuchsia', 'Specialist consultation request with question and response',        true, false, false,  35, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Discharge Note',     'dc_note',          'log-out',        'slate',   'Structured discharge summary with diagnoses and instructions',      true, false, false,  90, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Medications',        'meds',             'pill',           'lime',    'Active medication list with dose, route, frequency and status',     true, false, false,  15, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Pharmacy Fulfillment', 'pharmacy_fulfillment', 'package-check', 'amber', 'Pharmacy order fulfillment — dispensed items and stock status', true, false, true,   24, '[]'::jsonb, array['physician','admin'], '{}')
 on conflict (slug) do update set
-  name                   = excluded.name,
-  icon                   = excluded.icon,
-  color                  = excluded.color,
-  description            = excluded.description,
-  cap_media              = excluded.cap_media,
-  cap_immutable          = excluded.cap_immutable,
-  sort_order             = excluded.sort_order;
+  name                     = excluded.name,
+  icon                     = excluded.icon,
+  color                    = excluded.color,
+  description              = excluded.description,
+  cap_media                = excluded.cap_media,
+  cap_immutable            = excluded.cap_immutable,
+  sort_order               = excluded.sort_order,
+  visible_to_roles         = excluded.visible_to_roles,
+  default_visible_to_roles = excluded.default_visible_to_roles;
+
+-- Result blocks are entered only via department portal / fulfilment (not Add Block on timeline).
+update block_definitions set is_dept_only = true where slug in ('lab_result', 'radiology_result');
 
 -- Remove legacy built-in blocks no longer in the registry
 delete from block_definitions where is_builtin = true and slug not in (
   'note','vitals','hx_physical','plan','media','score','tour',
-  'procedure_note','anaesthetic_note','pain_assessment','wound_care','lab_order','lab_result',
-  'nurse_note','consultation','dc_note','meds'
+  'procedure_note','anaesthetic_note','pain_assessment','wound_care','lab_order','lab_result','radiology_request','radiology_result',
+  'nurse_note','consultation','dc_note','meds','pharmacy_fulfillment'
 );
 
 -- System roles
@@ -1065,7 +1574,7 @@ insert into roles (name, slug, description, is_system, sort_order, permissions) 
   ('System Admin', 'admin',
    'Full access to all features including user and role management',
    true, 10,
-   array['block.add','admin.manage_users','admin.manage_blocks','admin.manage_templates','template.create',
+   array['block.add','admin.manage_users','admin.manage_blocks','admin.manage_templates','admin.manage_settings','template.create',
          'billing.charge','billing.payment','billing.manage_fees']),
   ('Physician', 'physician',
    'Full clinical access — create encounters, add all block types, edit patient records',
@@ -1079,18 +1588,6 @@ insert into roles (name, slug, description, is_system, sort_order, permissions) 
    'Can register patients and create/assign encounters',
    true, 40,
    array[]::text[]),
-  ('Lab Technician', 'lab_tech',
-   'Can receive and fulfill lab orders, create direct lab entries',
-   true, 50,
-   array[]::text[]),
-  ('Radiographer', 'radiographer',
-   'Can receive and fulfill radiology orders, create direct radiology entries',
-   true, 60,
-   array[]::text[]),
-  ('Pharmacist', 'pharmacist',
-   'Can receive and fulfill pharmacy orders, dispense medications',
-   true, 70,
-   array[]::text[]),
   ('Billing', 'billing',
    'Can view billing dashboard, manage charges, receive payments, and generate invoices',
    true, 45,
@@ -1099,6 +1596,13 @@ on conflict (slug) do update set
   name        = excluded.name,
   description = excluded.description,
   permissions = excluded.permissions;
+
+-- Legacy department-specific system roles (lab_tech, radiographer, pharmacist):
+-- access is via department membership + a clinical permission such as block.add; remove assignments then rows.
+delete from user_roles where role_id in (
+  select id from roles where slug in ('lab_tech', 'radiographer', 'pharmacist')
+);
+delete from roles where slug in ('lab_tech', 'radiographer', 'pharmacist');
 
 -- Patient field definitions
 insert into patient_field_definitions (label, slug, field_type, is_required, is_system, sort_order, options) values
@@ -1122,11 +1626,14 @@ insert into patient_field_definitions (label, slug, field_type, is_required, is_
   ('Emergency Relation', 'emergency_relation',  'text',     false, false, 140, '[]'::jsonb)
 on conflict (slug) do nothing;
 
--- Bootstrap: assign admin role to all existing users (new users get roles via Settings → Users)
+-- Bootstrap: assign admin role only to users who have no roles yet (fresh install safety net)
 insert into user_roles (user_id, role_id)
 select p.id, r.id
 from profiles p cross join roles r
 where r.slug = 'admin'
+  and not exists (
+    select 1 from user_roles ur where ur.user_id = p.id
+  )
 on conflict do nothing;
 
 -- Default app settings
@@ -1152,18 +1659,96 @@ as $$
   where ur.user_id = auth.uid()
 $$;
 
--- Role slugs for the current user
+-- Role slugs for the current user — includes directly-assigned slugs AND all
+-- ancestor slugs reached via role_parents, so the front-end sees the full
+-- effective set (e.g. respiratory_physician user also gets 'physician').
 create or replace function get_my_role_slugs()
 returns text[] language sql security definer stable
 set search_path = public
 as $$
-  select coalesce(array_agg(r.slug order by r.sort_order), '{}')
-  from user_roles ur
-  join roles r on r.id = ur.role_id
-  where ur.user_id = auth.uid()
+  with recursive role_tree as (
+    select r.slug
+    from user_roles ur
+    join roles r on r.id = ur.role_id
+    where ur.user_id = auth.uid()
+
+    union
+
+    select rp.parent_slug
+    from role_tree rt
+    join role_parents rp on rp.child_slug = rt.slug
+  )
+  select coalesce(array_agg(slug), '{}') from role_tree
 $$;
 
--- All users with their assigned roles (admin use)
+-- Permission helper — direct role assignments only (matches earlier has_permission).
+create or replace function has_permission(p text)
+returns boolean language sql security definer stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from user_roles ur
+    join roles r on r.id = ur.role_id
+    where ur.user_id = auth.uid()
+    and r.permissions && array[p]
+  )
+$$;
+
+-- Physicians list — returns id + full_name for all users with the physician role.
+-- Accessible to any authenticated user so nurses/receptionists can pick an assignee
+-- when creating an encounter.
+create or replace function get_physicians_list()
+returns table (id uuid, full_name text) language sql security definer stable
+set search_path = public
+as $$
+  select p.id, p.full_name
+  from profiles p
+  join user_roles ur on ur.user_id = p.id
+  join roles r on r.id = ur.role_id
+  where r.slug = 'physician'
+  order by p.full_name;
+$$;
+
+-- Reassign an encounter to a different physician (or NULL for admin).
+-- SECURITY DEFINER so it bypasses the encounter_update WITH CHECK issue.
+-- Authorisation mirrors encounter_select: if you can see it, you can reassign it.
+create or replace function reassign_encounter(p_encounter_id uuid, p_physician_id uuid default null)
+returns void language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_enc record;
+begin
+  select * into v_enc from encounters where id = p_encounter_id;
+  if not found then
+    raise exception 'Encounter not found';
+  end if;
+
+  -- Authorise: caller must be admin, or have block.add and visibility access
+  if not (
+    has_role_in(array['admin'])
+    or (
+      has_permission('block.add')
+      and (
+        v_enc.visibility = 'staff'
+        or v_enc.assigned_to = auth.uid()
+        or (v_enc.visibility = 'restricted' and has_role_in(v_enc.visible_to_roles))
+      )
+    )
+  ) then
+    raise exception 'Not authorised to reassign this encounter';
+  end if;
+
+  -- Non-admin must always assign to a physician (cannot leave NULL)
+  if p_physician_id is null and not has_role_in(array['admin']) then
+    raise exception 'A physician must be assigned';
+  end if;
+
+  update encounters set assigned_to = p_physician_id where id = p_encounter_id;
+end;
+$$;
+
+-- All users with their assigned roles (admin only)
 drop function if exists get_users_with_roles();
 create or replace function get_users_with_roles()
 returns table (
@@ -1174,23 +1759,224 @@ returns table (
   role_ids   uuid[],
   role_slugs text[],
   role_names text[]
-) language sql security definer stable
+) language plpgsql security definer stable
 set search_path = public
 as $$
-  select
-    p.id,
-    p.full_name,
-    u.email,
-    p.created_at,
-    coalesce(array_agg(r.id)   filter (where r.id   is not null), '{}'),
-    coalesce(array_agg(r.slug) filter (where r.slug is not null), '{}'),
-    coalesce(array_agg(r.name) filter (where r.name is not null), '{}')
-  from profiles p
-  join auth.users u on u.id = p.id
-  left join user_roles ur on ur.user_id = p.id
-  left join roles r on r.id = ur.role_id
-  group by p.id, p.full_name, u.email, p.created_at
-  order by p.created_at
+begin
+  if not has_permission('admin.manage_users') then
+    raise exception 'Forbidden';
+  end if;
+  return query
+    select
+      p.id,
+      p.full_name,
+      u.email::text,
+      p.created_at,
+      coalesce(array_agg(r.id)   filter (where r.id   is not null), '{}'::uuid[]),
+      coalesce(array_agg(r.slug) filter (where r.slug is not null), '{}'::text[]),
+      coalesce(array_agg(r.name) filter (where r.name is not null), '{}'::text[])
+    from profiles p
+    join auth.users u on u.id = p.id
+    left join user_roles ur on ur.user_id = p.id
+    left join roles r on r.id = ur.role_id
+    group by p.id, p.full_name, u.email, p.created_at
+    order by p.created_at;
+end;
+$$;
+
+-- ── Admin: Role management (roles/user_roles have no RLS mutation policies) ──
+
+create or replace function admin_create_role(
+  p_name        text,
+  p_slug        text,
+  p_description text,
+  p_permissions text[]
+) returns roles language plpgsql security definer
+set search_path = public
+as $$
+declare v_row roles;
+begin
+  if not has_permission('admin.manage_users') then
+    raise exception 'Forbidden';
+  end if;
+  insert into roles (name, slug, description, permissions, is_system)
+  values (p_name, p_slug, p_description, p_permissions, false)
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+create or replace function admin_update_role(
+  p_id          uuid,
+  p_name        text,
+  p_description text,
+  p_permissions text[]
+) returns roles language plpgsql security definer
+set search_path = public
+as $$
+declare v_row roles;
+begin
+  if not has_permission('admin.manage_users') then
+    raise exception 'Forbidden';
+  end if;
+  update roles
+  set name = p_name, description = p_description, permissions = p_permissions
+  where id = p_id
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+create or replace function admin_delete_role(p_id uuid)
+returns void language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not has_permission('admin.manage_users') then
+    raise exception 'Forbidden';
+  end if;
+  -- Prevent deleting a role that would leave no users with admin.manage_users
+  if exists (
+    select 1 from roles where id = p_id and permissions && array['admin.manage_users']
+  ) and (
+    select count(distinct ur.user_id)
+    from user_roles ur
+    join roles r on r.id = ur.role_id
+    where r.permissions && array['admin.manage_users']
+      and ur.role_id != p_id
+  ) = 0 then
+    raise exception 'Cannot delete the last role granting admin.manage_users — assign it to another role first';
+  end if;
+  delete from roles where id = p_id;
+end;
+$$;
+
+create or replace function admin_assign_role(
+  p_user_id uuid,
+  p_role_id uuid
+) returns void language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not has_permission('admin.manage_users') then
+    raise exception 'Forbidden';
+  end if;
+  insert into user_roles (user_id, role_id, assigned_by)
+  values (p_user_id, p_role_id, auth.uid());
+end;
+$$;
+
+create or replace function admin_remove_role(p_user_id uuid, p_role_id uuid)
+returns void language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not has_permission('admin.manage_users') then
+    raise exception 'Forbidden';
+  end if;
+  -- Prevent removing a role assignment that would leave zero users with admin.manage_users
+  if exists (
+    select 1 from roles where id = p_role_id and permissions && array['admin.manage_users']
+  ) and (
+    select count(distinct ur.user_id)
+    from user_roles ur
+    join roles r on r.id = ur.role_id
+    where r.permissions && array['admin.manage_users']
+      and not (ur.user_id = p_user_id and ur.role_id = p_role_id)
+  ) = 0 then
+    raise exception 'Cannot remove the last admin.manage_users assignment — assign it to another user first';
+  end if;
+  delete from user_roles where user_id = p_user_id and role_id = p_role_id;
+end;
+$$;
+
+-- ── Admin: Profile update (profiles_update RLS only allows id = auth.uid()) ──
+
+create or replace function admin_update_profile(
+  p_user_id  uuid,
+  p_full_name text
+) returns void language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not has_permission('admin.manage_users') then
+    raise exception 'Forbidden';
+  end if;
+  update profiles set full_name = p_full_name where id = p_user_id;
+end;
+$$;
+
+-- ── Admin: Template management (universal templates can't be mutated via RLS) ──
+
+create or replace function admin_create_template(
+  p_name                     text,
+  p_description              text,
+  p_is_universal             boolean,
+  p_visible_to_roles         text[],
+  p_blocks                   jsonb,
+  p_default_visibility       text,
+  p_default_visible_to_roles text[]
+) returns encounter_templates language plpgsql security definer
+set search_path = public
+as $$
+declare v_row encounter_templates;
+begin
+  if not has_permission('admin.manage_templates') then
+    raise exception 'Forbidden';
+  end if;
+  insert into encounter_templates (
+    name, description, is_universal, visible_to_roles, blocks,
+    default_visibility, default_visible_to_roles, created_by
+  ) values (
+    p_name, p_description, p_is_universal, p_visible_to_roles, p_blocks,
+    p_default_visibility, p_default_visible_to_roles, auth.uid()
+  )
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+create or replace function admin_update_template(
+  p_id                       uuid,
+  p_name                     text,
+  p_description              text,
+  p_is_universal             boolean,
+  p_visible_to_roles         text[],
+  p_blocks                   jsonb,
+  p_default_visibility       text,
+  p_default_visible_to_roles text[]
+) returns encounter_templates language plpgsql security definer
+set search_path = public
+as $$
+declare v_row encounter_templates;
+begin
+  if not has_permission('admin.manage_templates') then
+    raise exception 'Forbidden';
+  end if;
+  update encounter_templates set
+    name                     = p_name,
+    description              = p_description,
+    is_universal             = p_is_universal,
+    visible_to_roles         = p_visible_to_roles,
+    blocks                   = p_blocks,
+    default_visibility       = p_default_visibility,
+    default_visible_to_roles = p_default_visible_to_roles
+  where id = p_id
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+create or replace function admin_delete_template(p_id uuid)
+returns void language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not has_permission('admin.manage_templates') then
+    raise exception 'Forbidden';
+  end if;
+  delete from encounter_templates where id = p_id;
+end;
 $$;
 
 -- Patient search RPC — flexible multi-token search across name/MRN/phone/DOB
@@ -1239,6 +2025,7 @@ returns table (
   total_count             bigint
 )
 language sql stable security definer
+set search_path = public
 as $$
   select
     pt.id, pt.mrn, pt.first_name, pt.middle_name, pt.last_name,
@@ -1276,17 +2063,110 @@ as $$
   offset p_offset;
 $$;
 
-grant execute on function search_patients      to authenticated;
-grant execute on function get_my_permissions   to authenticated;
-grant execute on function get_my_role_slugs    to authenticated;
-grant execute on function get_users_with_roles to authenticated;
-grant execute on function has_billing_access   to authenticated;
-grant execute on function can_manage_fees      to authenticated;
-grant execute on function can_billing_charge   to authenticated;
-grant execute on function can_billing_payment  to authenticated;
+grant execute on function has_permission             to authenticated;
+grant execute on function has_role_in               to authenticated;
+grant execute on function search_patients            to authenticated;
+grant execute on function get_my_permissions         to authenticated;
+grant execute on function get_my_role_slugs          to authenticated;
+grant execute on function get_physicians_list        to authenticated;
+grant execute on function reassign_encounter         to authenticated;
+grant execute on function get_users_with_roles       to authenticated;
+grant execute on function has_billing_access         to authenticated;
+grant execute on function can_manage_fees            to authenticated;
+grant execute on function can_billing_charge         to authenticated;
+grant execute on function can_billing_payment        to authenticated;
+grant execute on function record_payment_from_deposit(uuid, numeric, uuid, text, text, text) to authenticated;
+grant execute on function admin_create_role          to authenticated;
+grant execute on function admin_update_role          to authenticated;
+grant execute on function admin_delete_role          to authenticated;
+grant execute on function admin_assign_role          to authenticated;
+grant execute on function admin_remove_role          to authenticated;
+grant execute on function admin_update_profile       to authenticated;
+grant execute on function admin_create_template      to authenticated;
+grant execute on function admin_update_template      to authenticated;
+grant execute on function admin_delete_template      to authenticated;
 
 -- ============================================================
--- 15. REALTIME PUBLICATIONS
+-- 15. ENCOUNTER AUDIT LOG
+-- ============================================================
+
+create table if not exists encounter_audit_log (
+  id           uuid        primary key default gen_random_uuid(),
+  encounter_id uuid        not null references encounters(id) on delete cascade,
+  actor_id     uuid        references auth.users(id),
+  action       text        not null,   -- 'assignment' | 'visibility' | 'status' | 'title'
+  old_value    text,
+  new_value    text,
+  created_at   timestamptz not null default now()
+);
+
+alter table encounter_audit_log enable row level security;
+
+-- Anyone who can see the encounter can read its audit trail
+drop policy if exists "audit_log_admin_select" on encounter_audit_log;
+drop policy if exists "audit_log_select" on encounter_audit_log;
+create policy "audit_log_select"
+  on encounter_audit_log for select
+  using (
+    auth.uid() is not null
+    and exists (
+      select 1 from encounters e
+      where e.id = encounter_id
+      and (
+        has_permission('encounter.view_all')
+        or e.visibility = 'staff'
+        or e.assigned_to = auth.uid()
+        or has_role_in(array['admin'])
+        or (e.visibility = 'restricted' and (
+          e.assigned_to = auth.uid()
+          or has_role_in(e.visible_to_roles)
+        ))
+      )
+    )
+  );
+
+-- Trigger function — runs as definer so it can always insert regardless of RLS
+create or replace function log_encounter_changes()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if old.assigned_to is distinct from new.assigned_to then
+    insert into encounter_audit_log (encounter_id, actor_id, action, old_value, new_value)
+    values (new.id, auth.uid(), 'assignment', old.assigned_to::text, new.assigned_to::text);
+  end if;
+
+  if old.visibility is distinct from new.visibility
+     or old.visible_to_roles is distinct from new.visible_to_roles then
+    insert into encounter_audit_log (encounter_id, actor_id, action, old_value, new_value)
+    values (
+      new.id, auth.uid(), 'visibility',
+      old.visibility || coalesce(' [' || array_to_string(old.visible_to_roles, ',') || ']', ''),
+      new.visibility || coalesce(' [' || array_to_string(new.visible_to_roles, ',') || ']', '')
+    );
+  end if;
+
+  if old.status is distinct from new.status then
+    insert into encounter_audit_log (encounter_id, actor_id, action, old_value, new_value)
+    values (new.id, auth.uid(), 'status', old.status, new.status);
+  end if;
+
+  if old.title is distinct from new.title then
+    insert into encounter_audit_log (encounter_id, actor_id, action, old_value, new_value)
+    values (new.id, auth.uid(), 'title', old.title, new.title);
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists encounter_changes_audit on encounters;
+create trigger encounter_changes_audit
+  after update on encounters
+  for each row execute function log_encounter_changes();
+
+-- ============================================================
+-- 16. REALTIME PUBLICATIONS
 -- ============================================================
 
 do $$ begin alter publication supabase_realtime add table blocks;               exception when duplicate_object then null; end $$;
@@ -1299,30 +2179,77 @@ do $$ begin alter publication supabase_realtime add table block_actions;        
 do $$ begin alter publication supabase_realtime add table department_block_types; exception when duplicate_object then null; end $$;
 
 -- ============================================================
--- 16. STORAGE BUCKETS & POLICIES
+-- 17. STORAGE BUCKETS & POLICIES
 -- ============================================================
 
-insert into storage.buckets (id, name, public) values ('block-media',    'block-media',    true)  on conflict (id) do nothing;
-insert into storage.buckets (id, name, public) values ('patient-photos', 'patient-photos', true)  on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('block-media',    'block-media',    false) on conflict (id) do update set public = false;
+insert into storage.buckets (id, name, public) values ('patient-photos', 'patient-photos', false) on conflict (id) do update set public = false;
 insert into storage.buckets (id, name, public) values ('patient-docs',   'patient-docs',   false) on conflict (id) do nothing;
 
 drop policy if exists "block_media_insert"    on storage.objects;
 drop policy if exists "block_media_select"    on storage.objects;
+drop policy if exists "block_media_update"    on storage.objects;
 drop policy if exists "block_media_delete"    on storage.objects;
 drop policy if exists "patient_photos_insert" on storage.objects;
 drop policy if exists "patient_photos_select" on storage.objects;
+drop policy if exists "patient_photos_update" on storage.objects;
 drop policy if exists "patient_photos_delete" on storage.objects;
 drop policy if exists "patient_docs_insert"   on storage.objects;
 drop policy if exists "patient_docs_select"   on storage.objects;
+drop policy if exists "patient_docs_update"   on storage.objects;
 drop policy if exists "patient_docs_delete"   on storage.objects;
 
-create policy "block_media_insert"    on storage.objects for insert with check (bucket_id = 'block-media'    and auth.uid() is not null);
-create policy "block_media_select"    on storage.objects for select using      (bucket_id = 'block-media');
-create policy "block_media_delete"    on storage.objects for delete using      (bucket_id = 'block-media'    and auth.uid() is not null);
-create policy "patient_photos_insert" on storage.objects for insert with check (bucket_id = 'patient-photos' and auth.uid() is not null);
-create policy "patient_photos_select" on storage.objects for select using      (bucket_id = 'patient-photos');
-create policy "patient_photos_delete" on storage.objects for delete using      (bucket_id = 'patient-photos' and auth.uid() is not null);
-create policy "patient_docs_insert"   on storage.objects for insert with check (bucket_id = 'patient-docs'   and auth.uid() is not null);
-create policy "patient_docs_select"   on storage.objects for select using      (bucket_id = 'patient-docs'   and auth.uid() is not null);
-create policy "patient_docs_delete"   on storage.objects for delete using      (bucket_id = 'patient-docs'   and auth.uid() is not null);
+-- block-media: clinical staff only (block.add permission required)
+create policy "block_media_insert"
+  on storage.objects for insert
+  with check (bucket_id = 'block-media' and public.has_permission('block.add'));
+
+create policy "block_media_select"
+  on storage.objects for select
+  using (bucket_id = 'block-media' and (public.has_permission('block.add') or public.has_role_in(array['admin'])));
+
+create policy "block_media_update"
+  on storage.objects for update
+  using      (bucket_id = 'block-media' and public.has_permission('block.add'))
+  with check (bucket_id = 'block-media' and public.has_permission('block.add'));
+
+create policy "block_media_delete"
+  on storage.objects for delete
+  using (bucket_id = 'block-media' and (owner = auth.uid() or public.has_role_in(array['admin'])));
+
+-- patient-photos: any authenticated staff can view; upload/update by clinical staff + receptionist; delete by admin only
+create policy "patient_photos_insert"
+  on storage.objects for insert
+  with check (bucket_id = 'patient-photos' and (public.has_permission('block.add') or public.has_role_in(array['receptionist', 'admin'])));
+
+create policy "patient_photos_select"
+  on storage.objects for select
+  using (bucket_id = 'patient-photos' and auth.uid() is not null);
+
+create policy "patient_photos_update"
+  on storage.objects for update
+  using      (bucket_id = 'patient-photos' and (public.has_permission('block.add') or public.has_role_in(array['receptionist', 'admin'])))
+  with check (bucket_id = 'patient-photos' and (public.has_permission('block.add') or public.has_role_in(array['receptionist', 'admin'])));
+
+create policy "patient_photos_delete"
+  on storage.objects for delete
+  using (bucket_id = 'patient-photos' and public.has_role_in(array['admin']));
+
+-- patient-docs: clinical staff + receptionist + admin for all operations; delete by uploader or admin
+create policy "patient_docs_insert"
+  on storage.objects for insert
+  with check (bucket_id = 'patient-docs' and (public.has_permission('block.add') or public.has_role_in(array['receptionist', 'admin'])));
+
+create policy "patient_docs_select"
+  on storage.objects for select
+  using (bucket_id = 'patient-docs' and (public.has_permission('block.add') or public.has_role_in(array['receptionist', 'admin'])));
+
+create policy "patient_docs_update"
+  on storage.objects for update
+  using      (bucket_id = 'patient-docs' and (public.has_permission('block.add') or public.has_role_in(array['receptionist', 'admin'])))
+  with check (bucket_id = 'patient-docs' and (public.has_permission('block.add') or public.has_role_in(array['receptionist', 'admin'])));
+
+create policy "patient_docs_delete"
+  on storage.objects for delete
+  using (bucket_id = 'patient-docs' and (owner = auth.uid() or public.has_role_in(array['admin'])));
 

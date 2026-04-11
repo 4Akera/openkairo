@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useEncounterStore } from '../stores/encounterStore'
@@ -14,11 +14,16 @@ import {
 import {
   ArrowLeft, Activity, CheckCircle2, XCircle, Loader2,
   Lock, Users, Globe, ChevronDown, ShieldCheck, UserCircle, ClipboardList,
-  AlertTriangle, Settings2, Search, X, Check, DollarSign, Ban,
+  AlertTriangle, Settings2, Search, X, Check, DollarSign, Ban, FileDown,
 } from 'lucide-react'
 import PatientRecord from '../components/patient-record/PatientRecord'
-import Timeline from '../components/timeline/Timeline'
-import { pushRecentEncounter } from '../lib/recentItems'
+import Timeline, { type TimelineHandle } from '../components/timeline/Timeline'
+import { pushRecentEncounterRef, getRecentEncounterRefs } from '../lib/recentItems'
+import {
+  buildEncounterHtmlDocument,
+  downloadHtmlFile,
+  fetchPatientChartForExport,
+} from '../lib/encounterHtmlExport'
 
 const VISIBILITY_OPTIONS = [
   { value: 'staff',      label: 'All Staff',  Icon: Globe,  desc: 'Visible to everyone' },
@@ -31,15 +36,16 @@ const ROLE_OPTIONS = ['physician', 'nurse', 'receptionist', 'admin']
 export default function EncounterPage() {
   const { patientId, encounterId } = useParams<{ patientId: string; encounterId: string }>()
   const navigate = useNavigate()
-  const { user, hasRole, roleSlugs, can } = useAuthStore()
+  const { user, profile, hasRole, roleSlugs, can } = useAuthStore()
   const { nameFormat } = useSettingsStore()
-  const { setBlocks, setLockMap, setDefinitions, blocks, definitionMap } = useEncounterStore()
+  const { setBlocks, setLockMap, setDefinitions, blocks, definitionMap, definitions } = useEncounterStore()
 
   const [patient, setPatient] = useState<Patient | null>(null)
   const [encounter, setEncounter] = useState<Encounter | null>(null)
   const [loading, setLoading] = useState(true)
   const [closing, setClosing] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
+  const [accessRevoked, setAccessRevoked] = useState(false)
   const [encounterCharges, setEncounterCharges] = useState<Charge[]>([])
   const [loadingCharges, setLoadingCharges] = useState(false)
   const { billingEnabled } = useSettingsStore()
@@ -56,9 +62,18 @@ export default function EncounterPage() {
   const [savingTitle, setSavingTitle] = useState(false)
   const [editAssignedTo, setEditAssignedTo] = useState('')
   const [savingAssignment, setSavingAssignment] = useState(false)
+  const [assignSaveError, setAssignSaveError] = useState<string | null>(null)
   const [physicians, setPhysicians] = useState<{ id: string; full_name: string }[]>([])
   const [physicianSearch, setPhysicianSearch] = useState('')
   const [physicianDropOpen, setPhysicianDropOpen] = useState(false)
+  const physicianInputRef = useRef<HTMLDivElement>(null)
+  const timelineRef = useRef<TimelineHandle>(null)
+  const [physicianDropRect, setPhysicianDropRect] = useState<{ top: number; left: number; width: number } | null>(null)
+
+  // Export HTML
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportIncludeChart, setExportIncludeChart] = useState(true)
+  const [exportLoading, setExportLoading] = useState(false)
 
   // Mobile tab
   const [mobileTab, setMobileTab] = useState<'timeline' | 'record'>('timeline')
@@ -84,14 +99,17 @@ export default function EncounterPage() {
       setEncounter({ ...enc, assigned_profile: assignedProfile })
       setEditVisibility(enc.visibility ?? 'staff')
       setEditVisibleToRoles(enc.visible_to_roles ?? [])
+    } else if (encounterId) {
+      // enc is null — RLS blocked the fetch. Check if the user previously visited
+      // this encounter (stored in sessionStorage); if so, access was revoked.
+      const wasVisited = getRecentEncounterRefs().some(e => e.encounterId === encounterId)
+      if (wasVisited) setAccessRevoked(true)
+      setEncounter(null)
     }
     if (pt && enc) {
-      pushRecentEncounter({
+      pushRecentEncounterRef({
         encounterId: enc.id,
         patientId:   pt.id,
-        patientName: [pt.first_name, pt.middle_name, pt.last_name].filter(Boolean).join(' '),
-        mrn:         pt.mrn,
-        title:       enc.title ?? null,
         status:      enc.status as 'open' | 'closed',
         visitedAt:   new Date().toISOString(),
       })
@@ -199,29 +217,25 @@ export default function EncounterPage() {
   const handleCloseEncounter = async () => {
     if (!encounterId) return
     setClosing(true)
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('encounters')
       .update({ status: 'closed', closed_at: new Date().toISOString() })
       .eq('id', encounterId)
-      .select()
-      .single()
-    if (!error && data) { setEncounter(data); setConfirmClose(false) }
+    if (!error) { await fetchData(); setConfirmClose(false); void timelineRef.current?.refreshAuditLog() }
     setClosing(false)
   }
 
   const handleSaveVisibility = async () => {
     if (!encounterId) return
     setSavingVis(true)
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('encounters')
       .update({
         visibility: editVisibility,
         visible_to_roles: editVisibility === 'restricted' ? editVisibleToRoles : [],
       })
       .eq('id', encounterId)
-      .select()
-      .single()
-    if (!error && data) { setEncounter(data) }
+    if (!error) { await fetchData(); void timelineRef.current?.refreshAuditLog() }
     setSavingVis(false)
     setVisPopoverOpen(false)
   }
@@ -232,14 +246,12 @@ export default function EncounterPage() {
     setEditAssignedTo(encounter.assigned_to ?? '')
     setPhysicianSearch('')
     setPhysicianDropOpen(false)
+    setAssignSaveError(null)
     setSettingsOpen(true)
     // Fetch physicians list
-    const { data } = await supabase.rpc('get_users_with_roles')
+    const { data } = await supabase.rpc('get_physicians_list')
     if (data) {
-      const list = (data as { id: string; full_name: string; role_slugs: string[] }[])
-        .filter(u => u.role_slugs?.includes('physician'))
-        .map(u => ({ id: u.id, full_name: u.full_name }))
-      setPhysicians(list)
+      setPhysicians(data as { id: string; full_name: string }[])
     }
   }
 
@@ -248,40 +260,59 @@ export default function EncounterPage() {
     const trimmed = editTitle.trim() || null
     if (trimmed === (encounter.title ?? null)) return
     setSavingTitle(true)
-    const { data } = await supabase
+    const { error } = await supabase
       .from('encounters')
       .update({ title: trimmed })
       .eq('id', encounterId)
-      .select()
-      .single()
-    if (data) setEncounter(data)
+    if (!error) { await fetchData(); void timelineRef.current?.refreshAuditLog() }
     setSavingTitle(false)
+  }
+
+  const handleExportHtml = async () => {
+    if (!patient || !encounter || !patientId) return
+    setExportLoading(true)
+    try {
+      const chart = exportIncludeChart ? await fetchPatientChartForExport(patientId) : null
+      const html = buildEncounterHtmlDocument({
+        patient,
+        encounter,
+        blocks,
+        definitions,
+        definitionMap,
+        nameFormat,
+        includeChart: exportIncludeChart,
+        chart: chart ?? undefined,
+        exportedAt: new Date(),
+        exportedBy: profile?.full_name?.trim() || user?.email || null,
+      })
+      const slug = (encounter.title?.trim() || encounter.id.slice(0, 8))
+        .replace(/[/\\?%*:|"<>]/g, '-')
+        .slice(0, 60)
+      downloadHtmlFile(html, `encounter-${patient.mrn}-${slug}`)
+      setExportOpen(false)
+    } finally {
+      setExportLoading(false)
+    }
   }
 
   const handleSaveAssignment = async (physicianId: string) => {
     if (!encounterId) return
     setSavingAssignment(true)
-    const { data } = await supabase
-      .from('encounters')
-      .update({ assigned_to: physicianId || null })
-      .eq('id', encounterId)
-      .select()
-      .single()
-    if (data) {
-      // Attach assigned profile name
-      let assignedProfile: { full_name: string } | null = null
-      if (physicianId) {
-        const { data: ap } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', physicianId)
-          .single()
-        if (ap) assignedProfile = ap
-      }
-      setEncounter({ ...data, assigned_profile: assignedProfile })
+    setAssignSaveError(null)
+    setSettingsOpen(false)
+    setPhysicianDropOpen(false)
+    const { error } = await supabase.rpc('reassign_encounter', {
+      p_encounter_id: encounterId,
+      p_physician_id: physicianId || null,
+    })
+    if (error) {
+      setAssignSaveError(error.message ?? 'Failed to save assignment')
+      setSettingsOpen(true)
+    } else {
+      await fetchData()
+      void timelineRef.current?.refreshAuditLog()
     }
     setSavingAssignment(false)
-    setPhysicianDropOpen(false)
   }
 
   if (loading) {
@@ -296,11 +327,23 @@ export default function EncounterPage() {
   if (!patient || !encounter) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
-        <XCircle className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Encounter not found</p>
-        <Button variant="outline" onClick={() => navigate('/')}>
+        {accessRevoked ? (
+          <>
+            <Lock className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm font-medium">You no longer have access</p>
+            <p className="text-xs text-muted-foreground text-center max-w-xs">
+              This encounter has been reassigned. Only the assigned physician can view it.
+            </p>
+          </>
+        ) : (
+          <>
+            <XCircle className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Encounter not found</p>
+          </>
+        )}
+        <Button variant="outline" onClick={() => navigate(accessRevoked ? `/patients/${patientId}` : '/')}>
           <ArrowLeft className="h-4 w-4" />
-          Back to Patients
+          {accessRevoked ? 'Back to Patient' : 'Back to Patients'}
         </Button>
       </div>
     )
@@ -308,16 +351,18 @@ export default function EncounterPage() {
 
   const patientDob = getPatientDob(patient)
   const patientGender = getPatientGender(patient)
-  const isCreator = encounter.created_by === user?.id
   const isAssigned = encounter.assigned_to === user?.id
+  // Broad manage: settings panel (visibility/title/assignment changes)
   const canManage = isAssigned || hasRole('physician') || hasRole('admin')
+  // Close requires ownership — only assigned physician or admin may close an encounter
+  const canClose = isAssigned || hasRole('admin')
 
   // View access: must have block.add permission; private/restricted are further gated
   const canView = (() => {
     if (!can('block.add')) return false
     if (encounter.visibility === 'staff') return true
-    if (isAssigned || hasRole('physician') || hasRole('admin')) return true
-    if (isCreator && !encounter.assigned_to) return true
+    if (hasRole('admin')) return true
+    if (isAssigned) return true
     if (encounter.visibility === 'restricted') {
       return encounter.visible_to_roles?.some(r => roleSlugs.includes(r)) ?? false
     }
@@ -405,7 +450,18 @@ export default function EncounterPage() {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setExportIncludeChart(true); setExportOpen(true) }}
+              title="Export encounter as HTML"
+              className="h-9 w-9 sm:h-7 sm:w-auto gap-1 text-xs text-muted-foreground p-0 sm:px-2.5"
+            >
+              <FileDown className="h-4 w-4 sm:h-3.5 sm:w-3.5 shrink-0" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+
             {/* Encounter Settings popover */}
             {canManage && encounter.status === 'open' && (
               <div className="relative">
@@ -414,18 +470,18 @@ export default function EncounterPage() {
                   size="sm"
                   onClick={openSettings}
                   title="Encounter settings"
-                  className="h-7 gap-1 text-xs text-muted-foreground"
+                  className="h-9 w-9 sm:h-7 sm:w-auto gap-1 text-xs text-muted-foreground p-0 sm:px-2.5"
                 >
-                  <Settings2 className="h-3.5 w-3.5 shrink-0" />
+                  <Settings2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 shrink-0" />
                   <span className="hidden sm:inline">Settings</span>
                 </Button>
 
                 {settingsOpen && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setSettingsOpen(false)} />
-                    <div className="absolute right-0 top-full mt-1.5 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border bg-card shadow-xl overflow-visible flex flex-col max-h-[min(480px,calc(100vh-80px))]">
+                    <div className="fixed inset-0 z-40" onClick={() => { setSettingsOpen(false); setPhysicianDropOpen(false) }} />
+                    <div className="absolute right-0 top-full mt-1.5 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border bg-card shadow-xl overflow-hidden flex flex-col max-h-[min(480px,calc(100vh-80px))]">
                       {/* Header */}
-                      <div className="px-4 py-3 border-b bg-muted/30 rounded-t-xl">
+                      <div className="px-4 py-3 border-b bg-muted/30 rounded-t-xl shrink-0">
                         <div className="flex items-center gap-2">
                           <Settings2 className="h-4 w-4 text-primary" />
                           <p className="text-xs font-semibold">Encounter Settings</p>
@@ -454,7 +510,7 @@ export default function EncounterPage() {
                         {/* Assigned to */}
                         <div className="space-y-1.5">
                           <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Assigned Physician</p>
-                          <div className="relative">
+                          <div ref={physicianInputRef} className="relative">
                             <div className="relative flex items-center">
                               <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                               <input
@@ -464,13 +520,20 @@ export default function EncounterPage() {
                                   ? physicianSearch
                                   : (physicians.find(p => p.id === editAssignedTo)?.full_name
                                     ?? (encounter.assigned_profile?.full_name || ''))}
-                                onFocus={() => { setPhysicianSearch(''); setPhysicianDropOpen(true) }}
+                                onFocus={() => {
+                                  setPhysicianSearch('')
+                                  setPhysicianDropOpen(true)
+                                  if (physicianInputRef.current) {
+                                    const rect = physicianInputRef.current.getBoundingClientRect()
+                                    setPhysicianDropRect({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+                                  }
+                                }}
                                 onChange={e => setPhysicianSearch(e.target.value)}
                                 className="w-full text-xs rounded-lg border border-border bg-background pl-8 pr-7 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                               />
                               {savingAssignment
                                 ? <Loader2 className="absolute right-2.5 h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                                : editAssignedTo && !physicianDropOpen
+                                : editAssignedTo && !physicianDropOpen && hasRole('admin')
                                   ? (
                                     <button
                                       type="button"
@@ -482,18 +545,23 @@ export default function EncounterPage() {
                                   ) : null}
                             </div>
 
-                            {physicianDropOpen && (
+                            {physicianDropOpen && physicianDropRect && (
                               <>
                                 <div className="fixed inset-0 z-[90]" onClick={() => setPhysicianDropOpen(false)} />
-                                <div className="absolute z-[100] mt-1 w-full rounded-lg border border-border bg-card shadow-lg overflow-hidden">
-                                  <div className="max-h-40 overflow-y-auto">
-                                    <button
-                                      type="button"
-                                      onClick={() => { setEditAssignedTo(''); handleSaveAssignment('') }}
-                                      className="w-full px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 transition-colors italic"
-                                    >
-                                      — No assignment —
-                                    </button>
+                                <div
+                                  className="fixed z-[100] rounded-lg border border-border bg-card shadow-lg overflow-hidden"
+                                  style={{ top: physicianDropRect.top, left: physicianDropRect.left, width: physicianDropRect.width }}
+                                >
+                                  <div className="max-h-44 overflow-y-auto overscroll-contain">
+                                    {hasRole('admin') && (
+                                      <button
+                                        type="button"
+                                        onClick={() => { setEditAssignedTo(''); handleSaveAssignment('') }}
+                                        className="w-full px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 transition-colors italic"
+                                      >
+                                        — No assignment —
+                                      </button>
+                                    )}
                                     {physicians
                                       .filter(p => p.full_name.toLowerCase().includes(physicianSearch.toLowerCase()))
                                       .map(p => (
@@ -521,8 +589,14 @@ export default function EncounterPage() {
                           </div>
                         </div>
                       </div>
+                      {/* Assignment error */}
+                      {assignSaveError && (
+                        <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/30 text-xs text-destructive">
+                          {assignSaveError}
+                        </div>
+                      )}
                       {/* Footer */}
-                      <div className="px-3 pb-3 flex justify-end gap-1.5 rounded-b-xl bg-card">
+                      <div className="px-3 py-3 border-t flex justify-end gap-1.5 rounded-b-xl bg-card shrink-0">
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSettingsOpen(false)}>
                           Cancel
                         </Button>
@@ -550,7 +624,7 @@ export default function EncounterPage() {
                 }}
                 title={canManage ? 'Manage visibility & privacy' : `Visibility: ${visOpt.label}`}
                 className={cn(
-                  'h-7 gap-1 text-xs',
+                  'h-9 w-9 sm:h-7 sm:w-auto gap-1 text-xs p-0 sm:px-2.5',
                   encounter.visibility === 'private'    && 'border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:border-rose-900',
                   encounter.visibility === 'restricted' && 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-900',
                   encounter.visibility === 'staff'      && 'text-muted-foreground',
@@ -662,14 +736,14 @@ export default function EncounterPage() {
               )}
             </div>
 
-            {encounter.status === 'open' && canManage && (
+            {encounter.status === 'open' && canClose && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={openCloseDialog}
-                className="text-xs h-7 gap-1 text-amber-600 border-amber-200 hover:bg-amber-50"
+                className="text-xs h-9 sm:h-7 gap-1 text-amber-600 border-amber-200 hover:bg-amber-50 px-3 sm:px-2.5"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" />
+                <CheckCircle2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                 <span className="hidden sm:inline">Close Encounter</span>
                 <span className="sm:hidden">Close</span>
               </Button>
@@ -713,6 +787,7 @@ export default function EncounterPage() {
           )}>
             {encounterId && patientId && (
               <Timeline
+                ref={timelineRef}
                 encounterId={encounterId}
                 patientId={patientId}
                 encounterStatus={encounter.status}
@@ -731,6 +806,41 @@ export default function EncounterPage() {
           </div>
         </div>
       </div>
+
+      {/* Export HTML */}
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Export encounter</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Download a self-contained HTML file with the encounter timeline. Open it in any browser or print to PDF.
+          </p>
+          <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+            <input
+              type="checkbox"
+              className="mt-1 h-3.5 w-3.5 rounded border-border"
+              checked={exportIncludeChart}
+              onChange={e => setExportIncludeChart(e.target.checked)}
+            />
+            <span className="text-sm">
+              <span className="font-medium text-foreground">Include patient chart</span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                Demographics, allergies, problem list, and medications (same data as the sidebar record).
+              </span>
+            </span>
+          </label>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exportLoading}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleExportHtml()} disabled={exportLoading}>
+              {exportLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              Download HTML
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Close encounter confirmation */}
       <Dialog open={confirmClose} onOpenChange={setConfirmClose}>

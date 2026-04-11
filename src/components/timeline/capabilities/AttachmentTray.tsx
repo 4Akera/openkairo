@@ -111,7 +111,7 @@ export function AttachmentTray({
     loadAttachments()
     // Real-time subscription handles updates from OTHER users
     const channel = supabase
-      .channel(`attachments:${blockId}`)
+      .channel(`attachments:${blockId}`, { config: { private: true } })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'block_attachments', filter: `block_id=eq.${blockId}` },

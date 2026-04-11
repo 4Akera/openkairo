@@ -45,6 +45,8 @@ export default function PatientPage() {
   const [visibility, setVisibility] = useState<'staff' | 'restricted' | 'private'>('staff')
   const [visibleToRoles, setVisibleToRoles] = useState<string[]>([])
   const [assignedTo, setAssignedTo] = useState<string>('')
+  const [assignError, setAssignError] = useState(false)
+  const [createdForOtherName, setCreatedForOtherName] = useState<string | null>(null)
   const [physicianSearch, setPhysicianSearch] = useState('')
   const [physicianDropOpen, setPhysicianDropOpen] = useState(false)
   const [physicians, setPhysicians] = useState<{ id: string; full_name: string }[]>([])
@@ -151,6 +153,10 @@ export default function PatientPage() {
   useEffect(() => { fetchData() }, [fetchData])
 
   const isAdmin = hasRole('admin')
+  // Who can open a new encounter
+  const canCreateEncounter = hasRole('physician') || hasRole('nurse') || hasRole('receptionist') || hasRole('admin')
+  // Everyone except admin must assign a physician (physician auto-assigns to self)
+  const requiresAssignment = !hasRole('admin')
 
   const handleDeleteEncounter = async (enc: Encounter) => {
     setDeletingEnc(true)
@@ -175,6 +181,7 @@ export default function PatientPage() {
     setVisibility('private')
     setVisibleToRoles([])
     setAssignedTo(roleSlugs.includes('physician') && user ? user.id : '')
+    setAssignError(false)
     setPhysicianSearch('')
     setPhysicianDropOpen(false)
     setBlockContentOverrides({})
@@ -188,8 +195,8 @@ export default function PatientPage() {
         .select('*')
         .eq('user_id', user.id)
         .order('sort_order'),
-      supabase.rpc('get_users_with_roles'),
-    ]).then(([tplRes, usersRes]) => {
+      supabase.rpc('get_physicians_list'),
+    ]).then(([tplRes, physRes]) => {
       const map: Record<string, UserBlockTemplate[]> = {}
       for (const t of tplRes.data ?? []) {
         if (!map[t.definition_id]) map[t.definition_id] = []
@@ -197,11 +204,7 @@ export default function PatientPage() {
       }
       setAllContentTpls(map)
       setLoadingContentTpls(false)
-      // Filter to physician users
-      const physicianUsers = ((usersRes.data ?? []) as { id: string; full_name: string; role_slugs: string[] }[])
-        .filter(u => u.role_slugs?.includes('physician'))
-        .map(u => ({ id: u.id, full_name: u.full_name }))
-      setPhysicians(physicianUsers)
+      setPhysicians((physRes.data ?? []) as { id: string; full_name: string }[])
     })
   }
 
@@ -223,11 +226,23 @@ export default function PatientPage() {
 
   const handleCreate = async () => {
     if (!patientId || !user) return
+    // Nurse / receptionist must assign to a physician before creating
+    if (requiresAssignment && !assignedTo) {
+      setAssignError(true)
+      return
+    }
+    setAssignError(false)
     setCreating(true)
 
-    const { data, error } = await supabase
+    // Pre-generate the ID so we can reference it for block seeding and
+    // navigation without relying on .select() (which RLS may block when the
+    // current user creates a private encounter assigned to someone else).
+    const newEncounterId = crypto.randomUUID()
+
+    const { error } = await supabase
       .from('encounters')
       .insert({
+        id: newEncounterId,
         patient_id: patientId,
         title: title.trim() || null,
         status: 'open',
@@ -236,10 +251,8 @@ export default function PatientPage() {
         assigned_to: assignedTo || null,
         created_by: user.id,
       })
-      .select()
-      .single()
 
-    if (error || !data) {
+    if (error) {
       setCreating(false)
       return
     }
@@ -262,7 +275,7 @@ export default function PatientPage() {
           // override === 'blank' → leave content as {}
         }
         return {
-          encounter_id: data.id,
+          encounter_id: newEncounterId,
           type: b.slug,
           content,
           sequence_order: b.sort_order,
@@ -285,10 +298,16 @@ export default function PatientPage() {
     )
 
     if (canOpenNow) {
-      navigate(`/patients/${patientId}/encounters/${data.id}`)
+      navigate(`/patients/${patientId}/encounters/${newEncounterId}`)
     } else {
       setDialogOpen(false)
       await fetchData()
+      // Show success note when the encounter was created for another doctor
+      if (visibility === 'private' && assignedTo && assignedTo !== user.id) {
+        const assignedName = physicians.find(p => p.id === assignedTo)?.full_name ?? 'the assigned physician'
+        setCreatedForOtherName(assignedName)
+        setTimeout(() => setCreatedForOtherName(null), 6000)
+      }
     }
     setCreating(false)
   }
@@ -354,7 +373,7 @@ export default function PatientPage() {
                   size="sm"
                   variant="ghost"
                   onClick={() => { setPatientDeleteConfirm(''); setPatientDeleteOpen(true) }}
-                  className="shrink-0 gap-1.5 text-rose-500 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-700 border border-transparent hover:border-rose-600 transition-all"
+                  className="shrink-0 gap-1.5 text-white bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-800 border border-rose-600 dark:border-rose-700 transition-all"
                 >
                   <Trash2 className="h-4 w-4" />
                   <span className="hidden sm:inline text-xs font-medium">Delete Patient</span>
@@ -366,11 +385,13 @@ export default function PatientPage() {
               </TooltipContent>
             </Tooltip>
           )}
-          <Button size="sm" onClick={openDialog} className="shrink-0">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New Encounter</span>
-            <span className="sm:hidden">New</span>
-          </Button>
+          {canCreateEncounter && (
+            <Button size="sm" onClick={openDialog} className="shrink-0">
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">New Encounter</span>
+              <span className="sm:hidden">New</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -415,14 +436,25 @@ export default function PatientPage() {
         )}>
           <ScrollArea className="h-full">
             <div className="px-4 sm:px-6 py-4 sm:py-5 max-w-2xl">
+              {/* Success note: private encounter created for another doctor */}
+              {createdForOtherName && (
+                <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <p className="text-xs leading-snug">
+                    Encounter created and assigned to <span className="font-medium">{createdForOtherName}</span>. It's private, so only they can view it.
+                  </p>
+                </div>
+              )}
               {encounters.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
                   <Activity className="h-10 w-10 opacity-20" />
                   <p className="text-sm">No encounters yet for this patient</p>
-                  <Button size="sm" onClick={openDialog}>
-                    <Plus className="h-4 w-4" />
-                    Start First Encounter
-                  </Button>
+                  {canCreateEncounter && (
+                    <Button size="sm" onClick={openDialog}>
+                      <Plus className="h-4 w-4" />
+                      Start First Encounter
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -564,7 +596,12 @@ export default function PatientPage() {
             {/* Assign to physician */}
             {physicians.length > 0 && (
               <div className="space-y-1.5">
-                <Label>Assign to <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Label className={assignError ? 'text-destructive' : ''}>
+                  Assign to{' '}
+                  {requiresAssignment
+                    ? <span className="text-destructive font-normal">(required)</span>
+                    : <span className="text-muted-foreground font-normal">(optional)</span>}
+                </Label>
                 <div className="relative">
                   {/* Selected display / search input */}
                   <div className="relative flex items-center">
@@ -580,9 +617,12 @@ export default function PatientPage() {
                         setPhysicianDropOpen(true)
                       }}
                       onChange={e => setPhysicianSearch(e.target.value)}
-                      className="w-full text-xs rounded-lg border border-border bg-background pl-8 pr-7 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      className={cn(
+                        'w-full text-xs rounded-lg border bg-background pl-8 pr-7 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                        assignError && !assignedTo ? 'border-destructive focus:ring-destructive' : 'border-border',
+                      )}
                     />
-                    {assignedTo && !physicianDropOpen && (
+                    {assignedTo && !physicianDropOpen && !requiresAssignment && (
                       <button
                         type="button"
                         onClick={() => { setAssignedTo(''); setPhysicianSearch('') }}
@@ -599,21 +639,23 @@ export default function PatientPage() {
                       <div className="fixed inset-0 z-[90]" onClick={() => setPhysicianDropOpen(false)} />
                       <div className="absolute z-[100] mt-1 w-full rounded-lg border border-border bg-card shadow-lg overflow-hidden">
                         <div className="max-h-48 overflow-y-auto">
-                          {/* Clear option */}
-                          <button
-                            type="button"
-                            onClick={() => { setAssignedTo(''); setPhysicianDropOpen(false) }}
-                            className="w-full px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 transition-colors italic"
-                          >
-                            — No assignment —
-                          </button>
+                          {/* Clear option — hidden for roles that must assign */}
+                          {!requiresAssignment && (
+                            <button
+                              type="button"
+                              onClick={() => { setAssignedTo(''); setPhysicianDropOpen(false) }}
+                              className="w-full px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 transition-colors italic"
+                            >
+                              — No assignment —
+                            </button>
+                          )}
                           {physicians
                             .filter(p => p.full_name.toLowerCase().includes(physicianSearch.toLowerCase()))
                             .map(p => (
                               <button
                                 key={p.id}
                                 type="button"
-                                onClick={() => { setAssignedTo(p.id); setPhysicianDropOpen(false) }}
+                                onClick={() => { setAssignedTo(p.id); setAssignError(false); setPhysicianDropOpen(false) }}
                                 className={cn(
                                   'w-full px-3 py-2 text-left text-xs hover:bg-accent/60 transition-colors flex items-center gap-2',
                                   assignedTo === p.id && 'bg-accent/40 font-medium',
@@ -631,6 +673,12 @@ export default function PatientPage() {
                     </>
                   )}
                 </div>
+                {assignError && !assignedTo && (
+                  <p className="text-[11px] text-destructive flex items-center gap-1 mt-0.5">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    A physician must be assigned before creating this encounter.
+                  </p>
+                )}
               </div>
             )}
 
@@ -938,10 +986,13 @@ function canNavigateEncounter(
   canPerm?: (p: string) => boolean,
 ): boolean {
   if (canPerm && !canPerm('block.add')) return false
+  // Staff-visibility encounters are open to all clinical staff
   if (enc.visibility === 'staff') return true
-  if (hasRole('physician') || hasRole('admin')) return true
+  // Admin can always enter any encounter
+  if (hasRole('admin')) return true
+  // Only the assigned physician has access to private/restricted encounters
   if (enc.assigned_to && enc.assigned_to === userId) return true
-  if (enc.created_by === userId && !enc.assigned_to) return true
+  // Restricted: role-list check (but only if also assigned — handled above — or in the role list)
   if (enc.visibility === 'restricted') {
     return enc.visible_to_roles?.some(r => roleSlugs.includes(r)) ?? false
   }
@@ -970,27 +1021,30 @@ function EncounterCard({
   return (
     <div
       className={cn(
-        'border rounded-lg p-4 flex items-center justify-between transition-colors',
+        'border rounded-lg p-4 flex items-center gap-3 min-w-0 transition-colors',
         canNavigate
           ? 'cursor-pointer hover:bg-accent/50'
           : 'cursor-default opacity-60',
       )}
       onClick={canNavigate ? onNavigate : undefined}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className={`h-2 w-2 rounded-full shrink-0 ${encounter.status === 'open' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-        <div>
-          <div className="flex items-center gap-1.5">
-            <p className="text-sm font-medium">
+        <div className="min-w-0 flex-1 pr-1">
+          <div className="flex items-start gap-1.5">
+            <p
+              className="text-sm font-medium leading-snug break-words"
+              title={encounter.title ?? undefined}
+            >
               {encounter.title ?? `Encounter #${encounter.id.slice(0, 8).toUpperCase()}`}
             </p>
             {visIcon && (
-              <span className="text-muted-foreground opacity-60" title={encounter.visibility}>
+              <span className="text-muted-foreground opacity-60 shrink-0 mt-0.5" title={encounter.visibility}>
                 {visIcon}
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground mt-0.5 break-words">
             {formatDateTime(encounter.created_at)}
             {encounter.created_profile?.full_name && (
               <span className="ml-1.5 opacity-70">· {encounter.created_profile.full_name}</span>
@@ -1001,7 +1055,7 @@ function EncounterCard({
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <Badge variant={encounter.status === 'open' ? 'success' : 'muted'}>
           {encounter.status === 'open' ? 'Open' : 'Closed'}
         </Badge>

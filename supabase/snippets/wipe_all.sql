@@ -4,49 +4,31 @@
 -- After running this, re-run schema.sql then seed_demo.sql.
 -- ============================================================
 
--- 1. Billing tables (cascade safe order)
-do $$ begin
-  truncate table payments           restart identity cascade;
-  truncate table patient_deposits   restart identity cascade;
-  truncate table invoices           restart identity cascade;
-  truncate table charges            restart identity cascade;
-  truncate table patient_insurance  restart identity cascade;
-  truncate table service_items      restart identity cascade;
-exception when undefined_table then null;
+-- Truncate every base table in `public` in one statement so PostgreSQL can
+-- resolve FK order (including self-referential and cross-table links).
+-- New tables added to schema.sql are picked up automatically on the next wipe.
+do $$
+declare
+  stmt text;
+begin
+  select 'truncate table '
+         || string_agg(format('%I.%I', schemaname, tablename), ', ' order by tablename)
+         || ' restart identity cascade'
+  into stmt
+  from pg_tables
+  where schemaname = 'public';
+
+  if stmt is not null and stmt like 'truncate table %' then
+    execute stmt;
+  end if;
 end $$;
 
--- 2. Department tables (only exist on schemas that include the departments system)
-do $$ begin
-  truncate table department_members     restart identity cascade;
-  truncate table department_block_types restart identity cascade;
-  truncate table departments            restart identity cascade;
-exception when undefined_table then null;
-end $$;
+-- Storage objects in all app buckets
+-- NOTE: Supabase blocks direct SQL deletes on storage.objects via a trigger.
+-- Files must be cleared via the Supabase Dashboard → Storage, or the JS client.
+-- They become inaccessible once auth.users is wiped, so this is safe to skip.
 
--- 2. Block sub-tables (all cascade from blocks/encounters)
-truncate table block_attachments     restart identity cascade;
-truncate table block_entries         restart identity cascade;
-truncate table block_acknowledgments restart identity cascade;
-truncate table block_actions         restart identity cascade;
-truncate table blocks                restart identity cascade;
 
--- 3. Encounters (cascades to blocks if not already gone)
-truncate table encounters            restart identity cascade;
-
--- 4. Patient clinical data (cascades from patients)
-truncate table patients              restart identity cascade;
-
--- 5. Patient field definitions
-truncate table patient_field_definitions restart identity cascade;
-
--- 6. Block definitions
-truncate table block_definitions     restart identity cascade;
-
--- 7. Encounter templates
-truncate table encounter_templates   restart identity cascade;
-
--- 8. Roles (cascades to user_roles)
-truncate table roles                 restart identity cascade;
-
--- 9. Auth users (cascades to profiles and user_roles)
+-- Auth users (identities). `profiles` and `user_roles` are already empty from
+-- the truncate above; any stragglers with ON DELETE CASCADE are cleaned up here.
 delete from auth.users;

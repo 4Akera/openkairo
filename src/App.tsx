@@ -14,6 +14,13 @@ import SettingsPage from './pages/SettingsPage'
 import DeptPortal from './pages/DeptPortal'
 import BillingPage from './pages/BillingPage'
 import ProfileModal from './components/profile/ProfileModal'
+import ZoomHintBanner from './components/ZoomHintBanner'
+
+function DeptAwareIndex() {
+  const { inDept, permissions } = useAuthStore()
+  const isDeptOnly = inDept && permissions.length === 0
+  return isDeptOnly ? <Navigate to="/portal" replace /> : <DashboardPage />
+}
 
 function ProtectedRoute() {
   const { user, loading, profile } = useAuthStore()
@@ -32,6 +39,7 @@ function ProtectedRoute() {
   return (
     <>
       <Outlet />
+      <ZoomHintBanner />
       {/* Force profile setup on first login */}
       <ProfileModal
         open={profileRequired}
@@ -81,7 +89,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="portal" element={<DeptPortal />} />
           <Route element={<AppLayout />}>
-            <Route index element={<DashboardPage />} />
+            <Route index element={<DeptAwareIndex />} />
             <Route path="patients/:patientId" element={<PatientPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="billing" element={<BillingPage />} />
