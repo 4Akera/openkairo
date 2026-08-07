@@ -127,3 +127,16 @@ render empty; hence the new error log.
 **Verification:** tsc clean, eslint clean, 117/117 tests (5 new);
 browser-verified — temporarily chained a live visit, row showed
 "← from General", then reverted the test link.
+
+## 2026-08-07 — Iteration 7: avg-visit stat on Front Desk header
+
+**Item:** "Avg wait today" stat (third UX item).
+
+**What changed:** tested helper `averageWaitMinutes` (arrival→checkout over
+finished visits only; null until one completes, so in-progress waits don't
+skew low) + a muted "avg visit today Xm" line in the Front Desk header next
+to the queue count. Filter-aware: respects the selected queue.
+
+**Verification:** tsc clean, eslint clean, 120/120 tests (3 new);
+browser-verified header shows "avg visit today 9m" from the day's two
+completed visits.

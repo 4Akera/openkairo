@@ -52,7 +52,8 @@ When working autonomously (e.g. via /loop), follow this contract:
       Front Desk and DepartmentPage both use it)
 - [x] Show referral chain on queue rows ("← from <dept>") using
       referred_from_visit_id. (2026-08-07)
-- [ ] "Avg wait today" stat on the Front Desk header.
+- [x] "Avg wait today" stat on the Front Desk header. (2026-08-07 — shown as
+      "avg visit today", arrival→checkout over finished visits)
 - [ ] Label patient-facing departments as "Clinic" in Settings and pickers.
 
 ### Features (only after the above)

@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useVisitQueue } from '../hooks/useVisits'
+import { averageWaitMinutes } from '../lib/visits'
 import { VisitQueue } from '../components/visits/VisitQueue'
 import { CheckInDialog } from '../components/visits/CheckInDialog'
 import type { Department } from '../types'
@@ -56,6 +57,7 @@ export default function FrontDeskPage() {
   }, [visits, deptFilter])
 
   const activeCount = filtered.filter(v => v.arrived_at && !v.finished_at).length
+  const avgWait = averageWaitMinutes(filtered)
 
   const canUse = hasRole('receptionist') || hasRole('admin') || hasRole('physician') || hasRole('nurse')
 
@@ -78,6 +80,11 @@ export default function FrontDeskPage() {
           <h1 className="text-base font-semibold truncate">Front Desk</h1>
           {!loading && activeCount > 0 && (
             <Badge variant="secondary" className="ml-1">{activeCount} in queue</Badge>
+          )}
+          {!loading && avgWait !== null && (
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              avg visit today {avgWait < 60 ? `${avgWait}m` : `${Math.floor(avgWait / 60)}h ${avgWait % 60}m`}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">

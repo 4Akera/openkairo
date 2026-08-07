@@ -121,6 +121,21 @@ export function cancelVisit(id: string) {
 }
 
 /**
+ * Average completed time-in-queue today, in whole minutes: arrival →
+ * checkout, over finished visits only. Null until at least one visit has
+ * completed the full cycle (an in-progress wait would skew low).
+ */
+export function averageWaitMinutes(visits: Pick<Visit, 'arrived_at' | 'finished_at'>[]): number | null {
+  const done = visits.filter(v => v.arrived_at && v.finished_at)
+  if (done.length === 0) return null
+  const totalMs = done.reduce(
+    (sum, v) => sum + (new Date(v.finished_at!).getTime() - new Date(v.arrived_at!).getTime()),
+    0,
+  )
+  return Math.max(0, Math.round(totalMs / done.length / 60000))
+}
+
+/**
  * Referral: an order sent to a patient-facing department also queues the
  * patient there. Chains from the patient's active visit; skipped when the
  * patient is already waiting in that department's queue.

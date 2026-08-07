@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { referralSourceLabel } from '../visits'
+import { referralSourceLabel, averageWaitMinutes } from '../visits'
 
 describe('referralSourceLabel', () => {
   it('null for non-referral visits', () => {
@@ -29,5 +29,29 @@ describe('referralSourceLabel', () => {
 
   it('General when the origin row is not joined (deleted origin)', () => {
     expect(referralSourceLabel({ referred_from_visit_id: 'v1', referred_from: null })).toBe('General')
+  })
+})
+
+describe('averageWaitMinutes', () => {
+  const at = (min: number) => new Date(min * 60000).toISOString()
+
+  it('null with no finished visits', () => {
+    expect(averageWaitMinutes([])).toBeNull()
+    expect(averageWaitMinutes([{ arrived_at: at(0), finished_at: null }])).toBeNull()
+  })
+
+  it('averages arrival→checkout over finished visits only', () => {
+    expect(averageWaitMinutes([
+      { arrived_at: at(0), finished_at: at(10) },
+      { arrived_at: at(0), finished_at: at(30) },
+      { arrived_at: at(0), finished_at: null },   // still waiting — excluded
+    ])).toBe(20)
+  })
+
+  it('rounds to whole minutes', () => {
+    expect(averageWaitMinutes([
+      { arrived_at: at(0), finished_at: at(10) },
+      { arrived_at: at(0), finished_at: at(11) },
+    ])).toBe(11)
   })
 })
