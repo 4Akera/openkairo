@@ -42,9 +42,9 @@ When working autonomously (e.g. via /loop), follow this contract:
       in the Settings UI (schema can stay; simplify presentation first).
       (2026-08-07 — Block Library rows now show one derived "who sees this"
       phrase via `blockVisibilitySummary`)
-- [ ] Split BlockDefinitionModal into Simple (name, icon, fields) and
+- [x] Split BlockDefinitionModal into Simple (name, icon, fields) and
       Advanced (capabilities, dept pairing, billing) with progressive
-      disclosure.
+      disclosure. (2026-08-07)
 
 ### UX rough edges
 - [ ] Walk-in check-in button on a clinic's own Patients tab (departments with

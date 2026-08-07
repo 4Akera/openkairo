@@ -68,3 +68,23 @@ boolean-ish notions of "does this block show up" was a named pain point.
 browser-verified Block Library shows "Physician, System Admin",
 "All clinical staff" (Vitals), "Department portal only" (Lab/Radiology
 Result) as row subtitles.
+
+## 2026-08-07 — Iteration 4: Simple/Advanced block-definition modal
+
+**Item:** Progressive disclosure in BlockDefinitionModal (last simplify
+item).
+
+**What changed:** the full (non-built-in) form now shows only Basic Info
+(name, slug, description, icon, color) and Fields; the Capabilities,
+Department-only, Billing, and Role-access sections sit behind a single
+"Advanced options" expander, collapsed by default
+(`BlockDefinitionModal.tsx` — one `showAdvanced` state wrapping the four
+sections; no logic changes).
+
+**Why highest value:** the 1,400-line single-scroll modal was the "eight to
+ten concepts to configure one block" problem in physical form; a new simple
+block now fits on one screen.
+
+**Verification:** tsc clean, eslint clean, 112/112 tests; browser-verified —
+New Block Type opens as Basic Info → collapsed Advanced → Static Fields on
+one screen; expanding reveals Capabilities et al.

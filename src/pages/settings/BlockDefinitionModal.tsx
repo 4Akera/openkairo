@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, Check, FileText } from 'lucide-react'
+import { Loader2, Check, FileText, ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import * as adminApi from '../../lib/adminUsers'
 import { useAuthStore } from '../../stores/authStore'
@@ -184,6 +184,9 @@ export function BlockDefinitionModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showTsFields, setShowTsFields] = useState(!!initial?.cap_time_series)
+  // Progressive disclosure: name/icon/fields is all most blocks need — the
+  // capability/department/billing/role machinery stays behind one expander.
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   useEffect(() => {
     if (!initial) return
@@ -909,6 +912,20 @@ export function BlockDefinitionModal({
 
             <Separator />
 
+            {/* ── Advanced expander: capabilities / departments / billing / roles ── */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(a => !a)}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showAdvanced ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              <SlidersHorizontal className="h-3 w-3" />
+              Advanced options
+              <span className="font-normal opacity-60">— capabilities, departments, billing, role access</span>
+            </button>
+
+            {showAdvanced && (<>
+
             {/* ── Capabilities ── */}
             <section className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Capabilities</p>
@@ -1371,6 +1388,10 @@ export function BlockDefinitionModal({
                 </>
               )
             )}
+
+            </>)} {/* end advanced options */}
+
+            <Separator />
 
             {/* ── Fields ── */}
             <section>
