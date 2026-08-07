@@ -3,6 +3,7 @@ import type { Block, DCNoteContent } from '../../../types'
 import { Button, Input, Label, Separator, Textarea } from '../../ui'
 import { Loader2, FileText, Plus, X } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { DictateButton, appendDictation } from './DictateButton'
 
 // ============================================================
 // Empty
@@ -327,7 +328,10 @@ export function DCNoteEdit({ block, onSave, onCancel }: EditProps) {
       </div>
 
       <div className="space-y-1">
-        <Label className="text-xs">Hospital course</Label>
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Hospital course</Label>
+          <DictateButton onText={text => set('hospital_course', appendDictation(form.hospital_course, text))} />
+        </div>
         <Textarea rows={4} placeholder="Key events, investigations, procedures, treatments, and response…"
           value={form.hospital_course}
           onChange={e => set('hospital_course', e.target.value)}

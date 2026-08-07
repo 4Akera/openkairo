@@ -3,6 +3,7 @@ import type { Block, ConsultationContent } from '../../../types'
 import { Button, Input, Label, Separator, Textarea } from '../../ui'
 import { Loader2, Stethoscope, MessageSquareReply, Clock, CheckCircle2, AlertCircle } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { DictateButton, appendDictation } from './DictateButton'
 
 // ============================================================
 // Empty
@@ -204,7 +205,10 @@ export function ConsultationEdit({ block, onSave, onCancel }: EditProps) {
         </div>
 
         <div className="space-y-1">
-          <Label className="text-xs">Clinical summary</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Clinical summary</Label>
+            <DictateButton onText={text => set('clinical_summary', appendDictation(form.clinical_summary, text))} />
+          </div>
           <Textarea
             rows={3}
             placeholder="Relevant history, examination findings, investigations…"
@@ -264,7 +268,10 @@ export function ConsultationEdit({ block, onSave, onCancel }: EditProps) {
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs">Response</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Response</Label>
+              <DictateButton onText={text => set('answer', appendDictation(form.answer, text))} />
+            </div>
             <Textarea
               rows={4}
               placeholder="Consultant's findings, recommendations, and management plan…"

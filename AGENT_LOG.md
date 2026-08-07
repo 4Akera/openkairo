@@ -305,3 +305,18 @@ reads: book → (day nav) → check in → queue → one-tap Start encounter →
 journey strip in the encounter → checkout → one merged Visits history on
 the patient page. Remaining backlog: features (dictation extension,
 carried-over visits).
+
+## 2026-08-08 — Iteration 17: dictation across text-heavy blocks
+
+**Item:** Extend voice typing beyond the Note pilot.
+
+**What changed:** the inline pill from NoteBlock became a shared
+`DictateButton` component (feature-detected, error display included);
+NoteBlock was refactored onto it, and it now sits on Nurse Note's entry
+composer, Consultation's clinical summary + consultant response, and
+Discharge Note's hospital course. Net: four blocks dictate through one
+component and one hook.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+the Dictate pill in the Nurse Note composer (identical component in the
+other blocks). Test block removed.

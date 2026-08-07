@@ -60,8 +60,9 @@ thing — a single patient journey — not separate modules stitched together.
       check-in and the today-only stats)
 
 ### Features (only after the above)
-- [ ] Extend dictation to other text-heavy blocks (Nurse Note,
-      Consultation, Discharge Note) reusing useDictation.
+- [x] Extend dictation to other text-heavy blocks (Nurse Note,
+      Consultation, Discharge Note) reusing useDictation. (2026-08-08 —
+      shared DictateButton component; NoteBlock refactored onto it too)
 - [ ] Queue auto-refresh of stale visits: on Front Desk load, visits from
       previous days that were never checked out get a subtle "carried over"
       section instead of disappearing.

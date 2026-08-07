@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { Block, NurseNoteContent, NurseNoteEntry } from '../../../types'
 import { Button, Textarea } from '../../ui'
 import { Loader2, ClipboardList, Plus } from 'lucide-react'
+import { DictateButton, appendDictation } from './DictateButton'
 
 // ============================================================
 // Empty
@@ -154,7 +155,10 @@ export function NurseNoteEdit({ block, onSave, onCancel }: EditProps) {
           className="resize-none text-sm"
         />
         <div className="flex items-center justify-between">
-          <p className="text-[11px] text-muted-foreground">⌘↵ adds entry and keeps editing</p>
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] text-muted-foreground">⌘↵ adds entry and keeps editing</p>
+            <DictateButton onText={text => setDraft(d => appendDictation(d, text))} />
+          </div>
           <Button
             variant="secondary"
             size="sm"
