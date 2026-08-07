@@ -5,6 +5,8 @@ import { Loader2, Pill, Plus, X, ChevronDown, AlertTriangle } from 'lucide-react
 import { cn } from '../../../lib/utils'
 import { supabase } from '../../../lib/supabase'
 import { findAllergyConflicts, type AllergyRef } from '../../../lib/allergyCheck'
+import { syncMedsToPatientList } from '../../../lib/medsSync'
+import { useAuthStore } from '../../../stores/authStore'
 
 // ============================================================
 // Empty / helpers
@@ -274,26 +276,29 @@ export function MedsEdit({ block, onSave, onCancel }: EditProps) {
   )
   const [saving, setSaving] = useState(false)
   const [allergies, setAllergies] = useState<AllergyRef[]>([])
+  const [patientId, setPatientId] = useState<string | null>(null)
+  const { profile } = useAuthStore()
 
-  // Load the patient's allergy list for prescribing-time cross-checks.
-  // Blocks carry patient_id directly (dept walk-ins) or via their encounter.
+  // Resolve the patient (blocks carry patient_id directly for dept walk-ins,
+  // or via their encounter) and load the allergy list for cross-checks.
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      let patientId = block.patient_id
-      if (!patientId && block.encounter_id) {
+      let pid = block.patient_id
+      if (!pid && block.encounter_id) {
         const { data } = await supabase
           .from('encounters')
           .select('patient_id')
           .eq('id', block.encounter_id)
           .maybeSingle()
-        patientId = (data?.patient_id as string | undefined) ?? null
+        pid = (data?.patient_id as string | undefined) ?? null
       }
-      if (!patientId) return
+      if (!pid || cancelled) return
+      setPatientId(pid)
       const { data } = await supabase
         .from('patient_allergies')
         .select('allergen, severity, reaction')
-        .eq('patient_id', patientId)
+        .eq('patient_id', pid)
       if (!cancelled && data) setAllergies(data as AllergyRef[])
     }
     void load()
@@ -310,7 +315,12 @@ export function MedsEdit({ block, onSave, onCancel }: EditProps) {
 
   const handleSave = async () => {
     setSaving(true)
-    await onSave({ meds: meds.filter(m => m.name.trim()) })
+    const kept = meds.filter(m => m.name.trim())
+    await onSave({ meds: kept })
+    // Keep the patient-level medication list in step (additive-only)
+    if (patientId) {
+      await syncMedsToPatientList(patientId, kept, profile?.full_name ?? null)
+    }
     setSaving(false)
   }
 

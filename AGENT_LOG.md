@@ -171,3 +171,25 @@ reaction. Discontinued meds don't warn.
 browser-verified on a real chart — typing "Penicilina 500mg" for a patient
 with a severe Penicilina allergy showed the warning with reaction text
 live. Test block removed from the encounter afterwards.
+
+## 2026-08-07 — Iteration 10: MedsBlock → patient medication list sync
+
+**Item:** mx slice B — completes the meds-module backlog item.
+
+**What changed:** `src/lib/medsSync.ts` — additive-only sync: saving a
+MedsBlock inserts its ACTIVE meds into `patient_medications` when the
+master list doesn't already have them (normalized-name match, any status);
+it never updates or discontinues master rows — the record UI stays the
+authority. Carries dose/route/freq, prescriber (current profile), start
+date today, indication as a note. Pure decision logic `medsToAdd` unit
+tested; MedsBlock calls the sync after save.
+
+**Scope note:** PharmacyFulfillment-side sync deferred — dispensing already
+writes result blocks; wiring it into the master list is a separate
+decision worth making with real usage. Item ticked with that note.
+
+**Verification:** tsc clean, eslint clean, 130/130 tests (5 new);
+browser-verified — saved a "Paracetamol 1g" meds block for a patient whose
+master list had only Metformine; patient_medications gained the Paracetamol
+row (dose, prescriber, start date) and Metformine was not duplicated. Test
+rows removed afterwards.

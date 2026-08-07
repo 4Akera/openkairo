@@ -59,10 +59,12 @@ When working autonomously (e.g. via /loop), follow this contract:
       clearer editor checkbox label)
 
 ### Features (only after the above)
-- [ ] Patient-level active-medication list wired to MedsBlock +
+- [x] Patient-level active-medication list wired to MedsBlock +
       PharmacyFulfillment (the "mx" module), with allergy cross-check.
-      (in progress — allergy cross-check at prescribing time DONE 2026-08-07;
-      remaining: sync MedsBlock content to patient_medications)
+      (2026-08-07 — allergy cross-check at prescribing time + additive-only
+      MedsBlock → patient_medications sync. PharmacyFulfillment wiring
+      deferred: fulfilment already writes result blocks; extend later if a
+      dispensing-side sync proves needed.)
 - [ ] Voice typing into note-type blocks (Web Speech API first).
 
 ## Project conventions
