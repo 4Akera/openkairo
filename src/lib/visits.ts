@@ -6,7 +6,7 @@
  * an optional queue label validated against the org's flow_stages setting.
  */
 import { supabase } from './supabase'
-import type { Patient, Visit, VisitEncounterRef } from '../types'
+import type { Patient, Visit, VisitEncounterRef, VisitReferralRef } from '../types'
 
 export function dayBoundsIso(date = new Date()): { start: string; end: string } {
   const start = new Date(date)
@@ -29,6 +29,20 @@ export function visitEncounter(v: Visit): VisitEncounterRef | null {
 }
 
 /**
+ * Where a referred visit came from: the origin queue's department name,
+ * "General" when the origin sat in the default queue, null when the visit
+ * isn't a referral at all.
+ */
+export function referralSourceLabel(v: Pick<Visit, 'referred_from_visit_id' | 'referred_from'>): string | null {
+  if (!v.referred_from_visit_id) return null
+  const origin: VisitReferralRef | null =
+    (Array.isArray(v.referred_from) ? v.referred_from[0] : v.referred_from) ?? null
+  if (!origin) return 'General'
+  const dept = Array.isArray(origin.departments) ? origin.departments[0] : origin.departments
+  return dept?.name ?? 'General'
+}
+
+/**
  * All of today's non-cancelled visits: arrived today, or booked for today.
  * Finished visits stay included so the front desk sees the whole day.
  */
@@ -36,12 +50,15 @@ export async function fetchTodayVisits(): Promise<Visit[]> {
   const { start, end } = dayBoundsIso()
   const { data, error } = await supabase
     .from('visits')
-    .select('*, patients(*), encounters(id, status)')
+    .select('*, patients(*), encounters(id, status), referred_from:visits!referred_from_visit_id(department_id, departments(name))')
     .is('cancelled_at', null)
     .or(`arrived_at.gte.${start},and(scheduled_at.gte.${start},scheduled_at.lt.${end})`)
     .order('arrived_at', { ascending: true, nullsFirst: false })
-  if (error || !data) return []
-  return data as Visit[]
+  if (error) {
+    console.error('fetchTodayVisits failed:', error.message)
+    return []
+  }
+  return (data ?? []) as Visit[]
 }
 
 export interface CheckInInput {

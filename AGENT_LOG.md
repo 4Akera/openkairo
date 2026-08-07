@@ -106,3 +106,24 @@ desk previously had no way to admit walk-ins from their workspace.
 **Verification:** tsc clean, eslint clean, 112/112 tests; browser-verified
 on the user-created Cardiology clinic — Patients tab shows its 2-patient
 queue, Check in opens the search-only dialog (queue locked, no selector).
+
+## 2026-08-07 — Iteration 6: referral chain on queue rows
+
+**Item:** "← from <dept>" on referred visits (second UX item).
+
+**What changed:** `fetchTodayVisits` self-joins the origin visit
+(`referred_from:visits!referred_from_visit_id(department_id,
+departments(name))`); new tested helper `referralSourceLabel` resolves it to
+the origin queue's name ("General" for the default queue); VisitQueue
+renders it in the row subtitle. Also: fetch errors are now console-logged
+instead of silently returning an empty queue.
+
+**Gotcha found & fixed:** embedding by constraint-name hint
+(`visits!visits_referred_from_visit_id_fkey`) returns PGRST200 on this
+PostgREST version for the self-join — the column-name hint
+(`visits!referred_from_visit_id`) works. The silent error made the queue
+render empty; hence the new error log.
+
+**Verification:** tsc clean, eslint clean, 117/117 tests (5 new);
+browser-verified — temporarily chained a live visit, row showed
+"← from General", then reverted the test link.

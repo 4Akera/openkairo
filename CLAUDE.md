@@ -50,8 +50,8 @@ When working autonomously (e.g. via /loop), follow this contract:
 - [x] Walk-in check-in button on a clinic's own Patients tab (departments with
       can_receive_patients). (2026-08-07 — shared CheckInDialog extracted;
       Front Desk and DepartmentPage both use it)
-- [ ] Show referral chain on queue rows ("← from <dept>") using
-      referred_from_visit_id.
+- [x] Show referral chain on queue rows ("← from <dept>") using
+      referred_from_visit_id. (2026-08-07)
 - [ ] "Avg wait today" stat on the Front Desk header.
 - [ ] Label patient-facing departments as "Clinic" in Settings and pickers.
 

@@ -11,6 +11,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useNow } from '../../hooks/useNow'
 import {
   visitPatient, visitEncounter, arriveVisit, finishVisit, cancelVisit, updateVisit,
+  referralSourceLabel,
 } from '../../lib/visits'
 import type { Visit } from '../../types'
 import { fullName, formatDateTime } from '../../lib/utils'
@@ -134,6 +135,7 @@ export function VisitQueue({
     const isActive = !!v.arrived_at && !v.finished_at
     const readyForCheckout = isActive && enc?.status === 'closed'
     const assignedName = v.assigned_to ? profileNames[v.assigned_to] : null
+    const referredFrom = referralSourceLabel(v)
     return (
       <div
         key={v.id}
@@ -181,6 +183,7 @@ export function VisitQueue({
                 : v.arrived_at
                   ? <>waiting <span className="font-medium text-foreground/70">{waitTime(v.arrived_at)}</span></>
                   : v.scheduled_at ? formatDateTime(v.scheduled_at) : null}
+              {referredFrom && <> · <span className="text-primary/80">← from {referredFrom}</span></>}
               {assignedName && <> · {assignedName}</>}
               {!v.finished_at ? (
                 <button

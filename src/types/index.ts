@@ -346,11 +346,18 @@ export interface Visit {
   updated_at: string
   patients?: Patient | Patient[] | null
   encounters?: VisitEncounterRef | VisitEncounterRef[] | null
+  /** Joined origin visit when this one was created by a referral */
+  referred_from?: VisitReferralRef | VisitReferralRef[] | null
 }
 
 export interface VisitEncounterRef {
   id: string
   status: 'open' | 'closed'
+}
+
+export interface VisitReferralRef {
+  department_id: string | null
+  departments?: { name: string } | { name: string }[] | null
 }
 
 // ============================================================
