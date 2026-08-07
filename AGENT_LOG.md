@@ -153,3 +153,21 @@ sees patients — without splitting the table.
 
 **Verification:** tsc clean, eslint clean, 120/120 tests; browser-verified
 the Cardiology page header shows the Clinic chip.
+
+## 2026-08-07 — Iteration 9: allergy cross-check at prescribing time
+
+**Item:** Meds module ("mx"), slice A of the feature item: allergy
+cross-check in MedsBlock. (Slice B — syncing block meds into
+patient_medications — is next; item left unchecked with progress note.)
+
+**What changed:** new tested matcher `findAllergyConflicts` in
+`src/lib/allergyCheck.ts` (conservative token substring match, ≥4-char
+tokens, both directions). MedsBlock edit loads the patient's allergy list
+(via block.patient_id or the encounter) and renders a red inline warning
+under any med row whose name matches a recorded allergen — name, severity,
+reaction. Discontinued meds don't warn.
+
+**Verification:** tsc clean, eslint clean, 125/125 tests (5 new);
+browser-verified on a real chart — typing "Penicilina 500mg" for a patient
+with a severe Penicilina allergy showed the warning with reaction text
+live. Test block removed from the encounter afterwards.

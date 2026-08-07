@@ -61,6 +61,8 @@ When working autonomously (e.g. via /loop), follow this contract:
 ### Features (only after the above)
 - [ ] Patient-level active-medication list wired to MedsBlock +
       PharmacyFulfillment (the "mx" module), with allergy cross-check.
+      (in progress — allergy cross-check at prescribing time DONE 2026-08-07;
+      remaining: sync MedsBlock content to patient_medications)
 - [ ] Voice typing into note-type blocks (Web Speech API first).
 
 ## Project conventions

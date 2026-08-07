@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Block, MedsContent, MedItem } from '../../../types'
 import { Button, Input } from '../../ui'
-import { Loader2, Pill, Plus, X, ChevronDown } from 'lucide-react'
+import { Loader2, Pill, Plus, X, ChevronDown, AlertTriangle } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { supabase } from '../../../lib/supabase'
+import { findAllergyConflicts, type AllergyRef } from '../../../lib/allergyCheck'
 
 // ============================================================
 // Empty / helpers
@@ -112,11 +114,13 @@ interface EditProps {
 
 function MedEditRow({
   med,
+  allergies,
   onChange,
   onRemove,
   onEnter,
 }: {
   med:      MedItem
+  allergies: AllergyRef[]
   onChange: (m: MedItem) => void
   onRemove: () => void
   onEnter:  () => void
@@ -129,6 +133,10 @@ function MedEditRow({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); onEnter() }
   }
+
+  const conflicts = med.status !== 'discontinued'
+    ? findAllergyConflicts(med.name, allergies)
+    : []
 
   return (
     <div className={cn(
@@ -212,6 +220,24 @@ function MedEditRow({
         </button>
       </div>
 
+      {/* Allergy conflict warning — the chart's own allergy list, surfaced at prescribing time */}
+      {conflicts.length > 0 && (
+        <div className="mx-2 mb-1.5 flex items-start gap-1.5 rounded border border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30 px-2 py-1">
+          <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0 mt-px" />
+          <p className="text-[11px] text-red-700 dark:text-red-300 leading-snug">
+            Allergy on record:{' '}
+            {conflicts.map((c, i) => (
+              <span key={c.allergen}>
+                {i > 0 && ', '}
+                <strong>{c.allergen}</strong>
+                {c.severity ? ` (${c.severity})` : ''}
+                {c.reaction ? ` — ${c.reaction}` : ''}
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
+
       {/* Expanded extras */}
       {open && (
         <div className="border-t border-border/40 px-2 pb-2 pt-1.5 grid grid-cols-2 gap-1.5">
@@ -247,6 +273,32 @@ export function MedsEdit({ block, onSave, onCancel }: EditProps) {
     ex.meds?.length ? ex.meds : [newMed()]
   )
   const [saving, setSaving] = useState(false)
+  const [allergies, setAllergies] = useState<AllergyRef[]>([])
+
+  // Load the patient's allergy list for prescribing-time cross-checks.
+  // Blocks carry patient_id directly (dept walk-ins) or via their encounter.
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      let patientId = block.patient_id
+      if (!patientId && block.encounter_id) {
+        const { data } = await supabase
+          .from('encounters')
+          .select('patient_id')
+          .eq('id', block.encounter_id)
+          .maybeSingle()
+        patientId = (data?.patient_id as string | undefined) ?? null
+      }
+      if (!patientId) return
+      const { data } = await supabase
+        .from('patient_allergies')
+        .select('allergen, severity, reaction')
+        .eq('patient_id', patientId)
+      if (!cancelled && data) setAllergies(data as AllergyRef[])
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [block.patient_id, block.encounter_id])
 
   const addMed = () => setMeds(m => [...m, newMed()])
 
@@ -280,6 +332,7 @@ export function MedsEdit({ block, onSave, onCancel }: EditProps) {
           <MedEditRow
             key={med.id}
             med={med}
+            allergies={allergies}
             onChange={updated => updateMed(med.id, updated)}
             onRemove={() => removeMed(med.id)}
             onEnter={() => {
