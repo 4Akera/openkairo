@@ -320,3 +320,23 @@ component and one hook.
 **Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
 the Dictate pill in the Nurse Note composer (identical component in the
 other blocks). Test block removed.
+
+## 2026-08-08 — Iteration 18: carried-over visits (BACKLOG EMPTY, loop stops)
+
+**Item:** The last backlog item — stranded visits stop vanishing at
+midnight.
+
+**What changed:** `fetchCarriedOverVisits` finds visits that arrived on a
+previous day and were never checked out or cancelled; the today view of the
+Front Desk shows them in a quiet amber "Carried over" section (with the
+usual row actions — assign, stage, start encounter, check out). Off-today
+views and clinic tabs are untouched; the dept filter applies.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+with REAL stranded data — three visits from yesterday (7h+ old) appeared
+under "Carried over" with full actions.
+
+**Loop state:** backlog fully ticked again — stopping the autonomous loop.
+This run shipped 7 commits: the clinic-tabs bug fix, the five One Journey
+items, dictation across blocks, and carried-over visits. Restart with
+/loop after curating new backlog items.

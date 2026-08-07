@@ -62,6 +62,29 @@ export async function fetchTodayVisits(date: Date = new Date()): Promise<Visit[]
   return (data ?? []) as Visit[]
 }
 
+/**
+ * Visits that arrived on a previous day and were never checked out or
+ * cancelled — the front desk shows these as a quiet "carried over" section
+ * instead of letting them vanish at midnight.
+ */
+export async function fetchCarriedOverVisits(): Promise<Visit[]> {
+  const { start } = dayBoundsIso()
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*, patients(*), encounters(id, status), referred_from:visits!referred_from_visit_id(department_id, departments(name))')
+    .is('cancelled_at', null)
+    .is('finished_at', null)
+    .not('arrived_at', 'is', null)
+    .lt('arrived_at', start)
+    .order('arrived_at', { ascending: true })
+    .limit(30)
+  if (error) {
+    console.error('fetchCarriedOverVisits failed:', error.message)
+    return []
+  }
+  return (data ?? []) as Visit[]
+}
+
 export interface CheckInInput {
   patientId: string
   departmentId?: string | null

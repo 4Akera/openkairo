@@ -46,7 +46,7 @@ export default function FrontDeskPage() {
   const { user, hasRole } = useAuthStore()
   // Day navigation: today is the default; arrows reveal booked future days
   const [dayOffset, setDayOffset] = useState(0)
-  const { visits, profileNames, loading } = useVisitQueue(dateKeyFor(dayOffset))
+  const { visits, carriedOver, profileNames, loading } = useVisitQueue(dateKeyFor(dayOffset))
   const isToday = dayOffset === 0
 
   const [patientDepts, setPatientDepts] = useState<Department[]>([])
@@ -166,6 +166,8 @@ export default function FrontDeskPage() {
 
       <VisitQueue
         visits={filtered}
+        carriedOver={deptFilter === 'all' ? carriedOver
+          : carriedOver.filter(v => deptFilter === GENERAL_QUEUE ? !v.department_id : v.department_id === deptFilter)}
         profileNames={profileNames}
         loading={loading}
         emptyLabel={isToday ? 'No patients today yet' : `No visits booked for ${dayLabel(dayOffset).toLowerCase()}`}

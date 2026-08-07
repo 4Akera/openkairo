@@ -23,17 +23,20 @@ import {
 } from '../ui'
 import {
   ClipboardList, Clock, Loader2, LogOut, XCircle, Stethoscope,
-  ChevronRight, CheckCircle2, UserPlus,
+  ChevronRight, CheckCircle2, UserPlus, History,
 } from 'lucide-react'
 
 export function VisitQueue({
   visits,
+  carriedOver = [],
   profileNames,
   loading,
   emptyLabel = 'No patients today yet',
   emptyAction,
 }: {
   visits: Visit[]
+  /** Unfinished visits from previous days — shown as a quiet section */
+  carriedOver?: Visit[]
   profileNames: Record<string, string>
   loading: boolean
   emptyLabel?: string
@@ -297,7 +300,7 @@ export function VisitQueue({
           <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading queue…
           </div>
-        ) : visits.length === 0 ? (
+        ) : visits.length === 0 && carriedOver.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
             <ClipboardList className="h-8 w-8 opacity-30" />
             <p className="text-sm">{emptyLabel}</p>
@@ -305,6 +308,19 @@ export function VisitQueue({
           </div>
         ) : (
           <div className="pb-6">
+            {/* Unfinished visits from previous days — check out or cancel */}
+            {carriedOver.length > 0 && (
+              <>
+                {sectionHeader('Carried over', carriedOver.length, <History className="h-3.5 w-3.5 text-amber-600" />)}
+                <p className="px-4 pb-1.5 -mt-1 text-[11px] text-muted-foreground">
+                  Arrived on a previous day and never checked out.
+                </p>
+                <div className="divide-y divide-border border-y border-border bg-amber-500/[0.04]">
+                  {carriedOver.map(renderVisit)}
+                </div>
+              </>
+            )}
+
             {upcoming.length > 0 && (
               <>
                 {sectionHeader('Upcoming', upcoming.length, <Clock className="h-3.5 w-3.5" />)}
