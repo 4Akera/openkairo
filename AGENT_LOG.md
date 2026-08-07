@@ -229,3 +229,23 @@ the toggle and default to Work.
 
 **Backlog refilled:** new "One Journey" tier added by user direction —
 scheduling, visits, patients, and encounters must feel like one thing.
+
+## 2026-08-08 — Iteration 13: one-tap Start encounter from the queue
+
+**Item:** One Journey — queue rows grow a "Start encounter" button.
+
+**What changed:** VisitQueue's active rows without a linked encounter show
+"Start encounter": one tap creates the encounter (physician carried from
+the visit; physicians self-assign when unassigned; disabled with a hint
+when neither), links visit.encounter_id, advances the stage to the second
+configured stage (Waiting → With doctor), and navigates straight in.
+Shared component, so Front Desk and clinic Patients tabs both gained it.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+end-to-end — checked Jane Smith in, pressed Start encounter, landed in a
+fresh open encounter assigned to Dr. James Harrison; DB confirmed the visit
+linked and stage moved to "With doctor". Test visit+encounter removed.
+
+**Observation for the journey:** day rollover made yesterday's unfinished
+visits vanish from the Front Desk — the "carried over" backlog item is
+real; it stays queued in the features tier.

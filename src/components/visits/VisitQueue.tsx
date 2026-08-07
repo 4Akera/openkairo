@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useNow } from '../../hooks/useNow'
 import {
@@ -46,9 +47,11 @@ export function VisitQueue({
   emptyAction?: React.ReactNode
 }) {
   const navigate = useNavigate()
+  const { user, hasRole } = useAuthStore()
   const { nameFormat, flowStages } = useSettingsStore()
   const now = useNow()
   const [checkout, setCheckout] = useState<CheckoutInfo | null>(null)
+  const [startingId, setStartingId] = useState<string | null>(null)
   // Physician + reason are assigned inline on the row, after check-in
   const [physicians, setPhysicians] = useState<{ id: string; full_name: string }[]>([])
   const [reasonEditId, setReasonEditId] = useState<string | null>(null)
@@ -127,6 +130,40 @@ export function VisitQueue({
     if (!checkout) return
     await finishVisit(checkout.visit.id)
     setCheckout(null)
+  }
+
+  /**
+   * One-tap journey step: waiting visit → open encounter. Creates the
+   * encounter (physician carried over from the visit, or self for
+   * physicians), links it to the visit, advances the stage to the second
+   * configured stage ("With doctor" in the default preset), and navigates
+   * straight in — no patient-page detour.
+   */
+  const startEncounter = async (v: Visit) => {
+    const pt = visitPatient(v)
+    if (!pt || !user || startingId) return
+    const assigned = v.assigned_to ?? (hasRole('physician') ? user.id : null)
+    if (!assigned && !hasRole('admin')) return
+    setStartingId(v.id)
+    const encounterId = crypto.randomUUID()
+    const { error } = await supabase.from('encounters').insert({
+      id: encounterId,
+      patient_id: pt.id,
+      status: 'open',
+      visibility: 'private',
+      visible_to_roles: [],
+      assigned_to: assigned,
+      created_by: user.id,
+    })
+    if (!error) {
+      const nextStage =
+        flowStages.length > 1 && (!v.stage || v.stage === flowStages[0])
+          ? flowStages[1]
+          : v.stage
+      await updateVisit(v.id, { encounter_id: encounterId, assigned_to: assigned, stage: nextStage })
+      navigate(`/patients/${pt.id}/encounters/${encounterId}`)
+    }
+    setStartingId(null)
   }
 
   const renderVisit = (v: Visit) => {
@@ -243,6 +280,23 @@ export function VisitQueue({
             >
               <Stethoscope className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Encounter</span>
+            </Button>
+          )}
+          {isActive && !enc && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-primary border-primary/40"
+              disabled={startingId === v.id || (!v.assigned_to && !hasRole('physician') && !hasRole('admin'))}
+              title={!v.assigned_to && !hasRole('physician') && !hasRole('admin')
+                ? 'Assign a physician first'
+                : 'Create the encounter and open it'}
+              onClick={() => void startEncounter(v)}
+            >
+              {startingId === v.id
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Stethoscope className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">Start encounter</span>
             </Button>
           )}
           {isActive && (

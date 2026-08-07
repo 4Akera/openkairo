@@ -38,9 +38,11 @@ thing — a single patient journey — not separate modules stitched together.
       directly on their patient queue; the Work tab exists only for
       departments that receive orders or direct entries. (2026-08-07 — bug
       reported by user)
-- [ ] One-tap "Start encounter" on queue rows: pressing it on a waiting
+- [x] One-tap "Start encounter" on queue rows: pressing it on a waiting
       visit creates the encounter (physician carried over from the visit),
       links it, and navigates straight into it — no patient-page detour.
+      (2026-08-08 — also auto-advances the stage to the second configured
+      stage, e.g. Waiting → With doctor)
 - [ ] Visit journey strip in the encounter header: show arrived → stage →
       checkout for the linked visit, with the stage advanceable right there,
       so clinicians never need the Front Desk to move a patient along.
