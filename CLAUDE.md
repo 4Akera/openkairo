@@ -65,7 +65,10 @@ When working autonomously (e.g. via /loop), follow this contract:
       MedsBlock → patient_medications sync. PharmacyFulfillment wiring
       deferred: fulfilment already writes result blocks; extend later if a
       dispensing-side sync proves needed.)
-- [ ] Voice typing into note-type blocks (Web Speech API first).
+- [x] Voice typing into note-type blocks (Web Speech API first).
+      (2026-08-07 — useDictation hook + Dictate button in NoteBlock;
+      feature-detected, final-results-only, auto-restarts through silence.
+      Extend to other text-heavy blocks when the pilot proves out.)
 
 ## Project conventions
 

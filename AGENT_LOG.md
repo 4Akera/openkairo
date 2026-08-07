@@ -193,3 +193,23 @@ browser-verified — saved a "Paracetamol 1g" meds block for a patient whose
 master list had only Metformine; patient_medications gained the Paracetamol
 row (dose, prescriber, start date) and Metformine was not duplicated. Test
 rows removed afterwards.
+
+## 2026-08-07 — Iteration 11: voice typing in Note blocks (BACKLOG EMPTY)
+
+**Item:** Voice typing via Web Speech API — the final backlog item.
+
+**What changed:** `src/hooks/useDictation.ts` — feature-detected wrapper
+around (webkit)SpeechRecognition: final results only, auto-restart through
+the browser's silence timeouts, mic-permission errors surfaced inline,
+clean stop on unmount. `appendDictation` (tested) handles spacing when
+inserting fragments. NoteBlock's editor gains a "Dictate" pill that pulses
+red while listening; it renders only where the API exists, so unsupported
+browsers see nothing new.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests (3 new);
+browser-verified the Dictate button renders in the Note editor (Chromium).
+Actual speech input cannot be simulated headlessly; the permission-denied
+path is handled. Test note block removed afterwards.
+
+**Loop state:** the backlog in CLAUDE.md is now fully ticked. Stopping the
+autonomous loop; restart with /loop after curating new backlog items.
