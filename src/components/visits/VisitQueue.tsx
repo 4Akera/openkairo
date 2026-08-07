@@ -11,27 +11,20 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useNow } from '../../hooks/useNow'
 import {
-  visitPatient, visitEncounter, arriveVisit, finishVisit, cancelVisit, updateVisit,
+  visitPatient, visitEncounter, arriveVisit, cancelVisit, updateVisit,
   referralSourceLabel,
 } from '../../lib/visits'
+import { CheckoutDialog } from './CheckoutDialog'
 import type { Visit } from '../../types'
 import { fullName, formatDateTime } from '../../lib/utils'
 import {
   Button, Input, ScrollArea,
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../ui'
 import {
   ClipboardList, Clock, Loader2, LogOut, XCircle, Stethoscope,
-  ChevronRight, AlertTriangle, CheckCircle2, UserPlus,
+  ChevronRight, CheckCircle2, UserPlus,
 } from 'lucide-react'
-
-type CheckoutInfo = {
-  visit: Visit
-  pendingCharges: { id: string; description: string; status: string }[]
-  openOrders: { id: string; action_type: string; status: string }[]
-  loading: boolean
-}
 
 export function VisitQueue({
   visits,
@@ -50,7 +43,7 @@ export function VisitQueue({
   const { user, hasRole } = useAuthStore()
   const { nameFormat, flowStages } = useSettingsStore()
   const now = useNow()
-  const [checkout, setCheckout] = useState<CheckoutInfo | null>(null)
+  const [checkoutVisit, setCheckoutVisit] = useState<Visit | null>(null)
   const [startingId, setStartingId] = useState<string | null>(null)
   // Physician + reason are assigned inline on the row, after check-in
   const [physicians, setPhysicians] = useState<{ id: string; full_name: string }[]>([])
@@ -94,42 +87,6 @@ export function VisitQueue({
     if (m < 1) return 'now'
     if (m < 60) return `${m}m`
     return `${Math.floor(m / 60)}h ${m % 60}m`
-  }
-
-  const openCheckout = async (visit: Visit) => {
-    setCheckout({ visit, pendingCharges: [], openOrders: [], loading: true })
-    const patient = visitPatient(visit)
-    const enc = visitEncounter(visit)
-    const [chargesRes, ordersRes] = await Promise.all([
-      patient
-        ? supabase
-            .from('charges')
-            .select('id, description, status')
-            .eq('patient_id', patient.id)
-            .in('status', ['pending', 'pending_approval', 'invoiced'])
-        : Promise.resolve({ data: [] }),
-      enc
-        ? supabase
-            .from('block_actions')
-            .select('id, action_type, status')
-            .eq('encounter_id', enc.id)
-            .not('status', 'in', '("completed","cancelled")')
-        : Promise.resolve({ data: [] }),
-    ])
-    setCheckout(prev => prev && prev.visit.id === visit.id
-      ? {
-          visit,
-          pendingCharges: (chargesRes.data ?? []) as CheckoutInfo['pendingCharges'],
-          openOrders: (ordersRes.data ?? []) as CheckoutInfo['openOrders'],
-          loading: false,
-        }
-      : prev)
-  }
-
-  const confirmCheckout = async () => {
-    if (!checkout) return
-    await finishVisit(checkout.visit.id)
-    setCheckout(null)
   }
 
   /**
@@ -300,7 +257,7 @@ export function VisitQueue({
             </Button>
           )}
           {isActive && (
-            <Button size="sm" variant="ghost" onClick={() => void openCheckout(v)}>
+            <Button size="sm" variant="ghost" onClick={() => setCheckoutVisit(v)}>
               <LogOut className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Check out</span>
             </Button>
@@ -388,71 +345,7 @@ export function VisitQueue({
         )}
       </ScrollArea>
 
-      {/* ── Checkout dialog ── */}
-      <Dialog open={!!checkout} onOpenChange={(o) => { if (!o) setCheckout(null) }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Check out</DialogTitle>
-            <DialogDescription>
-              {checkout && visitPatient(checkout.visit)
-                ? fullName(visitPatient(checkout.visit)!, nameFormat)
-                : ''}
-            </DialogDescription>
-          </DialogHeader>
-          {checkout?.loading ? (
-            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Checking charges and orders…
-            </div>
-          ) : checkout && (
-            <div className="space-y-3">
-              {checkout.pendingCharges.length === 0 && checkout.openOrders.length === 0 ? (
-                <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  No pending charges or open orders.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {checkout.pendingCharges.length > 0 && (
-                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2">
-                      <p className="text-xs font-medium flex items-center gap-1.5 text-amber-700">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        {checkout.pendingCharges.length} unsettled charge{checkout.pendingCharges.length > 1 ? 's' : ''}
-                      </p>
-                      <ul className="mt-1 text-xs text-muted-foreground list-disc list-inside">
-                        {checkout.pendingCharges.slice(0, 5).map(c => (
-                          <li key={c.id} className="truncate">{c.description} · {c.status}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {checkout.openOrders.length > 0 && (
-                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2">
-                      <p className="text-xs font-medium flex items-center gap-1.5 text-amber-700">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        {checkout.openOrders.length} order{checkout.openOrders.length > 1 ? 's' : ''} still in progress
-                      </p>
-                      <ul className="mt-1 text-xs text-muted-foreground list-disc list-inside">
-                        {checkout.openOrders.slice(0, 5).map(o => (
-                          <li key={o.id} className="capitalize truncate">{o.action_type} · {o.status.replace('_', ' ')}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    You can still check the patient out — this is only a heads-up.
-                  </p>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setCheckout(null)}>Cancel</Button>
-                <Button onClick={() => void confirmCheckout()}>
-                  <LogOut className="h-3.5 w-3.5" /> Check out
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <CheckoutDialog visit={checkoutVisit} onClose={() => setCheckoutVisit(null)} />
     </>
   )
 }

@@ -249,3 +249,22 @@ linked and stage moved to "With doctor". Test visit+encounter removed.
 **Observation for the journey:** day rollover made yesterday's unfinished
 visits vanish from the Front Desk — the "carried over" backlog item is
 real; it stays queued in the features tier.
+
+## 2026-08-08 — Iteration 14: visit journey strip in the encounter
+
+**Item:** One Journey — the visit's logistics visible and controllable
+inside the encounter.
+
+**What changed:** new `VisitJourneyStrip` renders as a slim bar under the
+encounter header when a visit is linked: arrived time, live in-clinic
+duration, the stage as an inline select, and Check out — flipping to
+"Checked out <time>" when done, updated via realtime. The checkout dialog
+(charges + open-orders heads-up) was extracted from VisitQueue into a
+shared `CheckoutDialog`, so queue rows and the strip use one
+implementation. Encounters without visits render nothing new.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+the full journey without leaving the encounter — checked Jane Smith in,
+one-tap Start encounter, strip showed "Arrived 12:20 AM · in clinic 0m ·
+With doctor · Check out", checkout flipped it to "Checked out 12:21 AM"
+in realtime. Test visit and encounter removed afterwards.

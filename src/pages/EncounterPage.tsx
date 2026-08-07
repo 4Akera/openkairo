@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, cn } from '../lib/utils'
+import { VisitJourneyStrip } from '../components/visits/VisitJourneyStrip'
 import {
   Button, Badge, Separator,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -750,6 +751,9 @@ export default function EncounterPage() {
             )}
           </div>
         </header>
+
+        {/* Visit journey — arrived → stage → checkout, advanceable in place */}
+        {encounterId && <VisitJourneyStrip encounterId={encounterId} />}
 
         {/* Mobile tab bar */}
         <div className="md:hidden flex border-b bg-card shrink-0">

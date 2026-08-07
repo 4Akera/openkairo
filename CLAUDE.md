@@ -43,9 +43,11 @@ thing — a single patient journey — not separate modules stitched together.
       links it, and navigates straight into it — no patient-page detour.
       (2026-08-08 — also auto-advances the stage to the second configured
       stage, e.g. Waiting → With doctor)
-- [ ] Visit journey strip in the encounter header: show arrived → stage →
+- [x] Visit journey strip in the encounter header: show arrived → stage →
       checkout for the linked visit, with the stage advanceable right there,
       so clinicians never need the Front Desk to move a patient along.
+      (2026-08-08 — VisitJourneyStrip under the encounter header, realtime;
+      CheckoutDialog extracted and shared with queue rows)
 - [ ] Patient page: ONE chronological "Visits" list merging visits
       (logistics: booked, arrived, checked out) with their encounters
       (clinical) — upcoming bookings at top; kill the separate mental model.
