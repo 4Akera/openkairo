@@ -48,9 +48,11 @@ thing — a single patient journey — not separate modules stitched together.
       so clinicians never need the Front Desk to move a patient along.
       (2026-08-08 — VisitJourneyStrip under the encounter header, realtime;
       CheckoutDialog extracted and shared with queue rows)
-- [ ] Patient page: ONE chronological "Visits" list merging visits
+- [x] Patient page: ONE chronological "Visits" list merging visits
       (logistics: booked, arrived, checked out) with their encounters
       (clinical) — upcoming bookings at top; kill the separate mental model.
+      (2026-08-08 — Upcoming + Visits sections; logistics line above each
+      linked encounter card; Open/Closed sections retired)
 - [ ] Scheduling beyond today: Front Desk gains simple day navigation so
       booked visits for future days are visible and manageable (today stays
       the default view; no calendar module).

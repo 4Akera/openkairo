@@ -268,3 +268,20 @@ the full journey without leaving the encounter — checked Jane Smith in,
 one-tap Start encounter, strip showed "Arrived 12:20 AM · in clinic 0m ·
 With doctor · Check out", checkout flipped it to "Checked out 12:21 AM"
 in realtime. Test visit and encounter removed afterwards.
+
+## 2026-08-08 — Iteration 15: one Visits list on the patient page
+
+**Item:** One Journey — merge visits and encounters into a single history.
+
+**What changed:** PatientPage now fetches the patient's visits alongside
+encounters and renders ONE journey: an "Upcoming" section (booked visits,
+soonest first) and a "Visits" section (newest first) where each entry shows
+its logistics line — arrived / checked out / stage / reason — above the
+linked encounter card. Encounters without visits stand alone; visits
+without clinical documentation show a quiet placeholder. The Open/Closed
+encounter sections and the "Encounters" tab label are gone (tab now says
+"Visits").
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+on a patient with a completed visit — "Arrived 5:19 PM · checked out
+5:37 PM" renders above the linked Follow up encounter card in one list.

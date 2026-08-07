@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSettingsStore as useBillingSettings } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
-import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate } from '../types'
+import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate, Visit } from '../types'
 import { fullName, formatDateTime, cn } from '../lib/utils'
 import { linkEncounterToActiveVisit } from '../lib/visits'
 import {
@@ -25,7 +25,7 @@ import {
 import {
   ArrowLeft, Plus, ChevronRight, Loader2, Activity, Clock,
   CheckCircle2, XCircle, LayoutTemplate, Lock, Users, Zap, ClipboardList, UserCircle,
-  Search, X, DollarSign, Trash2, AlertTriangle,
+  Search, X, DollarSign, Trash2, AlertTriangle, CalendarClock, Footprints,
 } from 'lucide-react'
 import PatientRecord from '../components/patient-record/PatientRecord'
 
@@ -39,6 +39,7 @@ export default function PatientPage() {
 
   const [patient, setPatient] = useState<Patient | null>(null)
   const [encounters, setEncounters] = useState<Encounter[]>([])
+  const [visits, setVisits] = useState<Visit[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
@@ -101,7 +102,7 @@ export default function PatientPage() {
     if (!patientId) return
     setLoading(true)
 
-    const [{ data: pt }, encRes, { data: tmpl }] = await Promise.all([
+    const [{ data: pt }, encRes, { data: tmpl }, { data: vts }] = await Promise.all([
       supabase.from('patients').select('*').eq('id', patientId).single(),
       supabase
         .from('encounters')
@@ -109,9 +110,17 @@ export default function PatientPage() {
         .eq('patient_id', patientId)
         .order('created_at', { ascending: false }),
       supabase.from('encounter_templates').select('*').order('is_universal', { ascending: false }),
+      supabase
+        .from('visits')
+        .select('*')
+        .eq('patient_id', patientId)
+        .is('cancelled_at', null)
+        .order('created_at', { ascending: false })
+        .limit(100),
     ])
 
     if (pt) setPatient(pt)
+    setVisits((vts ?? []) as Visit[])
 
     if (encRes.data) {
       // Batch-fetch creator + assigned-to names from profiles
@@ -339,8 +348,38 @@ export default function PatientPage() {
     )
   }
 
-  const open = encounters.filter(e => e.status === 'open')
-  const closed = encounters.filter(e => e.status === 'closed')
+  // ── ONE journey: merge visits (logistics) and encounters (clinical) ──
+  // A visit row carries its encounter when linked; encounters without a
+  // visit stand alone; upcoming bookings float to the top.
+  type JourneyEntry = {
+    key: string
+    visit: Visit | null
+    encounter: Encounter | null
+    when: string
+  }
+  const linkedEncIds = new Set(visits.map(v => v.encounter_id).filter(Boolean))
+  const upcoming: JourneyEntry[] = visits
+    .filter(v => v.scheduled_at && !v.arrived_at && !v.finished_at)
+    .map(v => ({
+      key: `v-${v.id}`,
+      visit: v,
+      encounter: null,
+      when: v.scheduled_at!,
+    }))
+    .sort((a, b) => a.when.localeCompare(b.when))
+  const history: JourneyEntry[] = [
+    ...visits
+      .filter(v => v.arrived_at || v.finished_at)
+      .map(v => ({
+        key: `v-${v.id}`,
+        visit: v,
+        encounter: encounters.find(e => e.id === v.encounter_id) ?? null,
+        when: v.arrived_at ?? v.created_at,
+      })),
+    ...encounters
+      .filter(e => !linkedEncIds.has(e.id))
+      .map(e => ({ key: `e-${e.id}`, visit: null, encounter: e, when: e.created_at })),
+  ].sort((a, b) => b.when.localeCompare(a.when))
 
   return (
     <div className="h-full flex flex-col">
@@ -412,7 +451,7 @@ export default function PatientPage() {
           )}
         >
           <ClipboardList className="h-3.5 w-3.5" />
-          Encounters
+          Visits
           {encounters.length > 0 && (
             <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{encounters.length}</Badge>
           )}
@@ -450,10 +489,10 @@ export default function PatientPage() {
                   </p>
                 </div>
               )}
-              {encounters.length === 0 ? (
+              {upcoming.length === 0 && history.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
                   <Activity className="h-10 w-10 opacity-20" />
-                  <p className="text-sm">No encounters yet for this patient</p>
+                  <p className="text-sm">No visits yet for this patient</p>
                   {canCreateEncounter && (
                     <Button size="sm" onClick={openDialog}>
                       <Plus className="h-4 w-4" />
@@ -463,43 +502,62 @@ export default function PatientPage() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {open.length > 0 && (
+                  {upcoming.length > 0 && (
                     <section>
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5" />
-                        Open ({open.length})
+                        Upcoming ({upcoming.length})
                       </p>
                       <div className="space-y-2">
-                        {open.map(enc => (
-                          <EncounterCard
-                            key={enc.id}
-                            encounter={enc}
-                            canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
-                            onNavigate={() => navigate(`/patients/${patientId}/encounters/${enc.id}`)}
-                            isAdmin={isAdmin}
-                            onDelete={() => setEncToDelete(enc)}
-                          />
+                        {upcoming.map(entry => (
+                          <div key={entry.key} className="rounded-lg border border-dashed px-3.5 py-2.5 flex items-center gap-2.5">
+                            <CalendarClock className="h-4 w-4 text-primary/70 shrink-0" />
+                            <div className="flex-1 min-w-0 text-sm">
+                              Booked for <span className="font-medium">{formatDateTime(entry.visit!.scheduled_at!)}</span>
+                              {entry.visit!.reason && (
+                                <span className="text-muted-foreground"> · {entry.visit!.reason}</span>
+                              )}
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </section>
                   )}
 
-                  {closed.length > 0 && (
+                  {history.length > 0 && (
                     <section>
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Closed ({closed.length})
+                        <Footprints className="h-3.5 w-3.5" />
+                        Visits ({history.length})
                       </p>
-                      <div className="space-y-2">
-                        {closed.map(enc => (
-                          <EncounterCard
-                            key={enc.id}
-                            encounter={enc}
-                            canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
-                            onNavigate={() => navigate(`/patients/${patientId}/encounters/${enc.id}`)}
-                            isAdmin={isAdmin}
-                            onDelete={() => setEncToDelete(enc)}
-                          />
+                      <div className="space-y-2.5">
+                        {history.map(entry => (
+                          <div key={entry.key}>
+                            {/* Logistics line — present when this was a real visit */}
+                            {entry.visit && (
+                              <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1.5 px-0.5">
+                                <Footprints className="h-3 w-3 shrink-0" />
+                                {entry.visit.arrived_at && <>Arrived {formatDateTime(entry.visit.arrived_at)}</>}
+                                {entry.visit.finished_at
+                                  ? <> · checked out {formatDateTime(entry.visit.finished_at)}</>
+                                  : entry.visit.stage ? <> · {entry.visit.stage}</> : null}
+                                {entry.visit.reason && <> · {entry.visit.reason}</>}
+                              </p>
+                            )}
+                            {entry.encounter ? (
+                              <EncounterCard
+                                encounter={entry.encounter}
+                                canNavigate={canNavigateEncounter(entry.encounter, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
+                                onNavigate={() => navigate(`/patients/${patientId}/encounters/${entry.encounter!.id}`)}
+                                isAdmin={isAdmin}
+                                onDelete={() => setEncToDelete(entry.encounter!)}
+                              />
+                            ) : entry.visit && (
+                              <div className="rounded-lg border px-3.5 py-2 text-xs text-muted-foreground">
+                                Visit without clinical documentation
+                              </div>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </section>
