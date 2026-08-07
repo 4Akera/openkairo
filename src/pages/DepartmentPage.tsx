@@ -31,10 +31,15 @@ export default function DepartmentPage() {
   const [tab, setTab] = useState<'work' | 'patients'>('work')
   const [checkInOpen, setCheckInOpen] = useState(false)
 
+  /** Tabs follow capabilities: pure clinics open on their patient queue. */
+  const defaultTab = (d: Department | null): 'work' | 'patients' =>
+    d && !d.can_receive_orders && !d.can_create_direct && d.can_receive_patients
+      ? 'patients'
+      : 'work'
+
   // Admins may open any active department without being a member
   useEffect(() => {
-    setTab('work')
-    if (memberDept) { setDept(memberDept); setLoading(false); return }
+    if (memberDept) { setDept(memberDept); setTab(defaultTab(memberDept)); setLoading(false); return }
     if (!slug || !isAdmin) { setDept(null); setLoading(false); return }
     setLoading(true)
     supabase
@@ -44,13 +49,16 @@ export default function DepartmentPage() {
       .eq('active', true)
       .maybeSingle()
       .then(({ data }) => {
-        setDept((data as Department | null) ?? null)
+        const d = (data as Department | null) ?? null
+        setDept(d)
+        setTab(defaultTab(d))
         setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, memberDept?.id, isAdmin])
 
   const showPatients = !!dept?.can_receive_patients
+  const showWork = !!dept && (dept.can_receive_orders || dept.can_create_direct)
   const { visits, profileNames, loading: visitsLoading } = useVisitQueue()
   const deptVisits = useMemo(
     () => (dept ? visits.filter(v => v.department_id === dept.id) : []),
@@ -101,41 +109,42 @@ export default function DepartmentPage() {
           </div>
         </div>
 
-        {showPatients && (
-          <div className="flex items-center gap-2 shrink-0">
-          {tab === 'patients' && (
+        <div className="flex items-center gap-2 shrink-0">
+          {showPatients && tab === 'patients' && (
             <Button size="sm" onClick={() => setCheckInOpen(true)}>
               <UserPlus className="h-4 w-4" />
               <span className="hidden sm:inline">Check in</span>
             </Button>
           )}
-          <div className="flex items-center rounded-lg border p-0.5 shrink-0">
-            {([
-              { id: 'work' as const, label: 'Work', icon: <Zap className="h-3.5 w-3.5" /> },
-              { id: 'patients' as const, label: 'Patients', icon: <ClipboardList className="h-3.5 w-3.5" /> },
-            ]).map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-medium transition-colors',
-                  tab === t.id
-                    ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t.icon}{t.label}
-                {t.id === 'patients' && waitingCount > 0 && (
-                  <Badge variant="secondary" className="h-4 px-1 text-[10px]">{waitingCount}</Badge>
-                )}
-              </button>
-            ))}
-          </div>
-          </div>
-        )}
+          {/* Tab toggle only exists when the department genuinely does both */}
+          {showWork && showPatients && (
+            <div className="flex items-center rounded-lg border p-0.5 shrink-0">
+              {([
+                { id: 'work' as const, label: 'Work', icon: <Zap className="h-3.5 w-3.5" /> },
+                { id: 'patients' as const, label: 'Patients', icon: <ClipboardList className="h-3.5 w-3.5" /> },
+              ]).map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-medium transition-colors',
+                    tab === t.id
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t.icon}{t.label}
+                  {t.id === 'patients' && waitingCount > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">{waitingCount}</Badge>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {tab === 'patients' && showPatients ? (
+      {showPatients && (tab === 'patients' || !showWork) ? (
         <VisitQueue
           visits={deptVisits}
           profileNames={profileNames}

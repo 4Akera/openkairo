@@ -30,6 +30,36 @@ When working autonomously (e.g. via /loop), follow this contract:
 
 ## Backlog (edit freely — user curates this list)
 
+### One Journey pass (highest priority)
+Scheduling, visits, patients, and encounters must feel like ONE simple
+thing — a single patient journey — not separate modules stitched together.
+
+- [x] Department tabs follow capabilities: pure clinics (orders off) open
+      directly on their patient queue; the Work tab exists only for
+      departments that receive orders or direct entries. (2026-08-07 — bug
+      reported by user)
+- [ ] One-tap "Start encounter" on queue rows: pressing it on a waiting
+      visit creates the encounter (physician carried over from the visit),
+      links it, and navigates straight into it — no patient-page detour.
+- [ ] Visit journey strip in the encounter header: show arrived → stage →
+      checkout for the linked visit, with the stage advanceable right there,
+      so clinicians never need the Front Desk to move a patient along.
+- [ ] Patient page: ONE chronological "Visits" list merging visits
+      (logistics: booked, arrived, checked out) with their encounters
+      (clinical) — upcoming bookings at top; kill the separate mental model.
+- [ ] Scheduling beyond today: Front Desk gains simple day navigation so
+      booked visits for future days are visible and manageable (today stays
+      the default view; no calendar module).
+
+### Features (only after the above)
+- [ ] Extend dictation to other text-heavy blocks (Nurse Note,
+      Consultation, Discharge Note) reusing useDictation.
+- [ ] Queue auto-refresh of stale visits: on Front Desk load, visits from
+      previous days that were never checked out get a subtle "carried over"
+      section instead of disappearing.
+
+## Shipped backlog (2026-08-07, first autonomous run)
+
 ### Simplify (highest priority)
 - [x] Patient-flow pass: reduce the check-in dialog to name-first (search →
       one tap → in queue); assign physician and reason inline in the queue row

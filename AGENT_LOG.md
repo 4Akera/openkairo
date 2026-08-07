@@ -213,3 +213,19 @@ path is handled. Test note block removed afterwards.
 
 **Loop state:** the backlog in CLAUDE.md is now fully ticked. Stopping the
 autonomous loop; restart with /loop after curating new backlog items.
+
+## 2026-08-07 — Iteration 12: department tabs follow capabilities (user bug)
+
+**Item:** User-reported: their Cardiology clinic (orders and direct entries
+disabled) still opened on the Work tab with an empty order queue.
+
+**What changed:** DepartmentPage derives its tabs from capabilities — the
+Work tab exists only when `can_receive_orders || can_create_direct`; pure
+clinics open directly on their patient queue with no toggle; hybrids keep
+the toggle and default to Work.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+/dept/card now opens straight on the Waiting queue, no Work tab.
+
+**Backlog refilled:** new "One Journey" tier added by user direction —
+scheduling, visits, patients, and encounters must feel like one thing.
