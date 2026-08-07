@@ -88,3 +88,21 @@ block now fits on one screen.
 **Verification:** tsc clean, eslint clean, 112/112 tests; browser-verified —
 New Block Type opens as Basic Info → collapsed Advanced → Static Fields on
 one screen; expanding reveals Capabilities et al.
+
+## 2026-08-07 — Iteration 5: clinic walk-in check-in (shared CheckInDialog)
+
+**Item:** Walk-in check-in on a clinic's own Patients tab (first UX item).
+
+**What changed:** the name-first check-in dialog moved out of FrontDeskPage
+into `src/components/visits/CheckInDialog.tsx` with a `fixedDepartmentId`
+prop. The Front Desk uses it unchanged (queue selector, book mode); a
+clinic's Patients tab (DepartmentPage) gets a "Check in" header button and
+an empty-state action, both opening the dialog locked to that clinic's
+queue — no queue selector shown. FrontDeskPage shrank ~140 lines.
+
+**Why highest value:** first unchecked UX item; clinics running their own
+desk previously had no way to admit walk-ins from their workspace.
+
+**Verification:** tsc clean, eslint clean, 112/112 tests; browser-verified
+on the user-created Cardiology clinic — Patients tab shows its 2-patient
+queue, Check in opens the search-only dialog (queue locked, no selector).

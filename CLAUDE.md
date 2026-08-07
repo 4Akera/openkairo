@@ -47,8 +47,9 @@ When working autonomously (e.g. via /loop), follow this contract:
       disclosure. (2026-08-07)
 
 ### UX rough edges
-- [ ] Walk-in check-in button on a clinic's own Patients tab (departments with
-      can_receive_patients).
+- [x] Walk-in check-in button on a clinic's own Patients tab (departments with
+      can_receive_patients). (2026-08-07 — shared CheckInDialog extracted;
+      Front Desk and DepartmentPage both use it)
 - [ ] Show referral chain on queue rows ("← from <dept>") using
       referred_from_visit_id.
 - [ ] "Avg wait today" stat on the Front Desk header.

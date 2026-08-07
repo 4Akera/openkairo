@@ -13,11 +13,12 @@ import { useAuthStore } from '../stores/authStore'
 import { useVisitQueue } from '../hooks/useVisits'
 import { DeptTab } from './DeptPortal'
 import { VisitQueue } from '../components/visits/VisitQueue'
+import { CheckInDialog } from '../components/visits/CheckInDialog'
 import { deptIconComponent, deptColorClasses } from '../lib/deptIcons'
 import type { Department } from '../types'
 import { cn } from '../lib/utils'
-import { Badge } from '../components/ui'
-import { Building2, Loader2, ClipboardList, Zap } from 'lucide-react'
+import { Badge, Button } from '../components/ui'
+import { Building2, Loader2, ClipboardList, Zap, UserPlus } from 'lucide-react'
 
 export default function DepartmentPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -28,6 +29,7 @@ export default function DepartmentPage() {
   const [dept, setDept] = useState<Department | null>(memberDept)
   const [loading, setLoading] = useState(!memberDept)
   const [tab, setTab] = useState<'work' | 'patients'>('work')
+  const [checkInOpen, setCheckInOpen] = useState(false)
 
   // Admins may open any active department without being a member
   useEffect(() => {
@@ -93,6 +95,13 @@ export default function DepartmentPage() {
         </div>
 
         {showPatients && (
+          <div className="flex items-center gap-2 shrink-0">
+          {tab === 'patients' && (
+            <Button size="sm" onClick={() => setCheckInOpen(true)}>
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Check in</span>
+            </Button>
+          )}
           <div className="flex items-center rounded-lg border p-0.5 shrink-0">
             {([
               { id: 'work' as const, label: 'Work', icon: <Zap className="h-3.5 w-3.5" /> },
@@ -115,6 +124,7 @@ export default function DepartmentPage() {
               </button>
             ))}
           </div>
+          </div>
         )}
       </div>
 
@@ -124,11 +134,25 @@ export default function DepartmentPage() {
           profileNames={profileNames}
           loading={visitsLoading}
           emptyLabel="No patients in this queue today"
+          emptyAction={
+            <Button size="sm" variant="outline" onClick={() => setCheckInOpen(true)}>
+              Check in a walk-in
+            </Button>
+          }
         />
       ) : (
         <div className="flex-1 flex overflow-hidden min-h-0">
           <DeptTab key={dept.slug} dept={dept} />
         </div>
+      )}
+
+      {showPatients && (
+        <CheckInDialog
+          open={checkInOpen}
+          onOpenChange={setCheckInOpen}
+          mode="now"
+          fixedDepartmentId={dept.id}
+        />
       )}
     </div>
   )
