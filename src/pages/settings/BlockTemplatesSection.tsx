@@ -185,9 +185,9 @@ export function BlockTemplatesSection() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Content Templates</h3>
+        <h3 className="text-sm font-semibold">My Defaults</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Pre-fill block content when adding to an encounter. Mark a template as <strong>Auto-apply</strong> to skip the picker and add instantly.
+          Saved content that pre-fills a block when you add it to an encounter. Mark a default as <strong>Auto-apply</strong> to skip the picker and add instantly.
         </p>
       </div>
 
@@ -254,7 +254,7 @@ export function BlockTemplatesSection() {
           {/* Add template to a block that doesn't have any yet */}
           {defsWithout.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Add template for</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Add a default for</p>
               <div className="flex flex-wrap gap-1.5">
                 {defsWithout.map((def) => {
                   const colors = getDefinitionColors(def.color)
@@ -334,7 +334,7 @@ export function BlockTemplatesSection() {
                   {/* Name + auto-apply row */}
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
-                      <Label className="text-xs">Template Name</Label>
+                      <Label className="text-xs">Name</Label>
                       <Input
                         className="mt-1"
                         placeholder="e.g. Routine Vitals, Standard SOAP…"
@@ -361,12 +361,12 @@ export function BlockTemplatesSection() {
                     </div>
                   </div>
                   {!tplName.trim() && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400">Enter a template name before saving.</p>
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">Enter a name before saving.</p>
                   )}
                   {/* Block's own editor — its Save button finalises the template */}
                   <div className="border rounded-lg overflow-hidden">
                     <div className="px-3 py-1.5 bg-muted/30 border-b">
-                      <p className="text-[10px] text-muted-foreground">Fill in the content below, then click <strong>Save</strong> to save the template.</p>
+                      <p className="text-[10px] text-muted-foreground">Fill in the content below, then click <strong>Save</strong> to save it as a default.</p>
                     </div>
                     <div className={cn('p-4', !tplName.trim() && 'pointer-events-none opacity-50')}>
                       <registry.Edit
@@ -393,7 +393,7 @@ export function BlockTemplatesSection() {
               </DialogHeader>
               <div className="flex-1 overflow-y-auto space-y-4 py-2">
                 <div>
-                  <Label className="text-xs">Template Name</Label>
+                  <Label className="text-xs">Name</Label>
                   <Input
                     className="mt-1"
                     placeholder="e.g. Routine Follow-up, Post-op Note…"
@@ -406,7 +406,7 @@ export function BlockTemplatesSection() {
                 <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
                   <div>
                     <p className="text-xs font-medium">Auto-apply</p>
-                    <p className="text-[11px] text-muted-foreground">Skip the template picker and add this block instantly.</p>
+                    <p className="text-[11px] text-muted-foreground">Skip the picker and add this block instantly.</p>
                   </div>
                   <button
                     type="button"
@@ -435,7 +435,7 @@ export function BlockTemplatesSection() {
                     </div>
                   ) : (
                     <p className="mt-1 text-xs text-muted-foreground italic border rounded-lg p-3 bg-muted/20">
-                      This block has no configurable fields. The template will act as a quick-add shortcut.
+                      This block has no configurable fields. The default will act as a quick-add shortcut.
                     </p>
                   )}
                 </div>
@@ -444,7 +444,7 @@ export function BlockTemplatesSection() {
                 <Button variant="outline" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
                 <Button size="sm" onClick={handleSave} disabled={saving || !tplName.trim()}>
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {saving ? 'Saving…' : 'Save Template'}
+                  {saving ? 'Saving…' : 'Save Default'}
                 </Button>
               </div>
             </DialogContent>

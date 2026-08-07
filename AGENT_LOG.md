@@ -27,3 +27,24 @@ contains the pre-existing uncommitted work in this tree (the visits/patient
 flow feature, the unified department shell, and a concurrent session's
 Settings refactor) — those changes predate the loop and were never committed
 anywhere else. From iteration 2 onward, commits are one-item-sized.
+
+## 2026-08-07 — Iteration 2: one meaning per word — "template"
+
+**Item:** Unify "template" naming (second simplify item).
+
+**What changed:** user content templates are now called **defaults** in every
+user-facing string; "Templates" refers only to encounter templates.
+- Settings → My Blocks: "Content Templates" → "My Defaults", body copy,
+  "Add a default for", "Save Default" (`BlockTemplatesSection.tsx`).
+- Add Block menu: picker tooltip "Choose template" → "Choose default"
+  (`AddBlockMenu.tsx`).
+- Encounter creation: "pre-filled from your templates" → "…your defaults"
+  (`PatientPage.tsx`).
+No schema or variable renames — UI vocabulary only, per the item's scope.
+
+**Why highest value:** top unchecked simplify item; "template" meaning three
+things was called out as a core confusion in the product review.
+
+**Verification:** tsc clean, eslint clean, 106/106 tests; browser-verified
+Settings → My Blocks shows "My Defaults" / "Add a default for", and the
+encounter Templates section is unchanged.

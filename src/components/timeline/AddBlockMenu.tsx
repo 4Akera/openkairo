@@ -332,7 +332,7 @@ export default function AddBlockMenu({ onAdd, disabled }: Props) {
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); setSelectedDef(def) }}
-                                title="Choose template"
+                                title="Choose default"
                                 className={cn(
                                   'flex items-center gap-0.5 text-[9px] border rounded px-1 py-px shrink-0 transition-colors',
                                   hasDefault

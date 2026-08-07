@@ -34,8 +34,9 @@ When working autonomously (e.g. via /loop), follow this contract:
 - [x] Patient-flow pass: reduce the check-in dialog to name-first (search →
       one tap → in queue); assign physician and reason inline in the queue row
       afterwards instead of upfront fields. (2026-08-07)
-- [ ] Unify "template" naming: encounter templates keep the name "Templates";
+- [x] Unify "template" naming: encounter templates keep the name "Templates";
       rename user content templates to "My defaults" everywhere in the UI.
+      (2026-08-07)
 - [ ] Collapse block-visibility booleans (`is_builtin`/`is_universal`/
       `is_dept_only`/`active`/preferred/pinned) into one clear status concept
       in the Settings UI (schema can stay; simplify presentation first).

@@ -750,8 +750,8 @@ export default function PatientPage() {
                           <p className="text-[10px] text-amber-600 flex items-center gap-1 mt-1">
                             <Zap className="w-2.5 h-2.5 shrink-0" />
                             {preFilled.length === t.blocks.length
-                              ? 'All blocks pre-filled from your templates'
-                              : `${preFilled.length} block${preFilled.length !== 1 ? 's' : ''} pre-filled from your templates`}
+                              ? 'All blocks pre-filled from your defaults'
+                              : `${preFilled.length} block${preFilled.length !== 1 ? 's' : ''} pre-filled from your defaults`}
                           </p>
                         )}
                       </div>
