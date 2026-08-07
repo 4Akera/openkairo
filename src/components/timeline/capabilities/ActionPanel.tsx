@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Zap, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, Flame } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../stores/authStore'
+import { useSettingsStore } from '../../../stores/settingsStore'
+import { createReferralVisit } from '../../../lib/visits'
 import type { BlockAction, BlockDefinition } from '../../../types'
 import { formatDateTime } from '../../../lib/utils'
 import { Button } from '../../ui'
@@ -43,11 +45,13 @@ export function ActionPanel({
   onOrderFulfilledPreferCollapsed?: () => void
 }) {
   const { user } = useAuthStore()
+  const { flowStages } = useSettingsStore()
   const [actions, setActions]       = useState<BlockAction[]>([])
   const [triggering, setTriggering] = useState(false)
   const [sendError, setSendError]   = useState<string | null>(null)
   const [deptName, setDeptName]     = useState<string | null>(null)
   const [deptSlug, setDeptSlug]     = useState<string | null>(null)
+  const [patientDeptId, setPatientDeptId] = useState<string | null>(null)
   const [btId, setBtId]             = useState<string | null>(null)
   const [deptChecked, setDeptChecked] = useState(false)
   const [priority, setPriority]     = useState<'stat' | 'routine'>('routine')
@@ -61,19 +65,21 @@ export function ActionPanel({
     if (!definition.id) return
     supabase
       .from('department_block_types')
-      .select('id, departments(name, slug)')
+      .select('id, departments(id, name, slug, can_receive_patients)')
       .eq('order_block_def_id', definition.id)
       .eq('active', true)
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
+          type DeptRef = { id: string; name: string; slug: string; can_receive_patients?: boolean }
           const row = data as { id: string; departments: unknown }
           const dept = Array.isArray(row.departments)
-            ? (row.departments[0] as { name: string; slug: string } | undefined)
-            : (row.departments as { name: string; slug: string } | null)
+            ? (row.departments[0] as DeptRef | undefined)
+            : (row.departments as DeptRef | null)
           setDeptName(dept?.name ?? null)
           setDeptSlug(dept?.slug ?? null)
+          setPatientDeptId(dept?.can_receive_patients ? dept.id : null)
           setBtId(row.id)
         }
         setDeptChecked(true)
@@ -145,6 +151,10 @@ export function ActionPanel({
       if (error) {
         setSendError(error.message || 'Could not send order. Try again or check your connection.')
       } else {
+        // Patient-facing department: the referral also queues the patient there
+        if (patientDeptId) {
+          void createReferralVisit(patientId, patientDeptId, flowStages[0] ?? null)
+        }
         // Refresh before dropping the in-flight UI so Send stays hidden (avoids second click gap)
         await loadActions()
       }

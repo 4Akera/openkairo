@@ -81,7 +81,7 @@ function rebuildLabRulesSimple(
 
 /** One charge line per catalogue panel (optional) + optional add-on lines. */
 export function LabPanelsBillingRulesEditor({ form, set, allServiceItems }: BillingRulesEditorProps) {
-  const rules = form.config?.billing?.rules ?? []
+  const rules = useMemo(() => form.config?.billing?.rules ?? [], [form.config?.billing?.rules])
 
   const { byPanel, other } = useMemo(() => partitionLabRules(rules), [rules])
 
@@ -323,7 +323,7 @@ function rebuildRadiologyRulesSimple(
 
 /** One charge line per catalog imaging study (optional) + optional add-on lines — mirrors lab_panels. */
 export function RadiologyStudiesBillingRulesEditor({ form, set, allServiceItems }: BillingRulesEditorProps) {
-  const rules = form.config?.billing?.rules ?? []
+  const rules = useMemo(() => form.config?.billing?.rules ?? [], [form.config?.billing?.rules])
 
   const { byStudy, other } = useMemo(() => partitionRadiologyRules(rules), [rules])
 

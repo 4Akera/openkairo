@@ -1,18 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, ZoomIn } from 'lucide-react'
 
 const STORAGE_KEY = 'zoom_hint_dismissed'
 
 export default function ZoomHintBanner() {
-  const [visible, setVisible] = useState(false)
-  const [leaving, setLeaving] = useState(false)
-
-  useEffect(() => {
+  const [visible, setVisible] = useState(() => {
     const isDesktop = window.matchMedia('(min-width: 1024px) and (pointer: fine)').matches
-    if (isDesktop && !localStorage.getItem(STORAGE_KEY)) {
-      setVisible(true)
-    }
-  }, [])
+    return isDesktop && !localStorage.getItem(STORAGE_KEY)
+  })
+  const [leaving, setLeaving] = useState(false)
 
   function dismiss() {
     setLeaving(true)

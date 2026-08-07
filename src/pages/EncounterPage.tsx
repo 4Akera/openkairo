@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useEncounterStore } from '../stores/encounterStore'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import type { Patient, Encounter, Charge } from '../types'
+import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, cn } from '../lib/utils'
 import {
   Button, Badge, Separator,
@@ -122,7 +122,7 @@ export default function EncounterPage() {
     setLockMap({})
     setDefinitions([])
     fetchData()
-  }, [fetchData, setBlocks, setLockMap])
+  }, [fetchData, setBlocks, setLockMap, setDefinitions])
 
   useEffect(() => {
     if (!encounterId) return
@@ -133,7 +133,7 @@ export default function EncounterPage() {
       .not('locked_by', 'is', null)
       .then(({ data }) => {
         if (!data) return
-        const map: Record<string, any> = {}
+        const map: BlockLockMap = {}
         data.forEach(b => { map[b.id] = { block_id: b.id, locked_by: b.locked_by, user_email: b.locked_by } })
         setLockMap(map)
       })

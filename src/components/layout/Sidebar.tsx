@@ -1,20 +1,25 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
+import { useDeptPendingCounts } from '../../hooks/useDeptPendingCounts'
+import { deptIconComponent } from '../../lib/deptIcons'
 import { cn } from '../../lib/utils'
-import { Users, LogOut, Settings, Search, Building2, Sun, Moon, Receipt } from 'lucide-react'
+import { Users, LogOut, Settings, Search, Sun, Moon, Receipt, ClipboardList } from 'lucide-react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import Logo from '../Logo'
 
-const NAV = [
-  { to: '/', label: 'Patients', icon: Users, end: true },
-  { to: '/settings', label: 'Settings', icon: Settings, end: false },
-]
-
 export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void }) {
-  const { user, profile, signOut, inDept, hasBilling, permissions } = useAuthStore()
+  const { user, profile, signOut, inDept, myDepartments, hasBilling, permissions, hasRole } = useAuthStore()
   const isDeptOnly = inDept && permissions.length === 0
+  const hasFrontDesk = hasRole('receptionist') || hasRole('physician') || hasRole('nurse') || hasRole('admin')
+  const deptCounts = useDeptPendingCounts(myDepartments.map(d => d.slug))
+
+  const NAV = [
+    { to: '/', label: 'Patients', icon: Users, end: true },
+    ...(hasFrontDesk ? [{ to: '/frontdesk', label: 'Front Desk', icon: ClipboardList, end: false }] : []),
+    { to: '/settings', label: 'Settings', icon: Settings, end: false },
+  ]
   const { theme, toggle } = useThemeStore()
   const navigate = useNavigate()
 
@@ -97,34 +102,48 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
             </Tooltip>
           ))}
 
-          {inDept && (
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <NavLink
-                  to="/portal"
-                  className={({ isActive }) =>
-                    cn(
-                      'group relative flex items-center justify-center h-10 w-full rounded-xl transition-all duration-150',
-                      isActive
-                        ? 'bg-white/15 text-white shadow-inner'
-                        : 'text-slate-500 hover:bg-white/8 hover:text-slate-200',
-                    )
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-400 rounded-r-full" />
-                      )}
-                      <Building2 className="h-[18px] w-[18px]" />
-                      <span className="sr-only">Portal</span>
-                    </>
-                  )}
-                </NavLink>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="text-xs font-medium">Portal</TooltipContent>
-            </Tooltip>
-          )}
+          {/* One entry per membership department */}
+          {myDepartments.length > 0 && <div className="w-8 h-px bg-white/10 my-2 mx-auto" />}
+          {myDepartments.map(dept => {
+            const DeptIcon = deptIconComponent(dept.icon)
+            const count = deptCounts[dept.slug] ?? 0
+            return (
+              <Tooltip key={dept.id} delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <NavLink
+                    to={`/dept/${dept.slug}`}
+                    className={({ isActive }) =>
+                      cn(
+                        'group relative flex items-center justify-center h-10 w-full rounded-xl transition-all duration-150',
+                        isActive
+                          ? 'bg-white/15 text-white shadow-inner'
+                          : 'text-slate-500 hover:bg-white/8 hover:text-slate-200',
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-400 rounded-r-full" />
+                        )}
+                        <DeptIcon className="h-[18px] w-[18px]" />
+                        {count > 0 && (
+                          <span className="absolute top-1 right-1.5 flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold leading-none">
+                            {count > 99 ? '99+' : count}
+                          </span>
+                        )}
+                        <span className="sr-only">{dept.name}</span>
+                      </>
+                    )}
+                  </NavLink>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-xs font-medium">
+                  {dept.name}
+                  {count > 0 && <span className="ml-1 opacity-60">· {count} open</span>}
+                </TooltipContent>
+              </Tooltip>
+            )
+          })}
 
           {hasBilling && (
             <Tooltip delayDuration={200}>
@@ -237,6 +256,26 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           </NavLink>
         )}
 
+        {/* Front Desk */}
+        {!isDeptOnly && hasFrontDesk && (
+          <NavLink
+            to="/frontdesk"
+            className={({ isActive }) =>
+              cn(
+                'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
+                isActive ? 'text-white' : 'text-slate-500',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <ClipboardList className={cn('h-5 w-5', isActive && 'text-blue-400')} />
+                <span className="text-xs font-medium">Desk</span>
+              </>
+            )}
+          </NavLink>
+        )}
+
         {/* Search */}
         {!isDeptOnly && (
           <button
@@ -266,24 +305,34 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           )}
         </NavLink>
 
-        {inDept && (
-          <NavLink
-            to="/portal"
-            className={({ isActive }) =>
-              cn(
-                'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
-                isActive ? 'text-white' : 'text-slate-500',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Building2 className={cn('h-5 w-5', isActive && 'text-blue-400')} />
-                <span className="text-xs font-medium">Portal</span>
-              </>
-            )}
-          </NavLink>
-        )}
+        {myDepartments.map(dept => {
+          const DeptIcon = deptIconComponent(dept.icon)
+          const count = deptCounts[dept.slug] ?? 0
+          return (
+            <NavLink
+              key={dept.id}
+              to={`/dept/${dept.slug}`}
+              className={({ isActive }) =>
+                cn(
+                  'relative flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
+                  isActive ? 'text-white' : 'text-slate-500',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <DeptIcon className={cn('h-5 w-5', isActive && 'text-blue-400')} />
+                  {count > 0 && (
+                    <span className="absolute top-0.5 right-1 flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold leading-none">
+                      {count > 99 ? '99+' : count}
+                    </span>
+                  )}
+                  <span className="text-xs font-medium truncate max-w-[64px]">{dept.name}</span>
+                </>
+              )}
+            </NavLink>
+          )
+        })}
 
         {hasBilling && (
           <NavLink

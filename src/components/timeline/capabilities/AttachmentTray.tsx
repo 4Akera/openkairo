@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Paperclip, Upload, X, Image, FileText, Film, File, ExternalLink } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../stores/authStore'
@@ -7,11 +7,11 @@ import { cn } from '../../../lib/utils'
 
 const BUCKET = 'block-media'
 
-function mimeIcon(mime: string) {
-  if (mime.startsWith('image/')) return Image
-  if (mime.startsWith('video/')) return Film
-  if (mime === 'application/pdf') return FileText
-  return File
+function MimeIcon({ mime, className }: { mime: string; className?: string }) {
+  if (mime.startsWith('image/')) return <Image className={className} />
+  if (mime.startsWith('video/')) return <Film className={className} />
+  if (mime === 'application/pdf') return <FileText className={className} />
+  return <File className={className} />
 }
 
 function humanSize(bytes: number | null): string {
@@ -35,7 +35,6 @@ function AttachmentCard({
   readOnly: boolean
 }) {
   const [url, setUrl] = useState<string | null>(null)
-  const Icon = mimeIcon(attachment.mime_type)
 
   useEffect(() => {
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(attachment.storage_path)
@@ -54,7 +53,7 @@ function AttachmentCard({
         ) : isVideo && url ? (
           <video src={url} className="w-full h-full object-cover" muted />
         ) : (
-          <Icon className="w-8 h-8 text-muted-foreground" />
+          <MimeIcon mime={attachment.mime_type} className="w-8 h-8 text-muted-foreground" />
         )}
       </div>
 
@@ -107,6 +106,15 @@ export function AttachmentTray({
   const [expanded, setExpanded] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const loadAttachments = useCallback(async () => {
+    const { data } = await supabase
+      .from('block_attachments')
+      .select('*')
+      .eq('block_id', blockId)
+      .order('created_at', { ascending: true })
+    if (data) setAttachments(data as BlockAttachment[])
+  }, [blockId])
+
   useEffect(() => {
     loadAttachments()
     // Real-time subscription handles updates from OTHER users
@@ -119,22 +127,13 @@ export function AttachmentTray({
       )
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [blockId])
+  }, [blockId, loadAttachments])
 
   const appendAttachment = (attachment: BlockAttachment) => {
     setAttachments((prev) => {
       if (prev.some((a) => a.id === attachment.id)) return prev
       return [...prev, attachment]
     })
-  }
-
-  const loadAttachments = async () => {
-    const { data } = await supabase
-      .from('block_attachments')
-      .select('*')
-      .eq('block_id', blockId)
-      .order('created_at', { ascending: true })
-    if (data) setAttachments(data as BlockAttachment[])
   }
 
   const handleFiles = async (files: FileList | null) => {

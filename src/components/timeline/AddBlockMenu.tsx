@@ -3,7 +3,7 @@ import type { BlockDefinition, UserBlockTemplate } from '../../types'
 import { useEncounterStore } from '../../stores/encounterStore'
 import { useAuthStore } from '../../stores/authStore'
 import { supabase } from '../../lib/supabase'
-import { Dialog, DialogContent } from '../ui'
+import { Dialog, DialogContent, DialogTitle } from '../ui'
 import {
   Plus, FileText, ClipboardList, Stethoscope,
   Activity, Heart, Brain, TestTube, Zap, Clock, AlertTriangle,
@@ -211,6 +211,7 @@ export default function AddBlockMenu({ onAdd, disabled }: Props) {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-xs p-0 gap-0 overflow-hidden">
+          <DialogTitle className="sr-only">Add block</DialogTitle>
 
           {/* ── Template sub-menu view ────────────────────────────────────── */}
           {selectedDef ? (

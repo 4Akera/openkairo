@@ -1182,10 +1182,13 @@ create policy "admin_mutate_patient_fields" on patient_field_definitions for all
 -- ── Encounters ───────────────────────────────────────────────────────────────
 -- SELECT: visibility-based (staff / restricted / private / owner / assigned)
 -- Admin can see all encounters for oversight; otherwise assigned_to is the gate.
+-- The creator always retains select access — a receptionist who registers a
+-- private encounter for a physician must still see it in lists.
 create policy "encounter_select" on encounters for select using (
   auth.uid() is not null and (
     visibility = 'staff'
     or assigned_to = auth.uid()
+    or created_by = auth.uid()
     or has_role_in(array['admin'])
     or (visibility = 'restricted' and (
       assigned_to = auth.uid()
@@ -2253,3 +2256,72 @@ create policy "patient_docs_delete"
   on storage.objects for delete
   using (bucket_id = 'patient-docs' and (owner = auth.uid() or public.has_role_in(array['admin'])));
 
+
+-- ============================================================
+-- 18. PATIENT FLOW (VISITS)
+-- ============================================================
+-- A visit is the LOGISTICS record of one patient passage through the
+-- facility (queue position, arrival, checkout); the encounter remains the
+-- clinical record. Timestamps are the backbone — scheduled_at set = booked
+-- appointment, arrived_at set = in queue, finished_at set = checked out.
+-- `stage` is the only configurable notion: validated client-side against
+-- the org's app_settings.flow_stages list (empty list = no stage tracking).
+-- department_id null = the facility's single default queue; multi-clinic
+-- institutions point visits at departments with can_receive_patients.
+
+alter table departments add column if not exists can_receive_patients boolean not null default false;
+
+create table if not exists visits (
+  id                     uuid primary key default gen_random_uuid(),
+  patient_id             uuid not null references patients(id) on delete cascade,
+  department_id          uuid references departments(id) on delete set null,
+  encounter_id           uuid references encounters(id) on delete set null,
+  assigned_to            uuid references auth.users(id) on delete set null,
+  referred_from_visit_id uuid references visits(id) on delete set null,
+  scheduled_at           timestamptz,
+  arrived_at             timestamptz,
+  finished_at            timestamptz,
+  cancelled_at           timestamptz,
+  stage                  text,
+  reason                 text,
+  created_by             uuid references auth.users(id) on delete set null,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+
+create index if not exists idx_visits_patient   on visits(patient_id);
+create index if not exists idx_visits_assigned  on visits(assigned_to) where finished_at is null and cancelled_at is null;
+create index if not exists idx_visits_queue     on visits(department_id, arrived_at) where finished_at is null and cancelled_at is null;
+create index if not exists idx_visits_scheduled on visits(scheduled_at) where scheduled_at is not null and arrived_at is null and cancelled_at is null;
+
+drop trigger if exists visits_updated_at on visits;
+create trigger visits_updated_at
+  before update on visits for each row execute function update_updated_at();
+
+drop trigger if exists set_created_by_visits on visits;
+create trigger set_created_by_visits
+  before insert on visits for each row execute function set_created_by();
+
+alter table visits enable row level security;
+
+-- Logistics data: readable by all authenticated staff (dept members need the
+-- queue too); mutations follow the same gate as patient registration.
+drop policy if exists "visits_select" on visits;
+drop policy if exists "visits_insert" on visits;
+drop policy if exists "visits_update" on visits;
+drop policy if exists "visits_delete" on visits;
+create policy "visits_select" on visits for select using (auth.uid() is not null);
+create policy "visits_insert" on visits for insert
+  with check (has_permission('block.add') or has_role_in(array['receptionist', 'admin']));
+create policy "visits_update" on visits for update
+  using (has_permission('block.add') or has_role_in(array['receptionist', 'admin']))
+  with check (true);
+create policy "visits_delete" on visits for delete
+  using (has_role_in(array['admin']));
+
+-- Default stage list: JSON array of names; '[]' disables stage tracking
+insert into app_settings (key, value) values
+  ('flow_stages', '["Waiting","With doctor"]')
+on conflict (key) do nothing;
+
+do $$ begin alter publication supabase_realtime add table visits; exception when duplicate_object then null; end $$;

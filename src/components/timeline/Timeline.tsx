@@ -215,7 +215,7 @@ const Timeline = forwardRef<TimelineHandle, Props>(function Timeline(
 
     setLoading(false)
     await fetchAuditLog()
-  }, [encounterId, setBlocks, billingEnabled, can, fetchAuditLog])
+  }, [encounterId, setBlocks, billingEnabled, fetchAuditLog])
 
   // Stable ref for fetchBlocks so the channel useEffect doesn't depend on it
   const fetchBlocksRef = useRef(fetchBlocks)

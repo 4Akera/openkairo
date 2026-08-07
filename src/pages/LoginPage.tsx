@@ -5,6 +5,19 @@ import { Button, Input, Label } from '../components/ui'
 import { Loader2 } from 'lucide-react'
 import Logo from '../components/Logo'
 
+// Shown only when VITE_DEMO_LOGINS=true (the public demo). Self-hosted
+// installs never render these.
+const DEMO_ACCOUNTS = [
+  { email: 'admin@demo.com',     label: 'Admin' },
+  { email: 'dr.emily@demo.com',  label: 'Physician' },
+  { email: 'nurse.sarah@demo.com', label: 'Nurse' },
+  { email: 'reception@demo.com', label: 'Reception' },
+  { email: 'billing@demo.com',   label: 'Billing' },
+  { email: 'lab.tech@demo.com',  label: 'Lab' },
+]
+const DEMO_PASSWORD = 'Demo123!'
+const SHOW_DEMO_LOGINS = import.meta.env.VITE_DEMO_LOGINS === 'true'
+
 export default function LoginPage() {
   const { user, signIn } = useAuthStore()
   const [email, setEmail] = useState('')
@@ -19,6 +32,16 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     const { error } = await signIn(email, password)
+    if (error) setError(error)
+    setLoading(false)
+  }
+
+  const handleDemoLogin = async (demoEmail: string) => {
+    setEmail(demoEmail)
+    setPassword(DEMO_PASSWORD)
+    setError(null)
+    setLoading(true)
+    const { error } = await signIn(demoEmail, DEMO_PASSWORD)
     if (error) setError(error)
     setLoading(false)
   }
@@ -83,6 +106,27 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
+
+          {SHOW_DEMO_LOGINS && (
+            <div className="mt-6 pt-5 border-t border-border/60">
+              <p className="text-xs font-medium text-muted-foreground mb-2.5">
+                Try the demo — one click, no signup
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {DEMO_ACCOUNTS.map(({ email: demoEmail, label }) => (
+                  <button
+                    key={demoEmail}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleDemoLogin(demoEmail)}
+                    className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-foreground hover:bg-primary/10 hover:border-primary/40 transition-colors disabled:opacity-50"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-6">

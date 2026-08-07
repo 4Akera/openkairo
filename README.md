@@ -27,7 +27,9 @@ OpenKairo works differently. Every visit is a **timeline of blocks**. You pick t
 
 ### Demo login
 
-Sign in with **password `Demo123!`** for every demo user. Example:
+The demo login page shows one-click buttons for each role (enabled with the
+`VITE_DEMO_LOGINS=true` env var — leave it unset on self-hosted installs).
+You can also sign in manually with **password `Demo123!`** for every demo user:
 
 | Email | Role |
 | --- | --- |

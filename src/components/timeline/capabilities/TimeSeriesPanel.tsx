@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Clock, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../stores/authStore'
@@ -168,14 +168,14 @@ export function TimeSeriesPanel({
   const [adding, setAdding] = useState(false)
   const [expanded, setExpanded] = useState(true)
 
-  const loadEntries = async () => {
+  const loadEntries = useCallback(async () => {
     const { data } = await supabase
       .from('block_entries')
       .select('*')
       .eq('block_id', blockId)
       .order('recorded_at', { ascending: false })
     if (data) setEntries(data as BlockEntry[])
-  }
+  }, [blockId])
 
   // Prepend entry, deduplicating by id (handles both own inserts and other users)
   const prependEntry = (entry: BlockEntry) => {
@@ -197,7 +197,7 @@ export function TimeSeriesPanel({
       )
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [blockId])
+  }, [blockId, loadEntries])
 
   const hasFields = definition.time_series_fields.filter((f) => f.type !== 'section_header').length > 0
 

@@ -71,7 +71,6 @@ export function ClinicalDatePicker({
     setMonth(m)
     if (precision === 'month') { setDay(''); return }
     setDay(d)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, precision])
 
   // Emit whenever internal state changes

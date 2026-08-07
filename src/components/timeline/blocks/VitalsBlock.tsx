@@ -120,8 +120,9 @@ function scoreSpo2(spo2: number | null): number {
   return 0
 }
 function scoreOnO2(spo2Flags: string[]): number {
+  // RCP NEWS2: supplemental oxygen scores 2 (air scores 0)
   const onO2 = spo2Flags.some(f => ['nasal_cannula','simple_mask','nrb_mask','cpap_bipap','intubated'].includes(f))
-  return onO2 ? 3 : 0
+  return onO2 ? 2 : 0
 }
 function scoreBP(sys: number | null, bpFlags: string[]): number {
   if (bpFlags.includes('on_pressor')) return 3
@@ -564,18 +565,16 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
   const [saving, setSaving] = useState(false)
 
   // Ordered refs for keyboard focus advancement
-  const refs = {
-    bp:   useRef<HTMLInputElement>(null),
-    pr:   useRef<HTMLInputElement>(null),
-    rr:   useRef<HTMLInputElement>(null),
-    temp: useRef<HTMLInputElement>(null),
-    spo2: useRef<HTMLInputElement>(null),
-  }
+  const bpRef   = useRef<HTMLInputElement>(null)
+  const prRef   = useRef<HTMLInputElement>(null)
+  const rrRef   = useRef<HTMLInputElement>(null)
+  const tempRef = useRef<HTMLInputElement>(null)
+  const spo2Ref = useRef<HTMLInputElement>(null)
   const focusOrder = ['bp', 'pr', 'rr', 'temp', 'spo2'] as const
   const advance = (from: typeof focusOrder[number]) => {
-    const idx = focusOrder.indexOf(from)
-    const next = focusOrder[idx + 1]
-    if (next) refs[next].current?.focus()
+    const refsInOrder = [bpRef, prRef, rrRef, tempRef, spo2Ref]
+    const next = refsInOrder[focusOrder.indexOf(from) + 1]
+    next?.current?.focus()
   }
 
   const setNum = useCallback((
@@ -619,7 +618,7 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
         input={
           <>
             <BpInput
-              inputRef={refs.bp}
+              inputRef={bpRef}
               systolic={form.bp_systolic}
               diastolic={form.bp_diastolic}
               onChangeSys={v => setNum('bp_systolic',  'bp_flags', v)}
@@ -655,7 +654,7 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
         input={
           <>
             <NumInput
-              inputRef={refs.pr}
+              inputRef={prRef}
               value={form.pulse_rate}
               onChange={v => setNum('pulse_rate', 'pr_flags', v)}
               onNext={() => advance('pr')}
@@ -676,7 +675,7 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
         input={
           <>
             <NumInput
-              inputRef={refs.rr}
+              inputRef={rrRef}
               value={form.resp_rate}
               onChange={v => setNum('resp_rate', 'rr_flags', v)}
               onNext={() => advance('rr')}
@@ -698,7 +697,7 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
           <>
             <div className="flex h-8 rounded border border-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
               <input
-                ref={refs.temp}
+                ref={tempRef}
                 type="number"
                 step="0.1"
                 placeholder="—"
@@ -731,7 +730,7 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
         input={
           <>
             <NumInput
-              inputRef={refs.spo2}
+              inputRef={spo2Ref}
               value={form.spo2}
               onChange={v => setForm(f => ({
                 ...f, spo2: v,

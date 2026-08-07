@@ -12,6 +12,8 @@ interface SettingsState {
   timeFormat: TimeFormat
   billingEnabled: boolean
   currencySymbol: string
+  /** Ordered queue stage names; empty = stage tracking disabled */
+  flowStages: string[]
   fetchSettings: () => Promise<void>
   updateNameFormat: (format: NameFormat) => Promise<{ error: string | null }>
   updateFacilityName: (name: string) => Promise<{ error: string | null }>
@@ -19,6 +21,18 @@ interface SettingsState {
   updateTimeFormat: (format: TimeFormat) => Promise<{ error: string | null }>
   updateBillingEnabled: (enabled: boolean) => Promise<{ error: string | null }>
   updateCurrencySymbol: (symbol: string) => Promise<{ error: string | null }>
+  updateFlowStages: (stages: string[]) => Promise<{ error: string | null }>
+}
+
+function parseFlowStages(raw: string | undefined): string[] | null {
+  if (raw === undefined) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      return parsed.filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+    }
+  } catch { /* malformed value — keep current state */ }
+  return null
 }
 
 async function upsertSetting(key: string, value: string): Promise<{ error: string | null }> {
@@ -35,6 +49,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   timeFormat: '24h',
   billingEnabled: false,
   currencySymbol: '$',
+  flowStages: [],
 
   fetchSettings: async () => {
     const { data } = await supabase
@@ -64,6 +79,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
     const sym = find('currency')
     if (sym) set({ currencySymbol: sym })
+
+    const stages = parseFlowStages(find('flow_stages'))
+    if (stages !== null) set({ flowStages: stages })
   },
 
   updateNameFormat: async (format) => {
@@ -111,6 +129,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ currencySymbol: symbol })
     const result = await upsertSetting('currency', symbol)
     if (result.error) set({ currencySymbol: prev })
+    return result
+  },
+
+  updateFlowStages: async (stages) => {
+    const prev = useSettingsStore.getState().flowStages
+    const clean = stages.map(s => s.trim()).filter(Boolean)
+    set({ flowStages: clean })
+    const result = await upsertSetting('flow_stages', JSON.stringify(clean))
+    if (result.error) set({ flowStages: prev })
     return result
   },
 }))

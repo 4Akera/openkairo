@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import type { Patient } from '../types'
+import type { Patient, Visit } from '../types'
 import { pushRecentPatientId, getRecentEncounterRefs } from '../lib/recentItems'
+import { fetchTodayVisits, visitPatient, visitEncounter } from '../lib/visits'
+import { useNow } from '../hooks/useNow'
 import { CreatePatientDialog } from '../components/patients/CreatePatientDialog'
 
 type RecentEncounterDisplay = {
@@ -21,6 +23,28 @@ type RecentEncounterDisplay = {
 
 const PAGE_SIZE = 50
 
+type Pt = { first_name: string; middle_name: string | null; last_name: string; mrn: string }
+type EncRow = {
+  id: string
+  title: string | null
+  status: string
+  patient_id: string
+  updated_at?: string
+  patients: Pt | Pt[] | null
+}
+
+function patientNameFromRow(enc: EncRow): string {
+  const ptRaw = enc.patients
+  const pt = Array.isArray(ptRaw) ? ptRaw[0] ?? null : ptRaw
+  return [pt?.first_name, pt?.middle_name, pt?.last_name].filter(Boolean).join(' ') || 'Unknown'
+}
+
+function patientMrnFromRow(enc: EncRow): string {
+  const ptRaw = enc.patients
+  const pt = Array.isArray(ptRaw) ? ptRaw[0] ?? null : ptRaw
+  return pt?.mrn ?? ''
+}
+
 import {
   calcAge, formatDate, formatDateTime, fullName,
   getPatientDob, getPatientGender, cn,
@@ -30,13 +54,14 @@ import {
   Button, Input, Badge,
   ScrollArea,
 } from '../components/ui'
-import { Search, UserPlus, ChevronRight, Loader2, Users, SlidersHorizontal, Check, Clock, Activity, UserCheck } from 'lucide-react'
+import { Search, UserPlus, ChevronRight, Loader2, Users, SlidersHorizontal, Check, Clock, Activity, UserCheck, Hourglass } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const { nameFormat } = useSettingsStore()
+  const now = useNow()
 
   const [patients, setPatients]       = useState<Patient[]>([])
   const [loading, setLoading]         = useState(true)
@@ -52,6 +77,7 @@ export default function DashboardPage() {
 
   const [assignedEncounters, setAssignedEncounters] = useState<RecentEncounterDisplay[]>([])
   const [recentEncounters, setRecentEncounters] = useState<RecentEncounterDisplay[]>([])
+  const [myQueue, setMyQueue] = useState<Visit[]>([])
   const [mobileTab, setMobileTab] = useState<'patients' | 'recent'>('patients')
   const [open, setOpen]       = useState(false)
 
@@ -63,39 +89,27 @@ export default function DashboardPage() {
     searchRef.current?.focus()
   }, [])
 
-  type Pt = { first_name: string; middle_name: string | null; last_name: string; mrn: string }
-  type EncRow = {
-    id: string
-    title: string | null
-    status: string
-    patient_id: string
-    updated_at?: string
-    patients: Pt | Pt[] | null
-  }
-
-  function patientNameFromRow(enc: EncRow): string {
-    const ptRaw = enc.patients
-    const pt = Array.isArray(ptRaw) ? ptRaw[0] ?? null : ptRaw
-    return [pt?.first_name, pt?.middle_name, pt?.last_name].filter(Boolean).join(' ') || 'Unknown'
-  }
-
-  function patientMrnFromRow(enc: EncRow): string {
-    const ptRaw = enc.patients
-    const pt = Array.isArray(ptRaw) ? ptRaw[0] ?? null : ptRaw
-    return pt?.mrn ?? ''
-  }
-
   // Recent (session) + encounters assigned to current user (DB, RLS)
+  const userId = user?.id
   const loadEncounterSidebar = useCallback(async () => {
     const refs = getRecentEncounterRefs()
     const ids = refs.map(r => r.encounterId)
 
+    // My waiting room: today's arrived, unfinished visits assigned to me
+    if (userId) {
+      fetchTodayVisits().then(rows => {
+        setMyQueue(rows.filter(v => v.assigned_to === userId && v.arrived_at && !v.finished_at))
+      })
+    } else {
+      setMyQueue([])
+    }
+
     const [assignedRes, recentRes] = await Promise.all([
-      user?.id
+      userId
         ? supabase
             .from('encounters')
             .select('id, title, status, patient_id, updated_at, patients(first_name, middle_name, last_name, mrn)')
-            .eq('assigned_to', user.id)
+            .eq('assigned_to', userId)
             .eq('status', 'open')
         : Promise.resolve({ data: null as EncRow[] | null, error: null }),
       ids.length
@@ -111,7 +125,7 @@ export default function DashboardPage() {
     const normStatus = (s: string): 'open' | 'closed' =>
       s === 'open' || s === 'closed' ? s : 'open'
 
-    if (user?.id && assignedData) {
+    if (userId && assignedData) {
       const rows = [...(assignedData as EncRow[])].sort((a, b) => {
         const ta = new Date(a.updated_at ?? 0).getTime()
         const tb = new Date(b.updated_at ?? 0).getTime()
@@ -156,7 +170,7 @@ export default function DashboardPage() {
         }
       }).filter(Boolean) as RecentEncounterDisplay[],
     )
-  }, [user?.id])
+  }, [userId])
 
   const clearRecentHistory = useCallback(() => {
     sessionStorage.removeItem('ok_recent_encounters')
@@ -173,7 +187,14 @@ export default function DashboardPage() {
     () => recentEncounters.filter(e => !assignedIds.has(e.encounterId)),
     [recentEncounters, assignedIds],
   )
-  const sidebarTotalCount = assignedEncounters.length + recentOnlyEncounters.length
+  const sidebarTotalCount = myQueue.length + assignedEncounters.length + recentOnlyEncounters.length
+
+  const navigateToVisit = (v: Visit) => {
+    const pt = visitPatient(v)
+    if (!pt) return
+    const enc = visitEncounter(v)
+    navigate(enc ? `/patients/${pt.id}/encounters/${enc.id}` : `/patients/${pt.id}`)
+  }
 
   const fetchPatients = useCallback(async (
     q: string,
@@ -185,7 +206,7 @@ export default function DashboardPage() {
   ) => {
     const req = ++requestSeq.current
     if (!append) {
-      if (!hasMore || pageNum === 0) setLoading(true)
+      setLoading(true)
     } else {
       setLoadingMore(true)
     }
@@ -214,7 +235,7 @@ export default function DashboardPage() {
     }
     setLoading(false)
     setLoadingMore(false)
-  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user])
 
   // Re-fetch from page 0 when search/filters change
   useEffect(() => {
@@ -245,7 +266,7 @@ export default function DashboardPage() {
   const filtersActive = mineOnly || assignedToMe || openOnly || search.trim() !== ''
 
   function timeAgo(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime()
+    const diff = now - new Date(iso).getTime()
     const m = Math.floor(diff / 60000)
     if (m < 1)  return 'just now'
     if (m < 60) return `${m}m ago`
@@ -538,6 +559,40 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div>
+                  {myQueue.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        <Hourglass className="h-3.5 w-3.5" />
+                        Waiting for me
+                      </div>
+                      <div className="divide-y divide-border border-b border-border">
+                        {myQueue.map(v => {
+                          const pt = visitPatient(v)
+                          return (
+                            <button
+                              key={v.id}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent transition-colors text-left"
+                              onClick={() => navigateToVisit(v)}
+                            >
+                              <div className="h-9 w-9 rounded-full bg-amber-500/10 text-amber-700 flex items-center justify-center shrink-0">
+                                <Hourglass className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{pt ? fullName(pt, nameFormat) : 'Unknown'}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {v.stage || 'In queue'}{v.reason ? ` · ${v.reason}` : ''}
+                                </p>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground shrink-0">
+                                {v.arrived_at ? timeAgo(v.arrived_at) : ''}
+                              </span>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {assignedEncounters.length > 0 && (
                     <div>
                       <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -651,6 +706,38 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div>
+                {myQueue.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-1 px-4 pt-2.5 pb-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      <Hourglass className="h-3 w-3" />
+                      Waiting
+                    </div>
+                    <div className="divide-y divide-border border-b border-border">
+                      {myQueue.map(v => {
+                        const pt = visitPatient(v)
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className="w-full flex items-start gap-2.5 px-4 py-2.5 hover:bg-accent/50 active:bg-accent transition-colors text-left"
+                            onClick={() => navigateToVisit(v)}
+                          >
+                            <div className="h-7 w-7 rounded-full bg-amber-500/10 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                              <Hourglass className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate leading-snug">{pt ? fullName(pt, nameFormat) : 'Unknown'}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">{v.stage || 'In queue'}{v.reason ? ` · ${v.reason}` : ''}</p>
+                              <span className="text-[10px] text-muted-foreground">
+                                {v.arrived_at ? timeAgo(v.arrived_at) : ''}
+                              </span>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 {assignedEncounters.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1 px-4 pt-2.5 pb-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">

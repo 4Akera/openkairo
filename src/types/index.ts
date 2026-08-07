@@ -140,6 +140,7 @@ export interface Department {
   color: string
   can_receive_orders: boolean
   can_create_direct: boolean
+  can_receive_patients: boolean
   active: boolean
   sort_order: number
   created_by: string | null
@@ -318,6 +319,38 @@ export interface Encounter {
   closed_at: string | null
   created_profile?: { full_name: string } | null
   assigned_profile?: { full_name: string } | null
+}
+
+/**
+ * Logistics record of one patient passage through the facility; the
+ * encounter stays the clinical record. Timestamps are the backbone:
+ * scheduled_at set = booked, arrived_at set = in queue, finished_at set =
+ * checked out. `stage` is free-form, validated against the org's
+ * flow_stages setting (empty list = no stage tracking).
+ */
+export interface Visit {
+  id: string
+  patient_id: string
+  department_id: string | null
+  encounter_id: string | null
+  assigned_to: string | null
+  referred_from_visit_id: string | null
+  scheduled_at: string | null
+  arrived_at: string | null
+  finished_at: string | null
+  cancelled_at: string | null
+  stage: string | null
+  reason: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  patients?: Patient | Patient[] | null
+  encounters?: VisitEncounterRef | VisitEncounterRef[] | null
+}
+
+export interface VisitEncounterRef {
+  id: string
+  status: 'open' | 'closed'
 }
 
 // ============================================================

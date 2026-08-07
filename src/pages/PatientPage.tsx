@@ -7,6 +7,7 @@ import { useSettingsStore as useBillingSettings } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
 import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate } from '../types'
 import { fullName, formatDateTime, cn } from '../lib/utils'
+import { linkEncounterToActiveVisit } from '../lib/visits'
 import {
   Button,
   Badge,
@@ -118,7 +119,7 @@ export default function PatientPage() {
         ...encRes.data.map(e => e.created_by),
         ...encRes.data.map(e => e.assigned_to),
       ].filter(Boolean))]
-      let profileMap: Record<string, string> = {}
+      const profileMap: Record<string, string> = {}
       if (allIds.length > 0) {
         const { data: profs } = await supabase
           .from('profiles')
@@ -288,6 +289,10 @@ export default function PatientPage() {
       })
       await supabase.from('blocks').insert(blockRows)
     }
+
+    // Reflect clinical work starting in the front-desk queue (no-op if the
+    // patient isn't checked in today)
+    await linkEncounterToActiveVisit(patientId, newEncounterId)
 
     const canOpenNow = canNavigateEncounter(
       { visibility, assigned_to: assignedTo || null, created_by: user.id, visible_to_roles: visibleToRoles },
@@ -992,6 +997,8 @@ function canNavigateEncounter(
   if (hasRole('admin')) return true
   // Only the assigned physician has access to private/restricted encounters
   if (enc.assigned_to && enc.assigned_to === userId) return true
+  // The creator retains access (mirrors the encounter_select RLS policy)
+  if (enc.created_by && enc.created_by === userId) return true
   // Restricted: role-list check (but only if also assigned — handled above — or in the role list)
   if (enc.visibility === 'restricted') {
     return enc.visible_to_roles?.some(r => roleSlugs.includes(r)) ?? false

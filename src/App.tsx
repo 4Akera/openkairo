@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
@@ -7,31 +7,47 @@ import { useThemeStore } from './stores/themeStore'
 
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import PatientPage from './pages/PatientPage'
-import EncounterPage from './pages/EncounterPage'
-import SettingsPage from './pages/SettingsPage'
-import DeptPortal from './pages/DeptPortal'
-import BillingPage from './pages/BillingPage'
 import ProfileModal from './components/profile/ProfileModal'
 import ZoomHintBanner from './components/ZoomHintBanner'
 
+// Each page loads as its own chunk so the login screen doesn't ship the whole app
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const PatientPage   = lazy(() => import('./pages/PatientPage'))
+const EncounterPage = lazy(() => import('./pages/EncounterPage'))
+const SettingsPage  = lazy(() => import('./pages/SettingsPage'))
+const BillingPage    = lazy(() => import('./pages/BillingPage'))
+const FrontDeskPage  = lazy(() => import('./pages/FrontDeskPage'))
+const DepartmentPage = lazy(() => import('./pages/DepartmentPage'))
+
+function PageFallback() {
+  return (
+    <div className="flex h-full min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+      Loading…
+    </div>
+  )
+}
+
 function DeptAwareIndex() {
-  const { inDept, permissions } = useAuthStore()
-  const isDeptOnly = inDept && permissions.length === 0
-  return isDeptOnly ? <Navigate to="/portal" replace /> : <DashboardPage />
+  const { myDepartments, permissions } = useAuthStore()
+  const isDeptOnly = myDepartments.length > 0 && permissions.length === 0
+  return isDeptOnly
+    ? <Navigate to={`/dept/${myDepartments[0].slug}`} replace />
+    : <DashboardPage />
+}
+
+/** Legacy /portal URL → the user's first department workspace */
+function PortalRedirect() {
+  const { myDepartments, loading } = useAuthStore()
+  if (loading) return null
+  return myDepartments.length > 0
+    ? <Navigate to={`/dept/${myDepartments[0].slug}`} replace />
+    : <Navigate to="/" replace />
 }
 
 function ProtectedRoute() {
   const { user, loading, profile } = useAuthStore()
-  const [profileRequired, setProfileRequired] = useState(false)
-
-  // Once profile loads, check if name is missing
-  useEffect(() => {
-    if (profile !== null && !profile.full_name?.trim()) {
-      setProfileRequired(true)
-    }
-  }, [profile])
+  // Force profile setup on first login; derived so it closes once a name is saved
+  const profileRequired = profile !== null && !profile.full_name?.trim()
 
   if (loading) return null
   if (!user) return <Navigate to="/login" replace />
@@ -40,12 +56,7 @@ function ProtectedRoute() {
     <>
       <Outlet />
       <ZoomHintBanner />
-      {/* Force profile setup on first login */}
-      <ProfileModal
-        open={profileRequired}
-        onOpenChange={(open) => { if (!open && profile?.full_name?.trim()) setProfileRequired(false) }}
-        required
-      />
+      <ProfileModal open={profileRequired} onOpenChange={() => {}} required />
     </>
   )
 }
@@ -80,27 +91,31 @@ export default function App() {
     })
 
     return () => subscription.unsubscribe()
-  }, [setUser, setSession, setLoading, fetchProfile])
+  }, [setUser, setSession, setLoading, fetchProfile, fetchSettings])
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="portal" element={<DeptPortal />} />
-          <Route element={<AppLayout />}>
-            <Route index element={<DeptAwareIndex />} />
-            <Route path="patients/:patientId" element={<PatientPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="billing" element={<BillingPage />} />
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AppLayout />}>
+              <Route index element={<DeptAwareIndex />} />
+              <Route path="portal" element={<PortalRedirect />} />
+              <Route path="frontdesk" element={<FrontDeskPage />} />
+              <Route path="dept/:slug" element={<DepartmentPage />} />
+              <Route path="patients/:patientId" element={<PatientPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="billing" element={<BillingPage />} />
+            </Route>
+            <Route
+              path="patients/:patientId/encounters/:encounterId"
+              element={<EncounterPage />}
+            />
           </Route>
-          <Route
-            path="patients/:patientId/encounters/:encounterId"
-            element={<EncounterPage />}
-          />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

@@ -106,7 +106,7 @@ begin
 
   insert into roles (name, slug, description, is_system, sort_order, permissions) values
     ('System Admin',   'admin',        'Full access to all features including user and role management', true, 10,
-     array['block.add','admin.manage_users','admin.manage_blocks','admin.manage_templates','template.create',
+     array['block.add','admin.manage_users','admin.manage_blocks','admin.manage_templates','admin.manage_settings','template.create',
            'billing.charge','billing.payment','billing.manage_fees']),
     ('Physician',      'physician',    'Full clinical access — create encounters, add all block types, edit patient records', true, 20,
      array['block.add','template.create']),

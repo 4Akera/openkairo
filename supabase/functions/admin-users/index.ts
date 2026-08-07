@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     }
 
     return jsonResponse({ error: 'Unknown action' }, 400)
-  } catch (_err) {
+  } catch {
     return jsonResponse({ error: 'Internal server error' }, 500)
   }
 })

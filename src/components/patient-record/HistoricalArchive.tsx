@@ -84,7 +84,7 @@ export default function HistoricalArchive({ patientId, encounterId }: Props) {
     if (encRes.data) {
       // Batch-fetch creator names from profiles (profiles.id = auth.users.id)
       const creatorIds = [...new Set(encRes.data.map(e => e.created_by).filter(Boolean))]
-      let profileMap: Record<string, string> = {}
+      const profileMap: Record<string, string> = {}
       if (creatorIds.length > 0) {
         const { data: profs } = await supabase
           .from('profiles')

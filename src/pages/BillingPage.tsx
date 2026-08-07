@@ -47,6 +47,29 @@ const PAYMENT_METHODS = [
   { value: 'deposit',       label: 'Deposit' },
 ] as const
 
+// ── Query row shapes (charges joined with patients) ──────────────────────────
+
+type ChargePatientRef = Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
+
+type RecentChargeQueryRow = {
+  id: string
+  description: string
+  status: string
+  unit_price: number
+  quantity: number
+  created_at: string
+  patient_id: string
+  patients: ChargePatientRef | null
+}
+
+type ActionQueueQueryRow = {
+  patient_id: string
+  status: string
+  unit_price: number
+  quantity: number
+  patients: ChargePatientRef | null
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function BillingPage() {
@@ -98,7 +121,9 @@ export default function BillingPage() {
         if (!data) { setLoadingRecent(false); return }
         const seen = new Set<string>()
         const rows: typeof recentChargeRows = []
-        for (const row of data as any[]) {
+        // supabase-js (untyped client) infers the joined `patients` as an array,
+        // but this many-to-one embed returns a single object at runtime.
+        for (const row of data as unknown as RecentChargeQueryRow[]) {
           if (!row.patients || seen.has(row.patient_id)) continue
           seen.add(row.patient_id)
           rows.push({
@@ -137,7 +162,7 @@ export default function BillingPage() {
             insuranceTotal: number
           }
         >()
-        for (const row of data as any[]) {
+        for (const row of data as unknown as ActionQueueQueryRow[]) {
           const p = row.patients
           if (!p?.id) continue
           const pid = row.patient_id as string
@@ -347,7 +372,8 @@ export default function BillingPage() {
     if (!eligible) return
     setSelectedChargeIds(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }

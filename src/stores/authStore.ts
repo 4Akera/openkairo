@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import type { Profile, Permission } from '../types'
+import type { Profile, Permission, Department } from '../types'
 
 interface AuthState {
   user: User | null
@@ -13,6 +13,8 @@ interface AuthState {
   roleNames: string[]
   preferredBlocks: string[]   // IDs of blocks to show; empty = show all
   pinnedBlocks: string[]      // IDs pinned to the top of the Add Block menu
+  /** Active departments the user is a member of (sidebar workspaces) */
+  myDepartments: Department[]
   inDept: boolean
   hasBilling: boolean
   // Actions
@@ -39,6 +41,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   roleNames: [],
   preferredBlocks: [],
   pinnedBlocks: [],
+  myDepartments: [],
   inDept: false,
   hasBilling: false,
 
@@ -57,7 +60,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut()
-    set({ user: null, session: null, profile: null, permissions: [], roleSlugs: [], roleNames: [], inDept: false, hasBilling: false })
+    set({ user: null, session: null, profile: null, permissions: [], roleSlugs: [], roleNames: [], myDepartments: [], inDept: false, hasBilling: false })
   },
 
   fetchProfile: async () => {
@@ -82,11 +85,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (profile) set({ profile, preferredBlocks: profile.preferred_blocks ?? [], pinnedBlocks: profile.pinned_blocks ?? [] })
 
-    // Fetch permissions + role slugs + role names + dept membership (parallel)
+    // Fetch permissions + role slugs + role names + dept memberships (parallel)
     const [permsResult, slugsResult, deptResult] = await Promise.all([
       supabase.rpc('get_my_permissions'),
       supabase.rpc('get_my_role_slugs'),
-      supabase.from('department_members').select('id').eq('user_id', user.id).limit(1),
+      supabase.from('department_members').select('department_id, departments(*)').eq('user_id', user.id),
     ])
 
     const slugs = (slugsResult.data ?? []) as string[]
@@ -101,11 +104,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const perms = (permsResult.data ?? []) as Permission[]
+    const myDepartments = (deptResult.data ?? [])
+      .map((m: { departments: unknown }) => m.departments as Department)
+      .filter(Boolean)
+      .filter(d => d.active)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
     set({
       permissions: perms,
       roleSlugs: slugs,
       roleNames: names,
-      inDept: (deptResult.data?.length ?? 0) > 0,
+      myDepartments,
+      inDept: myDepartments.length > 0,
       hasBilling: perms.some(p => p.startsWith('billing.')),
     })
   },

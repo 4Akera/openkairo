@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CheckCheck, Clock } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../stores/authStore'
@@ -16,6 +16,15 @@ export function AcknowledgmentPanel({
   const { user, profile } = useAuthStore()
   const [acks, setAcks] = useState<BlockAcknowledgment[]>([])
   const [acking, setAcking] = useState(false)
+
+  const loadAcks = useCallback(async () => {
+    const { data } = await supabase
+      .from('block_acknowledgments')
+      .select('*')
+      .eq('block_id', blockId)
+      .order('acked_at', { ascending: true })
+    if (data) setAcks(data as BlockAcknowledgment[])
+  }, [blockId])
 
   useEffect(() => {
     loadAcks()
@@ -41,16 +50,7 @@ export function AcknowledgmentPanel({
       )
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [blockId])
-
-  const loadAcks = async () => {
-    const { data } = await supabase
-      .from('block_acknowledgments')
-      .select('*')
-      .eq('block_id', blockId)
-      .order('acked_at', { ascending: true })
-    if (data) setAcks(data as BlockAcknowledgment[])
-  }
+  }, [blockId, loadAcks])
 
   const myAck = user ? acks.find((a) => a.acked_by === user.id) : null
 

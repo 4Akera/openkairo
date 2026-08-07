@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -11,10 +11,9 @@ import {
   blockAllowsManualBlockFees,
 } from '../lib/blockBilling'
 import { BlockManualFeesPanel } from '../components/timeline/capabilities/BlockManualFeesPanel'
-import { fullName, cn, formatDateTime } from '../lib/utils'
-import { Loader2, CheckCircle2, X, Plus, Building2, Clock, History, ChevronRight, ChevronDown, Search, ExternalLink, BookOpen, DollarSign, Flame, XCircle, AlertCircle, UserPlus, Home, Ban } from 'lucide-react'
+import { fullName, cn, formatDateTime, calcAgeYears } from '../lib/utils'
+import { Loader2, CheckCircle2, X, Plus, Clock, History, ChevronRight, ChevronDown, Search, ExternalLink, BookOpen, DollarSign, Flame, XCircle, AlertCircle, UserPlus, Ban } from 'lucide-react'
 import { Button, ScrollArea, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, Separator } from '../components/ui'
-import Logo from '../components/Logo'
 import { DynamicBlockEdit, DynamicBlockView } from '../components/timeline/DynamicBlock'
 import { BLOCK_REGISTRY, orphanRegistryRenderKey, registryRenderKey } from '../components/timeline/BlockRegistry'
 import { getRecentPatientIds, pushRecentPatientId } from '../lib/recentItems'
@@ -998,9 +997,7 @@ function DeptPatientSearchPanel({
         {showResults && results.length > 0 && (
           <ul className="py-1">
             {results.map((pt, idx) => {
-              const age = pt.date_of_birth
-                ? Math.floor((Date.now() - new Date(pt.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-                : null
+              const age = calcAgeYears(pt.date_of_birth)
               const meta = [pt.mrn, age != null ? `${age}y` : null, pt.gender].filter(Boolean).join(' · ')
               const rowIdx = showRecents ? recents.length + idx : idx
               return (
@@ -1946,7 +1943,7 @@ function mergeQueueOrder(prev: OrderWithContext[], row: OrderWithContext): Order
   return next
 }
 
-function DeptTab({ dept }: { dept: Department }) {
+export function DeptTab({ dept }: { dept: Department }) {
   const { user: _user, can } = useAuthStore()
   const { billingEnabled, currencySymbol } = useSettingsStore()
   const [view, setView]     = useState<'queue' | 'history'>('queue')
@@ -2299,9 +2296,7 @@ function DeptTab({ dept }: { dept: Department }) {
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 border-b shrink-0">
         <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold">{dept.name}</span>
-
-          {/* Queue / History toggle */}
+          {/* Queue / History toggle (dept identity lives in the page header) */}
           <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted text-xs">
             <button
               onClick={() => setView('queue')}
@@ -2590,130 +2585,6 @@ function DeptTab({ dept }: { dept: Department }) {
 
 // ─── Main portal page ─────────────────────────────────────────────────────────
 
-export default function DeptPortal() {
-  const { user, profile, signOut } = useAuthStore()
-  const navigate = useNavigate()
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [activeTab, setActiveTab]     = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!user) return
-    supabase
-      .from('department_members')
-      .select('department_id, departments(*)')
-      .eq('user_id', user.id)
-      .then(({ data }) => {
-        if (data) {
-          const depts = data
-            .map((m: { departments: unknown }) => m.departments as Department)
-            .filter(Boolean)
-            .filter(d => d.active)
-            .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
-          setDepartments(depts)
-          if (depts.length > 0) setActiveTab(depts[0].slug)
-        }
-        setLoading(false)
-      })
-  }, [user])
-
-  const handleSignOut = async () => {
-    await signOut()
-    navigate('/login')
-  }
-
-  const activeDept = departments.find(d => d.slug === activeTab) ?? null
-
-  return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="flex items-center justify-between px-5 py-3 border-b bg-card shrink-0">
-        <div className="flex items-center gap-2.5">
-          <Logo size={28} className="rounded-lg" />
-          <div>
-            <p className="text-sm font-semibold leading-tight">Department Portal</p>
-            <p className="text-[11px] text-muted-foreground leading-tight">OpenKairo</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-foreground shrink-0"
-            title="Home"
-            aria-label="Go to home"
-            onClick={() => navigate('/')}
-          >
-            <Home className="h-4 w-4" />
-          </Button>
-          <span className="text-xs text-muted-foreground truncate max-w-[160px] sm:max-w-none">{profile?.full_name ?? user?.email}</span>
-          <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-xs h-7">
-            Sign out
-          </Button>
-        </div>
-      </header>
-
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : departments.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-          <Building2 className="h-10 w-10 opacity-20" />
-          <p className="text-sm">You are not assigned to any department.</p>
-          <p className="text-xs">Ask an admin to assign you in Settings → Departments.</p>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Mobile: horizontal department chips */}
-          <div className="md:hidden flex overflow-x-auto border-b bg-card shrink-0 px-2 py-2 gap-1.5 no-scrollbar">
-            {departments.map(dept => (
-              <button
-                key={dept.slug}
-                onClick={() => setActiveTab(dept.slug)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 min-h-[36px] rounded-full text-sm whitespace-nowrap transition-colors shrink-0',
-                  activeTab === dept.slug
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'bg-muted text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Building2 className="h-3.5 w-3.5 shrink-0" />
-                {dept.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1 flex overflow-hidden min-h-0">
-          {/* Department tabs (left sidebar, desktop only) */}
-          <nav className="hidden md:flex w-48 border-r flex-col py-3 shrink-0 bg-muted/20">
-            {departments.map(dept => (
-              <button
-                key={dept.slug}
-                onClick={() => setActiveTab(dept.slug)}
-                className={cn(
-                  'flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors relative',
-                  activeTab === dept.slug
-                    ? 'bg-accent text-accent-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-accent/50',
-                )}
-              >
-                {activeTab === dept.slug && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full" />
-                )}
-                <Building2 className="h-4 w-4 shrink-0" />
-                <span className="truncate">{dept.name}</span>
-              </button>
-            ))}
-          </nav>
-
-          {/* Active department content */}
-          {activeDept && <DeptTab key={activeDept.slug} dept={activeDept} />}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+// The standalone "Department Portal" shell was removed: department workspaces
+// now live inside the main app shell at /dept/:slug (see DepartmentPage),
+// with one sidebar entry per membership department.
