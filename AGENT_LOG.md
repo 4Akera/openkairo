@@ -140,3 +140,16 @@ to the queue count. Filter-aware: respects the selected queue.
 **Verification:** tsc clean, eslint clean, 120/120 tests (3 new);
 browser-verified header shows "avg visit today 9m" from the day's two
 completed visits.
+
+## 2026-08-07 — Iteration 8: "Clinic" labeling (UX tier complete)
+
+**Item:** Label patient-facing departments as Clinic (last UX item).
+
+**What changed:** a "Clinic" chip appears on Settings department cards and
+the department page header for can_receive_patients departments; the editor
+checkbox now reads "Clinic — receives patients (Front Desk queue)".
+Vocabulary matches the mental model: department = fulfils orders, clinic =
+sees patients — without splitting the table.
+
+**Verification:** tsc clean, eslint clean, 120/120 tests; browser-verified
+the Cardiology page header shows the Clinic chip.

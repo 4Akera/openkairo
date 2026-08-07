@@ -87,7 +87,14 @@ export default function DepartmentPage() {
             <Icon className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold truncate leading-tight">{dept.name}</h1>
+            <h1 className="text-base font-semibold truncate leading-tight flex items-center gap-1.5">
+              {dept.name}
+              {dept.can_receive_patients && (
+                <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 text-primary px-1.5 py-px text-[10px] font-medium shrink-0">
+                  Clinic
+                </span>
+              )}
+            </h1>
             {dept.description && (
               <p className="text-xs text-muted-foreground truncate leading-tight">{dept.description}</p>
             )}

@@ -54,7 +54,9 @@ When working autonomously (e.g. via /loop), follow this contract:
       referred_from_visit_id. (2026-08-07)
 - [x] "Avg wait today" stat on the Front Desk header. (2026-08-07 — shown as
       "avg visit today", arrival→checkout over finished visits)
-- [ ] Label patient-facing departments as "Clinic" in Settings and pickers.
+- [x] Label patient-facing departments as "Clinic" in Settings and pickers.
+      (2026-08-07 — Clinic chip on Settings dept cards, dept page header, and
+      clearer editor checkbox label)
 
 ### Features (only after the above)
 - [ ] Patient-level active-medication list wired to MedsBlock +

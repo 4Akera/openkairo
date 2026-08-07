@@ -324,7 +324,7 @@ export function DepartmentsSection() {
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.can_receive_patients} onChange={e => setForm(f => ({ ...f, can_receive_patients: e.target.checked }))} className="accent-primary" />
-              Patient queue (Front Desk)
+              Clinic — receives patients (Front Desk queue)
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="accent-primary" />
@@ -365,7 +365,11 @@ export function DepartmentsSection() {
                   <div className="flex gap-3 mt-1 text-[10px] text-muted-foreground">
                     {dept.can_receive_orders && <span>● Receives orders</span>}
                     {dept.can_create_direct && <span>● Walk-in entries</span>}
-                    {dept.can_receive_patients && <span>● Patient queue</span>}
+                    {dept.can_receive_patients && (
+                      <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 text-primary px-1.5 text-[10px] font-medium">
+                        Clinic
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
