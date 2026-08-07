@@ -15,6 +15,7 @@ import {
 import { cn, getDefinitionColors } from '../../lib/utils'
 import { registryRenderKey } from '../../components/timeline/BlockRegistry'
 import { blockDefinitionHasCharging } from '../../lib/blockBilling'
+import { blockVisibilitySummary } from '../../lib/blockVisibility'
 import { BlockDefinitionModal } from './BlockDefinitionModal'
 import { QuickAccessSection } from './QuickAccessSection'
 import { BlockTemplatesSection } from './BlockTemplatesSection'
@@ -103,7 +104,16 @@ function BlockVisibilityCard({
           <span className="text-white text-[9px] font-bold">{def.name[0]}</span>
         </div>
 
-        <span className="text-xs font-medium flex-1 truncate">{def.name}</span>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-medium block truncate">{def.name}</span>
+          {/* One phrase answers "who sees this?" — replaces the Disabled / N-roles badges */}
+          <span className={cn(
+            'text-[10px] block truncate',
+            !def.active ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground',
+          )}>
+            {blockVisibilitySummary(def, allRoles)}
+          </span>
+        </div>
 
         {/* Summary badges */}
         <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
@@ -120,16 +130,6 @@ function BlockVisibilityCard({
           {blockDefinitionHasCharging(def) && (
             <span className="text-[9px] px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400">
               $ charged
-            </span>
-          )}
-          {!def.active && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-muted border-border text-muted-foreground">
-              Disabled
-            </span>
-          )}
-          {visibleRoles.length > 0 && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-primary/5 border-primary/30 text-primary">
-              {visibleRoles.length} role{visibleRoles.length !== 1 ? 's' : ''}
             </span>
           )}
           <Button

@@ -37,9 +37,11 @@ When working autonomously (e.g. via /loop), follow this contract:
 - [x] Unify "template" naming: encounter templates keep the name "Templates";
       rename user content templates to "My defaults" everywhere in the UI.
       (2026-08-07)
-- [ ] Collapse block-visibility booleans (`is_builtin`/`is_universal`/
+- [x] Collapse block-visibility booleans (`is_builtin`/`is_universal`/
       `is_dept_only`/`active`/preferred/pinned) into one clear status concept
       in the Settings UI (schema can stay; simplify presentation first).
+      (2026-08-07 — Block Library rows now show one derived "who sees this"
+      phrase via `blockVisibilitySummary`)
 - [ ] Split BlockDefinitionModal into Simple (name, icon, fields) and
       Advanced (capabilities, dept pairing, billing) with progressive
       disclosure.

@@ -48,3 +48,23 @@ things was called out as a core confusion in the product review.
 **Verification:** tsc clean, eslint clean, 106/106 tests; browser-verified
 Settings → My Blocks shows "My Defaults" / "Add a default for", and the
 encounter Templates section is unchanged.
+
+## 2026-08-07 — Iteration 3: one phrase for "who sees this block"
+
+**Item:** Collapse block-visibility booleans in the Settings UI (third
+simplify item).
+
+**What changed:** new pure helper `blockVisibilitySummary(def, roles)` in
+`src/lib/blockVisibility.ts` derives a single status phrase from the gate
+fields — "Off — hidden everywhere" / "Department portal only" /
+"All clinical staff" / role names. Block Library rows now show that phrase
+as a subtitle and the ambiguous "Disabled" and "N roles" badges are gone
+(`blocksSections.tsx`). Six unit tests added.
+
+**Why highest value:** top unchecked simplify item; six overlapping
+boolean-ish notions of "does this block show up" was a named pain point.
+
+**Verification:** tsc clean, eslint clean, 112/112 tests (6 new);
+browser-verified Block Library shows "Physician, System Admin",
+"All clinical staff" (Vitals), "Department portal only" (Lab/Radiology
+Result) as row subtitles.
