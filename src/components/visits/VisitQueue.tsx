@@ -12,7 +12,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useNow } from '../../hooks/useNow'
 import {
   visitPatient, visitEncounter, arriveVisit, cancelVisit, updateVisit,
-  referralSourceLabel,
+  referralSourceLabel, dayBoundsIso,
 } from '../../lib/visits'
 import { CheckoutDialog } from './CheckoutDialog'
 import type { Visit } from '../../types'
@@ -223,7 +223,8 @@ export function VisitQueue({
         )}
 
         <div className="flex items-center gap-1 shrink-0">
-          {!v.arrived_at && v.scheduled_at && (
+          {/* Bookings can only arrive once their day has come */}
+          {!v.arrived_at && v.scheduled_at && v.scheduled_at < dayBoundsIso().end && (
             <Button size="sm" variant="outline" onClick={() => void arriveVisit(v.id, firstStage)}>
               Check in
             </Button>

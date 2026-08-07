@@ -285,3 +285,23 @@ encounter sections and the "Encounters" tab label are gone (tab now says
 **Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
 on a patient with a completed visit — "Arrived 5:19 PM · checked out
 5:37 PM" renders above the linked Follow up encounter card in one list.
+
+## 2026-08-08 — Iteration 16: day navigation (ONE JOURNEY TIER COMPLETE)
+
+**Item:** Scheduling beyond today — the last One Journey item.
+
+**What changed:** the Front Desk header gains ‹ Today › day navigation
+(no calendar module): `useVisitQueue(dateKey)` parameterizes the day,
+"Tomorrow"/"Yesterday"/weekday labels, one-tap return to today. Off-today
+views hide walk-in check-in and the today-only stats and offer Book
+instead; queue rows refuse to check a booking in before its day arrives.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+— seeded a booking for tomorrow 10:00, navigated ›, saw it under Upcoming
+with Assign but no Check in; header showed Book only. Seed removed.
+
+**Tier complete:** all five One Journey items are shipped. The journey now
+reads: book → (day nav) → check in → queue → one-tap Start encounter →
+journey strip in the encounter → checkout → one merged Visits history on
+the patient page. Remaining backlog: features (dictation extension,
+carried-over visits).

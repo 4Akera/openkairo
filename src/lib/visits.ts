@@ -43,11 +43,12 @@ export function referralSourceLabel(v: Pick<Visit, 'referred_from_visit_id' | 'r
 }
 
 /**
- * All of today's non-cancelled visits: arrived today, or booked for today.
+ * All of a day's non-cancelled visits: arrived that day, or booked for it.
  * Finished visits stay included so the front desk sees the whole day.
+ * Defaults to today; pass a date for the Front Desk's day navigation.
  */
-export async function fetchTodayVisits(): Promise<Visit[]> {
-  const { start, end } = dayBoundsIso()
+export async function fetchTodayVisits(date: Date = new Date()): Promise<Visit[]> {
+  const { start, end } = dayBoundsIso(date)
   const { data, error } = await supabase
     .from('visits')
     .select('*, patients(*), encounters(id, status), referred_from:visits!referred_from_visit_id(department_id, departments(name))')

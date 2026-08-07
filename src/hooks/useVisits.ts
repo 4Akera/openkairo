@@ -4,17 +4,17 @@ import { fetchTodayVisits } from '../lib/visits'
 import type { Visit } from '../types'
 
 /**
- * Live view of today's visits (front-desk queue). Reloads on any visits
- * realtime event — the day's queue is small, so a refetch beats patching.
- * Also resolves assigned-physician names into `profileNames`.
+ * Live view of a day's visits (front-desk queue; defaults to today).
+ * Reloads on any visits realtime event — the day's queue is small, so a
+ * refetch beats patching. Resolves assigned-physician names too.
  */
-export function useVisitQueue() {
+export function useVisitQueue(dateKey?: string) {
   const [visits, setVisits] = useState<Visit[]>([])
   const [profileNames, setProfileNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const rows = await fetchTodayVisits()
+    const rows = await fetchTodayVisits(dateKey ? new Date(`${dateKey}T00:00:00`) : new Date())
     setVisits(rows)
     const ids = [...new Set(rows.map(v => v.assigned_to).filter((id): id is string => !!id))]
     if (ids.length > 0) {
@@ -22,7 +22,7 @@ export function useVisitQueue() {
       if (data) setProfileNames(Object.fromEntries(data.map(p => [p.id, p.full_name ?? ''])))
     }
     setLoading(false)
-  }, [])
+  }, [dateKey])
 
   useEffect(() => {
     load()

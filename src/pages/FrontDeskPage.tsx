@@ -22,13 +22,32 @@ import {
   Button, Badge,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../components/ui'
-import { ClipboardList, UserPlus, CalendarPlus } from 'lucide-react'
+import { ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { cn } from '../lib/utils'
 
 const GENERAL_QUEUE = 'general'
 
+function dateKeyFor(offsetDays: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function dayLabel(offsetDays: number): string {
+  if (offsetDays === 0) return 'Today'
+  if (offsetDays === 1) return 'Tomorrow'
+  if (offsetDays === -1) return 'Yesterday'
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
 export default function FrontDeskPage() {
   const { user, hasRole } = useAuthStore()
-  const { visits, profileNames, loading } = useVisitQueue()
+  // Day navigation: today is the default; arrows reveal booked future days
+  const [dayOffset, setDayOffset] = useState(0)
+  const { visits, profileNames, loading } = useVisitQueue(dateKeyFor(dayOffset))
+  const isToday = dayOffset === 0
 
   const [patientDepts, setPatientDepts] = useState<Department[]>([])
   const [deptFilter, setDeptFilter] = useState<string>('all')
@@ -78,10 +97,39 @@ export default function FrontDeskPage() {
         <div className="flex items-center gap-2 min-w-0">
           <ClipboardList className="h-5 w-5 text-muted-foreground shrink-0" />
           <h1 className="text-base font-semibold truncate">Front Desk</h1>
-          {!loading && activeCount > 0 && (
+
+          {/* Day navigation — today by default, arrows for booked days */}
+          <div className="flex items-center gap-0.5 ml-1 shrink-0">
+            <button
+              onClick={() => setDayOffset(o => o - 1)}
+              className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Previous day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setDayOffset(0)}
+              className={cn(
+                'px-2 h-7 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
+                isToday ? 'text-foreground cursor-default' : 'text-primary hover:bg-accent',
+              )}
+              title={isToday ? undefined : 'Back to today'}
+            >
+              {dayLabel(dayOffset)}
+            </button>
+            <button
+              onClick={() => setDayOffset(o => o + 1)}
+              className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Next day"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          {!loading && isToday && activeCount > 0 && (
             <Badge variant="secondary" className="ml-1">{activeCount} in queue</Badge>
           )}
-          {!loading && avgWait !== null && (
+          {!loading && isToday && avgWait !== null && (
             <span className="text-xs text-muted-foreground hidden sm:inline">
               avg visit today {avgWait < 60 ? `${avgWait}m` : `${Math.floor(avgWait / 60)}h ${avgWait % 60}m`}
             </span>
@@ -107,10 +155,12 @@ export default function FrontDeskPage() {
             <CalendarPlus className="h-4 w-4" />
             <span className="hidden sm:inline">Book</span>
           </Button>
-          <Button size="sm" onClick={() => openCheckIn('now')}>
-            <UserPlus className="h-4 w-4" />
-            <span className="hidden sm:inline">Check in</span>
-          </Button>
+          {isToday && (
+            <Button size="sm" onClick={() => openCheckIn('now')}>
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Check in</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -118,10 +168,17 @@ export default function FrontDeskPage() {
         visits={filtered}
         profileNames={profileNames}
         loading={loading}
+        emptyLabel={isToday ? 'No patients today yet' : `No visits booked for ${dayLabel(dayOffset).toLowerCase()}`}
         emptyAction={
-          <Button size="sm" variant="outline" onClick={() => openCheckIn('now')}>
-            Check in the first patient
-          </Button>
+          isToday ? (
+            <Button size="sm" variant="outline" onClick={() => openCheckIn('now')}>
+              Check in the first patient
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => openCheckIn('book')}>
+              Book a visit
+            </Button>
+          )
         }
       />
 

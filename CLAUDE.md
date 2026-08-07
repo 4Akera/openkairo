@@ -53,9 +53,11 @@ thing — a single patient journey — not separate modules stitched together.
       (clinical) — upcoming bookings at top; kill the separate mental model.
       (2026-08-08 — Upcoming + Visits sections; logistics line above each
       linked encounter card; Open/Closed sections retired)
-- [ ] Scheduling beyond today: Front Desk gains simple day navigation so
+- [x] Scheduling beyond today: Front Desk gains simple day navigation so
       booked visits for future days are visible and manageable (today stays
-      the default view; no calendar module).
+      the default view; no calendar module). (2026-08-08 — ‹ Today › arrows;
+      bookings can't check in before their day; off-today hides walk-in
+      check-in and the today-only stats)
 
 ### Features (only after the above)
 - [ ] Extend dictation to other text-heavy blocks (Nurse Note,
