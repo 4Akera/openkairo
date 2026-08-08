@@ -55,7 +55,8 @@ result loop. Judged against: one journey, no new concepts.
       become one). (2026-08-08 — Settings nav 10 → 8 entries)
 - [ ] AI visit summary: one click drafts a visit-summary note block from
       the encounter's blocks (after the AI pilot lands).
-- [ ] Wait-time trend: 7-day avg-visit sparkline beside the Front Desk stat.
+- [x] Wait-time trend: 7-day avg-visit sparkline beside the Front Desk stat.
+      (2026-08-08 — hidden until ≥2 days have completed visits)
 
 ### One place for patients (done)
 User complaint 2026-08-08: patients appear in too many places (Recent tab,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { referralSourceLabel, averageWaitMinutes } from '../visits'
+import { referralSourceLabel, averageWaitMinutes, dailyAverageWaits } from '../visits'
 
 describe('referralSourceLabel', () => {
   it('null for non-referral visits', () => {
@@ -53,5 +53,31 @@ describe('averageWaitMinutes', () => {
       { arrived_at: at(0), finished_at: at(10) },
       { arrived_at: at(0), finished_at: at(11) },
     ])).toBe(11)
+  })
+})
+
+describe('dailyAverageWaits', () => {
+  const today = new Date('2026-08-08T12:00:00')
+  const on = (day: string, arriveH: number, finishH: number) => ({
+    arrived_at: `${day}T${String(arriveH).padStart(2, '0')}:00:00`,
+    finished_at: `${day}T${String(finishH).padStart(2, '0')}:00:00`,
+  })
+
+  it('buckets by finish day, oldest first, today last', () => {
+    const out = dailyAverageWaits(
+      [on('2026-08-08', 9, 10), on('2026-08-07', 9, 12)],
+      3,
+      today,
+    )
+    expect(out).toEqual([null, 180, 60])
+  })
+
+  it('ignores unfinished visits and marks empty days null', () => {
+    const out = dailyAverageWaits(
+      [{ arrived_at: '2026-08-08T09:00:00', finished_at: null }],
+      2,
+      today,
+    )
+    expect(out).toEqual([null, null])
   })
 })

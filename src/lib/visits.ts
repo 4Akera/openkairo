@@ -160,6 +160,34 @@ export function averageWaitMinutes(visits: Pick<Visit, 'arrived_at' | 'finished_
 }
 
 /**
+ * Average completed wait per local day for the trailing `days` days
+ * (oldest → newest, today last). Days without completed visits are null.
+ * Feeds the Front Desk's 7-day trend sparkline.
+ */
+export function dailyAverageWaits(
+  visits: Pick<Visit, 'arrived_at' | 'finished_at'>[],
+  days: number,
+  today: Date = new Date(),
+): (number | null)[] {
+  const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+  const buckets = new Map<string, Pick<Visit, 'arrived_at' | 'finished_at'>[]>()
+  for (const v of visits) {
+    if (!v.arrived_at || !v.finished_at) continue
+    const key = dayKey(new Date(v.finished_at))
+    const arr = buckets.get(key) ?? []
+    arr.push(v)
+    buckets.set(key, arr)
+  }
+  const out: (number | null)[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    out.push(averageWaitMinutes(buckets.get(dayKey(d)) ?? []))
+  }
+  return out
+}
+
+/**
  * Referral: an order sent to a patient-facing department also queues the
  * patient there. Chains from the patient's active visit; skipped when the
  * patient is already waiting in that department's queue.

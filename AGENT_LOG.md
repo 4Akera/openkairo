@@ -441,3 +441,20 @@ section components are unchanged — pure navigation consolidation.
 
 **Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
 the merged nav and tab switching between My Blocks and Block Library.
+
+## 2026-08-08 — Iteration 25: 7-day wait-time trend
+
+**Item:** First analytics — a sparkline, zero config.
+
+**What changed:** `dailyAverageWaits` (tested) buckets the trailing week's
+completed visits by finish day; the Front Desk header renders a tiny SVG
+bar sparkline beside the avg stat (today's bar in primary), hidden until
+at least two days have data, desktop only, today view only.
+
+**Verification:** tsc clean, eslint clean, 135/135 tests (2 new);
+browser-verified the sparkline in the header with real two-day data.
+
+**Loop state:** every unblocked backlog item is done. The two remaining
+items (AI-filled blocks pilot, AI visit summary) are gated on the user's
+approval to deploy an Edge Function + set ANTHROPIC_API_KEY. Stopping the
+loop per the charter's hard stop; restart after approval.
