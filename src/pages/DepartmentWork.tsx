@@ -21,6 +21,7 @@ import { parseSearchQuery } from '../lib/patientSearch'
 import { readWalkInLastBlockType, writeWalkInLastBlockType } from '../lib/walkInPreferences'
 import { CreatePatientDialog } from '../components/patients/CreatePatientDialog'
 import { isStatOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel } from '../lib/deptWorklist'
+import { ImportResultsDialog } from '../components/dept/ImportResultsDialog'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface OrderWithContext extends BlockAction {
@@ -1959,6 +1960,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   const [history, setHistory] = useState<PastEntry[]>([])
   const [loading, setLoading]         = useState(true)
   const [chargeNotice, setChargeNotice] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
   const [queueActionError, setQueueActionError] = useState<string | null>(null)
   const [loadingHistory, setLoadingH] = useState(false)
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE_SIZE)
@@ -2392,6 +2394,17 @@ export function DepartmentWork({ dept }: { dept: Department }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* CSV import — the 100k-scale path: results arrive as data */}
+          {deptBlockTypes.some(bt => bt.built_in_type === 'lab_result') && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setImportOpen(true)}
+              title="Import analyzer/LIS results from CSV"
+            >
+              <Plus className="h-3.5 w-3.5" /> Import results
+            </Button>
+          )}
           {billingEnabled && can('billing.charge') && (
             <Button
               size="sm"
@@ -2662,6 +2675,12 @@ export function DepartmentWork({ dept }: { dept: Department }) {
           </div>
         </DialogContent>
       </Dialog>
+      <ImportResultsDialog
+        dept={dept}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onReleased={() => { void load({ quiet: true }); setHistory([]) }}
+      />
       {showEntry && (
         <EntryModal
           key={fulfillOrder?.id ?? 'walk-in'}

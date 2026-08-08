@@ -731,3 +731,30 @@ errors. (Lane chips not visible in demo — single-lane dept, correct.)
 backlog as future items; Enter-to-advance relies on button autofocus, which
 held focus in testing but the synthetic-key event in the browser tool didn't
 activate it — clicking Next works; worth a quick manual keyboard check.
+
+## 2026-08-08 — Iteration 44: CSV result import — verify & release (user-driven)
+
+**Item:** Department worklist at volume — analyzer/import path (user
+green-lit: "receiving 100k test a month is not practical for this").
+
+**What:** "Import results" button in the lab work view → dialog: choose or
+paste a CSV (one row per sample, `mrn` column + test columns named by test
+id or display name). Rows are matched to the department's pending orders
+by MRN, oldest order first; values land in the panels the order actually
+contains (extras reported, unknown columns ignored); H/L flags computed
+from the catalogue reference ranges. Review table shows matched/unmatched,
+then one release pass writes a normal `lab_result` block per row
+(status 'resulted'), completes the order (result toasts fire as usual),
+and runs the same charge sync as manual entry. 500-row cap per import.
+Parsing/mapping/matching in `lib/resultImport.ts` (12 tests).
+
+**Verification:** tsc clean, eslint clean, 165/165 tests, browser
+end-to-end on /dept/lab: pasted a 2-row CSV → preview matched Hung Nguyen
+(4 values, analyzer_id ignored, bogus MRN flagged "no pending order") →
+released → DB shows order completed + lab_result with cbc.wbc {12.5, H},
+metabolic.na/k values. Test release fully reverted (block deleted, order
+back to in_progress, charges removed).
+
+**Note:** parallel session actively editing (EncounterPage export,
+FrontDesk date picker, CheckoutDialog, HistoricalArchive…) — those files
+left uncommitted; DepartmentWork diff verified mine-only before staging.

@@ -107,9 +107,15 @@ import + verify-release, listed below as future work).
 - [ ] Batch entry grid: pick a lane → one row per pending order, columns =
       result fields, save all (build only if lanes prove out at real
       volume).
-- [ ] Analyzer/import path for true 100k-scale labs: results arrive as
+- [x] Analyzer/import path for true 100k-scale labs: results arrive as
       data (CSV first, HL7 later), staff verify & release instead of
-      typing (bigger feature — ask user before starting).
+      typing. (2026-08-08 — user green-lit "100k a month is not
+      practical"; CSV import shipped: "Import results" in the lab work
+      view, MRN-matched to pending orders oldest-first, auto H/L flags
+      from the catalogue ranges, review table, release loop writes normal
+      lab_result blocks + completes orders + syncs charges;
+      lib/resultImport tested. HL7/direct analyzer feed remains future
+      work — ask user.)
 
 ### Post-restructure cleanup (pure simplification)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes
