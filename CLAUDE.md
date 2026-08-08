@@ -50,9 +50,9 @@ result loop. Judged against: one journey, no new concepts.
 - [ ] AI-filled blocks pilot: dictate/paste free text → Claude fills the
       structured fields of the Vitals block. HARD STOP before deploying the
       Edge Function or wiring an API key — ask the user first.
-- [ ] One Blocks place in Settings: merge My Blocks / Templates / Block
+- [x] One Blocks place in Settings: merge My Blocks / Templates / Block
       Library into a single "Blocks" section with tabs (three nav items
-      become one).
+      become one). (2026-08-08 — Settings nav 10 → 8 entries)
 - [ ] AI visit summary: one click drafts a visit-summary note block from
       the encounter's blocks (after the AI pilot lands).
 - [ ] Wait-time trend: 7-day avg-visit sparkline beside the Front Desk stat.

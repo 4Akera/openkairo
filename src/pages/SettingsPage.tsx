@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  User, Blocks, ShieldCheck, Users, Globe, LayoutTemplate, Building2,
+  User, Blocks, ShieldCheck, Users, Building2,
   ChevronLeft, ChevronRight, Star, Settings2,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
@@ -21,9 +21,8 @@ import { GeneralSection } from './settings/GeneralSection'
 
 const SETTINGS_NAV = (isAdmin: boolean, canManageSettings: boolean, canManageBlocks: boolean, canTemplates: boolean, canBlocks: boolean, canManageFees: boolean) => [
   { id: 'profile',       label: 'Profile',         icon: User,          show: true },
-  { id: 'blocks',        label: 'My Blocks',        icon: Blocks,        show: canBlocks },
-  { id: 'templates',     label: 'Templates',        icon: LayoutTemplate, show: canTemplates },
-  { id: 'standard',      label: 'Block Library',    icon: Globe,         show: canManageBlocks },
+  // One Blocks place: mine / templates / library live as tabs inside
+  { id: 'blocks',        label: 'Blocks',           icon: Blocks,        show: canBlocks || canTemplates || canManageBlocks },
   { id: 'patient-fields',label: 'Patient Fields',   icon: User,          show: isAdmin },
   { id: 'roles',         label: 'Roles',            icon: ShieldCheck,   show: isAdmin },
   { id: 'users',         label: 'Users',            icon: Users,         show: isAdmin },
@@ -31,6 +30,50 @@ const SETTINGS_NAV = (isAdmin: boolean, canManageSettings: boolean, canManageBlo
   { id: 'service-items', label: 'Service Items',    icon: Star,          show: canManageFees },
   { id: 'general',       label: 'General',          icon: Settings2,     show: canManageSettings },
 ].filter(n => n.show)
+
+/** One Blocks place: mine / encounter templates / org library as tabs. */
+function BlocksHub({
+  canBlocks,
+  canTemplates,
+  canManageBlocks,
+}: {
+  canBlocks: boolean
+  canTemplates: boolean
+  canManageBlocks: boolean
+}) {
+  const tabs = [
+    ...(canBlocks       ? [{ id: 'mine' as const,      label: 'My Blocks' }] : []),
+    ...(canTemplates    ? [{ id: 'templates' as const, label: 'Templates' }] : []),
+    ...(canManageBlocks ? [{ id: 'library' as const,   label: 'Block Library' }] : []),
+  ]
+  const [tab, setTab] = useState(tabs[0]?.id ?? 'mine')
+
+  return (
+    <div className="space-y-5">
+      {tabs.length > 1 && (
+        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted w-fit">
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                'px-3 h-8 rounded-md text-xs font-medium transition-colors',
+                tab === t.id
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === 'mine'      && canBlocks       && <CustomBlocksSection />}
+      {tab === 'templates' && canTemplates    && <TemplatesSection />}
+      {tab === 'library'   && canManageBlocks && <StandardBlocksSection />}
+    </div>
+  )
+}
 
 export default function SettingsPage() {
   const { can, hasRole } = useAuthStore()
@@ -127,9 +170,9 @@ export default function SettingsPage() {
 
         <div className="flex-1 overflow-auto p-6">
           {active === 'profile'        && <ProfileSection />}
-          {active === 'blocks'         && canBlocks       && <CustomBlocksSection />}
-          {active === 'templates'      && canTemplates    && <TemplatesSection />}
-          {active === 'standard'       && canManageBlocks && <StandardBlocksSection />}
+          {active === 'blocks'         && (canBlocks || canTemplates || canManageBlocks) && (
+            <BlocksHub canBlocks={canBlocks} canTemplates={canTemplates} canManageBlocks={canManageBlocks} />
+          )}
           {active === 'patient-fields' && isAdmin         && <PatientFieldsSection />}
           {active === 'roles'          && isAdmin         && <RolesSection />}
           {active === 'users'          && isAdmin         && <UsersSection />}

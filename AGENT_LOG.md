@@ -427,3 +427,17 @@ action id.
 — flipped a live in-progress lab order (placed by the logged-in admin) to
 completed via SQL and the toast appeared with patient name; reverted the
 order's status afterwards.
+
+## 2026-08-08 — Iteration 24: one Blocks place in Settings
+
+**Item:** Merge My Blocks / Templates / Block Library into one section.
+(The AI pilot stays parked awaiting the user's Edge Function + API key
+approval, per the charter's hard stop.)
+
+**What changed:** Settings nav drops from 10 to 8 entries: a single
+"Blocks" item shows a BlocksHub with My Blocks / Templates / Block Library
+as tabs (permission-gated; single-tab users see no tab strip). The three
+section components are unchanged — pure navigation consolidation.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+the merged nav and tab switching between My Blocks and Block Library.
