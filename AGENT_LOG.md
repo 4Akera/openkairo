@@ -815,3 +815,32 @@ preview on :54967 — the :5173 server belongs to the parallel session):
 schema". AI items still await the Edge Function key. Batch entry grid
 gated on lanes proving out. Loop will stop after this iteration — nothing
 unblocked remains.
+
+## 2026-08-08 — Iteration 46: department History at volume (user-driven)
+
+**Item:** "2k tests per day — history going massive." History stops being
+an unbounded list.
+
+**What:** History opens day-scoped — today's completed work only, with the
+same ‹ day › nav Today uses (future days disabled). A search box crosses
+all days by patient (search_patients RPC → patient_id filter on both the
+fulfilled-orders and direct-entries queries), debounced. The tab badge now
+shows TODAY's completed count (head count query refreshed with the queue)
+instead of the loaded-list length. Empty states name their scope
+("Nothing on this day" / "Nothing for X"); pagination stays within scope.
+Also fixed in passing: the history effect refetched forever when the
+result set was empty (gated by history.length===0) — a historyLoaded flag
+now gates it. Supporting partial index staged in schema section 20
+(approval-gated): block_actions(action_type, completed_at desc) where
+completed.
+
+**Verification:** tsc clean, eslint clean, 170/170 tests, browser on own
+preview (:55202): History opened on Today with "Nothing on this day"
+settling (no refetch loop); search "Mitchell" surfaced his two April
+results across days; "Hung" correctly empty (no completed results); badge
+hidden at 0 today. Caught & fixed a missing ChevronLeft import that
+white-screened the tab mid-verification.
+
+**Note:** parallel session actively editing (VisitQueue, utils, visits,
+FrontDeskPage, PatientPage + tests — count now 170); their files left
+uncommitted, DepartmentWork diff verified mine-only.

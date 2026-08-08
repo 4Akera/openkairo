@@ -12,7 +12,8 @@ import {
 } from '../lib/blockBilling'
 import { BlockManualFeesPanel } from '../components/timeline/capabilities/BlockManualFeesPanel'
 import { fullName, cn, formatDateTime, calcAgeYears } from '../lib/utils'
-import { Loader2, CheckCircle2, X, Plus, Clock, History, ChevronRight, ChevronDown, Search, ExternalLink, BookOpen, DollarSign, Flame, XCircle, AlertCircle, UserPlus, Ban } from 'lucide-react'
+import { dayBoundsIso } from '../lib/visits'
+import { Loader2, CheckCircle2, X, Plus, Clock, History, ChevronLeft, ChevronRight, ChevronDown, Search, ExternalLink, BookOpen, DollarSign, Flame, XCircle, AlertCircle, UserPlus, Ban } from 'lucide-react'
 import { Button, ScrollArea, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, Separator } from '../components/ui'
 import { DynamicBlockEdit, DynamicBlockView } from '../components/timeline/DynamicBlock'
 import { BLOCK_REGISTRY, orphanRegistryRenderKey, registryRenderKey } from '../components/timeline/BlockRegistry'
@@ -1958,6 +1959,12 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   const [lane, setLane]     = useState<string | null>(null)
   const [nowMs, setNowMs]   = useState(() => Date.now())
   const [history, setHistory] = useState<PastEntry[]>([])
+  // History is day-scoped at volume (2k results/day): default = today only,
+  // ‹ › walks days, search crosses all days by patient.
+  const [historyDayOffset, setHistoryDayOffset] = useState(0)
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [todayDone, setTodayDone] = useState<number | null>(null)
   const [loading, setLoading]         = useState(true)
   const [chargeNotice, setChargeNotice] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -2062,6 +2069,14 @@ export function DepartmentWork({ dept }: { dept: Department }) {
         setOrders(data as unknown as OrderWithContext[])
         setTotalOpen(count ?? data.length)
       }
+      // Today's completed count for the History badge — a number, not a list
+      const { count: doneCount } = await supabase
+        .from('block_actions')
+        .select('id', { count: 'exact', head: true })
+        .eq('action_type', dept.slug)
+        .eq('status', 'completed')
+        .gte('completed_at', dayBoundsIso().start)
+      setTodayDone(doneCount ?? 0)
     } finally {
       if (!quiet) setLoading(false)
     }
@@ -2077,6 +2092,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
       setHistory([])
       setHistoryLimit(HISTORY_PAGE_SIZE)
       setHasMoreHistory(false)
+      setHistoryLoaded(false)
       if (chargeMsg) {
         setChargeNotice(chargeMsg)
         setTimeout(() => setChargeNotice(null), 5000)
@@ -2162,10 +2178,33 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     // Fetch limit+1 to detect whether more pages exist
     const fetchLimit = limit + 1
 
-    const [{ data: actions }, { data: directs }] = await Promise.all([
-      supabase
-        .from('block_actions')
-        .select(`
+    // Search crosses all days by patient; otherwise scope to one day.
+    const searchTerm = historySearch.trim()
+    let patientIds: string[] | null = null
+    if (searchTerm) {
+      const { tokens, year } = parseSearchQuery(searchTerm)
+      const { data: pts } = await supabase.rpc('search_patients', {
+        p_tokens: tokens && tokens.length > 0 ? tokens : null,
+        p_year: year,
+        p_created_by: null,
+        p_assigned_to: null,
+        p_open_encounter: false,
+        p_limit: 20,
+        p_offset: 0,
+      })
+      patientIds = ((pts ?? []) as { id: string }[]).map(p => p.id)
+      if (patientIds.length === 0) {
+        setHistory([]); setHasMoreHistory(false); setHistoryLoaded(true); setLoadingH(false)
+        return
+      }
+    }
+    const dayDate = new Date()
+    dayDate.setDate(dayDate.getDate() + historyDayOffset)
+    const bounds = searchTerm ? null : dayBoundsIso(dayDate)
+
+    let actionsQuery = supabase
+      .from('block_actions')
+      .select(`
           id, completed_at,
           patients(id,first_name,middle_name,last_name,mrn),
           result_block:blocks!block_actions_result_block_id_fkey(
@@ -2174,25 +2213,33 @@ export function DepartmentWork({ dept }: { dept: Department }) {
             block_definitions(registry_slug)
           )
         `)
-        .eq('action_type', dept.slug)
-        .eq('status', 'completed')
-        .not('result_block_id', 'is', null)
-        .order('completed_at', { ascending: false })
-        .limit(fetchLimit),
-      supabase
-        .from('blocks')
-        .select(`
+      .eq('action_type', dept.slug)
+      .eq('status', 'completed')
+      .not('result_block_id', 'is', null)
+    let directsQuery = supabase
+      .from('blocks')
+      .select(`
           id, type, content, author_name, created_by, created_at, definition_id, department_block_type_id,
           share_to_record,
           patients(id,first_name,middle_name,last_name,mrn),
           department_block_types(name),
           block_definitions(registry_slug)
         `)
-        .eq('department_id', dept.id)
-        .is('encounter_id', null)
-        .eq('state', 'active')
-        .order('created_at', { ascending: false })
-        .limit(fetchLimit),
+      .eq('department_id', dept.id)
+      .is('encounter_id', null)
+      .eq('state', 'active')
+    if (bounds) {
+      actionsQuery = actionsQuery.gte('completed_at', bounds.start).lt('completed_at', bounds.end)
+      directsQuery = directsQuery.gte('created_at', bounds.start).lt('created_at', bounds.end)
+    }
+    if (patientIds) {
+      actionsQuery = actionsQuery.in('patient_id', patientIds)
+      directsQuery = directsQuery.in('patient_id', patientIds)
+    }
+
+    const [{ data: actions }, { data: directs }] = await Promise.all([
+      actionsQuery.order('completed_at', { ascending: false }).limit(fetchLimit),
+      directsQuery.order('created_at', { ascending: false }).limit(fetchLimit),
     ])
 
     // Dedupe only against the page of direct blocks we actually fetched —
@@ -2261,8 +2308,9 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     const hasMore = all.length > limit
     setHistory(all.slice(0, limit))
     setHasMoreHistory(hasMore)
+    setHistoryLoaded(true)
     setLoadingH(false)
-  }, [dept.slug, dept.id])
+  }, [dept.slug, dept.id, historyDayOffset, historySearch])
 
   useEffect(() => {
     load()
@@ -2290,10 +2338,22 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     return () => { supabase.removeChannel(channel) }
   }, [dept.slug, load, applyBlockActionRealtime])
 
-  // Load history when tab is first opened
+  // Load history when the tab opens or its scope (day / search) changes.
+  // historyLoaded gates the fetch so an empty day doesn't refetch forever.
   useEffect(() => {
-    if (view === 'history' && history.length === 0 && !loadingHistory) loadHistory(historyLimit)
-  }, [view, history.length, loadingHistory, loadHistory, historyLimit])
+    if (view === 'history' && !historyLoaded && !loadingHistory) loadHistory(historyLimit)
+  }, [view, historyLoaded, loadingHistory, loadHistory, historyLimit])
+
+  // Day or search changed → new scope, refetch from page one (debounced for typing)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setHistoryLimit(HISTORY_PAGE_SIZE)
+      setHistory([])
+      setHasMoreHistory(false)
+      setHistoryLoaded(false)
+    }, 250)
+    return () => clearTimeout(t)
+  }, [historyDayOffset, historySearch])
 
   /** One motion: opening the entry form IS starting the order (marks it in progress for other staff). */
   const openOrder = async (order: OrderWithContext) => {
@@ -2384,9 +2444,12 @@ export function DepartmentWork({ dept }: { dept: Department }) {
             >
               <History className="h-3 w-3" />
               History
-              {history.length > 0 && (
-                <span className="text-[10px] bg-muted-foreground/20 text-muted-foreground px-1 rounded-full">
-                  {hasMoreHistory ? `${history.length}+` : history.length}
+              {todayDone !== null && todayDone > 0 && (
+                <span
+                  className="text-[10px] bg-muted-foreground/20 text-muted-foreground px-1 rounded-full"
+                  title="Completed today"
+                >
+                  {todayDone}
                 </span>
               )}
             </button>
@@ -2517,7 +2580,58 @@ export function DepartmentWork({ dept }: { dept: Department }) {
             )
           )}
 
-          {/* ── History ── */}
+          {/* ── History — one day at a time; search crosses days ── */}
+          {view === 'history' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {!historySearch.trim() && (
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    onClick={() => setHistoryDayOffset(o => o - 1)}
+                    className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    title="Previous day"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setHistoryDayOffset(0)}
+                    className={cn(
+                      'px-2 h-7 rounded-md text-xs font-medium whitespace-nowrap transition-colors',
+                      historyDayOffset === 0 ? 'text-foreground cursor-default' : 'text-primary hover:bg-accent',
+                    )}
+                    title={historyDayOffset === 0 ? undefined : 'Back to today'}
+                  >
+                    {historyDayOffset === 0
+                      ? 'Today'
+                      : historyDayOffset === -1
+                        ? 'Yesterday'
+                        : (() => {
+                            const d = new Date()
+                            d.setDate(d.getDate() + historyDayOffset)
+                            return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+                          })()}
+                  </button>
+                  <button
+                    onClick={() => setHistoryDayOffset(o => Math.min(0, o + 1))}
+                    disabled={historyDayOffset >= 0}
+                    className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    title="Next day"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              <div className="relative flex-1 min-w-[180px] max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="search"
+                  placeholder="Search all history — name or MRN…"
+                  value={historySearch}
+                  onChange={e => setHistorySearch(e.target.value)}
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+            </div>
+          )}
           {view === 'history' && (
             loadingHistory ? (
               <div className="flex justify-center py-12">
@@ -2526,8 +2640,14 @@ export function DepartmentWork({ dept }: { dept: Department }) {
             ) : history.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
                 <History className="h-8 w-8 opacity-20" />
-                <p className="text-sm">No past entries yet</p>
-                <p className="text-xs">Fulfilled orders and direct entries will appear here.</p>
+                <p className="text-sm">
+                  {historySearch.trim() ? `Nothing for “${historySearch.trim()}”` : 'Nothing on this day'}
+                </p>
+                <p className="text-xs">
+                  {historySearch.trim()
+                    ? 'Results across all days appear as you type.'
+                    : 'Fulfilled orders and direct entries appear here, one day at a time.'}
+                </p>
               </div>
             ) : (
               <>
@@ -2550,7 +2670,9 @@ export function DepartmentWork({ dept }: { dept: Department }) {
                   </div>
                 )}
                 {!hasMoreHistory && history.length >= HISTORY_PAGE_SIZE && (
-                  <p className="text-center text-[11px] text-muted-foreground py-3">All entries loaded</p>
+                  <p className="text-center text-[11px] text-muted-foreground py-3">
+                    {historySearch.trim() ? 'All matches loaded' : 'End of this day'}
+                  </p>
                 )}
               </>
             )
@@ -2679,7 +2801,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
         dept={dept}
         open={importOpen}
         onOpenChange={setImportOpen}
-        onReleased={() => { void load({ quiet: true }); setHistory([]) }}
+        onReleased={() => { void load({ quiet: true }); setHistory([]); setHistoryLoaded(false) }}
       />
       {showEntry && (
         <EntryModal

@@ -2403,3 +2403,9 @@ create policy "encounter_insert" on encounters for insert with check (
 -- create extension if not exists pg_trgm;
 -- create index if not exists idx_patients_name_trgm on patients
 --   using gin ((first_name || ' ' || coalesce(middle_name,'') || ' ' || last_name) gin_trgm_ops);
+--
+-- Department History at 2k results/day: day-scoped completed-work query
+-- (action_type = dept, completed_at within one day, newest first).
+--
+-- create index if not exists idx_block_actions_dept_completed
+--   on block_actions (action_type, completed_at desc) where status = 'completed';

@@ -104,6 +104,15 @@ import + verify-release, listed below as future work).
       exact count, realtime keeps count in step), history's walk-in dedupe
       no longer scans every result ever. Helpers in `lib/deptWorklist.ts`
       (tested). (2026-08-08)
+- [x] History at volume (user-approved 2026-08-08 — "2k tests per day,
+      history going massive"): History opens day-scoped (today's completed
+      work only, ‹ day › nav like Today) + an MRN/name search box that
+      queries the server for cross-day lookups; tab badge shows today's
+      count, not the all-time total. Supporting index
+      block_actions(action_type, completed_at) goes into staged schema
+      section 20 (approval-gated). (2026-08-08 — historyLoaded flag also
+      fixes a pre-existing infinite refetch on empty history; badge is a
+      head-count query refreshed with the queue)
 - [ ] Batch entry grid: pick a lane → one row per pending order, columns =
       result fields, save all (build only if lanes prove out at real
       volume).
