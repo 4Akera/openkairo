@@ -14,14 +14,14 @@ import { BlockManualFeesPanel } from '../components/timeline/capabilities/BlockM
 import { fullName, cn, formatDateTime, calcAgeYears } from '../lib/utils'
 import { dayBoundsIso } from '../lib/visits'
 import { Loader2, CheckCircle2, X, Plus, Clock, History, ChevronLeft, ChevronRight, ChevronDown, Search, ExternalLink, BookOpen, DollarSign, Flame, XCircle, AlertCircle, UserPlus, Ban } from 'lucide-react'
-import { Button, ScrollArea, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, Separator } from '../components/ui'
+import { Button, ScrollArea, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, Separator, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui'
 import { DynamicBlockEdit, DynamicBlockView } from '../components/timeline/DynamicBlock'
 import { BLOCK_REGISTRY, orphanRegistryRenderKey, registryRenderKey } from '../components/timeline/BlockRegistry'
 import { getRecentPatientIds, pushRecentPatientId } from '../lib/recentItems'
 import { parseSearchQuery } from '../lib/patientSearch'
 import { readWalkInLastBlockType, writeWalkInLastBlockType } from '../lib/walkInPreferences'
 import { CreatePatientDialog } from '../components/patients/CreatePatientDialog'
-import { isStatOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel } from '../lib/deptWorklist'
+import { isStatOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel, originOf, originCounts } from '../lib/deptWorklist'
 import { ImportResultsDialog } from '../components/dept/ImportResultsDialog'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +35,8 @@ interface OrderWithContext extends BlockAction {
     order_block_type: { name: string } | null
   } | null
   patients?: Pick<Patient, 'id' | 'first_name' | 'middle_name' | 'last_name' | 'mrn'> | null
+  /** The queue the patient sits in — the order's origin (see lib/deptWorklist). */
+  encounter?: { department_id: string | null; departments: { name: string } | null } | null
 }
 
 interface PastEntry {
@@ -1934,6 +1936,7 @@ const QUEUE_LIMIT = 300
 const WORK_QUEUE_SELECT = `
   *,
   patients(id,first_name,middle_name,last_name,mrn),
+  encounter:encounters!encounter_id(department_id, departments(name)),
   order_block:blocks!block_actions_block_id_fkey(
     content, type, definition_id, department_block_type_id,
     order_def:block_definitions(*),
@@ -1957,6 +1960,9 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   const [orders, setOrders] = useState<OrderWithContext[]>([])
   const [totalOpen, setTotalOpen] = useState(0)
   const [lane, setLane]     = useState<string | null>(null)
+  // Filter by the queue the order came from ("General", "Cardiology", …);
+  // inpatient locations (building/floor) will be more origins later.
+  const [originFilter, setOriginFilter] = useState<string | null>(null)
   const [nowMs, setNowMs]   = useState(() => Date.now())
   const [history, setHistory] = useState<PastEntry[]>([])
   // History is day-scoped at volume (2k results/day): default = today only,
@@ -2047,11 +2053,18 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     () => new Map(deptBlockTypes.map(bt => [bt.id, bt.name])),
     [deptBlockTypes],
   )
-  const lanes = useMemo(() => laneCounts(orders, btNameMap), [orders, btNameMap])
+  // Origin filter first (which queue the order came from), lanes within it
+  const origins = useMemo(() => originCounts(orders), [orders])
+  const activeOrigin = originFilter && origins.some(o => o.origin === originFilter) ? originFilter : null
+  const originOrders = useMemo(
+    () => (activeOrigin ? orders.filter(o => originOf(o) === activeOrigin) : orders),
+    [orders, activeOrigin],
+  )
+  const lanes = useMemo(() => laneCounts(originOrders, btNameMap), [originOrders, btNameMap])
   const activeLane = lane && lanes.some(l => l.lane === lane) ? lane : null
   const visibleOrders = useMemo(
-    () => sortWorklist(activeLane ? orders.filter(o => laneOf(o, btNameMap) === activeLane) : orders),
-    [orders, activeLane, btNameMap],
+    () => sortWorklist(activeLane ? originOrders.filter(o => laneOf(o, btNameMap) === activeLane) : originOrders),
+    [originOrders, activeLane, btNameMap],
   )
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
@@ -2377,7 +2390,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   /** Save-&-next: swap the entry modal to the next open order in the same lane. */
   const advanceToNext = (chargeMsg?: string | null) => {
     const current = fulfillOrder
-    const next = current ? nextInLane(orders, current, btNameMap) : null
+    const next = current ? nextInLane(originOrders, current, btNameMap) : null
     if (chargeMsg) {
       setChargeNotice(chargeMsg)
       setTimeout(() => setChargeNotice(null), 5000)
@@ -2524,6 +2537,30 @@ export function DepartmentWork({ dept }: { dept: Department }) {
               </div>
             ) : (
               <>
+                {/* Origin filter — which queue the order came from (a ward/
+                    building/floor becomes just another origin later) */}
+                {origins.length > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground shrink-0">From</span>
+                    <Select
+                      value={activeOrigin ?? '__all__'}
+                      onValueChange={(v: string) => setOriginFilter(v === '__all__' ? null : v)}
+                    >
+                      <SelectTrigger className="h-7 w-auto min-w-[130px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All queues · {orders.length}</SelectItem>
+                        {origins.map(o => (
+                          <SelectItem key={o.origin} value={o.origin}>
+                            {o.origin} · {o.count}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {/* Lane chips — one per service, busiest first */}
                 {lanes.length > 1 && (
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -2537,7 +2574,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
                           : 'bg-background border-border text-muted-foreground hover:border-primary/50',
                       )}
                     >
-                      All <span className="opacity-70">{orders.length}</span>
+                      All <span className="opacity-70">{originOrders.length}</span>
                     </button>
                     {lanes.map(l => (
                       <button
@@ -2810,7 +2847,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
           orderAction={fulfillOrder}
           patientForWalkIn={walkInPt}
           selectedBTId={selectedBTId}
-          next={fulfillOrder ? nextInLane(orders, fulfillOrder, btNameMap) : null}
+          next={fulfillOrder ? nextInLane(originOrders, fulfillOrder, btNameMap) : null}
           onNext={advanceToNext}
           deptBlockTypes={deptBlockTypes}
           deptBlockTypesLoading={deptBlockTypesLoading}

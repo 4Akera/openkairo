@@ -910,3 +910,31 @@ parallel session's uncommitted files (deptWorklist, DepartmentWork) —
 caught immediately, soft-reset, recommitted mine only, theirs restored to
 working tree untouched. Rule for future iterations: ALWAYS stage explicit
 file lists, never `git add -A`, while parallel sessions share this tree.
+
+## 2026-08-08 — Iteration 47: origin filter on the worklist (user-driven)
+
+**Item:** user request — "filter per queue per dept, and per building/floor
+for inpatients in future".
+
+**What:** The department worklist gains a "From" select: filter orders by
+the queue their encounter sits in (General, Cardiology, …), with counts,
+shown only when more than one origin is present. Lane chips recount within
+the origin, and save-&-next chains inside it. `originOf`/`originCounts`
+in lib/deptWorklist (+5 tests, 172 total); the work-queue select gains an
+`encounter:encounters!encounter_id(department_id, departments(name))`
+join (column-name hint — realtime row hydration inherits it). Future
+inpatient building/floor = more origin labels, noted as a schema-gated
+backlog item.
+
+**Charter fix along the way:** `npx tsc --noEmit` was checking NOTHING —
+the root tsconfig is a solution file with `"files": []`. The DoD command
+is now `npx tsc --build --noEmit` (this is how the ChevronLeft crash
+slipped past iteration 46's checks). The real check surfaced two latent
+embed-typing errors in FrontDeskPage's Open list — fixed via
+visitPatient().
+
+**Verification:** tsc --build clean, eslint clean, 172/172 tests, browser
+(own preview :55699): filter hidden with one origin; after temporarily
+moving 2 encounters into Cardiology → "From: All queues · 39 / General ·
+37 / Cardiology · 2", picking Cardiology showed exactly those 2 orders.
+Test data reverted.

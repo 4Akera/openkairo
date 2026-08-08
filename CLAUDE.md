@@ -16,7 +16,10 @@ When working autonomously (e.g. via /loop), follow this contract:
    user must understand. When adding a config option, remove or merge one.
    Prefer opinionated defaults over new settings.
 3. **Definition of done** — all of, before an item counts as finished:
-   - `npx tsc --noEmit` clean, `npx eslint` clean on touched files
+   - `npx tsc --build --noEmit` clean (NOT plain `tsc --noEmit` — the root
+     tsconfig is a solution file with `"files": []`, so the plain form
+     checks NOTHING and passes vacuously), `npx eslint` clean on touched
+     files
    - `npm test` fully green (add tests for new logic in `src/lib`)
    - verified working in the browser preview when the change is visible
    - committed as ONE small commit on the `agent/autonomy` branch — never
@@ -113,6 +116,15 @@ import + verify-release, listed below as future work).
       section 20 (approval-gated). (2026-08-08 — historyLoaded flag also
       fixes a pre-existing infinite refetch on empty history; badge is a
       head-count query refreshed with the queue)
+- [x] Origin filter on the worklist (user-requested 2026-08-08): "From"
+      select filters orders by the queue their encounter sits in
+      (General / Cardiology / …); lane chips and save-&-next respect it.
+      Designed as the extension point for inpatient locations — a
+      building/floor becomes just another origin label (originOf in
+      lib/deptWorklist, tested; encounter join added to the queue select).
+- [ ] Inpatient locations (FUTURE — user note 2026-08-08): building/floor
+      as origins for the worklist filter once inpatient care lands
+      (needs a location concept on encounters — SCHEMA, ask user).
 - [ ] Batch entry grid: pick a lane → one row per pending order, columns =
       result fields, save all (build only if lanes prove out at real
       volume).

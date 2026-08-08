@@ -17,7 +17,7 @@ import type { Patient } from '../types'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useVisitQueue } from '../hooks/useVisits'
-import { averageWaitMinutes } from '../lib/visits'
+import { averageWaitMinutes, visitPatient } from '../lib/visits'
 import type { Visit } from '../types'
 import { VisitQueue } from '../components/visits/VisitQueue'
 import { CheckInDialog } from '../components/visits/CheckInDialog'
@@ -341,7 +341,7 @@ export default function FrontDeskPage() {
             ) : (
               <div className="divide-y divide-border">
                 {rows.map(v => {
-                  const pt = v.patients ?? null
+                  const pt = visitPatient(v)
                   return (
                     <button
                       key={v.id}

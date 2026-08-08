@@ -6,7 +6,10 @@ import {
   sortWorklist,
   nextInLane,
   waitedLabel,
+  originOf,
+  originCounts,
   OTHER_LANE,
+  GENERAL_ORIGIN,
   type WorklistOrder,
 } from '../deptWorklist'
 
@@ -153,5 +156,30 @@ describe('waitedLabel', () => {
 
   it('never goes negative on clock skew', () => {
     expect(waitedLabel('2026-08-08T12:05:00Z', now)).toBe('0m')
+  })
+})
+
+describe('originOf / originCounts', () => {
+  const fromQueue = (id: string, name: string | null): WorklistOrder =>
+    order({ id, encounter: name ? { department_id: 'q1', departments: { name } } : null })
+
+  it('reads the encounter queue name; falls back to General', () => {
+    expect(originOf(fromQueue('a', 'Cardiology'))).toBe('Cardiology')
+    expect(originOf(fromQueue('b', null))).toBe(GENERAL_ORIGIN)
+    expect(originOf(order({ id: 'c', encounter: { department_id: null, departments: null } }))).toBe(GENERAL_ORIGIN)
+  })
+
+  it('counts per origin, busiest first, ties alphabetical', () => {
+    const counts = originCounts([
+      fromQueue('a', 'Cardiology'),
+      fromQueue('b', 'Cardiology'),
+      fromQueue('c', null),
+      fromQueue('d', 'Antenatal'),
+    ])
+    expect(counts).toEqual([
+      { origin: 'Cardiology', count: 2 },
+      { origin: 'Antenatal', count: 1 },
+      { origin: GENERAL_ORIGIN, count: 1 },
+    ])
   })
 })

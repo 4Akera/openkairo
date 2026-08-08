@@ -12,9 +12,15 @@ export interface WorklistOrder {
     order_def?: { name?: string | null } | null
     order_block_type?: { name?: string | null } | null
   } | null
+  /** Joined encounter — carries the queue the patient sits in (the order's origin). */
+  encounter?: {
+    department_id?: string | null
+    departments?: { name?: string | null } | null
+  } | null
 }
 
 export const OTHER_LANE = 'Other'
+export const GENERAL_ORIGIN = 'General'
 
 const OPEN_DONE = new Set(['completed', 'cancelled'])
 
@@ -58,6 +64,35 @@ export function laneCounts(
   }
   return [...map.values()].sort(
     (a, b) => b.count - a.count || a.lane.localeCompare(b.lane),
+  )
+}
+
+/**
+ * Origin = where the order came FROM: the queue its encounter sits in
+ * ("Cardiology", "General" when none). This is the extension point for
+ * inpatient locations later — a ward/building/floor becomes just another
+ * origin label; the filter UI stays the same.
+ */
+export function originOf(o: WorklistOrder): string {
+  return o.encounter?.departments?.name?.trim() || GENERAL_ORIGIN
+}
+
+export interface OriginCount {
+  origin: string
+  count: number
+}
+
+/** Per-origin counts for the filter, busiest first (ties: A→Z). */
+export function originCounts(orders: WorklistOrder[]): OriginCount[] {
+  const map = new Map<string, OriginCount>()
+  for (const o of orders) {
+    const origin = originOf(o)
+    const entry = map.get(origin) ?? { origin, count: 0 }
+    entry.count += 1
+    map.set(origin, entry)
+  }
+  return [...map.values()].sort(
+    (a, b) => b.count - a.count || a.origin.localeCompare(b.origin),
   )
 }
 
