@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import type { Patient } from '../types'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useVisitQueue } from '../hooks/useVisits'
@@ -27,7 +28,7 @@ import {
 } from '../components/ui'
 import {
   ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight,
-  UserCheck, FolderOpen, Loader2,
+  UserCheck, FolderOpen, Loader2, Receipt,
 } from 'lucide-react'
 import { cn, fullName, formatDateTime } from '../lib/utils'
 
@@ -74,8 +75,8 @@ function dayLabel(offsetDays: number): string {
 }
 
 export default function FrontDeskPage() {
-  const { user, hasRole } = useAuthStore()
-  const { nameFormat } = useSettingsStore()
+  const { user, hasRole, hasBilling } = useAuthStore()
+  const { nameFormat, billingEnabled, currencySymbol } = useSettingsStore()
   const navigate = useNavigate()
   // Day navigation: today is the default; arrows reveal booked future days
   const [dayOffset, setDayOffset] = useState(0)
@@ -91,6 +92,11 @@ export default function FrontDeskPage() {
   // registry's Open filter used to, now that Patients has no nav entry.
   const [openOnly, setOpenOnly] = useState(false)
   const [openRows, setOpenRows] = useState<Visit[] | null>(null)
+  // "Cashier" = patients with unpaid charges — money is a queue too.
+  const [cashierOnly, setCashierOnly] = useState(false)
+  const [cashierRows, setCashierRows] =
+    useState<{ patient: Patient; total: number; items: number }[] | null>(null)
+  const showCashier = billingEnabled && hasBilling
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [mode, setMode] = useState<'now' | 'book'>('now')
 
@@ -118,6 +124,28 @@ export default function FrontDeskPage() {
         setTrend(dailyAverageWaits((data ?? []) as Pick<Visit, 'arrived_at' | 'finished_at'>[], 7))
       })
   }, [])
+
+  useEffect(() => {
+    if (!cashierOnly) { setCashierRows(null); return }
+    supabase
+      .from('charges')
+      .select('patient_id, quantity, unit_price, patients(*)')
+      .in('status', ['pending', 'pending_approval', 'pending_insurance'])
+      .order('created_at', { ascending: false })
+      .limit(500)
+      .then(({ data }) => {
+        type Row = { patient_id: string; quantity: number; unit_price: number; patients: Patient | null }
+        const byPatient = new Map<string, { patient: Patient; total: number; items: number }>()
+        for (const r of (data ?? []) as unknown as Row[]) {
+          if (!r.patients) continue
+          const cur = byPatient.get(r.patient_id) ?? { patient: r.patients, total: 0, items: 0 }
+          cur.total += r.quantity * r.unit_price
+          cur.items += 1
+          byPatient.set(r.patient_id, cur)
+        }
+        setCashierRows([...byPatient.values()].sort((a, b) => b.total - a.total))
+      })
+  }, [cashierOnly])
 
   useEffect(() => {
     if (!openOnly) { setOpenRows(null); return }
@@ -162,7 +190,7 @@ export default function FrontDeskPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="border-b bg-card px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 shrink-0">
+      <div className="border-b bg-card px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 shrink-0 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <ClipboardList className="h-5 w-5 text-muted-foreground shrink-0" />
           <h1 className="text-base font-semibold truncate">Front Desk</h1>
@@ -205,7 +233,7 @@ export default function FrontDeskPage() {
           )}
           {isToday && <span className="hidden md:inline-flex"><WaitTrend values={trend} /></span>}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {/* My worklist, inside the day view */}
           <button
             onClick={() => setMineOnly(m => !m)}
@@ -220,9 +248,25 @@ export default function FrontDeskPage() {
             <UserCheck className="h-3.5 w-3.5" />
             Mine
           </button>
+          {/* Cashier lane — patients with unpaid charges, tap → Billing */}
+          {showCashier && (
+            <button
+              onClick={() => { setCashierOnly(c => !c); setOpenOnly(false) }}
+              className={cn(
+                'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
+                cashierOnly
+                  ? 'bg-primary/10 border-primary/40 text-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
+              )}
+              title="Patients with unpaid charges"
+            >
+              <Receipt className="h-3.5 w-3.5" />
+              Cashier
+            </button>
+          )}
           {/* Every open encounter, any day — the old registry Open filter */}
           <button
-            onClick={() => setOpenOnly(o => !o)}
+            onClick={() => { setOpenOnly(o => !o); setCashierOnly(false) }}
             className={cn(
               'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
               openOnly
@@ -262,7 +306,37 @@ export default function FrontDeskPage() {
         </div>
       </div>
 
-      {openOnly ? (
+      {cashierOnly ? (
+        <div className="flex-1 overflow-y-auto">
+          {cashierRows === null ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          ) : cashierRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">Nobody owes anything. 🎉</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {cashierRows.map(({ patient, total, items }) => (
+                <button
+                  key={patient.id}
+                  onClick={() => navigate(`/billing?patient=${patient.id}`)}
+                  className="w-full flex items-center gap-3 px-4 sm:px-6 py-2.5 text-left hover:bg-accent/40 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{fullName(patient, nameFormat)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {items} unpaid item{items > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <span className="font-mono text-sm text-emerald-700 dark:text-emerald-400 shrink-0">
+                    {currencySymbol}{total.toFixed(2)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : openOnly ? (
         <div className="flex-1 overflow-y-auto">
           {openRows === null ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">

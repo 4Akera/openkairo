@@ -663,3 +663,24 @@ updated the chip to PLN404.00 live. Test charge deleted after.
 
 **Note:** foreign deptWorklist changes still uncommitted on disk (see
 iteration 41 note) — again excluded from this commit.
+
+## 2026-08-08 — Iteration 43: Cashier lane on Today (charging pass 2/2)
+
+**Item:** "Queues are the app" tier, item 5 (second half) — item now DONE.
+
+**What:** "Cashier" chip on Today (shown only when billing is enabled and
+the user has billing access): patients grouped from unpaid charges
+(pending / pending_approval / pending_insurance), sorted by amount owed,
+tap → /billing?patient=<id>. BillingPage learned the ?patient= deep link
+(selects the patient AND fetches their billing, then cleans the URL).
+Mine/Open/Cashier chips are mutually exclusive views. Also fixed a header
+overflow the third chip caused (flex-wrap on the Front Desk header rows).
+
+**Verification:** tsc clean, eslint clean, 153/153 tests, browser: Cashier
+lane listed Robert James Mitchell (PLN379.00, 8 items) + one more, tap
+opened Billing with his full workspace (charges, totals, insurance)
+loaded. First tap-through exposed the missing fetch on deep link — fixed
+and re-verified.
+
+**Note:** parallel session still active (test count 152→153, queue rows
+changing live, deptWorklist files still uncommitted — again excluded).

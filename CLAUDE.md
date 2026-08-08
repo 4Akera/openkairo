@@ -81,13 +81,14 @@ Today · Settings (+ order departments).
       older open encounters). Sidebar: Today · Settings (+ departments).
       (2026-08-08 — /patients route kept for deep links; Open chip lists
       all open encounters newest-first, Mine filter applies)
-- [ ] Charging pass, money as a queue: Cashier queue on Today (finished
+- [x] Charging pass, money as a queue: Cashier queue on Today (finished
       visits with unpaid charges), running-bill chip on the encounter
       header (live total → line items), one-tap add charge from the
       encounter, price list in Settings feeding the charge picker.
-      (2026-08-08 — bill chip + one-tap add SHIPPED (EncounterBill);
-      price list already existed as Service Items; REMAINING: Cashier
-      queue on Today)
+      (2026-08-08 — EncounterBill chip + one-tap add; Cashier chip on
+      Today lists patients with unpaid charges, tap →
+      /billing?patient=<id> deep link; price list already existed as
+      Service Items)
 
 ### Post-restructure cleanup (pure simplification)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes

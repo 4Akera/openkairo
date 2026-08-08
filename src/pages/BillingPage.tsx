@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -91,6 +92,26 @@ export default function BillingPage() {
   const [searchResults, setSearchResults] = useState<Patient[]>([])
   const [searching, setSearching]       = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+
+  // Deep link from the Cashier lane on Today: /billing?patient=<id>
+  const [searchParams, setSearchParams] = useSearchParams()
+  const linkedPatientId = searchParams.get('patient')
+  useEffect(() => {
+    if (!linkedPatientId) return
+    supabase
+      .from('patients')
+      .select('*')
+      .eq('id', linkedPatientId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setSelectedPatient(data as Patient)
+          fetchPatientBilling((data as Patient).id)
+        }
+        setSearchParams({}, { replace: true })
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedPatientId])
 
   // Recent charges list
   const [recentChargeRows, setRecentChargeRows] = useState<{
