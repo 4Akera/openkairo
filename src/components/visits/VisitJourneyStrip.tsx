@@ -1,88 +1,61 @@
 /**
- * VisitJourneyStrip — the visit's logistics, inside the encounter.
+ * VisitJourneyStrip — the encounter's own journey, under its header.
  *
- * A slim bar under the encounter header showing arrived → stage → checkout
- * for the linked visit, with the stage advanceable and checkout available
- * right there — clinicians never need the Front Desk to move a patient
- * along. Renders nothing when the encounter has no linked visit.
+ * Pure presentation: the page passes the encounter row (which carries
+ * arrived/stage/finished since the restructure) and a patient for the
+ * checkout dialog. Renders nothing when the patient never arrived.
  */
-import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useNow } from '../../hooks/useNow'
 import { updateVisit } from '../../lib/visits'
 import { CheckoutDialog } from './CheckoutDialog'
-import type { Visit } from '../../types'
+import type { Encounter, Patient, Visit } from '../../types'
 import { formatDateTime } from '../../lib/utils'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui'
 import { Footprints, LogOut, CheckCircle2 } from 'lucide-react'
 
 export function VisitJourneyStrip({
-  encounterId,
-  onVisitChange,
+  encounter,
+  patient,
+  onChanged,
 }: {
-  encounterId: string
-  /** Reports the linked visit upward (e.g. so Finish can chain checkout) */
-  onVisitChange?: (visit: Visit | null) => void
+  encounter: Encounter
+  patient: Patient | null
+  /** Called after the strip mutates the journey (stage / checkout) */
+  onChanged: () => void
 }) {
   const { flowStages } = useSettingsStore()
   const now = useNow()
-  const [visit, setVisit] = useState<Visit | null>(null)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
 
-  const load = useCallback(async () => {
-    // The encounter IS the journey — read the row itself
-    const { data } = await supabase
-      .from('encounters')
-      .select('*, patients(*)')
-      .eq('id', encounterId)
-      .maybeSingle()
-    const v = (data as Visit | null) ?? null
-    setVisit(v)
-    onVisitChange?.(v)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encounterId])
+  if (!encounter.arrived_at) return null
 
-  useEffect(() => {
-    load()
-    const channel = supabase
-      .channel(`visit-journey:${encounterId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'encounters', filter: `id=eq.${encounterId}` },
-        () => { void load() },
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [encounterId, load])
-
-  if (!visit || !visit.arrived_at) return null
-
-  const waitMin = Math.floor((now - new Date(visit.arrived_at).getTime()) / 60000)
+  const waitMin = Math.floor((now - new Date(encounter.arrived_at).getTime()) / 60000)
   const waitLabel = waitMin < 60 ? `${waitMin}m` : `${Math.floor(waitMin / 60)}h ${waitMin % 60}m`
+  const asVisit: Visit = { ...encounter, patients: patient }
 
   return (
     <>
       <div className="border-b bg-primary/[0.03] px-3 sm:px-4 py-1.5 flex items-center gap-2.5 text-xs shrink-0 overflow-x-auto no-scrollbar">
         <Footprints className="h-3.5 w-3.5 text-primary/70 shrink-0" />
         <span className="text-muted-foreground whitespace-nowrap">
-          Arrived {formatDateTime(visit.arrived_at)}
-          {!visit.finished_at && <> · in clinic <span className="font-medium text-foreground/80">{waitLabel}</span></>}
+          Arrived {formatDateTime(encounter.arrived_at)}
+          {!encounter.finished_at && <> · in clinic <span className="font-medium text-foreground/80">{waitLabel}</span></>}
         </span>
 
-        {visit.finished_at ? (
+        {encounter.finished_at ? (
           <span className="flex items-center gap-1 text-emerald-600 whitespace-nowrap">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Checked out {formatDateTime(visit.finished_at)}
+            Checked out {formatDateTime(encounter.finished_at)}
           </span>
         ) : (
           <>
             {flowStages.length > 0 && (
               <Select
-                value={visit.stage && flowStages.includes(visit.stage) ? visit.stage : flowStages[0]}
+                value={encounter.stage && flowStages.includes(encounter.stage) ? encounter.stage : flowStages[0]}
                 onValueChange={(s) => {
-                  setVisit(v => (v ? { ...v, stage: s } : v))
-                  void updateVisit(visit.id, { stage: s })
+                  void updateVisit(encounter.id, { stage: s }).then(onChanged)
                 }}
               >
                 <SelectTrigger className="h-6 w-[120px] text-xs shrink-0">
@@ -105,9 +78,9 @@ export function VisitJourneyStrip({
       </div>
 
       <CheckoutDialog
-        visit={checkoutOpen ? visit : null}
+        visit={checkoutOpen ? asVisit : null}
         onClose={() => setCheckoutOpen(false)}
-        onCheckedOut={() => void load()}
+        onCheckedOut={onChanged}
       />
     </>
   )

@@ -48,6 +48,19 @@ on Today (Front Desk as home).
       /patients; sidebar order Today · Patients · … (Cashier queue later).
       (2026-08-08)
 
+### Post-restructure cleanup (highest priority — pure simplification)
+- [x] Single source in the encounter view: VisitJourneyStrip becomes
+      props-driven (encounter + patient from the page); delete its own
+      fetch/channel and EncounterPage's linkedVisit mirror — the page's
+      encounter row already carries the journey. (2026-08-08)
+- [ ] DeptPortal.tsx (~2.5k lines) rename/split: it is the department Work
+      view now, not a "portal"; extract EntryModal/OrderCard/etc. and drop
+      any code dead since the shell was removed.
+- [ ] Drop the frozen legacy `visits` table and the /portal redirect
+      (SCHEMA — ask user before dropping the table).
+- [ ] pg_trgm index for patient name search at registry scale (SCHEMA —
+      ask user first).
+
 ### Simple power pass (highest priority)
 Simplify the endings and beginnings; add power through AI and closing the
 result loop. Judged against: one journey, no new concepts.

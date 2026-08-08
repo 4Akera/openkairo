@@ -505,3 +505,19 @@ appear only for queries; the browse-all default is gone.
 **Verification:** tsc clean, eslint clean, 135/135 tests; browser-verified
 — empty registry shows the hero with the live count and no list request;
 typing "chopin" returned 1 of 1 instantly.
+
+## 2026-08-08 — Iteration: single source in the encounter view
+
+**Item:** Post-restructure cleanup — the strip and the page were fetching
+the same encounter row twice, bridged by an onVisitChange callback.
+
+**What changed:** VisitJourneyStrip is now pure presentation
+({encounter, patient, onChanged}); its fetch, realtime channel, and the
+page's linkedVisit mirror are deleted. EncounterPage derives one
+`inClinic` flag from its own row for all Finish/Close labels and chains
+checkout from the same object; a single row-level subscription keeps the
+journey live when the desk moves the patient.
+
+**Verification:** tsc clean, eslint clean, 135/135 tests; browser-verified
+Jacob's encounter — strip renders identically from page-fed props with
+Finish in the header.
