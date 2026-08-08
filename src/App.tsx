@@ -41,16 +41,6 @@ function DeptAwareIndex() {
     : <FrontDeskPage />
 }
 
-/** Legacy /portal URL → the user's first department workspace */
-function PortalRedirect() {
-  const { myDepartments, loading } = useAuthStore()
-  if (loading) return null
-  const workDepts = myDepartments.filter(d => !isQueueDept(d))
-  return workDepts.length > 0
-    ? <Navigate to={`/dept/${workDepts[0].slug}`} replace />
-    : <Navigate to="/" replace />
-}
-
 function ProtectedRoute() {
   const { user, loading, profile } = useAuthStore()
   // Force profile setup on first login; derived so it closes once a name is saved
@@ -108,7 +98,6 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route index element={<DeptAwareIndex />} />
-              <Route path="portal" element={<PortalRedirect />} />
               <Route path="frontdesk" element={<Navigate to="/" replace />} />
               <Route path="dept/:slug" element={<DepartmentPage />} />
               <Route path="patients" element={<DashboardPage />} />

@@ -2385,3 +2385,21 @@ drop policy if exists "encounter_insert" on encounters;
 create policy "encounter_insert" on encounters for insert with check (
   auth.uid() is not null and has_role_in(array['admin', 'physician', 'nurse', 'receptionist'])
 );
+
+-- ============================================================
+-- 20. PENDING USER APPROVAL — staged, intentionally commented out
+-- ============================================================
+-- The app no longer reads or writes the legacy `visits` table (journeys
+-- live on encounters since section 19), and the /portal redirect is gone.
+-- Uncomment and apply ONLY after the user approves dropping the table —
+-- this deletes the migrated-from legacy rows permanently.
+--
+-- drop table if exists visits cascade;
+--
+-- Patient name search at registry scale (500k+): trigram index feeding
+-- search_patients' ILIKE tokens. Safe (no data loss) but schema — same
+-- approval gate applies.
+--
+-- create extension if not exists pg_trgm;
+-- create index if not exists idx_patients_name_trgm on patients
+--   using gin ((first_name || ' ' || coalesce(middle_name,'') || ' ' || last_name) gin_trgm_ops);

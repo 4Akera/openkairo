@@ -129,6 +129,9 @@ import + verify-release, listed below as future work).
       no concept removed; TODO left in the file header)
 - [ ] Drop the frozen legacy `visits` table and the /portal redirect
       (SCHEMA — ask user before dropping the table).
+      (2026-08-08 — /portal redirect REMOVED (catch-all covers it); drop
+      SQL + pg_trgm index STAGED as commented section 20 in schema.sql;
+      ONLY the remote `drop table` still awaits user approval)
 - [ ] pg_trgm index for patient name search at registry scale (SCHEMA —
       ask user first).
 

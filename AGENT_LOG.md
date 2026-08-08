@@ -794,3 +794,24 @@ identifiers untouched.
 demo Physician + Admin: journey strip Done → "Finish" dialog; Admin
 header shows single "Finish" → "Finish encounter?" dialog (cancelled, not
 closed); right rail reads "Encounters".
+
+## 2026-08-08 — Iteration 45: visits retirement prepared (code half)
+
+**Item:** Post-restructure cleanup — the non-schema half of "drop visits
+table + /portal redirect".
+
+**What:** PortalRedirect deleted from App.tsx — the existing `*` catch-all
+already lands unknown URLs on home, so /portal needs no dedicated route.
+The schema half is STAGED, not applied: new commented section 20 in
+supabase/schema.sql holds `drop table visits cascade` and the pg_trgm
+name-search index, with the approval note. No code reads the visits table
+(verified by grep). Remote untouched, per charter hard limit.
+
+**Verification:** tsc clean, eslint clean, 165/165 tests, browser (own
+preview on :54967 — the :5173 server belongs to the parallel session):
+/portal falls through to home → login. Preview server stopped after.
+
+**Blocked remainder:** applying section 20 needs the user's "approve
+schema". AI items still await the Edge Function key. Batch entry grid
+gated on lanes proving out. Loop will stop after this iteration — nothing
+unblocked remains.
