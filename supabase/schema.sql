@@ -451,6 +451,8 @@ create index if not exists idx_block_definitions_universal  on block_definitions
 -- Block sub-tables
 create index if not exists idx_block_entries_block          on block_entries(block_id, recorded_at);
 create index if not exists idx_block_attachments_block      on block_attachments(block_id);
+-- Backs the block-media storage select policy (lookup by object name)
+create index if not exists idx_block_attachments_path       on block_attachments(storage_path);
 create index if not exists idx_block_actions_block          on block_actions(block_id);
 create index if not exists idx_block_actions_type_status    on block_actions(action_type, status);
 create index if not exists idx_block_acks_block             on block_acknowledgments(block_id);
@@ -1289,15 +1291,31 @@ create policy "block_staff_access" on blocks for all using (
 create policy "block_delete_restrict" on blocks as restrictive for delete
   using (created_by = auth.uid() or has_role_in(array['admin']));
 
--- Block sub-tables: clinical permission (block.add) by default; billing/lab-only users stay out.
--- block_actions: department members may fulfill orders where action_type matches their dept slug.
-create policy "block_entries_access"     on block_entries         for all using (auth.uid() is not null and (has_permission('block.add') or has_role_in(array['admin'])));
-create policy "block_attachments_access" on block_attachments     for all using (auth.uid() is not null and (has_permission('block.add') or has_role_in(array['admin'])));
+-- Block sub-tables: clinical permission (block.add) AND visibility of the
+-- parent block. The exists() runs under blocks RLS for the querying user, so
+-- entries/attachments/acks inherit the whole wall (encounter visibility,
+-- instance visible_to_roles, dept arm) with zero restatement — a private
+-- encounter's payloads are no longer readable by unrelated staff via the API.
+-- block_actions: the department arm stays parent-INDEPENDENT on purpose —
+-- orders must reach the fulfilling department (its queue reads block_actions
+-- directly) even when the encounter is private.
+create policy "block_entries_access"     on block_entries         for all using (
+  auth.uid() is not null
+  and (has_permission('block.add') or has_role_in(array['admin']))
+  and exists (select 1 from blocks b where b.id = block_entries.block_id)
+);
+create policy "block_attachments_access" on block_attachments     for all using (
+  auth.uid() is not null
+  and (has_permission('block.add') or has_role_in(array['admin']))
+  and exists (select 1 from blocks b where b.id = block_attachments.block_id)
+);
 create policy "block_actions_access"     on block_actions         for all using (
   auth.uid() is not null
   and (
-    has_permission('block.add')
-    or has_role_in(array['admin'])
+    (
+      (has_permission('block.add') or has_role_in(array['admin']))
+      and exists (select 1 from blocks b where b.id = block_actions.block_id)
+    )
     or exists (
       select 1
       from departments d
@@ -1306,7 +1324,11 @@ create policy "block_actions_access"     on block_actions         for all using 
     )
   )
 );
-create policy "block_acks_access"        on block_acknowledgments for all using (auth.uid() is not null and (has_permission('block.add') or has_role_in(array['admin'])));
+create policy "block_acks_access"        on block_acknowledgments for all using (
+  auth.uid() is not null
+  and (has_permission('block.add') or has_role_in(array['admin']))
+  and exists (select 1 from blocks b where b.id = block_acknowledgments.block_id)
+);
 
 -- Templates
 create policy "select_templates" on encounter_templates for select
@@ -2188,9 +2210,23 @@ create policy "block_media_insert"
   on storage.objects for insert
   with check (bucket_id = 'block-media' and public.has_permission('block.add'));
 
+-- Download requires a VISIBLE block_attachments row pointing at the object —
+-- the subquery runs under block_attachments RLS, which derives from the parent
+-- block, so files inherit the encounter wall. The owner arm keeps the
+-- upload-then-link flow working (file lands before its attachment row exists).
 create policy "block_media_select"
   on storage.objects for select
-  using (bucket_id = 'block-media' and (public.has_permission('block.add') or public.has_role_in(array['admin'])));
+  using (
+    bucket_id = 'block-media'
+    and (
+      owner = auth.uid()
+      or public.has_role_in(array['admin'])
+      or exists (
+        select 1 from public.block_attachments a
+        where a.storage_path = storage.objects.name
+      )
+    )
+  );
 
 create policy "block_media_update"
   on storage.objects for update
