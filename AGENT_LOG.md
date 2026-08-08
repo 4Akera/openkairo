@@ -395,3 +395,19 @@ end-to-end on a carried-over visit — Start encounter → header shows
 "Finish" → dialog "Finish visit? … Checkout follows right after" → billing
 review → checkout auto-opened → confirmed; DB shows encounter closed AND
 visit finished. Test data removed.
+
+## 2026-08-08 — Iteration 22: one-tap New Encounter
+
+**Item:** The patient-page dialog catches up with the queue's one-tap path.
+
+**What changed:** the New Encounter dialog opens as one sentence + one
+button (physicians/admins: "Starts a private encounter assigned to you"),
+with title/template/visibility/physician behind an Options expander.
+Nurses/receptionists still see the physician picker upfront (RLS requires
+an assignee); everything else stays collapsed. Confirm button renamed
+Start Encounter; no state or logic changed — pure progressive disclosure.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+— dialog opened collapsed, one tap on Start Encounter created and
+navigated into a fresh open encounter (header correctly read "Close",
+not "Finish", since no visit was linked). Test encounter removed.

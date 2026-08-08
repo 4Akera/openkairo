@@ -44,6 +44,8 @@ export default function PatientPage() {
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
+  // One-tap by default: title/template/visibility live behind this expander
+  const [showEncOptions, setShowEncOptions] = useState(false)
   const [visibility, setVisibility] = useState<'staff' | 'restricted' | 'private'>('staff')
   const [visibleToRoles, setVisibleToRoles] = useState<string[]>([])
   const [assignedTo, setAssignedTo] = useState<string>('')
@@ -167,6 +169,8 @@ export default function PatientPage() {
   const canCreateEncounter = hasRole('physician') || hasRole('nurse') || hasRole('receptionist') || hasRole('admin')
   // Everyone except admin must assign a physician (physician auto-assigns to self)
   const requiresAssignment = !hasRole('admin')
+  // Physicians self-assign, so only non-physician creators pick upfront
+  const upfrontAssign = requiresAssignment && !hasRole('physician')
 
   const handleDeleteEncounter = async (enc: Encounter) => {
     setDeletingEnc(true)
@@ -190,6 +194,7 @@ export default function PatientPage() {
     setSelectedTemplate(null)
     setVisibility('private')
     setVisibleToRoles([])
+    setShowEncOptions(false)
     setAssignedTo(roleSlugs.includes('physician') && user ? user.id : '')
     setAssignError(false)
     setPhysicianSearch('')
@@ -589,6 +594,24 @@ export default function PatientPage() {
           <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
           <div className="space-y-4 mt-2 pb-2">
 
+            {/* One tap by default; everything configurable lives below */}
+            <p className="text-xs text-muted-foreground">
+              {upfrontAssign
+                ? 'Pick the physician, then start — everything else has sensible defaults.'
+                : 'Starts a private encounter assigned to you — tweak below if needed.'}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowEncOptions(o => !o)}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', showEncOptions && 'rotate-90')} />
+              Options
+              <span className="font-normal opacity-60">— title, template, visibility{upfrontAssign ? '' : ', physician'}</span>
+            </button>
+
+            {showEncOptions && (<>
             {/* Title */}
             <div className="space-y-1.5">
               <Label>Title (optional)</Label>
@@ -597,7 +620,6 @@ export default function PatientPage() {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !creating && handleCreate()}
-                autoFocus
               />
             </div>
 
@@ -656,8 +678,10 @@ export default function PatientPage() {
               )}
             </div>
 
-            {/* Assign to physician */}
-            {physicians.length > 0 && (
+            </>)}
+
+            {/* Assign to physician — upfront for nurses/receptionists */}
+            {physicians.length > 0 && (upfrontAssign || showEncOptions) && (
               <div className="space-y-1.5">
                 <Label className={assignError ? 'text-destructive' : ''}>
                   Assign to{' '}
@@ -745,6 +769,7 @@ export default function PatientPage() {
               </div>
             )}
 
+            {showEncOptions && (<>
             {/* Template picker */}
             <div className="space-y-2">
               <Label>Template <span className="text-muted-foreground font-normal">(optional)</span></Label>
@@ -862,12 +887,13 @@ export default function PatientPage() {
                 </div>
               )
             })()}
+            </>)}
 
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleCreate} disabled={creating}>
                 {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
-                Open Encounter
+                Start Encounter
               </Button>
             </div>
           </div>

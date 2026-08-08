@@ -39,9 +39,11 @@ result loop. Judged against: one journey, no new concepts.
       heads-up) in one chain; button reads "Finish visit" when an active
       visit is linked, "Close Encounter" otherwise. (2026-08-08 — journey
       strip reports the linked visit up via onVisitChange)
-- [ ] One-tap New Encounter on the patient page: create immediately
+- [x] One-tap New Encounter on the patient page: create immediately
       (physician auto/carried, private), with an Options disclosure for
       title/template/visibility — matching the queue's one-tap path.
+      (2026-08-08 — nurses/receptionists still see the physician picker
+      upfront; everything else collapsed)
 - [ ] Result-ready notifications: realtime toast for the ordering physician
       when their lab/radiology order completes, linking to the encounter.
 - [ ] AI-filled blocks pilot: dictate/paste free text → Claude fills the
