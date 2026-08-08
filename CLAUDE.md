@@ -83,7 +83,7 @@ page = census. Department pages must never become patient surfaces again.
       deptSummary in lib/queues, tested; collapsed self-describing cards;
       clinics gain the Members picker = the consult-routing prereq; nav
       label now "Departments")
-- [ ] Consults as orders (zero schema): "Receives consults" on a clinic =
+- [x] Consults as orders (zero schema): "Receives consults" on a clinic =
       can_receive_orders on + a Consultation service (order block =
       question; entry block = existing Consultation block). Work-view
       consult rows OPEN THE ENCOUNTER (no entry-form modal); writing the
@@ -92,6 +92,16 @@ page = census. Department pages must never become patient surfaces again.
       "consult answered". Prereq: specialty physicians are
       department_members of their own row. Refer stays the sibling verb
       (patient moves, new encounter) — present them as a pair.
+      (2026-08-08 — one-tap toggle auto-creates the per-specialty request
+      def ("Consult — <Dept>", is_universal REQUIRED — RLS hides
+      non-universal defs) + Consultation service; ActionPanel goes
+      consult-aware (label "Consult <Dept>", NO createReferralVisit — the
+      patient never moves); ConsultAnswerBanner on the encounter =
+      ?consult=<action id> deep link, explicit "Mark answered" links the
+      latest own Consultation block as result_block_id; Timeline dedupes
+      encounter-resident result blocks; full loop browser-verified. Gap
+      to watch: a user's curated Block Preferences hides new consult
+      defs until they re-save — same as any new org block.)
 - [ ] Wards (SCHEMA — stage + ask): ward = department flavor with an
       explicit kind discriminator (never inferred from absent
       capabilities); encounters gain ward_id / admitted_at / bed text.

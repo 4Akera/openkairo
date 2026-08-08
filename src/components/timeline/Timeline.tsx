@@ -187,7 +187,14 @@ const Timeline = forwardRef<TimelineHandle, Props>(function Timeline(
       }
     }
 
-    const all = [...(encounterBlocks ?? []), ...resultBlocks]
+    // Dedupe by id: a consult answer lives IN the encounter and is also the
+    // order's result_block_id, so it would otherwise appear in both lists.
+    const seen = new Set<string>()
+    const all = [...(encounterBlocks ?? []), ...resultBlocks].filter(b => {
+      if (seen.has(b.id)) return false
+      seen.add(b.id)
+      return true
+    })
     all.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     setBlocks(all)
 

@@ -53,6 +53,7 @@ export function ActionPanel({
   const [deptSlug, setDeptSlug]     = useState<string | null>(null)
   const [patientDeptId, setPatientDeptId] = useState<string | null>(null)
   const [btId, setBtId]             = useState<string | null>(null)
+  const [isConsult, setIsConsult]   = useState(false)
   const [deptChecked, setDeptChecked] = useState(false)
   const [priority, setPriority]     = useState<'stat' | 'routine'>('routine')
   /** Synchronous guard — React state updates too late to prevent double-submit */
@@ -65,7 +66,7 @@ export function ActionPanel({
     if (!definition.id) return
     supabase
       .from('department_block_types')
-      .select('id, departments(id, name, slug, can_receive_patients)')
+      .select('id, built_in_type, departments(id, name, slug, can_receive_patients)')
       .eq('order_block_def_id', definition.id)
       .eq('active', true)
       .limit(1)
@@ -73,14 +74,17 @@ export function ActionPanel({
       .then(({ data }) => {
         if (data) {
           type DeptRef = { id: string; name: string; slug: string; can_receive_patients?: boolean }
-          const row = data as { id: string; departments: unknown }
+          const row = data as { id: string; built_in_type: string | null; departments: unknown }
           const dept = Array.isArray(row.departments)
             ? (row.departments[0] as DeptRef | undefined)
             : (row.departments as DeptRef | null)
+          const consult = row.built_in_type === 'consultation'
           setDeptName(dept?.name ?? null)
           setDeptSlug(dept?.slug ?? null)
-          setPatientDeptId(dept?.can_receive_patients ? dept.id : null)
+          // Consult = bring the specialist; the patient does NOT join that queue
+          setPatientDeptId(dept?.can_receive_patients && !consult ? dept.id : null)
           setBtId(row.id)
+          setIsConsult(consult)
         }
         setDeptChecked(true)
       })
@@ -166,7 +170,7 @@ export function ActionPanel({
 
   const hasPending  = actions.some(a => ['pending', 'submitted', 'acknowledged', 'in_progress'].includes(a.status))
   const hasCompletedOrder = actions.some(a => a.status === 'completed')
-  const sendLabel   = deptName ? `Send to ${deptName}` : null
+  const sendLabel   = deptName ? (isConsult ? `Consult ${deptName}` : `Send to ${deptName}`) : null
 
   const completedWithResult = useMemo(
     () => actions.some(a => a.status === 'completed' && Boolean(a.result_block_id)),
@@ -199,7 +203,7 @@ export function ActionPanel({
           <div className="flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" />
             <span className="text-xs font-medium text-amber-800 dark:text-amber-400 flex-1">
-              {deptName ? `Order → ${deptName}` : 'Order Block'}
+              {deptName ? `${isConsult ? 'Consult' : 'Order'} → ${deptName}` : 'Order Block'}
             </span>
             {!readOnly && !hasPending && !sendLabel && (
               <span className="text-[10px] text-muted-foreground italic">Not linked to a department</span>

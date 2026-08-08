@@ -9,6 +9,7 @@ export interface WorklistOrder {
   triggered_at: string
   action_payload?: unknown
   order_block?: {
+    department_block_type_id?: string | null
     order_def?: { name?: string | null } | null
     order_block_type?: { name?: string | null } | null
   } | null
@@ -41,6 +42,22 @@ export function laneOf(o: WorklistOrder, blockTypeNames?: ReadonlyMap<string, st
   const fromPayload = btId ? blockTypeNames?.get(btId)?.trim() : undefined
   if (fromPayload) return fromPayload
   return o.order_block?.order_def?.name?.trim() || OTHER_LANE
+}
+
+/**
+ * The service (department_block_types id) an order was placed against:
+ * the ActionPanel stamps it into the payload; the block's own pairing is
+ * the fallback for direct entries.
+ */
+export function orderBlockTypeId(o: WorklistOrder): string | null {
+  const fromPayload = (o.action_payload as { block_type_id?: string } | null | undefined)?.block_type_id
+  return fromPayload ?? o.order_block?.department_block_type_id ?? null
+}
+
+/** Consult orders are answered IN the encounter, not via the entry-form modal. */
+export function isConsultOrder(o: WorklistOrder, consultBtIds: ReadonlySet<string>): boolean {
+  const btId = orderBlockTypeId(o)
+  return btId !== null && consultBtIds.has(btId)
 }
 
 export interface LaneCount {

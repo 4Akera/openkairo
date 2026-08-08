@@ -44,14 +44,19 @@ export default function ResultToasts() {
           if (next.status !== 'completed' || prev.status === 'completed') return
           if (!userIdRef.current || next.triggered_by !== userIdRef.current) return
 
-          const [{ data: pt }, { data: dept }] = await Promise.all([
+          const btId = (next.action_payload as { block_type_id?: string } | null)?.block_type_id ?? null
+          const [{ data: pt }, { data: dept }, btRes] = await Promise.all([
             supabase.from('patients').select('*').eq('id', next.patient_id as string).maybeSingle(),
             supabase.from('departments').select('name').eq('slug', next.action_type as string).maybeSingle(),
+            btId
+              ? supabase.from('department_block_types').select('built_in_type').eq('id', btId).maybeSingle()
+              : Promise.resolve({ data: null }),
           ])
+          const isConsult = (btRes.data as { built_in_type?: string | null } | null)?.built_in_type === 'consultation'
           const patientName = pt ? fullName(pt as Patient, useSettingsStore.getState().nameFormat) : 'a patient'
           const toast: Toast = {
             id: next.id as string,
-            title: `${dept?.name ?? (next.action_type as string)} result ready`,
+            title: `${dept?.name ?? (next.action_type as string)} ${isConsult ? 'consult answered' : 'result ready'}`,
             body: patientName,
             patientId: next.patient_id as string,
             encounterId: (next.encounter_id as string | null) ?? null,

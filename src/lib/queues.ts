@@ -17,12 +17,16 @@ export const isQueueDept = (d: Department) =>
 export function deptSummary(
   d: Pick<Department, 'can_receive_orders' | 'can_create_direct' | 'can_receive_patients'>,
   serviceCount: number,
+  consultServiceCount = 0,
 ): string {
   const svc = `${serviceCount} ${serviceCount === 1 ? 'service' : 'services'}`
+  const consultsOnly = consultServiceCount > 0 && consultServiceCount === serviceCount
   const parts: string[] = []
   if (d.can_receive_patients) parts.push('Clinic')
-  if (d.can_receive_orders) parts.push('fulfils orders', svc)
-  else if (d.can_create_direct) parts.push('walk-in entries', svc)
+  if (d.can_receive_orders) {
+    if (consultsOnly) parts.push('receives consults')
+    else parts.push('fulfils orders', svc)
+  } else if (d.can_create_direct) parts.push('walk-in entries', svc)
   else if (d.can_receive_patients) parts.push('queue on Today')
   if (parts.length === 0) return 'No capabilities'
   const s = parts.join(' · ')

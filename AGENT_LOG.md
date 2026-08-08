@@ -1221,3 +1221,47 @@ pick filled description + 45.00. No console errors.
 **Shared tree:** parallel session's consult WIP untouched — staged only
 my two DepartmentWork hunks (git apply --cached) + seven wholly-mine
 files.
+
+## 2026-08-09 — Iteration 52: consults as orders — the loop runs end to end
+
+**Why:** Item 2 of the department-as-unit pass (user-approved). The consult
+is the missing verb: refer moves the patient, consult brings the
+specialist; without it every specialty touch forks the record.
+
+**What:** Zero schema. (1) Settings: "Receives consults" one-tap on
+patient-facing depts — auto-creates a per-specialty dynamic request def
+("Consult — <Dept>", slug consult_<slug>, one required question textarea)
++ a Consultation service (built_in_type consultation) + flips
+can_receive_orders; off deactivates both and drops can_receive_orders when
+consults were the only service. deptSummary reads "Clinic · receives
+consults" when consults are the only service. (2) ActionPanel: consult
+services relabel Send → "Consult <Dept>" and SKIP createReferralVisit —
+the patient stays put. (3) Worklist: isConsultOrder/orderBlockTypeId in
+lib/deptWorklist (tested); consult rows get Open (marks in_progress,
+deep-links /patients/<pid>/encounters/<eid>?consult=<action>). (4) New
+ConsultAnswerBanner on EncounterPage: shows dept + requester, guards
+("Add a Consultation block first"), "Mark answered" links the latest own
+consultation block as result_block_id → completes the order. (5) Timeline
+fetch dedupes blocks that are both encounter-resident and result-linked.
+(6) ResultToasts title reads "consult answered" for consult completions.
+
+**Traps hit:** block_definitions RLS SELECT only exposes builtin/universal
+rows — the request def MUST be is_universal, and INSERT…RETURNING 403s
+otherwise (first toggle attempt half-created a def; revive-first update
+now heals that). AddBlockMenu honors the user's curated Block
+Preferences, so new consult defs stay hidden for curating users until
+re-saved — accepted as existing semantics, noted in backlog.
+
+**Verification:** tsc --build clean, eslint clean, 209/209 tests (5 new).
+Browser E2E on own preview (:56425, admin demo): toggle on → summary +
+service appear; Add Block → Consult — Cardiology → question → Consult
+Cardiology → Pending, NO cardiology queue entry for the patient (Today
+shows him once, original queue); sidebar Cardiology badge 1 → work view
+row lane "Consultation" + Open → banner (asked-by line) → guard error
+without block → built-in Consultation block (specialty/status Answered)
+→ Mark answered → green confirmation, order Completed "result ↓ below",
+queue empty, History 1. Completion toast title not visually caught
+(same-user, fired during banner swap) — logic mirrors the worklist's
+built_in_type lookup. Parallel session's files (BlockWrapper, TourBlock,
+addBlockMenuGroups, blockExportHtml, visits, schema.sql) left untouched
+and excluded.

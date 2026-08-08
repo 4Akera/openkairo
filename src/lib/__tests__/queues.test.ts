@@ -42,4 +42,14 @@ describe('deptSummary', () => {
   it('nothing enabled', () => {
     expect(deptSummary(dept({}), 0)).toBe('No capabilities')
   })
+
+  it('clinic whose only service is the consult reads receives consults', () => {
+    expect(deptSummary(dept({ can_receive_patients: true, can_receive_orders: true }), 1, 1))
+      .toBe('Clinic · receives consults')
+  })
+
+  it('mixed services keep the plain orders phrase', () => {
+    expect(deptSummary(dept({ can_receive_patients: true, can_receive_orders: true }), 3, 1))
+      .toBe('Clinic · fulfils orders · 3 services')
+  })
 })

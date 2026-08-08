@@ -10,6 +10,7 @@ import { updateVisit } from '../lib/visits'
 import { canAccessEncounter } from '../lib/encounterAccess'
 import { useNow } from '../hooks/useNow'
 import { EncounterBill } from '../components/billing/EncounterBill'
+import { ConsultAnswerBanner } from '../components/ConsultAnswerBanner'
 import { CheckoutDialog } from '../components/visits/CheckoutDialog'
 import type { Visit } from '../types'
 import {
@@ -822,6 +823,8 @@ export default function EncounterPage() {
             Patient Info
           </button>
         </div>
+
+        {encounterId && <ConsultAnswerBanner encounterId={encounterId} />}
 
         {/* Body */}
         <div className="flex-1 flex overflow-hidden">

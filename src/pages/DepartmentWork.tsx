@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -22,7 +22,7 @@ import { getRecentPatientIds, pushRecentPatientId } from '../lib/recentItems'
 import { parseSearchQuery } from '../lib/patientSearch'
 import { readWalkInLastBlockType, writeWalkInLastBlockType } from '../lib/walkInPreferences'
 import { CreatePatientDialog } from '../components/patients/CreatePatientDialog'
-import { isStatOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel, originOf, originCounts } from '../lib/deptWorklist'
+import { isStatOrder, isConsultOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel, originOf, originCounts } from '../lib/deptWorklist'
 import { ImportResultsDialog } from '../components/dept/ImportResultsDialog'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1296,12 +1296,15 @@ function OrderRow({
   order,
   laneName,
   nowMs,
+  consult = false,
   onOpen,
   onCancel,
 }: {
   order: OrderWithContext
   laneName: string
   nowMs: number
+  /** Consult rows open the encounter (answer = a Consultation block there), not the entry form. */
+  consult?: boolean
   onOpen: () => Promise<void>
   onCancel: (reason: string) => void
 }) {
@@ -1373,7 +1376,7 @@ function OrderRow({
             }
           }}
         >
-          {opening ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Result'}
+          {opening ? <Loader2 className="h-3 w-3 animate-spin" /> : consult ? 'Open' : 'Result'}
         </Button>
       </div>
 
@@ -1958,6 +1961,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   const { user: _user, can } = useAuthStore()
   const { billingEnabled, currencySymbol } = useSettingsStore()
   const [view, setView]     = useState<'queue' | 'history'>('queue')
+  const navigate = useNavigate()
   const [orders, setOrders] = useState<OrderWithContext[]>([])
   const [totalOpen, setTotalOpen] = useState(0)
   const [lane, setLane]     = useState<string | null>(null)
@@ -2052,6 +2056,10 @@ export function DepartmentWork({ dept }: { dept: Department }) {
 
   const btNameMap = useMemo(
     () => new Map(deptBlockTypes.map(bt => [bt.id, bt.name])),
+    [deptBlockTypes],
+  )
+  const consultBtIds = useMemo(
+    () => new Set(deptBlockTypes.filter(bt => bt.built_in_type === 'consultation').map(bt => bt.id)),
     [deptBlockTypes],
   )
   // Origin filter first (which queue the order came from), lanes within it
@@ -2388,6 +2396,24 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     setShowEntry(true)
   }
 
+  /** Consults are answered in the chart: taking one opens the encounter, not the entry form. */
+  const openConsult = async (order: OrderWithContext) => {
+    setQueueActionError(null)
+    if (order.status === 'pending') {
+      const { error } = await supabase
+        .from('block_actions')
+        .update({ status: 'in_progress' })
+        .eq('id', order.id)
+      if (error) {
+        setQueueActionError(error.message)
+        return
+      }
+    }
+    if (order.patient_id && order.encounter_id) {
+      navigate(`/patients/${order.patient_id}/encounters/${order.encounter_id}?consult=${order.id}`)
+    }
+  }
+
   /** Save-&-next: swap the entry modal to the next open order in the same lane. */
   const advanceToNext = (chargeMsg?: string | null) => {
     const current = fulfillOrder
@@ -2597,16 +2623,20 @@ export function DepartmentWork({ dept }: { dept: Department }) {
                 )}
 
                 <div className="rounded-lg border bg-card divide-y divide-border/60 overflow-hidden">
-                  {visibleOrders.map(order => (
-                    <OrderRow
-                      key={order.id}
-                      order={order}
-                      laneName={laneOf(order, btNameMap)}
-                      nowMs={nowMs}
-                      onOpen={() => openOrder(order)}
-                      onCancel={(reason) => cancelOrder(order, reason)}
-                    />
-                  ))}
+                  {visibleOrders.map(order => {
+                    const consult = isConsultOrder(order, consultBtIds)
+                    return (
+                      <OrderRow
+                        key={order.id}
+                        order={order}
+                        laneName={laneOf(order, btNameMap)}
+                        nowMs={nowMs}
+                        consult={consult}
+                        onOpen={() => (consult ? openConsult(order) : openOrder(order))}
+                        onCancel={(reason) => cancelOrder(order, reason)}
+                      />
+                    )
+                  })}
                 </div>
 
                 {totalOpen > orders.length && (

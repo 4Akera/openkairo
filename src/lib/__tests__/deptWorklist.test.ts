@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   isStatOrder,
+  isConsultOrder,
+  orderBlockTypeId,
   laneOf,
   laneCounts,
   sortWorklist,
@@ -26,6 +28,32 @@ function order(over: Partial<WorklistOrder> & { id: string }): WorklistOrder {
 function inLane(id: string, lane: string, over: Partial<WorklistOrder> = {}): WorklistOrder {
   return order({ id, order_block: { order_block_type: { name: lane } }, ...over })
 }
+
+describe('orderBlockTypeId / isConsultOrder', () => {
+  const consultIds = new Set(['bt-consult'])
+
+  it('payload id wins over the block pairing', () => {
+    const o = order({
+      id: 'a',
+      action_payload: { block_type_id: 'bt-consult' },
+      order_block: { department_block_type_id: 'bt-lab' },
+    })
+    expect(orderBlockTypeId(o)).toBe('bt-consult')
+    expect(isConsultOrder(o, consultIds)).toBe(true)
+  })
+
+  it('falls back to the block pairing for direct entries', () => {
+    const o = order({ id: 'b', order_block: { department_block_type_id: 'bt-consult' } })
+    expect(orderBlockTypeId(o)).toBe('bt-consult')
+    expect(isConsultOrder(o, consultIds)).toBe(true)
+  })
+
+  it('non-consult and unresolvable rows are not consults', () => {
+    expect(isConsultOrder(order({ id: 'c', action_payload: { block_type_id: 'bt-lab' } }), consultIds)).toBe(false)
+    expect(orderBlockTypeId(order({ id: 'd' }))).toBeNull()
+    expect(isConsultOrder(order({ id: 'd' }), consultIds)).toBe(false)
+  })
+})
 
 describe('isStatOrder', () => {
   it('reads priority from the action payload', () => {

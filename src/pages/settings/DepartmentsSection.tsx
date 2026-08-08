@@ -149,6 +149,7 @@ export function DepartmentsSection() {
   const [editingBT, setEditingBT] = useState<{ deptId: string; bt: DepartmentBlockType | null } | null>(null)
   const [btForm, setBtForm]       = useState({ name: '', description: '', order_block_def_id: '', entry_block_def_id: '', built_in_type: '', active: true })
   const [savingBT, setSavingBT]   = useState(false)
+  const [consultBusy, setConsultBusy] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -235,6 +236,74 @@ export function DepartmentsSection() {
     if (!confirm('Delete this department? Its services and member assignments are removed; past visits and records keep their data.')) return
     await supabase.from('departments').delete().eq('id', id)
     load()
+  }
+
+  /**
+   * One tap wires a specialty for consults: a "Consult — <Dept>" request
+   * block (dynamic def, one question field), a Consultation service whose
+   * answer is the built-in Consultation block, and can_receive_orders on.
+   * Off deactivates both and drops can_receive_orders when consults were
+   * the only service.
+   */
+  const toggleConsults = async (dept: Department) => {
+    setConsultBusy(dept.id)
+    try {
+      const deptBTs = blockTypes[dept.id] ?? []
+      const consultBT = deptBTs.find(bt => bt.built_in_type === 'consultation')
+      if (consultBT?.active) {
+        await supabase.from('department_block_types').update({ active: false }).eq('id', consultBT.id)
+        if (consultBT.order_block_def_id) {
+          await supabase.from('block_definitions').update({ active: false }).eq('id', consultBT.order_block_def_id)
+        }
+        const others = deptBTs.filter(bt => bt.id !== consultBT.id && bt.active)
+        if (others.length === 0 && dept.can_receive_orders) {
+          await supabase.from('departments').update({ can_receive_orders: false }).eq('id', dept.id)
+        }
+      } else {
+        const slug = `consult_${dept.slug}`
+        // Revive-first: RLS only exposes universal/builtin defs, so a prior
+        // half-created row is invisible until this update flips it universal.
+        await supabase.from('block_definitions')
+          .update({ active: true, is_universal: true })
+          .eq('slug', slug)
+        const { data: existing } = await supabase.from('block_definitions').select('id').eq('slug', slug).maybeSingle()
+        let defId = (existing as { id: string } | null)?.id ?? null
+        if (!defId) {
+          const { data: def } = await supabase.from('block_definitions').insert({
+            name: `Consult — ${dept.name}`,
+            slug,
+            icon: 'stethoscope',
+            color: dept.color,
+            description: `Ask ${dept.name} for an opinion — answered in this encounter.`,
+            fields: [{ id: 'question', label: 'Question for the specialist', type: 'textarea', required: true, rows: 3, placeholder: 'What should they assess?' }],
+            is_universal: true,
+            active: true,
+            created_by: user?.id,
+          }).select('id').single()
+          defId = (def as { id: string } | null)?.id ?? null
+        }
+        if (defId) {
+          if (consultBT) {
+            await supabase.from('department_block_types').update({ active: true, order_block_def_id: defId }).eq('id', consultBT.id)
+          } else {
+            await supabase.from('department_block_types').insert({
+              department_id: dept.id,
+              name: 'Consultation',
+              description: 'Specialist opinion — answered in the encounter',
+              order_block_def_id: defId,
+              built_in_type: 'consultation',
+              active: true,
+            })
+          }
+          if (!dept.can_receive_orders) {
+            await supabase.from('departments').update({ can_receive_orders: true }).eq('id', dept.id)
+          }
+        }
+      }
+    } finally {
+      setConsultBusy(null)
+      load()
+    }
   }
 
   const toggleMember = async (deptId: string, userId: string) => {
@@ -407,6 +476,8 @@ export function DepartmentsSection() {
         {departments.map(dept => {
           const deptMembers = members[dept.id] ?? []
           const deptBTs     = blockTypes[dept.id] ?? []
+          const activeBTs   = deptBTs.filter(bt => bt.active)
+          const consultOn   = activeBTs.some(bt => bt.built_in_type === 'consultation')
           const isBTEditing = editingBT?.deptId === dept.id
           const isExpanded  = !!expanded[dept.id]
           const hasWork     = dept.can_receive_orders || dept.can_create_direct
@@ -430,7 +501,7 @@ export function DepartmentsSection() {
                       {!dept.active && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
                     </span>
                     <span className="block text-xs text-muted-foreground truncate">
-                      {deptSummary(dept, deptBTs.length)}
+                      {deptSummary(dept, activeBTs.length, activeBTs.filter(bt => bt.built_in_type === 'consultation').length)}
                       {dept.description ? ` — ${dept.description}` : ''}
                     </span>
                   </span>
@@ -444,9 +515,38 @@ export function DepartmentsSection() {
 
               {isExpanded && (
                 <div className="border-t">
+                  {/* Consults — one tap wires the request block + service + capability */}
+                  {dept.can_receive_patients && (
+                    <div className="px-4 py-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium">Receives consults</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Doctors can ask this specialty for an opinion from any encounter; the
+                          answer comes back into the same record.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleConsults(dept)}
+                        disabled={consultBusy === dept.id}
+                        className={cn(
+                          'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors shrink-0',
+                          consultOn
+                            ? 'bg-primary/10 border-primary/30 text-primary'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/30',
+                        )}
+                      >
+                        {consultBusy === dept.id
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : consultOn && <Check className="h-3 w-3" />}
+                        {consultOn ? 'On' : 'Off'}
+                      </button>
+                    </div>
+                  )}
+
                   {/* Services / Block Types — only where order machinery exists */}
                   {hasWork && (
-                    <div className="p-4 space-y-2">
+                    <div className={cn('p-4 space-y-2', dept.can_receive_patients && 'border-t')}>
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                           Services / Block Types ({deptBTs.length})
@@ -551,7 +651,7 @@ export function DepartmentsSection() {
                   )}
 
                   {/* Members — every flavor has staff; clinics need theirs for consult routing */}
-                  <div className={cn('p-4', hasWork && 'border-t')}>
+                  <div className={cn('p-4', (hasWork || dept.can_receive_patients) && 'border-t')}>
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
                       Members ({deptMembers.length})
                     </p>
