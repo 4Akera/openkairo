@@ -642,3 +642,24 @@ shows no Patients; Open chip lists open encounters with titles/dates.
 lane grouping, STAT ordering, save-&-next for the dept worklist). Left
 UNCOMMITTED deliberately; committed only Sidebar.tsx, FrontDeskPage.tsx,
 CLAUDE.md, AGENT_LOG.md. Flagged to the user.
+
+## 2026-08-08 — Iteration 42: running bill on the encounter (charging pass 1/2)
+
+**Item:** "Queues are the app" tier, item 5 (first half).
+
+**What:** New `EncounterBill` chip in the encounter header: live total of
+the encounter's charges (void/waived excluded), tap → line items with
+statuses + total + a one-tap "add charge" picker fed by the Service Items
+price list (insert at default price, status pending). Renders only when
+billing is enabled AND the user has billing access (matches charges RLS).
+The price-list half of the backlog item already existed as Settings →
+Service Items — nothing new invented. REMAINING for next iteration: the
+Cashier lane on Today (finished visits with unpaid charges).
+
+**Verification:** tsc clean, eslint clean, 152/152 tests, browser on a
+real encounter with 8 charges: chip showed PLN379.00 (matches SQL sum);
+dialog listed all lines incl. Pending-Insurance ones; one-tap HbA1c add
+updated the chip to PLN404.00 live. Test charge deleted after.
+
+**Note:** foreign deptWorklist changes still uncommitted on disk (see
+iteration 41 note) — again excluded from this commit.

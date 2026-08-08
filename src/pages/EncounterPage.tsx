@@ -7,6 +7,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, cn } from '../lib/utils'
 import { VisitJourneyStrip } from '../components/visits/VisitJourneyStrip'
+import { EncounterBill } from '../components/billing/EncounterBill'
 import { CheckoutDialog } from '../components/visits/CheckoutDialog'
 import type { Visit } from '../types'
 import {
@@ -639,6 +640,11 @@ export default function EncounterPage() {
                   </>
                 )}
               </div>
+            )}
+
+            {/* Running bill — live total, tap for lines + one-tap add */}
+            {patientId && encounterId && (
+              <EncounterBill encounterId={encounterId} patientId={patientId} />
             )}
 
             {/* Combined Privacy / Visibility dropdown */}

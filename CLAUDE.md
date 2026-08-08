@@ -85,6 +85,9 @@ Today · Settings (+ order departments).
       visits with unpaid charges), running-bill chip on the encounter
       header (live total → line items), one-tap add charge from the
       encounter, price list in Settings feeding the charge picker.
+      (2026-08-08 — bill chip + one-tap add SHIPPED (EncounterBill);
+      price list already existed as Service Items; REMAINING: Cashier
+      queue on Today)
 
 ### Post-restructure cleanup (pure simplification)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes
