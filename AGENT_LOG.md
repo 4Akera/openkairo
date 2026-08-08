@@ -340,3 +340,20 @@ under "Carried over" with full actions.
 This run shipped 7 commits: the clinic-tabs bug fix, the five One Journey
 items, dictation across blocks, and carried-over visits. Restart with
 /loop after curating new backlog items.
+
+## 2026-08-08 — Iteration 19: "Mine" on the Front Desk (new tier: one
+place for patients)
+
+**Item:** User complaint — patients appear in too many places (Recent /
+Assigned / Front Desk / departments / patient list). New top tier collapses
+to TWO surfaces + search. First slice: the clinician's worklist becomes a
+"Mine" chip on the Front Desk.
+
+**What changed:** FrontDeskPage gains a Mine toggle filtering the day's
+visits AND the carried-over section to `assigned_to = me`, composing with
+the queue switcher and day navigation.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+— Mine dropped the carried-over list from 3 to 2, hiding the unassigned
+visit. (Also fixed en route, prior commit: sidebar nav scrolls when
+memberships overflow.)

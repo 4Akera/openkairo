@@ -22,7 +22,7 @@ import {
   Button, Badge,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../components/ui'
-import { ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 const GENERAL_QUEUE = 'general'
@@ -51,6 +51,9 @@ export default function FrontDeskPage() {
 
   const [patientDepts, setPatientDepts] = useState<Department[]>([])
   const [deptFilter, setDeptFilter] = useState<string>('all')
+  // "Mine" = visits assigned to me: the clinician's worklist lives in the
+  // day view instead of a separate list elsewhere.
+  const [mineOnly, setMineOnly] = useState(false)
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [mode, setMode] = useState<'now' | 'book'>('now')
 
@@ -70,10 +73,12 @@ export default function FrontDeskPage() {
   }
 
   const filtered = useMemo(() => {
-    if (deptFilter === 'all') return visits
-    if (deptFilter === GENERAL_QUEUE) return visits.filter(v => !v.department_id)
-    return visits.filter(v => v.department_id === deptFilter)
-  }, [visits, deptFilter])
+    let rows = visits
+    if (deptFilter === GENERAL_QUEUE) rows = rows.filter(v => !v.department_id)
+    else if (deptFilter !== 'all') rows = rows.filter(v => v.department_id === deptFilter)
+    if (mineOnly && user) rows = rows.filter(v => v.assigned_to === user.id)
+    return rows
+  }, [visits, deptFilter, mineOnly, user])
 
   const activeCount = filtered.filter(v => v.arrived_at && !v.finished_at).length
   const avgWait = averageWaitMinutes(filtered)
@@ -136,6 +141,20 @@ export default function FrontDeskPage() {
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* My worklist, inside the day view */}
+          <button
+            onClick={() => setMineOnly(m => !m)}
+            className={cn(
+              'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
+              mineOnly
+                ? 'bg-primary/10 border-primary/40 text-primary'
+                : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
+            )}
+            title="Only visits assigned to me"
+          >
+            <UserCheck className="h-3.5 w-3.5" />
+            Mine
+          </button>
           {/* Queue switcher — only rendered for multi-clinic institutions */}
           {patientDepts.length > 0 && (
             <Select value={deptFilter} onValueChange={setDeptFilter}>
@@ -166,8 +185,9 @@ export default function FrontDeskPage() {
 
       <VisitQueue
         visits={filtered}
-        carriedOver={deptFilter === 'all' ? carriedOver
-          : carriedOver.filter(v => deptFilter === GENERAL_QUEUE ? !v.department_id : v.department_id === deptFilter)}
+        carriedOver={carriedOver.filter(v =>
+          (deptFilter === 'all' || (deptFilter === GENERAL_QUEUE ? !v.department_id : v.department_id === deptFilter))
+          && (!mineOnly || v.assigned_to === user?.id))}
         profileNames={profileNames}
         loading={loading}
         emptyLabel={isToday ? 'No patients today yet' : `No visits booked for ${dayLabel(dayOffset).toLowerCase()}`}

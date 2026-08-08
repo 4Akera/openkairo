@@ -30,7 +30,21 @@ When working autonomously (e.g. via /loop), follow this contract:
 
 ## Backlog (edit freely — user curates this list)
 
-### One Journey pass (highest priority)
+### One place for patients (highest priority)
+User complaint 2026-08-08: patients appear in too many places (Recent tab,
+Assigned, Front Desk, department tabs, patient list). Collapse to TWO
+surfaces + search: Patients = the registry; Front Desk = the day.
+
+- [x] "Mine" filter chip on the Front Desk (visits assigned to me) — the
+      doctor's worklist lives in the day view, not a separate list.
+      (2026-08-08 — applies to the day's queue and carried-over alike)
+- [ ] Delete the Dashboard sidebar (Waiting for me / Assigned / Recently
+      opened, incl. the sessionStorage recents and the mobile Recent tab) —
+      the Patients page becomes purely the registry; its existing
+      Open/Assigned filters cover older open encounters; ⌘K covers
+      re-finding. Remove recentItems.ts if nothing else uses it.
+
+### One Journey pass (done)
 Scheduling, visits, patients, and encounters must feel like ONE simple
 thing — a single patient journey — not separate modules stitched together.
 
