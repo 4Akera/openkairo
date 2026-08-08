@@ -69,11 +69,13 @@ Today · Settings (+ order departments).
       patient queue moves to Today. (2026-08-08 — DepartmentPage is
       work-only, /dept/<queue> redirects home; sidebar + /portal and
       dept-only landing use non-queue depts)
-- [ ] "+ Patient" one-motion arrival on Today: search-first; no match →
+- [x] "+ Patient" one-motion arrival on Today: search-first; no match →
       inline new-patient mini-form (name + phone) that creates AND queues
       in one motion. Retire "check in / check out" wording app-wide —
       arriving is "+ Patient", the ending action reads "Done", bookings
-      keep "Book".
+      keep "Book". (2026-08-08 — mini-form prefills from the search text;
+      CheckoutDialog titled "Finish visit"; booked rows arrive via
+      "Arrived"; CreatePatientDialog no longer used from the queue flow)
 - [ ] Drop the /patients nav entry: ⌘K + Today are the whole surface
       ("New patient" lives in + Patient; an "Open" chip on Today covers
       older open encounters). Sidebar: Today · Settings (+ departments).

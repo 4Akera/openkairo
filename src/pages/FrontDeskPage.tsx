@@ -7,7 +7,7 @@
  *  - No bookings ever made → the Upcoming section simply never renders.
  *  - Patient-facing departments exist → a queue switcher appears.
  *
- * Queue rendering lives in VisitQueue and check-in in CheckInDialog — both
+ * Queue rendering lives in VisitQueue and "+ Patient" in CheckInDialog — both
  * shared with the per-department Patients tabs.
  */
 import { useEffect, useMemo, useState } from 'react'
@@ -219,7 +219,7 @@ export default function FrontDeskPage() {
           {isToday && (
             <Button size="sm" onClick={() => openCheckIn('now')}>
               <UserPlus className="h-4 w-4" />
-              <span className="hidden sm:inline">Check in</span>
+              <span className="hidden sm:inline">Patient</span>
             </Button>
           )}
         </div>
@@ -236,7 +236,7 @@ export default function FrontDeskPage() {
         emptyAction={
           isToday ? (
             <Button size="sm" variant="outline" onClick={() => openCheckIn('now')}>
-              Check in the first patient
+              Add the first patient
             </Button>
           ) : (
             <Button size="sm" variant="outline" onClick={() => openCheckIn('book')}>

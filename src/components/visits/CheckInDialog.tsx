@@ -1,23 +1,24 @@
 /**
- * CheckInDialog — name-first check-in / booking, shared by the Front Desk
- * and each clinic's own Patients tab. Search, tap, done: in 'now' mode a tap
- * checks the patient in immediately; 'book' mode adds only a "when" field.
- * Physician and reason are assigned inline on the queue row afterwards.
+ * CheckInDialog — the "+ Patient" one-motion arrival, shared by the Front
+ * Desk's add and book flows. Search, tap, done: in 'now' mode a tap puts the
+ * patient in the queue immediately; 'book' mode adds only a "when" field.
+ * No match → an inline mini-form (name + phone) creates AND queues in one
+ * motion. Physician and reason are assigned on the queue row afterwards.
  */
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { checkInVisit, bookVisit } from '../../lib/visits'
 import { parseSearchQuery } from '../../lib/patientSearch'
-import { CreatePatientDialog } from '../patients/CreatePatientDialog'
 import type { Department, Patient } from '../../types'
-import { fullName } from '../../lib/utils'
+import { fullName, generateMRN } from '../../lib/utils'
 import {
   Button, Input, Label,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../ui'
-import { Search, Loader2 } from 'lucide-react'
+import { Search, Loader2, UserPlus } from 'lucide-react'
 
 const GENERAL_QUEUE = 'general'
 
@@ -39,6 +40,7 @@ export function CheckInDialog({
   /** Pre-selected queue when the selector is shown ('' = general) */
   initialDeptId?: string
 }) {
+  const { user } = useAuthStore()
   const { nameFormat, flowStages } = useSettingsStore()
 
   const [search, setSearch] = useState('')
@@ -48,7 +50,12 @@ export function CheckInDialog({
   const [deptId, setDeptId] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [saving, setSaving] = useState(false)
-  const [newPatientOpen, setNewPatientOpen] = useState(false)
+
+  // Inline new-patient mini-form (shown when the search finds nobody)
+  const [newOpen, setNewOpen] = useState(false)
+  const [newFirst, setNewFirst] = useState('')
+  const [newLast, setNewLast] = useState('')
+  const [newPhone, setNewPhone] = useState('')
 
   const firstStage = flowStages[0] ?? null
   const targetDeptId = fixedDepartmentId ?? (deptId || null)
@@ -61,6 +68,8 @@ export function CheckInDialog({
     setSelectedPatient(null)
     setDeptId(initialDeptId)
     setScheduledAt('')
+    setNewOpen(false)
+    setNewFirst(''); setNewLast(''); setNewPhone('')
   }, [open, initialDeptId])
 
   // Debounced patient search
@@ -97,6 +106,42 @@ export function CheckInDialog({
     onOpenChange(false)
   }
 
+  /** Prefill the mini-form from what was typed: first token → first name. */
+  const openNewForm = () => {
+    const tokens = search.trim().split(/\s+/).filter(Boolean)
+    setNewFirst(tokens[0] ?? '')
+    setNewLast(tokens.slice(1).join(' '))
+    setNewOpen(true)
+  }
+
+  /** One motion: create the patient, then straight into the queue (or booking). */
+  const handleCreateAndQueue = async () => {
+    if (!newFirst.trim() || !newLast.trim() || saving || !user) return
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('patients')
+      .insert({
+        first_name: newFirst.trim(),
+        last_name: newLast.trim(),
+        phone: newPhone.trim() || null,
+        mrn: generateMRN(),
+        created_by: user.id,
+      })
+      .select()
+      .single()
+    if (error || !data) { setSaving(false); return }
+    const pt = data as Patient
+    if (mode === 'book') {
+      setSelectedPatient(pt)
+      setNewOpen(false)
+      setSaving(false)
+      return
+    }
+    await checkInVisit({ patientId: pt.id, departmentId: targetDeptId, stage: firstStage })
+    setSaving(false)
+    onOpenChange(false)
+  }
+
   const handleBook = async () => {
     if (!selectedPatient || !scheduledAt) return
     setSaving(true)
@@ -114,7 +159,7 @@ export function CheckInDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{mode === 'book' ? 'Book a visit' : 'Check in a patient'}</DialogTitle>
+            <DialogTitle>{mode === 'book' ? 'Book a visit' : 'Add a patient'}</DialogTitle>
             <DialogDescription>
               {mode === 'book'
                 ? 'Pick the patient, pick a time — done.'
@@ -171,12 +216,54 @@ export function CheckInDialog({
                     )}
                   </div>
                 )}
-                <button
-                  className="mt-1.5 text-xs text-primary hover:underline"
-                  onClick={() => setNewPatientOpen(true)}
-                >
-                  + New patient
-                </button>
+                {newOpen ? (
+                  <div className="mt-2 rounded-lg border p-3 space-y-2 bg-muted/20">
+                    <p className="text-xs font-medium flex items-center gap-1.5">
+                      <UserPlus className="h-3.5 w-3.5 text-primary" /> New patient
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        autoFocus
+                        placeholder="First name *"
+                        value={newFirst}
+                        onChange={e => setNewFirst(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                      <Input
+                        placeholder="Last name *"
+                        value={newLast}
+                        onChange={e => setNewLast(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <Input
+                      placeholder="Phone (optional)"
+                      value={newPhone}
+                      onChange={e => setNewPhone(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') void handleCreateAndQueue() }}
+                      className="h-8 text-sm"
+                    />
+                    <div className="flex justify-end gap-2 pt-0.5">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setNewOpen(false)}>Cancel</Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={saving || !newFirst.trim() || !newLast.trim()}
+                        onClick={() => void handleCreateAndQueue()}
+                      >
+                        {saving && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {mode === 'book' ? 'Create patient' : 'Add to queue'}
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Everything else (DOB, details) can be filled on the patient page later.
+                    </p>
+                  </div>
+                ) : (
+                  <button className="mt-1.5 text-xs text-primary hover:underline" onClick={openNewForm}>
+                    {search.trim() ? <>+ New patient: “{search.trim()}”</> : '+ New patient'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -218,12 +305,6 @@ export function CheckInDialog({
           </div>
         </DialogContent>
       </Dialog>
-
-      <CreatePatientDialog
-        open={newPatientOpen}
-        onOpenChange={setNewPatientOpen}
-        onCreated={pt => { setNewPatientOpen(false); void handlePickPatient(pt) }}
-      />
     </>
   )
 }

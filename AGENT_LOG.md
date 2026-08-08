@@ -597,3 +597,27 @@ browser: /dept/card redirected to Today; sidebar lists only Lab/Radiology;
 console from mid-edit state — did not recur across two fresh reloads.
 Realtime websocket errors observed are environmental (supabase wss
 unreachable at the moment), unrelated to this change.
+
+## 2026-08-08 — Iteration 40: "+ Patient" one-motion arrival
+
+**Item:** "Queues are the app" tier, item 3.
+
+**What:** CheckInDialog is now the "+ Patient" flow: when the search finds
+nobody, an inline mini-form (first/last prefilled from what was typed +
+optional phone) creates the patient AND queues them in one motion — the
+full CreatePatientDialog is no longer part of the queue flow (the search
+itself is the duplicate check; everything else fills in later on the
+patient page). Check-in/check-out wording retired app-wide: header button
+"Patient", empty state "Add the first patient", dialog "Add a patient",
+booked rows arrive via "Arrived", row/strip ending is "Done", finished
+section "Done", CheckoutDialog titled "Finish visit".
+
+**Why highest value:** next unchecked item in the approved restructure; the
+front desk's most frequent action drops to one motion, and the last
+hotel-vocabulary concept leaves the UI.
+
+**Verification:** tsc clean, eslint clean (5 touched files), 138/138 tests,
+browser end-to-end: typed "Zorro Testman" → no match → mini-form prefilled
+→ Add to queue → row in WAITING with Assign/stage/Open/Done actions; Done
+opens "Finish visit" with the charge/order heads-up. Test patient +
+encounter deleted from remote after.

@@ -48,7 +48,7 @@ export function VisitQueue({
   const now = useNow()
   const [checkoutVisit, setCheckoutVisit] = useState<Visit | null>(null)
   const [startingId, setStartingId] = useState<string | null>(null)
-  // Physician + reason are assigned inline on the row, after check-in
+  // Physician + reason are assigned inline on the row, after arrival
   const [physicians, setPhysicians] = useState<{ id: string; full_name: string }[]>([])
   const [reasonEditId, setReasonEditId] = useState<string | null>(null)
   const [reasonDraft, setReasonDraft] = useState('')
@@ -213,7 +213,7 @@ export function VisitQueue({
           {/* Bookings can only arrive once their day has come */}
           {!v.arrived_at && v.scheduled_at && v.scheduled_at < dayBoundsIso().end && (
             <Button size="sm" variant="outline" onClick={() => void arriveVisit(v.id, firstStage)}>
-              Check in
+              Arrived
             </Button>
           )}
           {isActive && (
@@ -234,7 +234,7 @@ export function VisitQueue({
           {isActive && (
             <Button size="sm" variant="ghost" onClick={() => setCheckoutVisit(v)}>
               <LogOut className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Check out</span>
+              <span className="hidden sm:inline">Done</span>
             </Button>
           )}
           {!v.finished_at && (
@@ -279,7 +279,7 @@ export function VisitQueue({
           </div>
         ) : (
           <div className="pb-6">
-            {/* Unfinished visits from previous days — check out or cancel */}
+            {/* Unfinished visits from previous days — finish or cancel */}
             {carriedOver.length > 0 && (
               <>
                 {sectionHeader('Carried over', carriedOver.length, <History className="h-3.5 w-3.5 text-amber-600" />)}
@@ -323,7 +323,7 @@ export function VisitQueue({
 
             {finished.length > 0 && (
               <>
-                {sectionHeader('Checked out', finished.length, <CheckCircle2 className="h-3.5 w-3.5" />)}
+                {sectionHeader('Done', finished.length, <CheckCircle2 className="h-3.5 w-3.5" />)}
                 <div className="divide-y divide-border border-y border-border opacity-60">
                   {finished.map(renderVisit)}
                 </div>

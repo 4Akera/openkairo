@@ -47,7 +47,7 @@ export function VisitJourneyStrip({
         {encounter.finished_at ? (
           <span className="flex items-center gap-1 text-emerald-600 whitespace-nowrap">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Checked out {formatDateTime(encounter.finished_at)}
+            Done {formatDateTime(encounter.finished_at)}
           </span>
         ) : (
           <>
@@ -71,7 +71,7 @@ export function VisitJourneyStrip({
               onClick={() => setCheckoutOpen(true)}
               className="ml-auto flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors whitespace-nowrap"
             >
-              <LogOut className="h-3 w-3" /> Check out
+              <LogOut className="h-3 w-3" /> Done
             </button>
           </>
         )}

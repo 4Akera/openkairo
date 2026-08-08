@@ -72,7 +72,7 @@ export function CheckoutDialog({
     <Dialog open={!!visit} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Check out</DialogTitle>
+          <DialogTitle>Finish visit</DialogTitle>
           <DialogDescription>{pt ? fullName(pt, nameFormat) : ''}</DialogDescription>
         </DialogHeader>
         {loading ? (
@@ -115,14 +115,14 @@ export function CheckoutDialog({
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  You can still check the patient out — this is only a heads-up.
+                  You can still finish the visit — this is only a heads-up.
                 </p>
               </div>
             )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>Cancel</Button>
               <Button onClick={() => void confirm()}>
-                <LogOut className="h-3.5 w-3.5" /> Check out
+                <LogOut className="h-3.5 w-3.5" /> Done
               </Button>
             </div>
           </div>
