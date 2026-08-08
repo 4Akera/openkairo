@@ -31,14 +31,13 @@ export function VisitJourneyStrip({
   const [checkoutOpen, setCheckoutOpen] = useState(false)
 
   const load = useCallback(async () => {
+    // The encounter IS the journey — read the row itself
     const { data } = await supabase
-      .from('visits')
-      .select('*, patients(*), encounters(id, status)')
-      .eq('encounter_id', encounterId)
-      .is('cancelled_at', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const v = ((data ?? [])[0] as Visit | undefined) ?? null
+      .from('encounters')
+      .select('*, patients(*)')
+      .eq('id', encounterId)
+      .maybeSingle()
+    const v = (data as Visit | null) ?? null
     setVisit(v)
     onVisitChange?.(v)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -50,7 +49,7 @@ export function VisitJourneyStrip({
       .channel(`visit-journey:${encounterId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'visits', filter: `encounter_id=eq.${encounterId}` },
+        { event: '*', schema: 'public', table: 'encounters', filter: `id=eq.${encounterId}` },
         () => { void load() },
       )
       .subscribe()

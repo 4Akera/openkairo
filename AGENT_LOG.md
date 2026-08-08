@@ -458,3 +458,35 @@ browser-verified the sparkline in the header with real two-day data.
 items (AI-filled blocks pilot, AI visit summary) are gated on the user's
 approval to deploy an Edge Function + set ANTHROPIC_API_KEY. Stopping the
 loop per the charter's hard stop; restart after approval.
+
+## 2026-08-08 — Ground-up restructure: THE ENCOUNTER IS THE EVENT
+
+**User direction:** redesign the structure from the ground up; encounter
+as the main event, absorbing the visit; app opens on Today.
+
+**Phase A (schema, user-approved):** encounters gained department_id,
+scheduled_at, arrived_at, finished_at, cancelled_at, stage, reason,
+referred_from_encounter_id + partial indexes; legacy visits rows migrated
+in (linked visits filled their encounters; standalone bookings/walk-ins
+became encounters); encounter_insert relaxed (check-in needs no upfront
+assignee — the queue's inline Assign covers it). The visits table is
+FROZEN legacy, kept for archaeology.
+
+**Phase B (code):** lib/visits now reads/writes encounters (one
+JOURNEY_SELECT with patient + referral-origin joins); Visit is a type
+alias extending Encounter; check-in/booking create encounters directly
+(visibility staff); queue rows ARE encounters, so "Start encounter"
+became a plain **Open** that self-assigns physicians and advances the
+stage; the journey strip reads the encounter row itself; CheckoutDialog
+queries by the row id; the patient page journey needs no merging at all;
+linkEncounterToActiveVisit deleted — there is nothing to link.
+
+**Phase C (home):** the app opens on Today (Front Desk at /); the registry
+moved to /patients; sidebar order Today · Patients · Settings · depts;
+/frontdesk redirects home. Cashier-as-queue deferred to backlog.
+
+**Verification:** tsc clean, eslint clean, 135/135 tests; browser-verified
+end-to-end — signed in lands on Today; Jacob's migrated row (user-authored
+note + title) opened as ONE record showing clinical timeline + journey
+strip + Finish; registry works at /patients. Migration counts checked in
+SQL (4 encounters carry journeys).

@@ -1,12 +1,18 @@
 /**
- * Visit data helpers — the logistics layer of patient flow.
+ * Journey data helpers — the logistics side of ENCOUNTERS.
  *
- * A visit row tracks one patient passage through the facility. Timestamps
- * carry the lifecycle (scheduled_at → arrived_at → finished_at); `stage` is
- * an optional queue label validated against the org's flow_stages setting.
+ * Ground-up restructure: the encounter is the one event object. It carries
+ * the clinical record (blocks) AND the journey — scheduled_at set = booked,
+ * arrived_at set = in queue, finished_at set = checked out; `stage` is an
+ * optional queue label validated against the org's flow_stages setting;
+ * department_id is which queue it sits in (null = the general queue).
+ * The legacy `visits` table is frozen and no longer read.
  */
 import { supabase } from './supabase'
-import type { Patient, Visit, VisitEncounterRef, VisitReferralRef } from '../types'
+import type { Patient, Visit, VisitReferralRef } from '../types'
+
+const JOURNEY_SELECT =
+  '*, patients(*), referred_from:encounters!referred_from_encounter_id(department_id, departments(name))'
 
 export function dayBoundsIso(date = new Date()): { start: string; end: string } {
   const start = new Date(date)
@@ -22,19 +28,13 @@ export function visitPatient(v: Visit): Patient | null {
   return (Array.isArray(raw) ? raw[0] : raw) ?? null
 }
 
-/** Resolve the joined encounter ref (PostgREST may return object or array). */
-export function visitEncounter(v: Visit): VisitEncounterRef | null {
-  const raw = v.encounters
-  return (Array.isArray(raw) ? raw[0] : raw) ?? null
-}
-
 /**
- * Where a referred visit came from: the origin queue's department name,
- * "General" when the origin sat in the default queue, null when the visit
- * isn't a referral at all.
+ * Where a referred encounter came from: the origin queue's department name,
+ * "General" when the origin sat in the default queue, null when it isn't a
+ * referral at all.
  */
-export function referralSourceLabel(v: Pick<Visit, 'referred_from_visit_id' | 'referred_from'>): string | null {
-  if (!v.referred_from_visit_id) return null
+export function referralSourceLabel(v: Pick<Visit, 'referred_from_encounter_id' | 'referred_from'>): string | null {
+  if (!v.referred_from_encounter_id) return null
   const origin: VisitReferralRef | null =
     (Array.isArray(v.referred_from) ? v.referred_from[0] : v.referred_from) ?? null
   if (!origin) return 'General'
@@ -43,15 +43,14 @@ export function referralSourceLabel(v: Pick<Visit, 'referred_from_visit_id' | 'r
 }
 
 /**
- * All of a day's non-cancelled visits: arrived that day, or booked for it.
- * Finished visits stay included so the front desk sees the whole day.
- * Defaults to today; pass a date for the Front Desk's day navigation.
+ * All of a day's journey encounters: arrived that day, or booked for it.
+ * Finished ones stay included so the front desk sees the whole day.
  */
 export async function fetchTodayVisits(date: Date = new Date()): Promise<Visit[]> {
   const { start, end } = dayBoundsIso(date)
   const { data, error } = await supabase
-    .from('visits')
-    .select('*, patients(*), encounters(id, status), referred_from:visits!referred_from_visit_id(department_id, departments(name))')
+    .from('encounters')
+    .select(JOURNEY_SELECT)
     .is('cancelled_at', null)
     .or(`arrived_at.gte.${start},and(scheduled_at.gte.${start},scheduled_at.lt.${end})`)
     .order('arrived_at', { ascending: true, nullsFirst: false })
@@ -63,15 +62,15 @@ export async function fetchTodayVisits(date: Date = new Date()): Promise<Visit[]
 }
 
 /**
- * Visits that arrived on a previous day and were never checked out or
+ * Encounters that arrived on a previous day and were never checked out or
  * cancelled — the front desk shows these as a quiet "carried over" section
  * instead of letting them vanish at midnight.
  */
 export async function fetchCarriedOverVisits(): Promise<Visit[]> {
   const { start } = dayBoundsIso()
   const { data, error } = await supabase
-    .from('visits')
-    .select('*, patients(*), encounters(id, status), referred_from:visits!referred_from_visit_id(department_id, departments(name))')
+    .from('encounters')
+    .select(JOURNEY_SELECT)
     .is('cancelled_at', null)
     .is('finished_at', null)
     .not('arrived_at', 'is', null)
@@ -85,68 +84,9 @@ export async function fetchCarriedOverVisits(): Promise<Visit[]> {
   return (data ?? []) as Visit[]
 }
 
-export interface CheckInInput {
-  patientId: string
-  departmentId?: string | null
-  assignedTo?: string | null
-  reason?: string | null
-  /** First configured stage, or null when stage tracking is off */
-  stage?: string | null
-}
-
-/** Walk-in or front-desk check-in: patient enters the queue now. */
-export async function checkInVisit(input: CheckInInput): Promise<{ error: string | null }> {
-  const { error } = await supabase.from('visits').insert({
-    patient_id: input.patientId,
-    department_id: input.departmentId ?? null,
-    assigned_to: input.assignedTo ?? null,
-    reason: input.reason?.trim() || null,
-    stage: input.stage ?? null,
-    arrived_at: new Date().toISOString(),
-  })
-  return { error: error ? error.message : null }
-}
-
-/** Book a future visit (an appointment is just a visit with scheduled_at). */
-export async function bookVisit(
-  input: CheckInInput & { scheduledAt: string },
-): Promise<{ error: string | null }> {
-  const { error } = await supabase.from('visits').insert({
-    patient_id: input.patientId,
-    department_id: input.departmentId ?? null,
-    assigned_to: input.assignedTo ?? null,
-    reason: input.reason?.trim() || null,
-    scheduled_at: input.scheduledAt,
-  })
-  return { error: error ? error.message : null }
-}
-
-export async function updateVisit(
-  id: string,
-  patch: Partial<Pick<Visit, 'stage' | 'assigned_to' | 'department_id' | 'reason' | 'encounter_id' | 'arrived_at' | 'finished_at' | 'cancelled_at' | 'scheduled_at'>>,
-): Promise<{ error: string | null }> {
-  const { error } = await supabase.from('visits').update(patch).eq('id', id)
-  return { error: error ? error.message : null }
-}
-
-/** Booked visit arrives: enters the queue. */
-export function arriveVisit(id: string, stage: string | null) {
-  return updateVisit(id, { arrived_at: new Date().toISOString(), stage })
-}
-
-/** Checkout: the patient has left. */
-export function finishVisit(id: string) {
-  return updateVisit(id, { finished_at: new Date().toISOString() })
-}
-
-/** Cancel a booking / remove a queue entry (no-show, mistake). */
-export function cancelVisit(id: string) {
-  return updateVisit(id, { cancelled_at: new Date().toISOString() })
-}
-
 /**
- * Average completed time-in-queue today, in whole minutes: arrival →
- * checkout, over finished visits only. Null until at least one visit has
+ * Average completed time-in-clinic today, in whole minutes: arrival →
+ * checkout, over finished encounters only. Null until at least one has
  * completed the full cycle (an in-progress wait would skew low).
  */
 export function averageWaitMinutes(visits: Pick<Visit, 'arrived_at' | 'finished_at'>[]): number | null {
@@ -187,18 +127,87 @@ export function dailyAverageWaits(
   return out
 }
 
+export interface CheckInInput {
+  patientId: string
+  departmentId?: string | null
+  assignedTo?: string | null
+  reason?: string | null
+  /** First configured stage, or null when stage tracking is off */
+  stage?: string | null
+}
+
+/**
+ * Walk-in or front-desk check-in: creates the encounter in the queue.
+ * Visibility defaults to staff so the desk and clinicians all see the day.
+ */
+export async function checkInVisit(input: CheckInInput): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('encounters').insert({
+    patient_id: input.patientId,
+    status: 'open',
+    visibility: 'staff',
+    visible_to_roles: [],
+    department_id: input.departmentId ?? null,
+    assigned_to: input.assignedTo ?? null,
+    reason: input.reason?.trim() || null,
+    stage: input.stage ?? null,
+    arrived_at: new Date().toISOString(),
+  })
+  return { error: error ? error.message : null }
+}
+
+/** Book a future visit (an appointment is an encounter with scheduled_at). */
+export async function bookVisit(
+  input: CheckInInput & { scheduledAt: string },
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('encounters').insert({
+    patient_id: input.patientId,
+    status: 'open',
+    visibility: 'staff',
+    visible_to_roles: [],
+    department_id: input.departmentId ?? null,
+    assigned_to: input.assignedTo ?? null,
+    reason: input.reason?.trim() || null,
+    scheduled_at: input.scheduledAt,
+  })
+  return { error: error ? error.message : null }
+}
+
+export async function updateVisit(
+  id: string,
+  patch: Partial<Pick<Visit, 'stage' | 'assigned_to' | 'department_id' | 'reason' | 'arrived_at' | 'finished_at' | 'cancelled_at' | 'scheduled_at'>>,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('encounters').update(patch).eq('id', id)
+  return { error: error ? error.message : null }
+}
+
+/** Booked encounter arrives: enters the queue. */
+export function arriveVisit(id: string, stage: string | null) {
+  return updateVisit(id, { arrived_at: new Date().toISOString(), stage })
+}
+
+/** Checkout: the patient has left. */
+export function finishVisit(id: string) {
+  return updateVisit(id, { finished_at: new Date().toISOString() })
+}
+
+/** Cancel a booking / remove a queue entry (no-show, mistake). */
+export function cancelVisit(id: string) {
+  return updateVisit(id, { cancelled_at: new Date().toISOString() })
+}
+
 /**
  * Referral: an order sent to a patient-facing department also queues the
- * patient there. Chains from the patient's active visit; skipped when the
- * patient is already waiting in that department's queue.
+ * patient there — as a fresh encounter chained to the origin. Skipped when
+ * the patient is already waiting in that department's queue.
  */
 export async function createReferralVisit(
   patientId: string,
   departmentId: string,
   stage: string | null,
+  originEncounterId?: string,
 ): Promise<void> {
   const { data: existing } = await supabase
-    .from('visits')
+    .from('encounters')
     .select('id')
     .eq('patient_id', patientId)
     .eq('department_id', departmentId)
@@ -208,46 +217,14 @@ export async function createReferralVisit(
     .limit(1)
   if (existing && existing.length > 0) return
 
-  const { start } = dayBoundsIso()
-  const { data: from } = await supabase
-    .from('visits')
-    .select('id')
-    .eq('patient_id', patientId)
-    .is('finished_at', null)
-    .is('cancelled_at', null)
-    .gte('arrived_at', start)
-    .order('arrived_at', { ascending: true })
-    .limit(1)
-
-  await supabase.from('visits').insert({
+  await supabase.from('encounters').insert({
     patient_id: patientId,
+    status: 'open',
+    visibility: 'staff',
+    visible_to_roles: [],
     department_id: departmentId,
-    referred_from_visit_id: from?.[0]?.id ?? null,
+    referred_from_encounter_id: originEncounterId ?? null,
     stage,
     arrived_at: new Date().toISOString(),
   })
-}
-
-/**
- * Attach a freshly created encounter to the patient's active visit of today,
- * so the queue reflects that clinical work started. No-op when the patient
- * isn't in the queue — encounters never require a visit.
- */
-export async function linkEncounterToActiveVisit(
-  patientId: string,
-  encounterId: string,
-): Promise<void> {
-  const { start } = dayBoundsIso()
-  const { data } = await supabase
-    .from('visits')
-    .select('id')
-    .eq('patient_id', patientId)
-    .is('encounter_id', null)
-    .is('finished_at', null)
-    .is('cancelled_at', null)
-    .gte('arrived_at', start)
-    .order('arrived_at', { ascending: true })
-    .limit(1)
-  const visitId = data?.[0]?.id
-  if (visitId) await supabase.from('visits').update({ encounter_id: encounterId }).eq('id', visitId)
 }

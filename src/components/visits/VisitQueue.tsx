@@ -11,7 +11,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useNow } from '../../hooks/useNow'
 import {
-  visitPatient, visitEncounter, arriveVisit, cancelVisit, updateVisit,
+  visitPatient, arriveVisit, cancelVisit, updateVisit,
   referralSourceLabel, dayBoundsIso,
 } from '../../lib/visits'
 import { CheckoutDialog } from './CheckoutDialog'
@@ -93,44 +93,28 @@ export function VisitQueue({
   }
 
   /**
-   * One-tap journey step: waiting visit → open encounter. Creates the
-   * encounter (physician carried over from the visit, or self for
-   * physicians), links it to the visit, advances the stage to the second
-   * configured stage ("With doctor" in the default preset), and navigates
-   * straight in — no patient-page detour.
+   * One-tap journey step: the queue row IS the encounter. Opening it
+   * self-assigns physicians when unassigned and advances the stage to the
+   * second configured stage ("With doctor" in the default preset).
    */
-  const startEncounter = async (v: Visit) => {
+  const openEncounter = async (v: Visit) => {
     const pt = visitPatient(v)
-    if (!pt || !user || startingId) return
-    const assigned = v.assigned_to ?? (hasRole('physician') ? user.id : null)
-    if (!assigned && !hasRole('admin')) return
+    if (!pt || startingId) return
     setStartingId(v.id)
-    const encounterId = crypto.randomUUID()
-    const { error } = await supabase.from('encounters').insert({
-      id: encounterId,
-      patient_id: pt.id,
-      status: 'open',
-      visibility: 'private',
-      visible_to_roles: [],
-      assigned_to: assigned,
-      created_by: user.id,
-    })
-    if (!error) {
-      const nextStage =
-        flowStages.length > 1 && (!v.stage || v.stage === flowStages[0])
-          ? flowStages[1]
-          : v.stage
-      await updateVisit(v.id, { encounter_id: encounterId, assigned_to: assigned, stage: nextStage })
-      navigate(`/patients/${pt.id}/encounters/${encounterId}`)
+    const patch: Parameters<typeof updateVisit>[1] = {}
+    if (!v.assigned_to && user && hasRole('physician')) patch.assigned_to = user.id
+    if (v.status === 'open' && flowStages.length > 1 && (!v.stage || v.stage === flowStages[0])) {
+      patch.stage = flowStages[1]
     }
+    if (Object.keys(patch).length > 0) await updateVisit(v.id, patch)
     setStartingId(null)
+    navigate(`/patients/${pt.id}/encounters/${v.id}`)
   }
 
   const renderVisit = (v: Visit) => {
     const pt = visitPatient(v)
-    const enc = visitEncounter(v)
     const isActive = !!v.arrived_at && !v.finished_at
-    const readyForCheckout = isActive && enc?.status === 'closed'
+    const readyForCheckout = isActive && v.status === 'closed'
     const assignedName = v.assigned_to ? profileNames[v.assigned_to] : null
     const referredFrom = referralSourceLabel(v)
     return (
@@ -232,32 +216,19 @@ export function VisitQueue({
               Check in
             </Button>
           )}
-          {isActive && enc && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-primary"
-              onClick={() => pt && navigate(`/patients/${pt.id}/encounters/${enc.id}`)}
-            >
-              <Stethoscope className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Encounter</span>
-            </Button>
-          )}
-          {isActive && !enc && (
+          {isActive && (
             <Button
               size="sm"
               variant="outline"
               className="text-primary border-primary/40"
-              disabled={startingId === v.id || (!v.assigned_to && !hasRole('physician') && !hasRole('admin'))}
-              title={!v.assigned_to && !hasRole('physician') && !hasRole('admin')
-                ? 'Assign a physician first'
-                : 'Create the encounter and open it'}
-              onClick={() => void startEncounter(v)}
+              disabled={startingId === v.id}
+              title="Open the encounter"
+              onClick={() => void openEncounter(v)}
             >
               {startingId === v.id
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <Stethoscope className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">Start encounter</span>
+              <span className="hidden sm:inline">Open</span>
             </Button>
           )}
           {isActive && (

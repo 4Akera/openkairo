@@ -2325,3 +2325,63 @@ insert into app_settings (key, value) values
 on conflict (key) do nothing;
 
 do $$ begin alter publication supabase_realtime add table visits; exception when duplicate_object then null; end $$;
+
+-- ============================================================
+-- 19. ENCOUNTER ABSORBS THE VISIT (ground-up restructure)
+-- ============================================================
+-- One object carries the whole event: the encounter now holds the journey
+-- (booked → arrived → stage → checked out), its queue (department_id), and
+-- referral chain. The `visits` table is FROZEN LEGACY: rows were migrated
+-- into encounters; the table is kept only for archaeology and may be
+-- dropped once confirmed unneeded.
+
+alter table encounters add column if not exists department_id uuid references departments(id) on delete set null;
+alter table encounters add column if not exists scheduled_at timestamptz;
+alter table encounters add column if not exists arrived_at   timestamptz;
+alter table encounters add column if not exists finished_at  timestamptz;
+alter table encounters add column if not exists cancelled_at timestamptz;
+alter table encounters add column if not exists stage        text;
+alter table encounters add column if not exists reason       text;
+alter table encounters add column if not exists referred_from_encounter_id uuid references encounters(id) on delete set null;
+
+create index if not exists idx_encounters_queue on encounters(department_id, arrived_at) where finished_at is null and cancelled_at is null;
+create index if not exists idx_encounters_scheduled on encounters(scheduled_at) where scheduled_at is not null and arrived_at is null and cancelled_at is null;
+create index if not exists idx_encounters_assigned_active on encounters(assigned_to) where arrived_at is not null and finished_at is null and cancelled_at is null;
+
+-- One-time data migration from the legacy visits table (idempotent-ish:
+-- only fills encounters that have no journey data yet).
+do $$ begin
+  if exists (select 1 from information_schema.tables where table_name = 'visits') then
+    update encounters e set
+      department_id = v.department_id,
+      scheduled_at  = v.scheduled_at,
+      arrived_at    = v.arrived_at,
+      finished_at   = v.finished_at,
+      cancelled_at  = v.cancelled_at,
+      stage         = v.stage,
+      reason        = v.reason
+    from visits v
+    where v.encounter_id = e.id
+      and e.arrived_at is null and e.scheduled_at is null;
+
+    insert into encounters (patient_id, status, visibility, visible_to_roles, assigned_to, created_by,
+                            department_id, scheduled_at, arrived_at, finished_at, cancelled_at, stage, reason, created_at)
+    select v.patient_id, 'open', 'staff', '{}', v.assigned_to, v.created_by,
+           v.department_id, v.scheduled_at, v.arrived_at, v.finished_at, v.cancelled_at, v.stage, v.reason, v.created_at
+    from visits v
+    where v.encounter_id is null and v.cancelled_at is null
+      and not exists (
+        select 1 from encounters e2
+        where e2.patient_id = v.patient_id
+          and e2.arrived_at is not distinct from v.arrived_at
+          and e2.scheduled_at is not distinct from v.scheduled_at
+      );
+  end if;
+end $$;
+
+-- Check-in creates the encounter directly, so an upfront assignee is no
+-- longer required — the queue's inline Assign covers it.
+drop policy if exists "encounter_insert" on encounters;
+create policy "encounter_insert" on encounters for insert with check (
+  auth.uid() is not null and has_role_in(array['admin', 'physician', 'nurse', 'receptionist'])
+);

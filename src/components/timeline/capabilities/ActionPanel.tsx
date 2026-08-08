@@ -153,7 +153,7 @@ export function ActionPanel({
       } else {
         // Patient-facing department: the referral also queues the patient there
         if (patientDeptId) {
-          void createReferralVisit(patientId, patientDeptId, flowStages[0] ?? null)
+          void createReferralVisit(patientId, patientDeptId, flowStages[0] ?? null, encounterId)
         }
         // Refresh before dropping the in-flight UI so Send stays hidden (avoids second click gap)
         await loadActions()

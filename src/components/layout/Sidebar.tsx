@@ -16,8 +16,8 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
   const deptCounts = useDeptPendingCounts(myDepartments.map(d => d.slug))
 
   const NAV = [
-    { to: '/', label: 'Patients', icon: Users, end: true },
-    ...(hasFrontDesk ? [{ to: '/frontdesk', label: 'Front Desk', icon: ClipboardList, end: false }] : []),
+    ...(hasFrontDesk ? [{ to: '/', label: 'Today', icon: ClipboardList, end: true }] : []),
+    { to: '/patients', label: 'Patients', icon: Users, end: false },
     { to: '/settings', label: 'Settings', icon: Settings, end: false },
   ]
   const { theme, toggle } = useThemeStore()
@@ -235,8 +235,8 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
 
       {/* ── Mobile bottom nav (< md) ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-white/10 flex items-center justify-around h-14 px-2 pb-safe overflow-x-auto no-scrollbar">
-        {/* Patients */}
-        {!isDeptOnly && (
+        {/* Today — the app opens on the day */}
+        {!isDeptOnly && hasFrontDesk && (
           <NavLink
             to="/"
             end
@@ -249,17 +249,17 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           >
             {({ isActive }) => (
               <>
-                <Users className={cn('h-5 w-5', isActive && 'text-blue-400')} />
-                <span className="text-xs font-medium">Patients</span>
+                <ClipboardList className={cn('h-5 w-5', isActive && 'text-blue-400')} />
+                <span className="text-xs font-medium">Today</span>
               </>
             )}
           </NavLink>
         )}
 
-        {/* Front Desk */}
-        {!isDeptOnly && hasFrontDesk && (
+        {/* Patients — the registry */}
+        {!isDeptOnly && (
           <NavLink
-            to="/frontdesk"
+            to="/patients"
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
@@ -269,8 +269,8 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           >
             {({ isActive }) => (
               <>
-                <ClipboardList className={cn('h-5 w-5', isActive && 'text-blue-400')} />
-                <span className="text-xs font-medium">Desk</span>
+                <Users className={cn('h-5 w-5', isActive && 'text-blue-400')} />
+                <span className="text-xs font-medium">Patients</span>
               </>
             )}
           </NavLink>

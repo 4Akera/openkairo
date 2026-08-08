@@ -317,42 +317,30 @@ export interface Encounter {
   created_at: string
   updated_at: string
   closed_at: string | null
+  // ── The journey lives on the encounter (ground-up restructure) ──
+  // scheduled_at set = booked · arrived_at set = in queue ·
+  // finished_at set = checked out · department_id = which queue
+  department_id?: string | null
+  scheduled_at?: string | null
+  arrived_at?: string | null
+  finished_at?: string | null
+  cancelled_at?: string | null
+  stage?: string | null
+  reason?: string | null
+  referred_from_encounter_id?: string | null
   created_profile?: { full_name: string } | null
   assigned_profile?: { full_name: string } | null
 }
 
 /**
- * Logistics record of one patient passage through the facility; the
- * encounter stays the clinical record. Timestamps are the backbone:
- * scheduled_at set = booked, arrived_at set = in queue, finished_at set =
- * checked out. `stage` is free-form, validated against the org's
- * flow_stages setting (empty list = no stage tracking).
+ * A Visit is an Encounter seen from the journey side — same row, same id.
+ * The queue/logistics code reads encounters enriched with the patient and
+ * referral-origin joins.
  */
-export interface Visit {
-  id: string
-  patient_id: string
-  department_id: string | null
-  encounter_id: string | null
-  assigned_to: string | null
-  referred_from_visit_id: string | null
-  scheduled_at: string | null
-  arrived_at: string | null
-  finished_at: string | null
-  cancelled_at: string | null
-  stage: string | null
-  reason: string | null
-  created_by: string | null
-  created_at: string
-  updated_at: string
+export interface Visit extends Encounter {
   patients?: Patient | Patient[] | null
-  encounters?: VisitEncounterRef | VisitEncounterRef[] | null
-  /** Joined origin visit when this one was created by a referral */
+  /** Joined origin encounter when this one was created by a referral */
   referred_from?: VisitReferralRef | VisitReferralRef[] | null
-}
-
-export interface VisitEncounterRef {
-  id: string
-  status: 'open' | 'closed'
 }
 
 export interface VisitReferralRef {

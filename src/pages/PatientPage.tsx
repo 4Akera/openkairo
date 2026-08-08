@@ -5,9 +5,8 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSettingsStore as useBillingSettings } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
-import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate, Visit } from '../types'
+import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate } from '../types'
 import { fullName, formatDateTime, cn } from '../lib/utils'
-import { linkEncounterToActiveVisit } from '../lib/visits'
 import {
   Button,
   Badge,
@@ -39,7 +38,6 @@ export default function PatientPage() {
 
   const [patient, setPatient] = useState<Patient | null>(null)
   const [encounters, setEncounters] = useState<Encounter[]>([])
-  const [visits, setVisits] = useState<Visit[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
@@ -104,7 +102,7 @@ export default function PatientPage() {
     if (!patientId) return
     setLoading(true)
 
-    const [{ data: pt }, encRes, { data: tmpl }, { data: vts }] = await Promise.all([
+    const [{ data: pt }, encRes, { data: tmpl }] = await Promise.all([
       supabase.from('patients').select('*').eq('id', patientId).single(),
       supabase
         .from('encounters')
@@ -112,17 +110,9 @@ export default function PatientPage() {
         .eq('patient_id', patientId)
         .order('created_at', { ascending: false }),
       supabase.from('encounter_templates').select('*').order('is_universal', { ascending: false }),
-      supabase
-        .from('visits')
-        .select('*')
-        .eq('patient_id', patientId)
-        .is('cancelled_at', null)
-        .order('created_at', { ascending: false })
-        .limit(100),
     ])
 
     if (pt) setPatient(pt)
-    setVisits((vts ?? []) as Visit[])
 
     if (encRes.data) {
       // Batch-fetch creator + assigned-to names from profiles
@@ -304,10 +294,6 @@ export default function PatientPage() {
       await supabase.from('blocks').insert(blockRows)
     }
 
-    // Reflect clinical work starting in the front-desk queue (no-op if the
-    // patient isn't checked in today)
-    await linkEncounterToActiveVisit(patientId, newEncounterId)
-
     const canOpenNow = canNavigateEncounter(
       { visibility, assigned_to: assignedTo || null, created_by: user.id, visible_to_roles: visibleToRoles },
       user.id,
@@ -353,38 +339,14 @@ export default function PatientPage() {
     )
   }
 
-  // ── ONE journey: merge visits (logistics) and encounters (clinical) ──
-  // A visit row carries its encounter when linked; encounters without a
-  // visit stand alone; upcoming bookings float to the top.
-  type JourneyEntry = {
-    key: string
-    visit: Visit | null
-    encounter: Encounter | null
-    when: string
-  }
-  const linkedEncIds = new Set(visits.map(v => v.encounter_id).filter(Boolean))
-  const upcoming: JourneyEntry[] = visits
-    .filter(v => v.scheduled_at && !v.arrived_at && !v.finished_at)
-    .map(v => ({
-      key: `v-${v.id}`,
-      visit: v,
-      encounter: null,
-      when: v.scheduled_at!,
-    }))
-    .sort((a, b) => a.when.localeCompare(b.when))
-  const history: JourneyEntry[] = [
-    ...visits
-      .filter(v => v.arrived_at || v.finished_at)
-      .map(v => ({
-        key: `v-${v.id}`,
-        visit: v,
-        encounter: encounters.find(e => e.id === v.encounter_id) ?? null,
-        when: v.arrived_at ?? v.created_at,
-      })),
-    ...encounters
-      .filter(e => !linkedEncIds.has(e.id))
-      .map(e => ({ key: `e-${e.id}`, visit: null, encounter: e, when: e.created_at })),
-  ].sort((a, b) => b.when.localeCompare(a.when))
+  // ── ONE journey: the encounter carries clinical AND logistics ──
+  const live = encounters.filter(e => !e.cancelled_at)
+  const upcoming = live
+    .filter(e => e.scheduled_at && !e.arrived_at && !e.finished_at)
+    .sort((a, b) => a.scheduled_at!.localeCompare(b.scheduled_at!))
+  const history = live
+    .filter(e => !upcoming.includes(e))
+    .sort((a, b) => (b.arrived_at ?? b.created_at).localeCompare(a.arrived_at ?? a.created_at))
 
   return (
     <div className="h-full flex flex-col">
@@ -514,13 +476,13 @@ export default function PatientPage() {
                         Upcoming ({upcoming.length})
                       </p>
                       <div className="space-y-2">
-                        {upcoming.map(entry => (
-                          <div key={entry.key} className="rounded-lg border border-dashed px-3.5 py-2.5 flex items-center gap-2.5">
+                        {upcoming.map(enc => (
+                          <div key={enc.id} className="rounded-lg border border-dashed px-3.5 py-2.5 flex items-center gap-2.5">
                             <CalendarClock className="h-4 w-4 text-primary/70 shrink-0" />
                             <div className="flex-1 min-w-0 text-sm">
-                              Booked for <span className="font-medium">{formatDateTime(entry.visit!.scheduled_at!)}</span>
-                              {entry.visit!.reason && (
-                                <span className="text-muted-foreground"> · {entry.visit!.reason}</span>
+                              Booked for <span className="font-medium">{formatDateTime(enc.scheduled_at!)}</span>
+                              {enc.reason && (
+                                <span className="text-muted-foreground"> · {enc.reason}</span>
                               )}
                             </div>
                           </div>
@@ -536,32 +498,26 @@ export default function PatientPage() {
                         Visits ({history.length})
                       </p>
                       <div className="space-y-2.5">
-                        {history.map(entry => (
-                          <div key={entry.key}>
-                            {/* Logistics line — present when this was a real visit */}
-                            {entry.visit && (
+                        {history.map(enc => (
+                          <div key={enc.id}>
+                            {/* Journey line — present when the patient was actually here */}
+                            {enc.arrived_at && (
                               <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1.5 px-0.5">
                                 <Footprints className="h-3 w-3 shrink-0" />
-                                {entry.visit.arrived_at && <>Arrived {formatDateTime(entry.visit.arrived_at)}</>}
-                                {entry.visit.finished_at
-                                  ? <> · checked out {formatDateTime(entry.visit.finished_at)}</>
-                                  : entry.visit.stage ? <> · {entry.visit.stage}</> : null}
-                                {entry.visit.reason && <> · {entry.visit.reason}</>}
+                                Arrived {formatDateTime(enc.arrived_at)}
+                                {enc.finished_at
+                                  ? <> · checked out {formatDateTime(enc.finished_at)}</>
+                                  : enc.stage ? <> · {enc.stage}</> : null}
+                                {enc.reason && <> · {enc.reason}</>}
                               </p>
                             )}
-                            {entry.encounter ? (
-                              <EncounterCard
-                                encounter={entry.encounter}
-                                canNavigate={canNavigateEncounter(entry.encounter, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
-                                onNavigate={() => navigate(`/patients/${patientId}/encounters/${entry.encounter!.id}`)}
-                                isAdmin={isAdmin}
-                                onDelete={() => setEncToDelete(entry.encounter!)}
-                              />
-                            ) : entry.visit && (
-                              <div className="rounded-lg border px-3.5 py-2 text-xs text-muted-foreground">
-                                Visit without clinical documentation
-                              </div>
-                            )}
+                            <EncounterCard
+                              encounter={enc}
+                              canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
+                              onNavigate={() => navigate(`/patients/${patientId}/encounters/${enc.id}`)}
+                              isAdmin={isAdmin}
+                              onDelete={() => setEncToDelete(enc)}
+                            />
                           </div>
                         ))}
                       </div>

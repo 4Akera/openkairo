@@ -99,7 +99,7 @@ export default function FrontDeskPage() {
     weekAgo.setDate(weekAgo.getDate() - 6)
     weekAgo.setHours(0, 0, 0, 0)
     supabase
-      .from('visits')
+      .from('encounters')
       .select('arrived_at, finished_at')
       .gte('finished_at', weekAgo.toISOString())
       .not('arrived_at', 'is', null)

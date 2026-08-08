@@ -30,6 +30,24 @@ When working autonomously (e.g. via /loop), follow this contract:
 
 ## Backlog (edit freely — user curates this list)
 
+### Ground-up restructure (user-approved 2026-08-08): ENCOUNTER IS THE EVENT
+The encounter absorbs the visit: one object carries the clinical record AND
+the journey (scheduled/arrived/stage/finished, department queue, referral).
+The visits table is frozen legacy after data migration. Then the app opens
+on Today (Front Desk as home).
+
+- [x] Phase A: schema — encounters gain department_id, scheduled_at,
+      arrived_at, finished_at, cancelled_at, stage, reason,
+      referred_from_encounter_id; migrate visits rows in; relax
+      encounter_insert (no upfront assignee needed); freeze visits table.
+      (2026-08-08 — applied to remote; 4 encounters carry journeys)
+- [x] Phase B: port the journey code (lib/visits, queue, strip, checkout,
+      check-in, patient page, toasts) to encounters; queue rows ARE
+      encounters — "Start encounter" becomes plain Open. (2026-08-08)
+- [x] Phase C: Today is home — index route = Front Desk; registry moves to
+      /patients; sidebar order Today · Patients · … (Cashier queue later).
+      (2026-08-08)
+
 ### Simple power pass (highest priority)
 Simplify the endings and beginnings; add power through AI and closing the
 result loop. Judged against: one journey, no new concepts.

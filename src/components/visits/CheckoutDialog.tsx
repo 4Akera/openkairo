@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { visitPatient, visitEncounter, finishVisit } from '../../lib/visits'
+import { visitPatient, finishVisit } from '../../lib/visits'
 import type { Visit } from '../../types'
 import { fullName } from '../../lib/utils'
 import {
@@ -37,7 +37,6 @@ export function CheckoutDialog({
     let cancelled = false
     setLoading(true)
     const patient = visitPatient(visit)
-    const enc = visitEncounter(visit)
     Promise.all([
       patient
         ? supabase
@@ -46,13 +45,11 @@ export function CheckoutDialog({
             .eq('patient_id', patient.id)
             .in('status', ['pending', 'pending_approval', 'invoiced'])
         : Promise.resolve({ data: [] }),
-      enc
-        ? supabase
-            .from('block_actions')
-            .select('id, action_type, status')
-            .eq('encounter_id', enc.id)
-            .not('status', 'in', '("completed","cancelled")')
-        : Promise.resolve({ data: [] }),
+      supabase
+        .from('block_actions')
+        .select('id, action_type, status')
+        .eq('encounter_id', visit.id)
+        .not('status', 'in', '("completed","cancelled")'),
     ]).then(([chargesRes, ordersRes]) => {
       if (cancelled) return
       setPendingCharges((chargesRes.data ?? []) as ChargeRow[])

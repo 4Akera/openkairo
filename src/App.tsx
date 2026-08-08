@@ -30,9 +30,11 @@ function PageFallback() {
 function DeptAwareIndex() {
   const { myDepartments, permissions } = useAuthStore()
   const isDeptOnly = myDepartments.length > 0 && permissions.length === 0
+  // The app opens on the day: Today (Front Desk) is home; dept-only users
+  // land in their own workspace; the registry lives at /patients.
   return isDeptOnly
     ? <Navigate to={`/dept/${myDepartments[0].slug}`} replace />
-    : <DashboardPage />
+    : <FrontDeskPage />
 }
 
 /** Legacy /portal URL → the user's first department workspace */
@@ -102,8 +104,9 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route index element={<DeptAwareIndex />} />
               <Route path="portal" element={<PortalRedirect />} />
-              <Route path="frontdesk" element={<FrontDeskPage />} />
+              <Route path="frontdesk" element={<Navigate to="/" replace />} />
               <Route path="dept/:slug" element={<DepartmentPage />} />
+              <Route path="patients" element={<DashboardPage />} />
               <Route path="patients/:patientId" element={<PatientPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="billing" element={<BillingPage />} />

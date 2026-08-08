@@ -36,7 +36,7 @@ export function useVisitQueue(dateKey?: string) {
     load()
     const channel = supabase
       .channel('visit-queue')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, () => { void load() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'encounters' }, () => { void load() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [load])
