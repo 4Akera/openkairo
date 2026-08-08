@@ -1069,3 +1069,43 @@ deleted again), Cardiology expand = Members only, Laboratory expand =
 Services + Members, Advanced disclosure shows slug `card` + capability
 states. No console errors. Parallel session's billing WIP untouched and
 excluded from the commit.
+
+## 2026-08-08 — Iteration 50: sub-table RLS derives from the parent block (staged)
+
+**Item:** Privacy pass step 2 — the wall stopped at the blocks table:
+block_entries / block_attachments / block_acknowledgments / block_actions
+and the block-media bucket were gated only by block.add, so any clinical
+staff could read a private encounter's time-series values, attachment
+metadata, and files via the API directly.
+
+**What:** Each sub-table policy now also requires
+`exists (select 1 from blocks b where b.id = block_id)` — the subquery
+runs under blocks RLS for the querying user, so the entire wall (encounter
+visibility, instance visible_to_roles, dept arm, admin) is inherited with
+zero restatement. block_actions keeps its department arm
+parent-INDEPENDENT by design: the fulfilling department's queue reads
+block_actions directly and a private encounter's order must still reach
+the lab (dept staff hold no block.add; verified the work queue renders
+from the denormalized action row). block-media select now requires a
+visible block_attachments row pointing at the object (subquery inherits
+the derivation chain); the owner arm preserves the upload-then-link gap;
+insert/update/delete unchanged. New index block_attachments(storage_path)
+backs the object-name lookup. Pure narrowing: no legitimate reader loses
+access (dept flows never touched these tables; verified entries/
+attachments writes already demanded block.add).
+
+**Charter gate:** STAGED in schema.sql only (commit 6e37c79); nothing
+applied to the remote. This one is semantics-changing (narrowing), so it
+explicitly awaits user approval before any apply.
+
+**Checks:** npm test 204/204 (co-session's new tests included), tsc
+--build reports 3 transient TS6133 unused-var errors in
+src/pages/settings/DepartmentsSection.tsx — that file is the PARALLEL
+session's uncommitted consults WIP, not part of this changeset (this
+iteration touches supabase/schema.sql only; my commit is scoped to it).
+No browser verification: nothing is applied remotely, so there is nothing
+observable.
+
+**Next in the pass:** step 3 (remove per-block visible_to_roles, UI
+first) touches Timeline.tsx/BlockWrapper.tsx — both currently dirty from
+the co-session's consult work; re-check the tree before starting it.

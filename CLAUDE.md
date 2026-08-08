@@ -48,10 +48,15 @@ surfaces. Sequence agreed with user:
       creator being locked out of the page for private encounters they
       registered. SCHEMA STAGED — remote apply awaits user approval.
       (2026-08-08)
-- [ ] Sub-table RLS hole: block_entries / block_attachments / block_acks /
-      block-media storage are gated only by block.add — private-encounter
-      payloads readable via direct API. Policies must derive from the
-      parent block → encounter. SCHEMA — stage + ask user.
+- [x] Sub-table RLS hole: block_entries / block_attachments / block_acks /
+      block-media storage were gated only by block.add — private-encounter
+      payloads readable via direct API. Now they demand a VISIBLE parent
+      block row (exists() reuses blocks RLS — the wall applies with zero
+      restatement); block_actions keeps its dept arm parent-independent so
+      private-encounter orders still reach the lab; block-media download
+      needs a visible attachment row (owner arm covers upload-then-link) +
+      storage_path index. (2026-08-08 — STAGED in schema.sql; remote apply
+      awaits user approval)
 - [ ] Remove per-block visible_to_roles (UI first: role picker leaves the
       block menu, default_visible_to_roles leaves Settings; columns stay
       dormant). Mask + encounter visibility cover the need; kills silent
