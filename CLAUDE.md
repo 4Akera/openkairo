@@ -61,6 +61,40 @@ surfaces. Sequence agreed with user:
       with a logged reason) as the power follow-up. Ask user before
       building this one.
 
+### Departments are the unit (user-approved 2026-08-08): capability flavors
+One departments table is the whole org model — a department composes
+capabilities: clinic queue (can_receive_patients → lane on Today), members
+(department_members), order fulfilment scoped by its service catalogue
+(department_block_types), consults (= an order whose entry block is
+Consultation), and — schema-gated — a ward. The ENTITY unifies; the
+SURFACES stay specialized: Today = patients, work view = orders, Wards
+page = census. Department pages must never become patient surfaces again.
+
+- [ ] Settings merge: Queues/Departments split → one "Departments" section;
+      create = name + kind choice (Clinic / Order department) presetting
+      flags; raw capability toggles behind an Advanced disclosure; rows
+      self-describe via a derived summary ("Clinic · receives consults",
+      "Fulfils orders: 14 services"). Net concepts −1.
+- [ ] Consults as orders (zero schema): "Receives consults" on a clinic =
+      can_receive_orders on + a Consultation service (order block =
+      question; entry block = existing Consultation block). Work-view
+      consult rows OPEN THE ENCOUNTER (no entry-form modal); writing the
+      Consultation block there completes the order (result_block_id
+      linkage). Sidebar badge is the consult inbox; completion toast reads
+      "consult answered". Prereq: specialty physicians are
+      department_members of their own row. Refer stays the sibling verb
+      (patient moves, new encounter) — present them as a pair.
+- [ ] Wards (SCHEMA — stage + ask): ward = department flavor with an
+      explicit kind discriminator (never inferred from absent
+      capabilities); encounters gain ward_id / admitted_at / bed text.
+      Admission is a PHASE of the same encounter — no separate inpatient
+      record. Wards census page (open admitted encounters grouped by ward,
+      "day n" counts); Admit action on the encounter; "Finish visit" reads
+      "Discharge" when admitted; Today queues and carried-over EXCLUDE
+      admitted encounters. Beds stay free text — no beds table, no bed
+      states. Creating the first ward IS the feature toggle — no settings
+      flag.
+
 ### Ground-up restructure (user-approved 2026-08-08): ENCOUNTER IS THE EVENT
 The encounter absorbs the visit: one object carries the clinical record AND
 the journey (scheduled/arrived/stage/finished, department queue, referral).

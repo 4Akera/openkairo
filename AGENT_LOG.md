@@ -973,3 +973,22 @@ console 403s traced to pre-existing noise, no Supabase mutation fired.
 
 **Next in the pass:** sub-table RLS hole (block_entries/attachments/acks +
 block-media storage ignore the encounter wall) — SCHEMA, stage + ask.
+
+## 2026-08-08 — Iteration 50: department-as-unit direction agreed (docs)
+
+**Why:** Live design session with the user on wards + intra-visit
+consults. User's call: don't bolt on new entities — the department IS the
+unit, composing capabilities (clinic queue, members, order fulfilment
+scoped by catalogue, consults, ward). Verdict written into the backlog as
+"Departments are the unit": Settings merge → consults-as-orders (zero
+schema) → wards (schema-gated), in that order. Guardrail recorded: unify
+the entity, not the surfaces.
+
+**Found in tree:** uncommitted, unlogged billing extraction WIP
+(lib/billing.ts + tests, ServiceItemPicker.tsx, slimmed EncounterBill/
+billingStore) — presumably an interrupted parallel iteration. Whole tree
+is green with it (tsc clean, 193/193 tests, up from 180). Leaving it in
+the working tree, excluding it from my commits; whoever owns it should
+finish + log it.
+
+**Docs only** — no code this iteration.
