@@ -910,6 +910,22 @@ as $$
   )
 $$;
 
+-- ONE encounter-access predicate. Every policy/RPC that gates on "can this
+-- user see this encounter" calls this — never restate the visibility logic.
+-- Client mirror: src/lib/encounterAccess.ts (keep the two in step).
+-- Creator access is intentionally NOT here: only the SELECT policy adds it
+-- (a receptionist who registered a private encounter sees it in lists but
+-- gains no update/block access).
+create or replace function can_access_encounter(e encounters)
+returns boolean language sql stable
+set search_path = public
+as $$
+  select e.visibility = 'staff'
+      or e.assigned_to = auth.uid()
+      or has_role_in(array['admin'])
+      or (e.visibility = 'restricted' and has_role_in(e.visible_to_roles))
+$$;
+
 -- Prevent staff from inserting block types their role is not allowed to add
 -- (block_definitions.visible_to_roles). Timeline inserts use this; department
 -- portal inserts set department_id and are exempt so lab/radiology/pharmacy
@@ -1186,14 +1202,8 @@ create policy "admin_mutate_patient_fields" on patient_field_definitions for all
 -- private encounter for a physician must still see it in lists.
 create policy "encounter_select" on encounters for select using (
   auth.uid() is not null and (
-    visibility = 'staff'
-    or assigned_to = auth.uid()
+    can_access_encounter(encounters)
     or created_by = auth.uid()
-    or has_role_in(array['admin'])
-    or (visibility = 'restricted' and (
-      assigned_to = auth.uid()
-      or has_role_in(visible_to_roles)
-    ))
   )
 );
 
@@ -1218,15 +1228,7 @@ create policy "encounter_update" on encounters for update
   using (
     auth.uid() is not null
     and (has_permission('block.add') or has_role_in(array['admin']))
-    and (
-      visibility = 'staff'
-      or assigned_to = auth.uid()
-      or has_role_in(array['admin'])
-      or (visibility = 'restricted' and (
-        assigned_to = auth.uid()
-        or has_role_in(visible_to_roles)
-      ))
-    )
+    and can_access_encounter(encounters)
   )
   with check (true);
 
@@ -1259,15 +1261,7 @@ create policy "block_staff_access" on blocks for all using (
         blocks.encounter_id is null
         or exists (
           select 1 from encounters e where e.id = blocks.encounter_id
-          and (
-            e.visibility = 'staff'
-            or e.assigned_to = auth.uid()
-            or has_role_in(array['admin'])
-            or (e.visibility = 'restricted' and (
-              e.assigned_to = auth.uid()
-              or has_role_in(e.visible_to_roles)
-            ))
-          )
+          and can_access_encounter(e)
         )
       )
     )
@@ -1720,7 +1714,7 @@ returns void language plpgsql security definer
 set search_path = public
 as $$
 declare
-  v_enc record;
+  v_enc encounters;
 begin
   select * into v_enc from encounters where id = p_encounter_id;
   if not found then
@@ -1730,14 +1724,7 @@ begin
   -- Authorise: caller must be admin, or have block.add and visibility access
   if not (
     has_role_in(array['admin'])
-    or (
-      has_permission('block.add')
-      and (
-        v_enc.visibility = 'staff'
-        or v_enc.assigned_to = auth.uid()
-        or (v_enc.visibility = 'restricted' and has_role_in(v_enc.visible_to_roles))
-      )
-    )
+    or (has_permission('block.add') and can_access_encounter(v_enc))
   ) then
     raise exception 'Not authorised to reassign this encounter';
   end if;
@@ -2117,13 +2104,7 @@ create policy "audit_log_select"
       where e.id = encounter_id
       and (
         has_permission('encounter.view_all')
-        or e.visibility = 'staff'
-        or e.assigned_to = auth.uid()
-        or has_role_in(array['admin'])
-        or (e.visibility = 'restricted' and (
-          e.assigned_to = auth.uid()
-          or has_role_in(e.visible_to_roles)
-        ))
+        or can_access_encounter(e)
       )
     )
   );

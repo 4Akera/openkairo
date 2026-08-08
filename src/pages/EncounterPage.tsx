@@ -7,6 +7,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, formatDayTime, formatMinutes, cn } from '../lib/utils'
 import { updateVisit } from '../lib/visits'
+import { canAccessEncounter } from '../lib/encounterAccess'
 import { useNow } from '../hooks/useNow'
 import { EncounterBill } from '../components/billing/EncounterBill'
 import { CheckoutDialog } from '../components/visits/CheckoutDialog'
@@ -406,17 +407,12 @@ export default function EncounterPage() {
   // Title + physician are edited straight in the header while the encounter is open
   const canEditInline = canManage && encounter.status === 'open'
 
-  // View access: must have block.add permission; private/restricted are further gated
-  const canView = (() => {
-    if (!can('block.add')) return false
-    if (encounter.visibility === 'staff') return true
-    if (hasRole('admin')) return true
-    if (isAssigned) return true
-    if (encounter.visibility === 'restricted') {
-      return encounter.visible_to_roles?.some(r => roleSlugs.includes(r)) ?? false
-    }
-    return false
-  })()
+  // View access — the one shared predicate (mirrors encounter_select RLS)
+  const canView = canAccessEncounter(encounter, {
+    userId: user?.id,
+    roleSlugs,
+    canAddBlocks: can('block.add'),
+  })
 
   if (!canView) {
     return (

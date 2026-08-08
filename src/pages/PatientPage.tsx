@@ -7,6 +7,7 @@ import { useSettingsStore as useBillingSettings } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
 import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate } from '../types'
 import { fullName, formatDateTime, formatDayTime, formatMinutes, minutesBetween, cn } from '../lib/utils'
+import { canAccessEncounter } from '../lib/encounterAccess'
 import {
   Button,
   Badge,
@@ -294,12 +295,9 @@ export default function PatientPage() {
       await supabase.from('blocks').insert(blockRows)
     }
 
-    const canOpenNow = canNavigateEncounter(
+    const canOpenNow = canAccessEncounter(
       { visibility, assigned_to: assignedTo || null, created_by: user.id, visible_to_roles: visibleToRoles },
-      user.id,
-      roleSlugs,
-      hasRole,
-      can as (p: string) => boolean,
+      { userId: user.id, roleSlugs, canAddBlocks: can('block.add') },
     )
 
     if (canOpenNow) {
@@ -520,7 +518,7 @@ export default function PatientPage() {
                             )}
                             <EncounterCard
                               encounter={enc}
-                              canNavigate={canNavigateEncounter(enc, user?.id, roleSlugs, hasRole, can as (p: string) => boolean)}
+                              canNavigate={canAccessEncounter(enc, { userId: user?.id, roleSlugs, canAddBlocks: can('block.add') })}
                               onNavigate={() => navigate(`/patients/${patientId}/encounters/${enc.id}`)}
                               isAdmin={isAdmin}
                               onDelete={() => setEncToDelete(enc)}
@@ -1029,29 +1027,6 @@ export default function PatientPage() {
       </Dialog>
     </div>
   )
-}
-
-function canNavigateEncounter(
-  enc: { visibility: string; assigned_to: string | null; created_by: string | null; visible_to_roles?: string[] },
-  userId: string | undefined,
-  roleSlugs: string[],
-  hasRole: (slug: string) => boolean,
-  canPerm?: (p: string) => boolean,
-): boolean {
-  if (canPerm && !canPerm('block.add')) return false
-  // Staff-visibility encounters are open to all clinical staff
-  if (enc.visibility === 'staff') return true
-  // Admin can always enter any encounter
-  if (hasRole('admin')) return true
-  // Only the assigned physician has access to private/restricted encounters
-  if (enc.assigned_to && enc.assigned_to === userId) return true
-  // The creator retains access (mirrors the encounter_select RLS policy)
-  if (enc.created_by && enc.created_by === userId) return true
-  // Restricted: role-list check (but only if also assigned — handled above — or in the role list)
-  if (enc.visibility === 'restricted') {
-    return enc.visible_to_roles?.some(r => roleSlugs.includes(r)) ?? false
-  }
-  return false
 }
 
 function EncounterCard({
