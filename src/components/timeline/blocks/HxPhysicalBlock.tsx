@@ -526,7 +526,7 @@ export function HxPhysicalEdit({ block, onSave, onCancel }: EditProps) {
             <Label>Chief Complaint</Label>
             <input
               type="text"
-              placeholder="Primary reason for visit…"
+              placeholder="Primary reason for the encounter…"
               value={form.chief_complaint}
               onChange={e => setForm(f => ({ ...f, chief_complaint: e.target.value }))}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

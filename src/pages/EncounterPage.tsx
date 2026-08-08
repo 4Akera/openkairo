@@ -48,8 +48,8 @@ export default function EncounterPage() {
   const [encounter, setEncounter] = useState<Encounter | null>(null)
   const [loading, setLoading] = useState(true)
   const [closing, setClosing] = useState(false)
-  // One ending: the encounter row itself carries the journey, so "Finish
-  // visit" chains close straight into checkout when the patient is here
+  // One ending: the encounter row itself carries the journey, so Finish
+  // chains close straight into the charges/orders check when the patient is here
   const [checkoutVisit, setCheckoutVisit] = useState<Visit | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [accessRevoked, setAccessRevoked] = useState(false)
@@ -247,7 +247,7 @@ export default function EncounterPage() {
       await fetchData()
       setConfirmClose(false)
       void timelineRef.current?.refreshAuditLog()
-      // Finish visit: flow straight into checkout when the patient is here
+      // Finish: flow straight into the charges/orders check when the patient is here
       if (encounter && encounter.arrived_at && !encounter.finished_at) {
         setCheckoutVisit({ ...encounter, patients: patient })
       }
@@ -781,21 +781,16 @@ export default function EncounterPage() {
                 className="text-xs h-9 sm:h-7 gap-1 text-amber-600 border-amber-200 hover:bg-amber-50 px-3 sm:px-2.5"
               >
                 <CheckCircle2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">
-                  {inClinic ? 'Finish visit' : 'Close Encounter'}
-                </span>
-                <span className="sm:hidden">
-                  {inClinic ? 'Finish' : 'Close'}
-                </span>
+                Finish
               </Button>
             )}
           </div>
         </header>
 
-        {/* Visit journey — arrived → stage → checkout, advanceable in place */}
+        {/* Journey — arrived → stage → done, advanceable in place */}
         <VisitJourneyStrip encounter={encounter} patient={patient} onChanged={() => void fetchData()} />
 
-        {/* Finish visit: checkout chained after encounter close */}
+        {/* Finish: charges/orders check chained after encounter close */}
         <CheckoutDialog visit={checkoutVisit} onClose={() => setCheckoutVisit(null)} />
 
         {/* Mobile tab bar */}
@@ -893,15 +888,13 @@ export default function EncounterPage() {
       <Dialog open={confirmClose} onOpenChange={setConfirmClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {inClinic ? 'Finish visit?' : 'Close Encounter?'}
-            </DialogTitle>
+            <DialogTitle>Finish encounter?</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 max-h-[60vh] overflow-y-auto">
             <p className="text-sm text-muted-foreground">
               This will mark the encounter as closed. No new blocks can be added.
               The encounter will remain viewable.
-              {inClinic && ' Checkout follows right after.'}
+              {inClinic && ' A charges & orders check follows.'}
             </p>
 
             {requiredIncomplete.length > 0 && (
@@ -1039,7 +1032,7 @@ export default function EncounterPage() {
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               {closing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              {inClinic ? 'Finish visit' : 'Close Encounter'}
+              Finish
             </Button>
           </div>
         </DialogContent>

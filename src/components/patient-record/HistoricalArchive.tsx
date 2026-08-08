@@ -28,7 +28,7 @@ interface Props {
 type UiSection = 'hosp' | 'family_hx' | 'social_hx' | 'document'
 
 const ARCHIVE_SECTIONS: { key: UiSection; label: string }[] = [
-  { key: 'hosp',       label: 'Visit History' },
+  { key: 'hosp',       label: 'Encounters' },
   { key: 'family_hx',  label: 'Family Hx' },
   { key: 'social_hx',  label: 'Social Hx' },
   { key: 'document',   label: 'Documents' },
@@ -330,7 +330,7 @@ export default function HistoricalArchive({ patientId, encounterId }: Props) {
             <DialogTitle>
               {editEntry ? 'Edit' : 'Add'}{' '}
               {formSection === 'hosp'
-                ? 'Visit'
+                ? 'Past Encounter'
                 : ARCHIVE_SECTIONS.find(s => s.key === formSection)?.label.replace(/s$/, '')}
             </DialogTitle>
           </DialogHeader>
@@ -383,7 +383,7 @@ function EntryRow({
 
   switch (entry.category) {
     case 'visit':
-      title = c.reason ?? 'Visit'
+      title = c.reason ?? 'Past encounter'
       detail = [
         c.date ? formatDateWithPrecision(c.date, (c.date_precision as DatePrecision | undefined) ?? 'full') : null,
         c.date_out ? `→ ${formatDateWithPrecision(c.date_out, (c.date_out_precision as DatePrecision | undefined) ?? 'full')}` : null,
@@ -499,9 +499,6 @@ function EncounterRow({
           <span className={cn('font-semibold leading-tight truncate', isCurrent ? 'text-primary' : '')}>
             {encounter.title ?? `#${encounter.id.slice(0, 8).toUpperCase()}`}
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 font-medium shrink-0">
-            Encounter
-          </span>
           {isCurrent && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0 font-medium">
               Current
@@ -547,7 +544,7 @@ function ArchiveForm({
       return (
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label>Visit Reason <span className="text-destructive">*</span></Label>
+            <Label>Reason <span className="text-destructive">*</span></Label>
             <Input
               placeholder="e.g. Pneumonia admission, Appendectomy, Follow-up clinic…"
               {...f('reason')}
@@ -562,7 +559,7 @@ function ArchiveForm({
                 onChange('date', iso ?? '')
                 onChange('date_precision', prec ?? '')
               }}
-              placeholder="Select visit date"
+              placeholder="Select date"
             />
           </div>
           <div className="space-y-1">

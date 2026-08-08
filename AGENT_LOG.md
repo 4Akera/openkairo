@@ -774,3 +774,23 @@ existing dayOffset state (no new state concept).
 **Verification:** tsc clean, eslint clean, 165/165 tests, browser: picked
 Aug 12 → view switched ("No visits booked for wed, aug 12", label tinted,
 walk-in hidden), Today chip reset back to the live queue.
+
+## 2026-08-08 — Iteration 46: one noun on the encounter page (user-driven)
+
+**Item:** User: "still the encounters page have visit label making
+confusion" — the page mixed "visit" and "encounter" for the same event.
+
+**What:** One vocabulary on the encounter page. Header/confirm button
+"Finish visit"/"Close Encounter" → one word, "Finish"; confirm dialog
+titled "Finish encounter?" ("Checkout follows" → "A charges & orders
+check follows"). CheckoutDialog (shared with queue Done) titled "Finish",
+body de-visited. Right-rail "Visit History" section → "Encounters"
+(redundant per-row "Encounter" chip dropped; manual archive entries read
+"Past Encounter" in the add/edit form). H&P chief-complaint placeholder
+"reason for visit" → "reason for the encounter". DB category and internal
+identifiers untouched.
+
+**Verification:** tsc clean, eslint clean, 165/165 tests, browser as
+demo Physician + Admin: journey strip Done → "Finish" dialog; Admin
+header shows single "Finish" → "Finish encounter?" dialog (cancelled, not
+closed); right rail reads "Encounters".

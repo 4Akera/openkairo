@@ -1,7 +1,7 @@
 /**
- * CheckoutDialog — end a visit, with a heads-up (never a block) on
- * unsettled charges and in-flight department orders. Shared by the queue
- * rows and the encounter page's journey strip.
+ * CheckoutDialog — the Finish step: end the patient's day, with a heads-up
+ * (never a block) on unsettled charges and in-flight department orders.
+ * Shared by the queue rows and the encounter page's journey strip.
  */
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
@@ -72,7 +72,7 @@ export function CheckoutDialog({
     <Dialog open={!!visit} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Finish visit</DialogTitle>
+          <DialogTitle>Finish</DialogTitle>
           <DialogDescription>{pt ? fullName(pt, nameFormat) : ''}</DialogDescription>
         </DialogHeader>
         {loading ? (
@@ -115,7 +115,7 @@ export function CheckoutDialog({
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  You can still finish the visit — this is only a heads-up.
+                  You can still finish — this is only a heads-up.
                 </p>
               </div>
             )}
