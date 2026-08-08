@@ -1152,3 +1152,36 @@ ResultToasts) left untouched and uncommitted; committing only
 FrontDeskPage, BillingPage, Sidebar + docs. (AGENT_LOG iteration numbers
 collided across parallel sessions — 50/51 each appear twice; this entry
 takes 52 by append order.)
+
+## 2026-08-08 — Iteration 53: sidebar redesign — labels when there's room (user-directed)
+
+**What:** User asked to "rearrange and redesign sidebar to look very good."
+One Sidebar.tsx rewrite, no new concepts, no new state: at xl+ the rail
+expands to a labeled 224px sidebar (brand wordmark, search styled as a
+field with a ⌘K chip, a DEPARTMENTS section header, names with
+right-aligned count pills, avatar + name + role at the bottom); below xl
+it stays the 64px icon rail — same DOM, breakpoint classes only, so
+zoomed-in laptops (the app targets 150% zoom) keep the space-efficient
+rail and big monitors get legible names. Rearranged: Settings moved out
+of the top nav down next to the user cluster (day work — Today +
+departments — owns the top), sign-out demoted from a permanent red box
+to a ghost icon that only turns red on hover, mobile nav reordered so
+departments come before Settings. Both duplicated desktop NavLink blocks
+collapsed into one NavItem component.
+
+**Bug found & fixed:** desktop nav active states never actually worked —
+TooltipTrigger's asChild Slot joins className props with .join(' '),
+stringifying NavLink's function className into the DOM class attribute;
+only accidental bare tokens mid-string (flex, h-10 …) applied, and
+`relative` (quote-mangled) never did, so count badges anchored to the
+viewport (a stray "19" floated at the screen's top-right corner).
+NavItem now computes active via useMatch and passes a plain string.
+
+**Verification:** tsc --build clean, eslint clean, 204/204 tests.
+Browser: expanded mode (1280) — active pill + blue icon on Today, muted
+idle labels, pills 39/19, no tooltips at xl; rail mode (1100) — corner
+badges hug the icons, tooltip "Laboratory · 39 open"; light theme seam
+clean; mobile order Today · Search · depts · Settings. No console errors.
+
+**Shared tree:** parallel session's WIP (consults et al.) left untouched;
+committing only Sidebar.tsx + this log.
