@@ -15,6 +15,7 @@ import { fullName, cn, formatDateTime, calcAgeYears } from '../lib/utils'
 import { dayBoundsIso } from '../lib/visits'
 import { Loader2, CheckCircle2, X, Plus, Clock, History, ChevronLeft, ChevronRight, ChevronDown, Search, ExternalLink, BookOpen, DollarSign, Flame, XCircle, AlertCircle, UserPlus, Ban } from 'lucide-react'
 import { Button, ScrollArea, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, Separator, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui'
+import { SearchSelect } from '../components/ui/SearchSelect'
 import { DynamicBlockEdit, DynamicBlockView } from '../components/timeline/DynamicBlock'
 import { BLOCK_REGISTRY, orphanRegistryRenderKey, registryRenderKey } from '../components/timeline/BlockRegistry'
 import { getRecentPatientIds, pushRecentPatientId } from '../lib/recentItems'
@@ -2777,23 +2778,19 @@ export function DepartmentWork({ dept }: { dept: Department }) {
             {serviceItems.length > 0 && (
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Quick pick</Label>
-                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                  {serviceItems.slice(0, 10).map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => { setQuickChargeDesc(s.name); setQuickChargePrice(String(s.default_price)) }}
-                      className={cn(
-                        'text-xs px-2.5 py-1 rounded-lg border transition-colors',
-                        quickChargeDesc === s.name
-                          ? 'border-primary bg-primary/5 text-primary font-medium'
-                          : 'border-border text-muted-foreground hover:border-primary/30',
-                      )}
-                    >
-                      {s.name} — {currencySymbol}{s.default_price.toFixed(2)}
-                    </button>
-                  ))}
-                </div>
+                <SearchSelect
+                  items={serviceItems.map(s => ({
+                    value: s.id, label: s.name, hint: `${currencySymbol}${s.default_price.toFixed(2)}`,
+                  }))}
+                  value={serviceItems.find(s => s.name === quickChargeDesc)?.id ?? ''}
+                  onSelect={id => {
+                    const s = serviceItems.find(x => x.id === id)
+                    if (s) { setQuickChargeDesc(s.name); setQuickChargePrice(String(s.default_price)) }
+                  }}
+                  placeholder="Search the price list…"
+                  searchPlaceholder="Search the price list…"
+                  className="w-full"
+                />
               </div>
             )}
             <div className="space-y-1.5">

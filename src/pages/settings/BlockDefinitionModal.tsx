@@ -10,6 +10,7 @@ import {
   ScrollArea,
 } from '../../components/ui'
 import { cn, getDefinitionColors } from '../../lib/utils'
+import { SearchSelect } from '../../components/ui/SearchSelect'
 import { BlockDefinitionSpecialConfig } from '../../components/settings/BlockDefinitionSpecialConfig'
 import { BILLING_SETTINGS_UI_OPTIONS } from '../../components/settings/billing/BillingRulesEditors'
 import { ICON_OPTIONS, COLOR_OPTIONS, CAPABILITIES, FieldBuilder } from './blockFieldEditors'
@@ -519,16 +520,17 @@ export function BlockDefinitionModal({
                         <div className="space-y-2 pt-1">
                           <div className="space-y-1.5">
                             <p className="text-[10px] font-medium text-muted-foreground">Service Item</p>
-                            <select
+                            <SearchSelect
+                              items={(allServiceItems ?? []).map(s => ({
+                                value: s.id, label: s.name, hint: `${s.default_price.toFixed(2)} · ${s.code}`,
+                              }))}
                               value={form.service_item_id ?? ''}
-                              onChange={e => set({ service_item_id: e.target.value || null })}
-                              className="w-full h-8 text-xs rounded-lg border border-border bg-background px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                            >
-                              <option value="">None — no charge on block creation</option>
-                              {(allServiceItems ?? []).map((s) => (
-                                <option key={s.id} value={s.id}>{s.name} — {s.default_price.toFixed(2)} ({s.code})</option>
-                              ))}
-                            </select>
+                              onSelect={v => set({ service_item_id: v || null })}
+                              placeholder="None — no charge on block creation"
+                              clearLabel="None — no charge on block creation"
+                              searchPlaceholder="Search service items…"
+                              className="w-full rounded-lg"
+                            />
                           </div>
                           {form.service_item_id && (
                             <div className="space-y-1.5">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Loader2, Check, Layers, ShieldCheck } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Check, Layers, Search, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useBillingStore } from '../../stores/billingStore'
 import type { InsuranceProvider } from '../../types'
@@ -28,6 +28,7 @@ type ServiceItemRow = {
 
 export function ServiceItemsSection() {
   const [items, setItems] = useState<ServiceItemRow[]>([])
+  const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<{ id?: string; code: string; name: string; category: string; default_price: string; active: boolean } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -50,9 +51,19 @@ export function ServiceItemsSection() {
     return [...s].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
   }, [items])
 
+  // The fee schedule can run to hundreds of items — always searchable
+  const visibleItems = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return items
+    return items.filter(i =>
+      i.name.toLowerCase().includes(needle)
+      || i.code.toLowerCase().includes(needle)
+      || (i.category ?? '').toLowerCase().includes(needle))
+  }, [items, q])
+
   const groupedByCategory = useMemo(() => {
     const map = new Map<string, ServiceItemRow[]>()
-    for (const item of items) {
+    for (const item of visibleItems) {
       const raw = item.category?.trim()
       const key = raw && raw.length > 0 ? raw : SERVICE_ITEM_UNCATEGORIZED
       const list = map.get(key) ?? []
@@ -68,7 +79,7 @@ export function ServiceItemsSection() {
       return a.localeCompare(b, undefined, { sensitivity: 'base' })
     })
     return keys.map(category => ({ category, items: map.get(category)! }))
-  }, [items])
+  }, [visibleItems])
 
   const openNew = () => setEditing({ code: '', name: '', category: '', default_price: '', active: true })
   const openEdit = (item: ServiceItemRow) => setEditing({
@@ -121,6 +132,20 @@ export function ServiceItemsSection() {
         </p>
       ) : (
         <div className="space-y-5">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search name, code, or category…"
+              className="h-8 pl-8 text-sm"
+            />
+          </div>
+          {visibleItems.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg">
+              No items match “{q.trim()}”.
+            </p>
+          )}
           {groupedByCategory.map(({ category, items: sectionItems }) => (
             <div key={category} className="space-y-2">
               <div className="flex items-center gap-2 px-0.5">

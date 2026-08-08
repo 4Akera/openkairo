@@ -1185,3 +1185,39 @@ clean; mobile order Today · Search · depts · Settings. No console errors.
 
 **Shared tree:** parallel session's WIP (consults et al.) left untouched;
 committing only Sidebar.tsx + this log.
+
+## 2026-08-09 — Iteration 54: search bar on every long picker (user-directed)
+
+**What:** User rule: "There must be a list and search bar wherever a
+physician or service items are there as it may go so long." Audited every
+physician and service-item picker. Already searchable: ServiceItemPicker,
+EncounterPage + PatientPage physician pickers, DepartmentMembersPicker.
+Seven gaps fixed via ONE new primitive `ui/SearchSelect` (search input +
+filtered scrolling list, ≤50 rows rendered with a "keep typing" tail,
+Enter picks first match, Escape closes without closing a parent dialog):
+- VisitQueue "Assign" — was a bare Select of every physician
+- BlockDefinitionModal Service Item linkage — bare <select>
+- BillingRulesEditors — three bare service <select>s (lab panels,
+  radiology studies, custom rules)
+- BlockManualFeesPanel "Quick pick (catalogue)" — bare <select>
+- DepartmentWork + PatientPage Quick Charge — showed only the FIRST 10
+  items as chips, rest unreachable; now search the whole price list
+- Settings → Service Items — management list gained a name/code/category
+  search above the grouped view
+
+**Bug found & fixed while verifying:** position:fixed panels inside the
+Radix dialog anchored to the wrong corner — DialogContent's
+translate(-50%,-50%) makes it the containing block for fixed descendants.
+SearchSelect now walks up for transformed ancestors and subtracts their
+rect (panel + click-away backdrop); stays inline in the DOM because a
+portal would fight the dialog focus trap.
+
+**Verification:** tsc --build clean, eslint clean, 204/204 tests.
+Browser: queue Assign → searched "james" → assigned, row shows the name,
+persisted after reload; Settings price list filtered "blood" → Lab · 2;
+Quick Charge dialog picker anchored under its trigger, "x-ray" → 2 hits,
+pick filled description + 45.00. No console errors.
+
+**Shared tree:** parallel session's consult WIP untouched — staged only
+my two DepartmentWork hunks (git apply --cached) + seven wholly-mine
+files.

@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { BlockChargeRule, BlockDefinition } from '../../../types'
 import { Button } from '../../ui'
+import { SearchSelect, type SearchSelectItem } from '../../ui/SearchSelect'
 import { PANELS } from '../../timeline/blocks/labShared'
 import { RADIOLOGY_STUDIES } from '../../timeline/blocks/radiologyShared'
 
@@ -14,6 +15,15 @@ export type BillingRulesEditorProps = {
 
 function newRuleId() {
   return `rule_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+}
+
+/** Service items as searchable rows — these lists can get long. */
+function svcSelectItems(
+  allServiceItems?: { id: string; name: string; code: string; default_price: number }[],
+): SearchSelectItem[] {
+  return (allServiceItems ?? []).map(s => ({
+    value: s.id, label: s.name, hint: `${s.default_price.toFixed(2)} · ${s.code}`,
+  }))
 }
 
 function patchBillingRules(
@@ -195,18 +205,14 @@ export function LabPanelsBillingRulesEditor({ form, set, allServiceItems }: Bill
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6 border-l-2 border-muted">
                     <div>
                       <label className="text-[10px] font-medium text-muted-foreground">Service item</label>
-                      <select
+                      <SearchSelect
+                        items={svcSelectItems(allServiceItems)}
                         value={r.service_item_id}
-                        onChange={e => updatePanelRule(panel.id, { service_item_id: e.target.value })}
-                        className="mt-0.5 w-full h-8 text-xs rounded-md border border-border bg-background px-2"
-                      >
-                        <option value="">Select…</option>
-                        {(allServiceItems ?? []).map(s => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} — {s.default_price.toFixed(2)} ({s.code})
-                          </option>
-                        ))}
-                      </select>
+                        onSelect={v => updatePanelRule(panel.id, { service_item_id: v })}
+                        placeholder="Select…"
+                        searchPlaceholder="Search service items…"
+                        className="mt-0.5 w-full"
+                      />
                     </div>
                     <div>
                       <label className="text-[10px] font-medium text-muted-foreground">Quantity</label>
@@ -440,18 +446,14 @@ export function RadiologyStudiesBillingRulesEditor({ form, set, allServiceItems 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6 border-l-2 border-muted">
                     <div>
                       <label className="text-[10px] font-medium text-muted-foreground">Service item</label>
-                      <select
+                      <SearchSelect
+                        items={svcSelectItems(allServiceItems)}
                         value={r.service_item_id}
-                        onChange={e => updateStudyRule(study.id, { service_item_id: e.target.value })}
-                        className="mt-0.5 w-full h-8 text-xs rounded-md border border-border bg-background px-2"
-                      >
-                        <option value="">Select…</option>
-                        {(allServiceItems ?? []).map(s => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} — {s.default_price.toFixed(2)} ({s.code})
-                          </option>
-                        ))}
-                      </select>
+                        onSelect={v => updateStudyRule(study.id, { service_item_id: v })}
+                        placeholder="Select…"
+                        searchPlaceholder="Search service items…"
+                        className="mt-0.5 w-full"
+                      />
                     </div>
                     <div>
                       <label className="text-[10px] font-medium text-muted-foreground">Quantity</label>
@@ -544,18 +546,14 @@ function AddonRuleRow({
         </div>
         <div>
           <label className="text-[10px] font-medium text-muted-foreground">Service item</label>
-          <select
+          <SearchSelect
+            items={svcSelectItems(allServiceItems)}
             value={rule.service_item_id}
-            onChange={e => onChange({ service_item_id: e.target.value })}
-            className="mt-0.5 w-full h-8 text-xs rounded-md border border-border bg-background px-2"
-          >
-            <option value="">Select…</option>
-            {(allServiceItems ?? []).map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name} — {s.default_price.toFixed(2)} ({s.code})
-              </option>
-            ))}
-          </select>
+            onSelect={v => onChange({ service_item_id: v })}
+            placeholder="Select…"
+            searchPlaceholder="Search service items…"
+            className="mt-0.5 w-full"
+          />
         </div>
       </div>
       <div className="flex items-end justify-between gap-2">

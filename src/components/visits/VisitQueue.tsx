@@ -15,6 +15,7 @@ import {
   referralSourceLabel, dayBoundsIso,
 } from '../../lib/visits'
 import { CheckoutDialog } from './CheckoutDialog'
+import { SearchSelect } from '../ui/SearchSelect'
 import type { Visit } from '../../types'
 import { fullName, formatDateTime } from '../../lib/utils'
 import {
@@ -58,6 +59,11 @@ export function VisitQueue({
       setPhysicians((data ?? []) as { id: string; full_name: string }[])
     })
   }, [])
+
+  const physicianItems = useMemo(
+    () => physicians.map(p => ({ value: p.id, label: p.full_name })),
+    [physicians],
+  )
 
   const saveReason = (v: Visit) => {
     setReasonEditId(null)
@@ -182,16 +188,13 @@ export function VisitQueue({
 
         {/* Inline physician assignment — appears until someone is assigned */}
         {!v.finished_at && !v.assigned_to && physicians.length > 0 && (
-          <Select onValueChange={(id) => { void updateVisit(v.id, { assigned_to: id }) }}>
-            <SelectTrigger className="h-8 w-[110px] text-xs shrink-0 text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <UserPlus className="h-3 w-3" /> Assign
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {physicians.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SearchSelect
+            items={physicianItems}
+            onSelect={(id) => { if (id) void updateVisit(v.id, { assigned_to: id }) }}
+            placeholder={<span className="flex items-center gap-1"><UserPlus className="h-3 w-3" /> Assign</span>}
+            searchPlaceholder="Search physician…"
+            className="w-[110px] shrink-0 text-muted-foreground"
+          />
         )}
 
         {/* Stage selector (only when stages are configured and visit is in queue) */}

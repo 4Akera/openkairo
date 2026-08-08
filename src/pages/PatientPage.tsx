@@ -22,6 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '../components/ui'
+import { SearchSelect } from '../components/ui/SearchSelect'
 import {
   ArrowLeft, Plus, ChevronRight, Loader2, Activity, Clock,
   CheckCircle2, XCircle, LayoutTemplate, Lock, Users, Zap, ClipboardList, UserCircle,
@@ -876,23 +877,19 @@ export default function PatientPage() {
             {serviceItems.length > 0 && (
               <div className="space-y-1.5">
                 <Label>Quick pick</Label>
-                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                  {serviceItems.filter(s => s.active).slice(0, 10).map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => { setQuickChargeDesc(s.name); setQuickChargePrice(String(s.default_price)) }}
-                      className={cn(
-                        'text-xs px-2.5 py-1 rounded-lg border transition-colors',
-                        quickChargeDesc === s.name
-                          ? 'border-primary bg-primary/5 text-primary font-medium'
-                          : 'border-border text-muted-foreground hover:border-primary/30',
-                      )}
-                    >
-                      {s.name} — {s.default_price.toFixed(2)}
-                    </button>
-                  ))}
-                </div>
+                <SearchSelect
+                  items={serviceItems.filter(s => s.active).map(s => ({
+                    value: s.id, label: s.name, hint: s.default_price.toFixed(2),
+                  }))}
+                  value={serviceItems.find(s => s.active && s.name === quickChargeDesc)?.id ?? ''}
+                  onSelect={id => {
+                    const s = serviceItems.find(x => x.id === id)
+                    if (s) { setQuickChargeDesc(s.name); setQuickChargePrice(String(s.default_price)) }
+                  }}
+                  placeholder="Search the price list…"
+                  searchPlaceholder="Search the price list…"
+                  className="w-full"
+                />
               </div>
             )}
             <div className="space-y-1.5">

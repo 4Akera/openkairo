@@ -3,6 +3,7 @@ import type { BlockDefinition, Charge } from '../../../types'
 import { useBillingStore } from '../../../stores/billingStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { Button, Input, Label } from '../../ui'
+import { SearchSelect } from '../../ui/SearchSelect'
 import { cn } from '../../../lib/utils'
 import {
   ChevronDown, ChevronRight, DollarSign, Loader2, Plus, Trash2, Ban,
@@ -74,6 +75,13 @@ export function BlockManualFeesPanel({
   const activeItems = useMemo(
     () => serviceItems.filter(s => s.active).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)),
     [serviceItems],
+  )
+
+  const quickPickItems = useMemo(
+    () => activeItems.map(s => ({
+      value: s.id, label: s.name, hint: `${currencySymbol}${s.default_price.toFixed(2)}`,
+    })),
+    [activeItems, currencySymbol],
   )
 
   const blockFeesTotal = useMemo(
@@ -269,10 +277,10 @@ export function BlockManualFeesPanel({
                     className="space-y-2 rounded-lg border border-border/60 bg-background p-2.5 shadow-sm shadow-black/[0.03] dark:bg-card/80 dark:shadow-none"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <select
+                      <SearchSelect
+                        items={quickPickItems}
                         value={row.service_item_id}
-                        onChange={e => {
-                          const id = e.target.value
+                        onSelect={id => {
                           if (!id) {
                             updateDraft(row.key, { service_item_id: '' })
                             return
@@ -286,15 +294,11 @@ export function BlockManualFeesPanel({
                             })
                           }
                         }}
-                        className="h-8 min-w-[9rem] flex-1 rounded-md border border-border bg-background px-2 text-[11px]"
-                      >
-                        <option value="">Quick pick (catalogue)…</option>
-                        {activeItems.map(s => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} — {currencySymbol}{s.default_price.toFixed(2)}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Quick pick (catalogue)…"
+                        clearLabel="No catalogue item — type it in"
+                        searchPlaceholder="Search catalogue…"
+                        className="min-w-[9rem] flex-1 text-[11px]"
+                      />
                       <Button
                         type="button"
                         variant="ghost"
