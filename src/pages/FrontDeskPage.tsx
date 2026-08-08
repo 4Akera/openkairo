@@ -17,7 +17,7 @@ import type { Patient } from '../types'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useVisitQueue } from '../hooks/useVisits'
-import { averageWaitMinutes, dailyAverageWaits } from '../lib/visits'
+import { averageWaitMinutes } from '../lib/visits'
 import type { Visit } from '../types'
 import { VisitQueue } from '../components/visits/VisitQueue'
 import { CheckInDialog } from '../components/visits/CheckInDialog'
@@ -30,34 +30,9 @@ import {
   ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight, ChevronDown,
   UserCheck, FolderOpen, Loader2, Receipt,
 } from 'lucide-react'
-import { cn, fullName, formatDateTime } from '../lib/utils'
+import { cn, fullName, formatDateTime, formatMinutes } from '../lib/utils'
 
 const GENERAL_QUEUE = 'general'
-
-/** Tiny 7-day trend of avg visit duration; renders nothing without data. */
-function WaitTrend({ values }: { values: (number | null)[] }) {
-  const present = values.filter((v): v is number => v !== null)
-  if (present.length < 2) return null
-  const max = Math.max(...present, 1)
-  const W = 56, H = 16, bw = W / values.length
-  return (
-    <svg width={W} height={H} className="shrink-0 opacity-80" aria-label="7-day avg visit trend">
-      {values.map((v, i) =>
-        v === null ? null : (
-          <rect
-            key={i}
-            x={i * bw + 1}
-            y={H - Math.max(2, (v / max) * H)}
-            width={bw - 2}
-            height={Math.max(2, (v / max) * H)}
-            rx={1}
-            className={i === values.length - 1 ? 'fill-primary' : 'fill-muted-foreground/40'}
-          />
-        ),
-      )}
-    </svg>
-  )
-}
 
 function dateKeyFor(offsetDays: number): string {
   const d = new Date()
@@ -113,8 +88,6 @@ export default function FrontDeskPage() {
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [mode, setMode] = useState<'now' | 'book'>('now')
 
-  const [trend, setTrend] = useState<(number | null)[]>([])
-
   useEffect(() => {
     supabase
       .from('departments')
@@ -123,19 +96,6 @@ export default function FrontDeskPage() {
       .eq('can_receive_patients', true)
       .order('sort_order')
       .then(({ data }) => setPatientDepts((data ?? []) as Department[]))
-
-    // Trailing week of completed visits → avg-duration trend
-    const weekAgo = new Date()
-    weekAgo.setDate(weekAgo.getDate() - 6)
-    weekAgo.setHours(0, 0, 0, 0)
-    supabase
-      .from('encounters')
-      .select('arrived_at, finished_at')
-      .gte('finished_at', weekAgo.toISOString())
-      .not('arrived_at', 'is', null)
-      .then(({ data }) => {
-        setTrend(dailyAverageWaits((data ?? []) as Pick<Visit, 'arrived_at' | 'finished_at'>[], 7))
-      })
   }, [])
 
   useEffect(() => {
@@ -261,10 +221,9 @@ export default function FrontDeskPage() {
           )}
           {!loading && isToday && avgWait !== null && (
             <span className="text-xs text-muted-foreground hidden sm:inline">
-              avg visit today {avgWait < 60 ? `${avgWait}m` : `${Math.floor(avgWait / 60)}h ${avgWait % 60}m`}
+              avg visit today {formatMinutes(avgWait)}
             </span>
           )}
-          {isToday && <span className="hidden md:inline-flex"><WaitTrend values={trend} /></span>}
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {/* My worklist, inside the day view */}

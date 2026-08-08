@@ -160,7 +160,7 @@ export function VisitQueue({
           ) : (
             <p className="text-xs text-muted-foreground truncate">
               {v.finished_at
-                ? <>checked out {formatDateTime(v.finished_at)}</>
+                ? <>finished {formatDateTime(v.finished_at)}</>
                 : v.arrived_at
                   ? <>waiting <span className="font-medium text-foreground/70">{waitTime(v.arrived_at)}</span></>
                   : v.scheduled_at ? formatDateTime(v.scheduled_at) : null}
@@ -284,7 +284,7 @@ export function VisitQueue({
               <>
                 {sectionHeader('Carried over', carriedOver.length, <History className="h-3.5 w-3.5 text-amber-600" />)}
                 <p className="px-4 pb-1.5 -mt-1 text-[11px] text-muted-foreground">
-                  Arrived on a previous day and never checked out.
+                  Arrived on a previous day and never finished.
                 </p>
                 <div className="divide-y divide-border border-y border-border bg-amber-500/[0.04]">
                   {carriedOver.map(renderVisit)}

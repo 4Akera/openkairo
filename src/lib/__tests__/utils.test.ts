@@ -10,6 +10,9 @@ import {
   fullName,
   getDefinitionColors,
   getBlockPreview,
+  formatDayTime,
+  minutesBetween,
+  formatMinutes,
 } from '../utils'
 
 beforeAll(() => {
@@ -150,5 +153,50 @@ describe('getBlockPreview', () => {
 
   it('returns empty string for unknown types', () => {
     expect(getBlockPreview({ type: 'mystery', content: {} })).toBe('')
+  })
+})
+
+describe('formatDayTime', () => {
+  // System time is frozen at 2026-08-07T12:00:00Z above.
+  it('uses day words for today, yesterday, tomorrow', () => {
+    expect(formatDayTime('2026-08-07T14:21:00')).toBe('Today · 2:21 PM')
+    expect(formatDayTime('2026-08-06T09:05:00')).toBe('Yesterday · 9:05 AM')
+    expect(formatDayTime('2026-08-08T09:00:00')).toBe('Tomorrow · 9:00 AM')
+  })
+
+  it('drops the year for same-year dates, keeps it otherwise', () => {
+    expect(formatDayTime('2026-05-03T09:00:00')).toBe('May 3 · 9:00 AM')
+    expect(formatDayTime('2025-05-03T09:00:00')).toBe('May 3, 2025 · 9:00 AM')
+  })
+
+  it('handles empty and invalid input', () => {
+    expect(formatDayTime(null)).toBe('—')
+    expect(formatDayTime('')).toBe('—')
+    expect(formatDayTime('not a date')).toBe('—')
+  })
+})
+
+describe('minutesBetween', () => {
+  it('rounds to whole minutes', () => {
+    expect(minutesBetween('2026-08-07T09:00:00', '2026-08-07T09:44:30')).toBe(45)
+  })
+
+  it('never goes negative', () => {
+    expect(minutesBetween('2026-08-07T10:00:00', '2026-08-07T09:00:00')).toBe(0)
+  })
+
+  it('is null when either side is missing or invalid', () => {
+    expect(minutesBetween(null, '2026-08-07T09:00:00')).toBeNull()
+    expect(minutesBetween('2026-08-07T09:00:00', undefined)).toBeNull()
+    expect(minutesBetween('junk', '2026-08-07T09:00:00')).toBeNull()
+  })
+})
+
+describe('formatMinutes', () => {
+  it('formats minutes and hours', () => {
+    expect(formatMinutes(0)).toBe('0m')
+    expect(formatMinutes(45)).toBe('45m')
+    expect(formatMinutes(60)).toBe('1h 0m')
+    expect(formatMinutes(125)).toBe('2h 5m')
   })
 })

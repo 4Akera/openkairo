@@ -2,7 +2,7 @@ import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import {
   format, parseISO, differenceInYears, differenceInMonths, differenceInDays,
-  isValid, sub,
+  isValid, sub, isToday, isYesterday, isTomorrow,
 } from 'date-fns'
 import type { DatePrecision, NameFormat } from '@/types'
 
@@ -64,6 +64,44 @@ export function formatDateTime(date: string | null | undefined): string {
   } catch {
     return '—'
   }
+}
+
+/**
+ * formatDateTime with near days as words: "Today · 10:21 PM",
+ * "Yesterday · …", "Tomorrow · …"; other same-year dates drop the year.
+ */
+export function formatDayTime(date: string | null | undefined): string {
+  if (date == null || String(date).trim() === '') return '—'
+  try {
+    const parsed = parseISO(String(date))
+    if (!isValid(parsed)) return '—'
+    const time = format(parsed, 'h:mm a')
+    if (isToday(parsed)) return `Today · ${time}`
+    if (isYesterday(parsed)) return `Yesterday · ${time}`
+    if (isTomorrow(parsed)) return `Tomorrow · ${time}`
+    const sameYear = parsed.getFullYear() === new Date().getFullYear()
+    return `${format(parsed, sameYear ? 'MMM d' : 'MMM d, yyyy')} · ${time}`
+  } catch {
+    return '—'
+  }
+}
+
+/** Whole minutes from `start` to `end`; null unless both parse. Never negative. */
+export function minutesBetween(
+  start: string | null | undefined,
+  end: string | null | undefined,
+): number | null {
+  if (!start || !end) return null
+  const a = Date.parse(String(start))
+  const b = Date.parse(String(end))
+  if (Number.isNaN(a) || Number.isNaN(b)) return null
+  return Math.max(0, Math.round((b - a) / 60000))
+}
+
+/** "45m" or "2h 5m". */
+export function formatMinutes(mins: number): string {
+  if (mins < 60) return `${mins}m`
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`
 }
 
 /** Prefer `patients.date_of_birth`, fall back to `custom_fields.date_of_birth` (YYYY-MM-DD). */

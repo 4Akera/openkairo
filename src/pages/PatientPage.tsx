@@ -6,7 +6,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useSettingsStore as useBillingSettings } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
 import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate } from '../types'
-import { fullName, formatDateTime, cn } from '../lib/utils'
+import { fullName, formatDateTime, formatDayTime, formatMinutes, minutesBetween, cn } from '../lib/utils'
 import {
   Button,
   Badge,
@@ -480,7 +480,7 @@ export default function PatientPage() {
                           <div key={enc.id} className="rounded-lg border border-dashed px-3.5 py-2.5 flex items-center gap-2.5">
                             <CalendarClock className="h-4 w-4 text-primary/70 shrink-0" />
                             <div className="flex-1 min-w-0 text-sm">
-                              Booked for <span className="font-medium">{formatDateTime(enc.scheduled_at!)}</span>
+                              Booked for <span className="font-medium">{formatDayTime(enc.scheduled_at!)}</span>
                               {enc.reason && (
                                 <span className="text-muted-foreground"> · {enc.reason}</span>
                               )}
@@ -498,16 +498,23 @@ export default function PatientPage() {
                         Visits ({history.length})
                       </p>
                       <div className="space-y-2.5">
-                        {history.map(enc => (
+                        {history.map(enc => {
+                          const visitMins = minutesBetween(enc.arrived_at, enc.finished_at)
+                          const arrivedToday = enc.arrived_at &&
+                            new Date(enc.arrived_at).toDateString() === new Date().toDateString()
+                          const hereMins = arrivedToday && !enc.finished_at
+                            ? minutesBetween(enc.arrived_at, new Date().toISOString())
+                            : null
+                          return (
                           <div key={enc.id}>
                             {/* Journey line — present when the patient was actually here */}
                             {enc.arrived_at && (
                               <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1.5 px-0.5">
                                 <Footprints className="h-3 w-3 shrink-0" />
-                                Arrived {formatDateTime(enc.arrived_at)}
-                                {enc.finished_at
-                                  ? <> · checked out {formatDateTime(enc.finished_at)}</>
-                                  : enc.stage ? <> · {enc.stage}</> : null}
+                                Arrived {formatDayTime(enc.arrived_at)}
+                                {visitMins !== null && visitMins > 0 && <> · {formatMinutes(visitMins)} visit</>}
+                                {!enc.finished_at && enc.stage && <> · {enc.stage}</>}
+                                {hereMins !== null && hereMins > 0 && <> · here {formatMinutes(hereMins)}</>}
                                 {enc.reason && <> · {enc.reason}</>}
                               </p>
                             )}
@@ -519,7 +526,8 @@ export default function PatientPage() {
                               onDelete={() => setEncToDelete(enc)}
                             />
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </section>
                   )}

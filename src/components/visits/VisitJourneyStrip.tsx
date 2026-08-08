@@ -11,7 +11,7 @@ import { useNow } from '../../hooks/useNow'
 import { updateVisit } from '../../lib/visits'
 import { CheckoutDialog } from './CheckoutDialog'
 import type { Encounter, Patient, Visit } from '../../types'
-import { formatDateTime } from '../../lib/utils'
+import { formatDayTime, formatMinutes } from '../../lib/utils'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui'
 import { Footprints, LogOut, CheckCircle2 } from 'lucide-react'
 
@@ -31,8 +31,7 @@ export function VisitJourneyStrip({
 
   if (!encounter.arrived_at) return null
 
-  const waitMin = Math.floor((now - new Date(encounter.arrived_at).getTime()) / 60000)
-  const waitLabel = waitMin < 60 ? `${waitMin}m` : `${Math.floor(waitMin / 60)}h ${waitMin % 60}m`
+  const waitLabel = formatMinutes(Math.max(0, Math.floor((now - new Date(encounter.arrived_at).getTime()) / 60000)))
   const asVisit: Visit = { ...encounter, patients: patient }
 
   return (
@@ -40,14 +39,14 @@ export function VisitJourneyStrip({
       <div className="border-b bg-primary/[0.03] px-3 sm:px-4 py-1.5 flex items-center gap-2.5 text-xs shrink-0 overflow-x-auto no-scrollbar">
         <Footprints className="h-3.5 w-3.5 text-primary/70 shrink-0" />
         <span className="text-muted-foreground whitespace-nowrap">
-          Arrived {formatDateTime(encounter.arrived_at)}
+          Arrived {formatDayTime(encounter.arrived_at)}
           {!encounter.finished_at && <> · in clinic <span className="font-medium text-foreground/80">{waitLabel}</span></>}
         </span>
 
         {encounter.finished_at ? (
           <span className="flex items-center gap-1 text-emerald-600 whitespace-nowrap">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Done {formatDateTime(encounter.finished_at)}
+            Done {formatDayTime(encounter.finished_at)}
           </span>
         ) : (
           <>
