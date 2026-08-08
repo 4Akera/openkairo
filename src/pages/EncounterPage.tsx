@@ -5,18 +5,20 @@ import { useEncounterStore } from '../stores/encounterStore'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
-import { fullName, calcAge, getPatientDob, getPatientGender, cn } from '../lib/utils'
-import { VisitJourneyStrip } from '../components/visits/VisitJourneyStrip'
+import { fullName, calcAge, getPatientDob, getPatientGender, formatDayTime, formatMinutes, cn } from '../lib/utils'
+import { updateVisit } from '../lib/visits'
+import { useNow } from '../hooks/useNow'
 import { EncounterBill } from '../components/billing/EncounterBill'
 import { CheckoutDialog } from '../components/visits/CheckoutDialog'
 import type { Visit } from '../types'
 import {
   Button, Badge, Separator,
   Dialog, DialogContent, DialogHeader, DialogTitle,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   TooltipProvider,
 } from '../components/ui'
 import {
-  ArrowLeft, Activity, CheckCircle2, XCircle, Loader2,
+  ArrowLeft, CheckCircle2, XCircle, Loader2, Footprints,
   Lock, Users, Globe, ChevronDown, ShieldCheck, UserCircle, ClipboardList,
   AlertTriangle, Search, Check, DollarSign, Ban, FileDown,
 } from 'lucide-react'
@@ -37,11 +39,17 @@ const VISIBILITY_OPTIONS = [
 
 const ROLE_OPTIONS = ['physician', 'nurse', 'receptionist', 'admin']
 
+/** Ticking "in clinic Xm" label — isolated so only it re-renders each minute. */
+function InClinicLabel({ since }: { since: string }) {
+  const now = useNow()
+  return <>{formatMinutes(Math.max(0, Math.floor((now - new Date(since).getTime()) / 60000)))}</>
+}
+
 export default function EncounterPage() {
   const { patientId, encounterId } = useParams<{ patientId: string; encounterId: string }>()
   const navigate = useNavigate()
   const { user, profile, hasRole, roleSlugs, can } = useAuthStore()
-  const { nameFormat } = useSettingsStore()
+  const { nameFormat, flowStages } = useSettingsStore()
   const { setBlocks, setLockMap, setDefinitions, blocks, definitionMap, definitions } = useEncounterStore()
 
   const [patient, setPatient] = useState<Patient | null>(null)
@@ -466,112 +474,9 @@ export default function EncounterPage() {
 
             <Separator orientation="vertical" className="h-5 shrink-0 hidden sm:block" />
 
-            {/* Encounter info (desktop) — title and physician edit in place */}
-            <div className="items-center gap-2 min-w-0 hidden sm:flex">
-              <Activity className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              {titleEditing ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={editTitle}
-                  onChange={e => setEditTitle(e.target.value)}
-                  onBlur={() => void handleSaveTitle()}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') e.currentTarget.blur()
-                    if (e.key === 'Escape') setTitleEditing(false)
-                  }}
-                  placeholder="Encounter title"
-                  className="text-sm w-44 rounded-md border border-border bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              ) : canEditInline ? (
-                <button
-                  type="button"
-                  onClick={startTitleEdit}
-                  title="Rename encounter"
-                  className={cn(
-                    'text-sm truncate text-left hover:text-foreground transition-colors',
-                    encounter.title ? 'text-muted-foreground' : 'text-muted-foreground/60 italic',
-                  )}
-                >
-                  {encounter.title ?? 'Add title'}
-                </button>
-              ) : (
-                <p className="text-sm text-muted-foreground truncate">
-                  {encounter.title ?? `Encounter #${encounter.id.slice(0, 8).toUpperCase()}`}
-                </p>
-              )}
-              {savingTitle && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />}
-              <Badge variant={encounter.status === 'open' ? 'success' : 'muted'}>
-                {encounter.status === 'open' ? 'Open' : 'Closed'}
-              </Badge>
-              {canEditInline ? (
-                <button
-                  type="button"
-                  onClick={e => void openAssignPicker(e)}
-                  title="Assign physician"
-                  className={cn(
-                    'text-xs whitespace-nowrap truncate max-w-[160px] transition-colors',
-                    encounter.assigned_profile?.full_name
-                      ? 'text-primary/70 hover:text-primary'
-                      : 'text-muted-foreground/60 italic hover:text-primary',
-                  )}
-                >
-                  → {encounter.assigned_profile?.full_name ?? 'Assign physician'}
-                </button>
-              ) : (
-                encounter.assigned_profile?.full_name && (
-                  <span className="text-xs text-primary/70 whitespace-nowrap hidden lg:inline">
-                    → {encounter.assigned_profile.full_name}
-                  </span>
-                )
-              )}
-            </div>
-            {/* Mobile: title + status badge, same inline editing */}
-            <div className="sm:hidden flex items-center gap-1.5 shrink-0 min-w-0">
-              {titleEditing ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={editTitle}
-                  onChange={e => setEditTitle(e.target.value)}
-                  onBlur={() => void handleSaveTitle()}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') e.currentTarget.blur()
-                    if (e.key === 'Escape') setTitleEditing(false)
-                  }}
-                  placeholder="Title"
-                  className="text-[10px] w-24 rounded-md border border-border bg-background px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              ) : canEditInline ? (
-                <button
-                  type="button"
-                  onClick={startTitleEdit}
-                  className={cn(
-                    'text-[10px] truncate max-w-[100px] text-left',
-                    encounter.title ? 'text-muted-foreground' : 'text-muted-foreground/60 italic',
-                  )}
-                >
-                  {encounter.title ?? 'Add title'}
-                </button>
-              ) : (
-                <p className="text-[10px] text-muted-foreground truncate max-w-[100px]">
-                  {encounter.title ?? `Enc #${encounter.id.slice(0, 6).toUpperCase()}`}
-                </p>
-              )}
-              <Badge variant={encounter.status === 'open' ? 'success' : 'muted'} className="shrink-0">
-                {encounter.status === 'open' ? 'Open' : 'Closed'}
-              </Badge>
-              {canEditInline && (
-                <button
-                  type="button"
-                  onClick={e => void openAssignPicker(e)}
-                  title="Assign physician"
-                  className="text-muted-foreground hover:text-primary shrink-0"
-                >
-                  <UserCircle className="h-4 w-4" />
-                </button>
-              )}
-            </div>
+            <Badge variant={encounter.status === 'open' ? 'success' : 'muted'} className="shrink-0">
+              {encounter.status === 'open' ? 'Open' : 'Closed'}
+            </Badge>
           </div>
 
           {/* Actions */}
@@ -780,22 +685,116 @@ export default function EncounterPage() {
               )}
             </div>
 
-            {encounter.status === 'open' && canClose && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openCloseDialog}
-                className="text-xs h-9 sm:h-7 gap-1 text-amber-600 border-amber-200 hover:bg-amber-50 px-3 sm:px-2.5"
-              >
-                <CheckCircle2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                Finish
-              </Button>
-            )}
           </div>
         </header>
 
-        {/* Journey — arrived → stage → done, advanceable in place */}
-        <VisitJourneyStrip encounter={encounter} patient={patient} onChanged={() => void fetchData()} />
+        {/* Subheader — the encounter's one context bar:
+            title · physician · journey (arrived → stage → done) · Finish */}
+        <div className="border-b bg-primary/[0.03] px-3 sm:px-4 py-1.5 flex items-center gap-2.5 text-xs shrink-0">
+          <div className="flex-1 min-w-0 flex items-center gap-2.5 overflow-x-auto no-scrollbar">
+            {titleEditing ? (
+              <input
+                autoFocus
+                type="text"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                onBlur={() => void handleSaveTitle()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                  if (e.key === 'Escape') setTitleEditing(false)
+                }}
+                placeholder="Encounter title"
+                className="w-40 shrink-0 rounded-md border border-border bg-background px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            ) : canEditInline ? (
+              <button
+                type="button"
+                onClick={startTitleEdit}
+                title="Rename encounter"
+                className={cn(
+                  'shrink-0 max-w-[220px] truncate text-left font-medium transition-colors hover:text-foreground',
+                  encounter.title ? 'text-foreground/90' : 'text-muted-foreground/70 italic',
+                )}
+              >
+                {encounter.title ?? 'Add title'}
+              </button>
+            ) : (
+              <span className="shrink-0 max-w-[220px] truncate font-medium text-foreground/90">
+                {encounter.title ?? `Encounter #${encounter.id.slice(0, 8).toUpperCase()}`}
+              </span>
+            )}
+            {savingTitle && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />}
+
+            {canEditInline ? (
+              <button
+                type="button"
+                onClick={e => void openAssignPicker(e)}
+                title="Assign physician"
+                className={cn(
+                  'shrink-0 whitespace-nowrap transition-colors',
+                  encounter.assigned_profile?.full_name
+                    ? 'text-primary/70 hover:text-primary'
+                    : 'text-muted-foreground/60 italic hover:text-primary',
+                )}
+              >
+                → {encounter.assigned_profile?.full_name ?? 'Assign physician'}
+              </button>
+            ) : (
+              encounter.assigned_profile?.full_name && (
+                <span className="shrink-0 whitespace-nowrap text-primary/70">
+                  → {encounter.assigned_profile.full_name}
+                </span>
+              )
+            )}
+
+            {encounter.arrived_at && (
+              <>
+                <Separator orientation="vertical" className="h-4 shrink-0" />
+                <Footprints className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                <span className="text-muted-foreground whitespace-nowrap">
+                  Arrived {formatDayTime(encounter.arrived_at)}
+                  {!encounter.finished_at && (
+                    <> · in clinic <span className="font-medium text-foreground/80"><InClinicLabel since={encounter.arrived_at} /></span></>
+                  )}
+                </span>
+                {encounter.finished_at ? (
+                  <span className="flex items-center gap-1 text-emerald-600 whitespace-nowrap">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Done {formatDayTime(encounter.finished_at)}
+                  </span>
+                ) : (
+                  flowStages.length > 0 && (
+                    <Select
+                      value={encounter.stage && flowStages.includes(encounter.stage) ? encounter.stage : flowStages[0]}
+                      onValueChange={(s) => {
+                        void updateVisit(encounter.id, { stage: s }).then(() => void fetchData())
+                      }}
+                    >
+                      <SelectTrigger className="h-6 w-[120px] text-xs shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {flowStages.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )
+                )}
+              </>
+            )}
+          </div>
+
+          {encounter.status === 'open' && canClose && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openCloseDialog}
+              className="text-xs h-7 gap-1 shrink-0 text-amber-600 border-amber-200 hover:bg-amber-50 px-2.5"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Finish
+            </Button>
+          )}
+        </div>
 
         {/* Finish: charges/orders check chained after encounter close */}
         <CheckoutDialog visit={checkoutVisit} onClose={() => setCheckoutVisit(null)} />
