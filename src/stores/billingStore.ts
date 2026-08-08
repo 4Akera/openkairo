@@ -68,8 +68,8 @@ interface BillingState {
     reference?: string
     payer_name?: string
     notes?: string
-    chargeIds?: string[]
-    chargesTotal?: number  // total of selected charges; if > amount → create remaining charge
+    /** Charges this payment settles (lib/billing allocatePayment) — flipped to `paid`. */
+    markPaidChargeIds?: string[]
   }) => Promise<boolean>
 
   addDeposit: (deposit: {
@@ -303,39 +303,21 @@ export const useBillingStore = create<BillingState>((set, get) => ({
       if (error) return false
     }
 
-    // Mark selected charges as paid
-    if (payment.chargeIds && payment.chargeIds.length > 0) {
+    // Flip the charges this payment covers. A partial payment simply leaves
+    // the rest due — the ledger (lib/billing) is the source of truth, so no
+    // synthetic "remaining balance" charges.
+    const paidIds = payment.markPaidChargeIds ?? []
+    if (paidIds.length > 0) {
       await supabase
         .from('charges')
         .update({ status: 'paid' })
-        .in('id', payment.chargeIds)
+        .in('id', paidIds)
+      const flip = (list: Charge[]) =>
+        list.map(c => paidIds.includes(c.id) ? { ...c, status: 'paid' as const } : c)
       set((s) => ({
-        charges: s.charges.map(c =>
-          payment.chargeIds!.includes(c.id) ? { ...c, status: 'paid' as const } : c
-        ),
-        encounterCharges: s.encounterCharges.map(c =>
-          payment.chargeIds!.includes(c.id) ? { ...c, status: 'paid' as const } : c
-        ),
+        charges: flip(s.charges),
+        encounterCharges: flip(s.encounterCharges),
       }))
-
-      // If partial payment, create a remaining balance charge
-      const chargesTotal = payment.chargesTotal ?? 0
-      const remaining    = Math.round((chargesTotal - payment.amount) * 100) / 100
-      if (remaining > 0.009) {
-        const firstCharge = get().charges.find(c => payment.chargeIds!.includes(c.id))
-        if (firstCharge) {
-          await supabase.from('charges').insert({
-            patient_id:   payment.patient_id,
-            encounter_id: firstCharge.encounter_id,
-            description:  'Remaining balance',
-            quantity:     1,
-            unit_price:   remaining,
-            status:       'pending',
-            source:       'manual',
-            created_by:   (await supabase.auth.getUser()).data.user?.id ?? null,
-          })
-        }
-      }
     }
 
     return true

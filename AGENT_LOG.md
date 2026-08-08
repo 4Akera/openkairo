@@ -992,3 +992,48 @@ the working tree, excluding it from my commits; whoever owns it should
 finish + log it.
 
 **Docs only** — no code this iteration.
+
+## 2026-08-08 — Iteration 51: money pass phase 1 — the charge screen tells the truth
+
+**Why:** User audited the charging model ("what do u think… simplify and
+empowering", then "charge screen … not practical", then "go"). Live demo
+data proved the screen incoherent: one patient showed 379 owed on the
+landing, 347 charged / −353 balance on his detail, and every charge still
+"Pending Payment" after 700 recorded — the old flow let payments in
+without allocating them to charges.
+
+**What:** ONE ledger in lib/billing (walkLedger / allocatePayment, 13
+tests): due = counted charges − payments, mirroring the patient_balance
+view. Billing landing = "Waiting to pay" queue off that view (+
+insurance-pending chips). Patient detail = Due now hero with ONE Collect
+button — everything outstanding pre-selected, checkboxes only for
+partial settles. Payments always allocate oldest-first and lazily
+converge stale paid flags; the synthetic "Remaining balance" charge in
+addPayment is deleted. Add Charge now uses the same search-first one-tap
+picker as the encounter bill chip (new shared ServiceItemPicker with a
+custom-amount escape hatch; the native-select + quantity dialog is
+gone). Charge chips are derived from the ledger (Due/Paid) instead of
+raw status; the pending-approval show/hide toggle is dropped (rows
+always visible, greyed, one Approve action). Insurance-provider CRUD
+moved off the cashier landing into Settings → Service Items. The Cashier
+lane on Today reads patient_balance too, so it shows the same number
+Collect will ask for. Billing-only users land on /billing instead of the
+Front Desk dead end. Net −255 lines.
+
+**Verification:** tsc --build clean, eslint clean on touched files,
+193/193 tests (13 new in lib/__tests__/billing.test.ts). Browser (billing
+demo user): Robert's phantom 379 gone — landing shows only his insurance
+chip, detail shows credit 353 with rows reading Paid; Fabian: Collect
+7.50 → receipt → All settled → drops from the queue; one-tap add CBC →
+hero live-updates to Due 18.00 → void → settled again; provider
+directory renders under Settings → Service Items.
+
+**Shared tree:** a parallel session's Settings-merge WIP (queues.ts,
+SettingsPage.tsx, DepartmentsSection.tsx + tests) sits uncommitted in
+the tree — untouched, excluded from this commit. (That session's it. 50
+note flagged my then-uncommitted billing files; this iteration finishes
+and logs them.)
+
+**Phase 2 (staged in backlog, NOT started):** schema shrink — drop the
+never-written invoices table, collapse charge statuses, deposits as
+payments-in-advance, payer-on-payment insurance. SCHEMA — ask user.

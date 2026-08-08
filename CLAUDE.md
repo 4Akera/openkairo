@@ -199,6 +199,32 @@ import + verify-release, listed below as future work).
       lib/resultImport tested. HL7/direct analyzer feed remains future
       work — ask user.)
 
+### Money pass (user-approved 2026-08-08 — "go")
+The charging model is two concepts: charge and payment; everything else
+is a view or an attribute. Phase 1 (UI, no schema) shipped; phase 2
+shrinks the schema behind it (approval-gated).
+
+- [x] Charge screen honesty: ONE ledger (lib/billing walkLedger mirrors
+      patient_balance — due = counted charges − payments) drives the
+      Billing landing queue ("Waiting to pay" + insurance-pending
+      chips), the patient hero (Due now / credit / All settled with ONE
+      Collect button, everything outstanding pre-selected; checkboxes
+      only for partial settles), derived Due/Paid row chips, and Today's
+      Cashier lane. Payments always allocate oldest-first and converge
+      stale flags; the synthetic "Remaining balance" charge hack is
+      deleted. Add Charge reuses the encounter bill's search-first
+      one-tap picker (shared ServiceItemPicker, custom-amount escape
+      hatch). Insurance-provider CRUD moved to Settings → Service Items;
+      billing-only users land on /billing. (2026-08-08)
+- [ ] Schema shrink (SCHEMA — ask user before any of it): drop the
+      never-written invoices table (nothing inserts one; charges/
+      payments invoice_id columns and the invoice settings knob go with
+      it), collapse charge statuses to pending/paid/waived/void
+      (+ pending_approval), fold deposits into payments-in-advance
+      (credit = negative balance), reduce insurance to
+      payer-on-the-payment (claim-splitting that rewrites unit_price
+      goes). Stage SQL in schema.sql section 20 and stop.
+
 ### Post-restructure cleanup (pure simplification)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes
       props-driven (encounter + patient from the page); delete its own

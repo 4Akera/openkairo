@@ -12,13 +12,12 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { Charge } from '../../types'
 import {
-  Button, Input,
+  Button,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '../ui'
 import { cn } from '../../lib/utils'
-import { Receipt, Loader2, Plus } from 'lucide-react'
-
-type PriceItem = { id: string; name: string; category: string | null; default_price: number }
+import { Receipt } from 'lucide-react'
+import { ServiceItemPicker, type ChargeLine } from './ServiceItemPicker'
 
 const DEAD_STATUSES = new Set(['void', 'waived'])
 
@@ -28,9 +27,6 @@ export function EncounterBill({ encounterId, patientId }: { encounterId: string;
 
   const [charges, setCharges] = useState<Charge[] | null>(null)
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState<PriceItem[]>([])
-  const [q, setQ] = useState('')
-  const [adding, setAdding] = useState<string | null>(null)
 
   const canRead = billingEnabled && hasBilling
   const canCharge = canRead && can('billing.charge')
@@ -49,46 +45,26 @@ export function EncounterBill({ encounterId, patientId }: { encounterId: string;
     void fetchCharges()
   }, [canRead, fetchCharges])
 
-  // Price list, loaded once the dialog first opens
-  useEffect(() => {
-    if (!open || !canCharge || items.length > 0) return
-    supabase
-      .from('service_items')
-      .select('id,name,category,default_price')
-      .eq('active', true)
-      .order('sort_order')
-      .then(({ data }) => setItems((data ?? []) as PriceItem[]))
-  }, [open, canCharge, items.length])
-
   const live = useMemo(
     () => (charges ?? []).filter(c => !DEAD_STATUSES.has(c.status)),
     [charges],
   )
   const total = live.reduce((sum, c) => sum + c.quantity * c.unit_price, 0)
 
-  const filteredItems = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    if (!needle) return items
-    return items.filter(i =>
-      i.name.toLowerCase().includes(needle) || (i.category ?? '').toLowerCase().includes(needle))
-  }, [items, q])
-
-  const addCharge = async (item: PriceItem) => {
-    if (!user || adding) return
-    setAdding(item.id)
+  const addCharge = async (line: ChargeLine) => {
+    if (!user) return
     await supabase.from('charges').insert({
       patient_id: patientId,
       encounter_id: encounterId,
-      service_item_id: item.id,
-      description: item.name,
+      service_item_id: line.service_item_id,
+      description: line.description,
       quantity: 1,
-      unit_price: item.default_price,
+      unit_price: line.unit_price,
       status: 'pending',
       source: 'manual',
       created_by: user.id,
     })
     await fetchCharges()
-    setAdding(null)
   }
 
   if (!canRead || charges === null) return null
@@ -141,41 +117,8 @@ export function EncounterBill({ encounterId, patientId }: { encounterId: string;
             )}
 
             {canCharge && (
-              <div className="border-t pt-3 space-y-2">
-                <Input
-                  placeholder="Add a charge — search the price list…"
-                  value={q}
-                  onChange={e => setQ(e.target.value)}
-                  className="h-8 text-sm"
-                />
-                <div className="max-h-44 overflow-y-auto rounded-md border divide-y divide-border">
-                  {filteredItems.length === 0 ? (
-                    <p className="px-3 py-2.5 text-xs text-muted-foreground">
-                      {items.length === 0 ? 'No service items — add them in Settings → Service Items.' : 'No matches.'}
-                    </p>
-                  ) : (
-                    filteredItems.slice(0, 30).map(i => (
-                      <button
-                        key={i.id}
-                        type="button"
-                        disabled={adding !== null}
-                        onClick={() => void addCharge(i)}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-accent/50 transition-colors disabled:opacity-50"
-                      >
-                        <Plus className="h-3 w-3 text-primary shrink-0" />
-                        <span className="flex-1 truncate">
-                          {i.name}
-                          {i.category && <span className="text-muted-foreground"> · {i.category}</span>}
-                        </span>
-                        <span className="font-mono shrink-0">
-                          {adding === i.id
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : `${currencySymbol}${Number(i.default_price).toFixed(2)}`}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
+              <div className="border-t pt-3">
+                <ServiceItemPicker onPick={addCharge} currencySymbol={currencySymbol} />
               </div>
             )}
 

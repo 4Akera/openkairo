@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Loader2, Check, Layers } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Check, Layers, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useBillingStore } from '../../stores/billingStore'
+import type { InsuranceProvider } from '../../types'
 import {
   Button, Input, Badge,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -155,6 +157,8 @@ export function ServiceItemsSection() {
         </div>
       )}
 
+      <InsuranceProvidersBlock />
+
       {/* Edit / New dialog */}
       <Dialog open={!!editing} onOpenChange={o => { if (!o) setEditing(null) }}>
         <DialogContent className="max-w-md">
@@ -202,6 +206,135 @@ export function ServiceItemsSection() {
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
                 <Button onClick={handleSave} disabled={saving || !editing.code || !editing.name}>
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  Save
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// ============================================================
+// Insurance providers — the shared payer directory. Lives here with the
+// rest of the price/fee configuration (it used to sit on the Billing
+// work screen); the Billing page only *uses* it via the patient
+// insurance dialog's "fill from directory" picker.
+// ============================================================
+
+function InsuranceProvidersBlock() {
+  const {
+    insuranceProviders, loadingInsuranceProviders, fetchInsuranceProviders,
+    upsertInsuranceProvider, deleteInsuranceProvider,
+  } = useBillingStore()
+
+  const [editing, setEditing] = useState<{ id?: string; name: string; copay: string; limit: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { fetchInsuranceProviders() }, [fetchInsuranceProviders])
+
+  const openForm = (p?: InsuranceProvider) => setEditing({
+    id: p?.id,
+    name: p?.name ?? '',
+    copay: p?.default_copay_percent != null ? String(p.default_copay_percent) : '',
+    limit: p?.default_coverage_limit != null ? String(p.default_coverage_limit) : '',
+  })
+
+  const handleSave = async () => {
+    if (!editing || !editing.name.trim()) return
+    setSaving(true)
+    const ok = await upsertInsuranceProvider({
+      id: editing.id,
+      name: editing.name.trim(),
+      default_copay_percent: editing.copay ? parseFloat(editing.copay) : undefined,
+      default_coverage_limit: editing.limit ? parseFloat(editing.limit) : undefined,
+      active: true,
+    })
+    setSaving(false)
+    if (ok) setEditing(null)
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Remove this insurance provider from the shared list?')) return
+    await deleteInsuranceProvider(id)
+  }
+
+  const active = insuranceProviders.filter(p => p.active)
+
+  return (
+    <div className="space-y-3 pt-2 border-t">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5 text-purple-600" /> Insurance providers
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Shared payer directory — picking one when adding patient insurance fills payer and defaults.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => openForm()}>
+          <Plus className="h-3.5 w-3.5" /> Add
+        </Button>
+      </div>
+
+      {loadingInsuranceProviders ? (
+        <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+      ) : active.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg">
+          Add payers you use often — they appear when adding patient insurance.
+        </p>
+      ) : (
+        <div className="border rounded-lg divide-y overflow-hidden bg-card">
+          {active.map(p => (
+            <div key={p.id} className="flex items-center gap-2 px-4 py-2.5 text-sm">
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{p.name}</p>
+                {(p.default_copay_percent != null || p.default_coverage_limit != null) && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {p.default_copay_percent != null && <span>{p.default_copay_percent}% patient copay (default)</span>}
+                    {p.default_copay_percent != null && p.default_coverage_limit != null && ' · '}
+                    {p.default_coverage_limit != null && <span>limit {p.default_coverage_limit.toFixed(2)} (default)</span>}
+                  </p>
+                )}
+              </div>
+              <Button variant="ghost" size="icon-sm" className="h-6 w-6 shrink-0" onClick={() => openForm(p)}>
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="icon-sm" className="h-6 w-6 shrink-0 hover:text-red-500" onClick={() => handleDelete(p.id)}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={!!editing} onOpenChange={o => { if (!o) setEditing(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{editing?.id ? 'Edit provider' : 'Add insurance provider'}</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Payer / company name *</Label>
+                <Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="e.g. NHIF, AAR" autoFocus />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Default patient copay %</Label>
+                  <Input type="number" min={0} max={100} value={editing.copay} onChange={e => setEditing({ ...editing, copay: e.target.value })} placeholder="optional" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Default coverage limit</Label>
+                  <Input type="number" value={editing.limit} onChange={e => setEditing({ ...editing, limit: e.target.value })} placeholder="optional" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+                <Button onClick={handleSave} disabled={saving || !editing.name.trim()}>
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   Save
                 </Button>

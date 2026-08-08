@@ -11,7 +11,7 @@
  * shared with the per-department Patients tabs.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Patient } from '../types'
 import { useAuthStore } from '../stores/authStore'
@@ -80,10 +80,10 @@ export default function FrontDeskPage() {
   // registry's Open filter used to, now that Patients has no nav entry.
   const [openOnly, setOpenOnly] = useState(false)
   const [openRows, setOpenRows] = useState<Visit[] | null>(null)
-  // "Cashier" = patients with unpaid charges — money is a queue too.
+  // "Cashier" = patients who owe money — money is a queue too.
   const [cashierOnly, setCashierOnly] = useState(false)
   const [cashierRows, setCashierRows] =
-    useState<{ patient: Patient; total: number; items: number }[] | null>(null)
+    useState<{ patient: Patient; total: number }[] | null>(null)
   const showCashier = billingEnabled && hasBilling
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [mode, setMode] = useState<'now' | 'book'>('now')
@@ -100,23 +100,28 @@ export default function FrontDeskPage() {
 
   useEffect(() => {
     if (!cashierOnly) { setCashierRows(null); return }
+    // Same ledger as the Billing page (patient_balance = charges − payments),
+    // so the amount here always matches what Collect will ask for.
     supabase
-      .from('charges')
-      .select('patient_id, quantity, unit_price, patients(*)')
-      .in('status', ['pending', 'pending_approval', 'pending_insurance'])
-      .order('created_at', { ascending: false })
-      .limit(500)
-      .then(({ data }) => {
-        type Row = { patient_id: string; quantity: number; unit_price: number; patients: Patient | null }
-        const byPatient = new Map<string, { patient: Patient; total: number; items: number }>()
-        for (const r of (data ?? []) as unknown as Row[]) {
-          if (!r.patients) continue
-          const cur = byPatient.get(r.patient_id) ?? { patient: r.patients, total: 0, items: 0 }
-          cur.total += r.quantity * r.unit_price
-          cur.items += 1
-          byPatient.set(r.patient_id, cur)
-        }
-        setCashierRows([...byPatient.values()].sort((a, b) => b.total - a.total))
+      .from('patient_balance')
+      .select('patient_id, balance')
+      .gt('balance', 0)
+      .order('balance', { ascending: false })
+      .limit(200)
+      .then(async ({ data }) => {
+        const dueRows = (data ?? []) as { patient_id: string; balance: number }[]
+        if (dueRows.length === 0) { setCashierRows([]); return }
+        const { data: pts } = await supabase
+          .from('patients')
+          .select('*')
+          .in('id', dueRows.map(r => r.patient_id))
+        const byId = new Map(((pts ?? []) as Patient[]).map(p => [p.id, p]))
+        setCashierRows(
+          dueRows.flatMap(r => {
+            const patient = byId.get(r.patient_id)
+            return patient ? [{ patient, total: Number(r.balance) }] : []
+          }),
+        )
       })
   }, [cashierOnly])
 
@@ -152,6 +157,8 @@ export default function FrontDeskPage() {
 
   if (!user) return null
   if (!canUse) {
+    // Billing-only staff: their day view is the Billing queue, not a dead end.
+    if (hasBilling) return <Navigate to="/billing" replace />
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
         <ClipboardList className="h-8 w-8 opacity-30" />
@@ -308,7 +315,7 @@ export default function FrontDeskPage() {
             <p className="text-sm text-muted-foreground text-center py-12">Nobody owes anything. 🎉</p>
           ) : (
             <div className="divide-y divide-border">
-              {cashierRows.map(({ patient, total, items }) => (
+              {cashierRows.map(({ patient, total }) => (
                 <button
                   key={patient.id}
                   onClick={() => navigate(`/billing?patient=${patient.id}`)}
@@ -316,9 +323,7 @@ export default function FrontDeskPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{fullName(patient, nameFormat)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {items} unpaid item{items > 1 ? 's' : ''}
-                    </p>
+                    <p className="text-xs text-muted-foreground font-mono">{patient.mrn}</p>
                   </div>
                   <span className="font-mono text-sm text-emerald-700 dark:text-emerald-400 shrink-0">
                     {currencySymbol}{total.toFixed(2)}

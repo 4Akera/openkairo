@@ -1,11 +1,24 @@
+/**
+ * Billing — the cashier's screen, built around ONE question: how much do
+ * I collect right now?
+ *
+ * Landing = the money queue: patients owing (patient_balance view) plus
+ * patients with charges waiting on an insurer. Detail = a Due-now hero
+ * whose Collect button settles everything outstanding in one motion;
+ * checkbox selection exists only for partial settles. All amounts come
+ * from lib/billing's ledger walk so this page, the Cashier lane on
+ * Today, and the DB view can never disagree.
+ */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
-import type { Patient, Charge, PatientInsurance, InsuranceProvider } from '../types'
+import type { Patient, Charge, PatientInsurance } from '../types'
 import { fullName, formatDateTime, cn } from '../lib/utils'
+import { walkLedger, allocatePayment, chargeAmount } from '../lib/billing'
+import { ServiceItemPicker } from '../components/billing/ServiceItemPicker'
 import {
   Button, Input, Badge, Label,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -13,30 +26,32 @@ import {
 } from '../components/ui'
 import {
   Search, Loader2, DollarSign, Receipt, CreditCard, Plus, XCircle,
-  Check, ArrowLeft, TrendingUp, TrendingDown, Wallet, Ban, CheckCircle2,
-  Clock, Pencil, Trash2, ShieldCheck, Printer,
+  Check, ArrowLeft, Wallet, Ban, CheckCircle2, Pencil, Trash2,
+  ShieldCheck, Printer,
 } from 'lucide-react'
 
-// ── Status display maps ──────────────────────────────────────────────────────
+// ── Charge chip display ──────────────────────────────────────────────────────
+// Ledger rows (pending/invoiced/paid) get a derived Due/Paid chip from the
+// walk; only non-ledger states keep their own label.
 
-export const CHARGE_STATUS_COLORS: Record<string, string> = {
-  pending:            'bg-emerald-100 text-emerald-800 border-emerald-300',
-  pending_approval:   'bg-blue-100 text-blue-800 border-blue-300',
-  pending_insurance:  'bg-purple-100 text-purple-800 border-purple-300',
-  invoiced:           'bg-indigo-100 text-indigo-800 border-indigo-300',
-  paid:               'bg-green-100 text-green-800 border-green-300',
-  waived:             'bg-slate-100 text-slate-600 border-slate-300',
-  void:               'bg-red-100 text-red-700 border-red-300',
-}
+const CHIP = {
+  due:       { label: 'Due',             cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800' },
+  paid:      { label: 'Paid',            cls: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800' },
+  insurance: { label: 'Insurance',       cls: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-800' },
+  review:    { label: 'Awaiting review', cls: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800' },
+  waived:    { label: 'Waived',          cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700' },
+  void:      { label: 'Cancelled',       cls: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800' },
+} as const
 
-export const CHARGE_STATUS_LABELS: Record<string, string> = {
-  pending:            'Pending Payment',
-  pending_approval:   'Pending Approval',
-  pending_insurance:  'Insurance',
-  invoiced:           'Invoiced',
-  paid:               'Paid',
-  waived:             'Waived',
-  void:               'Cancelled',
+function chipFor(c: Charge, settledIds: Set<string>): (typeof CHIP)[keyof typeof CHIP] {
+  switch (c.status) {
+    case 'pending_insurance': return CHIP.insurance
+    case 'pending_approval':  return CHIP.review
+    case 'waived':            return CHIP.waived
+    case 'void':              return CHIP.void
+    case 'paid':              return CHIP.paid
+    default:                  return settledIds.has(c.id) ? CHIP.paid : CHIP.due
+  }
 }
 
 const PAYMENT_METHODS = [
@@ -48,43 +63,36 @@ const PAYMENT_METHODS = [
   { value: 'deposit',       label: 'Deposit' },
 ] as const
 
-// ── Query row shapes (charges joined with patients) ──────────────────────────
+// ── Query row shapes ─────────────────────────────────────────────────────────
 
 type ChargePatientRef = Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
 
-type RecentChargeQueryRow = {
-  id: string
-  description: string
-  status: string
+type InsurancePendingRow = {
+  patient_id: string
   unit_price: number
   quantity: number
-  created_at: string
-  patient_id: string
   patients: ChargePatientRef | null
 }
 
-type ActionQueueQueryRow = {
-  patient_id: string
-  status: string
-  unit_price: number
-  quantity: number
-  patients: ChargePatientRef | null
+type QueueRow = {
+  patient: ChargePatientRef
+  due: number
+  insuranceTotal: number
+  insuranceCount: number
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  const { user, can, hasBilling } = useAuthStore()
+  const { user, can } = useAuthStore()
   const { nameFormat, currencySymbol } = useSettingsStore()
   const {
-    serviceItems, fetchServiceItems,
-    charges, payments, deposits, insurance, balance,
+    charges, payments, deposits, insurance,
     loadingPatient, fetchPatientBilling,
     addCharge, voidCharge, approveCharge, fileInsuranceClaim,
     addPayment, addDeposit,
     upsertInsurance, deleteInsurance,
-    insuranceProviders, loadingInsuranceProviders, fetchInsuranceProviders,
-    upsertInsuranceProvider, deleteInsuranceProvider,
+    insuranceProviders, fetchInsuranceProviders,
   } = useBillingStore()
 
   // ── Patient search ──────────────────────────────────────────────────────
@@ -113,109 +121,73 @@ export default function BillingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedPatientId])
 
-  // Recent charges list
-  const [recentChargeRows, setRecentChargeRows] = useState<{
-    patient: Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
-    lastCharge: { description: string; status: string; amount: number; created_at: string }
-  }[]>([])
-  const [loadingRecent, setLoadingRecent] = useState(true)
-
-  /** Patients with at least one charge in pending payment or pending insurance */
-  const [actionQueuePatients, setActionQueuePatients] = useState<{
-    patient: Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
-    pendingCount: number
-    insuranceCount: number
-    pendingTotal: number
-    insuranceTotal: number
-  }[]>([])
-  const [loadingActionQueue, setLoadingActionQueue] = useState(false)
-
-  useEffect(() => {
-    setLoadingRecent(true)
-    supabase
-      .from('charges')
-      .select('id, description, status, unit_price, quantity, created_at, patient_id, patients(id, first_name, last_name, mrn)')
-      .not('status', 'in', '(void)')
-      .order('created_at', { ascending: false })
-      .limit(30)
-      .then(({ data }) => {
-        if (!data) { setLoadingRecent(false); return }
-        const seen = new Set<string>()
-        const rows: typeof recentChargeRows = []
-        // supabase-js (untyped client) infers the joined `patients` as an array,
-        // but this many-to-one embed returns a single object at runtime.
-        for (const row of data as unknown as RecentChargeQueryRow[]) {
-          if (!row.patients || seen.has(row.patient_id)) continue
-          seen.add(row.patient_id)
-          rows.push({
-            patient: row.patients,
-            lastCharge: { description: row.description, status: row.status, amount: row.quantity * row.unit_price, created_at: row.created_at },
-          })
-          if (rows.length >= 8) break
-        }
-        setRecentChargeRows(rows)
-        setLoadingRecent(false)
-      })
-  }, [])
+  // ── Waiting-to-pay queue (landing) ──────────────────────────────────────
+  const [queueRows, setQueueRows] = useState<QueueRow[]>([])
+  const [loadingQueue, setLoadingQueue] = useState(true)
 
   useEffect(() => {
     if (selectedPatient !== null) return
     let cancelled = false
-    setLoadingActionQueue(true)
-    supabase
-      .from('charges')
-      .select('patient_id, status, unit_price, quantity, patients(id, first_name, last_name, mrn)')
-      .in('status', ['pending', 'pending_insurance'])
-      .then(({ data }) => {
+    setLoadingQueue(true)
+    Promise.all([
+      supabase
+        .from('patient_balance')
+        .select('patient_id, balance')
+        .gt('balance', 0)
+        .order('balance', { ascending: false })
+        .limit(200),
+      supabase
+        .from('charges')
+        .select('patient_id, unit_price, quantity, patients(id, first_name, last_name, mrn)')
+        .eq('status', 'pending_insurance'),
+    ]).then(async ([balRes, insRes]) => {
+      if (cancelled) return
+      const dueByPatient = new Map<string, number>()
+      for (const r of (balRes.data ?? []) as { patient_id: string; balance: number }[]) {
+        dueByPatient.set(r.patient_id, Number(r.balance))
+      }
+      const patientRefs = new Map<string, ChargePatientRef>()
+      const insByPatient = new Map<string, { total: number; count: number }>()
+      // supabase-js (untyped client) infers the joined `patients` as an array,
+      // but this many-to-one embed returns a single object at runtime.
+      for (const r of (insRes.data ?? []) as unknown as InsurancePendingRow[]) {
+        if (!r.patients) continue
+        patientRefs.set(r.patient_id, r.patients)
+        const agg = insByPatient.get(r.patient_id) ?? { total: 0, count: 0 }
+        agg.total += Number(r.quantity) * Number(r.unit_price)
+        agg.count += 1
+        insByPatient.set(r.patient_id, agg)
+      }
+      const missingIds = [...dueByPatient.keys()].filter(id => !patientRefs.has(id))
+      if (missingIds.length > 0) {
+        const { data } = await supabase
+          .from('patients')
+          .select('id, first_name, last_name, mrn')
+          .in('id', missingIds)
         if (cancelled) return
-        setLoadingActionQueue(false)
-        if (!data) {
-          setActionQueuePatients([])
-          return
-        }
-        const map = new Map<
-          string,
-          {
-            patient: Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
-            pendingCount: number
-            insuranceCount: number
-            pendingTotal: number
-            insuranceTotal: number
-          }
-        >()
-        for (const row of data as unknown as ActionQueueQueryRow[]) {
-          const p = row.patients
-          if (!p?.id) continue
-          const pid = row.patient_id as string
-          const amt = Number(row.quantity) * Number(row.unit_price)
-          let agg = map.get(pid)
-          if (!agg) {
-            agg = { patient: p, pendingCount: 0, insuranceCount: 0, pendingTotal: 0, insuranceTotal: 0 }
-            map.set(pid, agg)
-          }
-          if (row.status === 'pending') {
-            agg.pendingCount += 1
-            agg.pendingTotal += amt
-          } else if (row.status === 'pending_insurance') {
-            agg.insuranceCount += 1
-            agg.insuranceTotal += amt
-          }
-        }
-        const list = [...map.values()].sort((a, b) => {
-          const ta = a.pendingTotal + a.insuranceTotal
-          const tb = b.pendingTotal + b.insuranceTotal
-          if (tb !== ta) return tb - ta
-          return `${a.patient.last_name} ${a.patient.first_name}`.localeCompare(
-            `${b.patient.last_name} ${b.patient.first_name}`,
-            undefined,
-            { sensitivity: 'base' },
-          )
+        for (const p of (data ?? []) as ChargePatientRef[]) patientRefs.set(p.id, p)
+      }
+      const ids = new Set([...dueByPatient.keys(), ...insByPatient.keys()])
+      const rows: QueueRow[] = []
+      for (const id of ids) {
+        const patient = patientRefs.get(id)
+        if (!patient) continue
+        rows.push({
+          patient,
+          due: dueByPatient.get(id) ?? 0,
+          insuranceTotal: insByPatient.get(id)?.total ?? 0,
+          insuranceCount: insByPatient.get(id)?.count ?? 0,
         })
-        setActionQueuePatients(list)
-      })
-    return () => {
-      cancelled = true
-    }
+      }
+      rows.sort((a, b) =>
+        b.due - a.due ||
+        b.insuranceTotal - a.insuranceTotal ||
+        `${a.patient.last_name} ${a.patient.first_name}`.localeCompare(
+          `${b.patient.last_name} ${b.patient.first_name}`, undefined, { sensitivity: 'base' }))
+      setQueueRows(rows)
+      setLoadingQueue(false)
+    })
+    return () => { cancelled = true }
   }, [selectedPatient])
 
   // ── Dialogs state ───────────────────────────────────────────────────────
@@ -236,7 +208,7 @@ export default function BillingPage() {
   const [claimPayer, setClaimPayer]           = useState('')
   const [claimSaving, setClaimSaving]         = useState(false)
 
-  // Insurance management
+  // Patient insurance (policies on file)
   const [insOpen, setInsOpen]     = useState(false)
   const [insEdit, setInsEdit]     = useState<Partial<PatientInsurance> | null>(null)
   const [insPayer, setInsPayer]   = useState('')
@@ -248,19 +220,8 @@ export default function BillingPage() {
   const [insActive, setInsActive] = useState(true)
   const [insTemplateId, setInsTemplateId] = useState('')
 
-  // Reusable insurance provider directory (billing)
-  const [provOpen, setProvOpen] = useState(false)
-  const [provEdit, setProvEdit] = useState<InsuranceProvider | null>(null)
-  const [provName, setProvName] = useState('')
-  const [provCopay, setProvCopay] = useState('')
-  const [provLimit, setProvLimit] = useState('')
-  const [provSaving, setProvSaving] = useState(false)
-
-  // Charge selection for payment
+  // Partial-settle selection (outstanding charges only)
   const [selectedChargeIds, setSelectedChargeIds] = useState<Set<string>>(new Set())
-
-  /** When false, pending_approval charges are hidden from the list until toggled */
-  const [showPendingApprovalCharges, setShowPendingApprovalCharges] = useState(false)
 
   // Payment form
   const [payAmount, setPayAmount] = useState('')
@@ -285,17 +246,9 @@ export default function BillingPage() {
   const [depRef, setDepRef]       = useState('')
   const [depNotes, setDepNotes]   = useState('')
 
-  // Charge form
-  const [chargeMode, setChargeMode]         = useState<'service' | 'custom'>('service')
-  const [selectedServiceId, setSelectedServiceId] = useState('')
-  const [chargeDesc, setChargeDesc]         = useState('')
-  const [chargeQty, setChargeQty]           = useState(1)
-  const [chargePrice, setChargePrice]       = useState('')
-
   useEffect(() => {
-    fetchServiceItems()
     fetchInsuranceProviders()
-  }, [fetchServiceItems, fetchInsuranceProviders])
+  }, [fetchInsuranceProviders])
 
   const handleSearch = useCallback(async () => {
     const q = query.trim()
@@ -317,28 +270,38 @@ export default function BillingPage() {
     setSearchResults([])
     setQuery('')
     setSelectedChargeIds(new Set())
-    setShowPendingApprovalCharges(false)
     fetchPatientBilling(pt.id)
   }
 
-  // ── Handlers ───────────────────────────────────────────────────────────
+  // ── The ledger — one computation feeds every number on this screen ──────
+  const paymentsTotal = useMemo(
+    () => payments.reduce((s, p) => s + Number(p.amount), 0),
+    [payments],
+  )
+  const ledger = useMemo(() => walkLedger(charges, paymentsTotal), [charges, paymentsTotal])
 
-  const handleAddCharge = async () => {
-    if (!selectedPatient) return
-    setSaving(true)
-    const svc = chargeMode === 'service' ? serviceItems.find(s => s.id === selectedServiceId) : null
-    await addCharge({
-      patient_id:      selectedPatient.id,
-      service_item_id: svc?.id ?? null,
-      description:     svc ? svc.name : chargeDesc,
-      quantity:        chargeQty,
-      unit_price:      svc ? svc.default_price : parseFloat(chargePrice) || 0,
-      source:          'manual',
-    })
-    setSaving(false)
-    setChargeOpen(false)
-    fetchPatientBilling(selectedPatient.id)
-  }
+  const outstandingIds = useMemo(
+    () => new Set(ledger.outstanding.map(c => c.id)),
+    [ledger],
+  )
+
+  const selectedTotal = charges
+    .filter(c => selectedChargeIds.has(c.id))
+    .reduce((sum, c) => sum + chargeAmount(c), 0)
+
+  const collectTarget = selectedChargeIds.size > 0 ? selectedTotal : ledger.dueNow
+
+  const depositAvailable = useMemo(
+    () => deposits.reduce((s, d) => s + Math.max(0, Number(d.remaining)), 0),
+    [deposits],
+  )
+
+  const insurancePendingTotal = useMemo(
+    () => charges.filter(c => c.status === 'pending_insurance').reduce((s, c) => s + chargeAmount(c), 0),
+    [charges],
+  )
+
+  // ── Handlers ───────────────────────────────────────────────────────────
 
   const handleVoid = async () => {
     if (!voidOpen || !selectedPatient) return
@@ -360,10 +323,8 @@ export default function BillingPage() {
 
   const openClaimDialog = (ids: string[]) => {
     setClaimChargeIds(ids)
-    // Pre-fill payer from active insurance if available
     setClaimPayer(activeInsurance?.payer_name ?? '')
-    // Pre-fill percentage from active insurance copay if available
-    // copay_percent is patient's %, so insurer pays (100 - copay_percent)
+    // copay_percent is the patient's %, so the insurer pays (100 − copay)
     const insurerPct = activeInsurance?.copay_percent != null
       ? String(100 - activeInsurance.copay_percent)
       : ''
@@ -399,18 +360,8 @@ export default function BillingPage() {
     })
   }
 
-  const selectedTotal = charges
-    .filter(c => selectedChargeIds.has(c.id))
-    .reduce((sum, c) => sum + c.quantity * c.unit_price, 0)
-
-  const depositAvailable = useMemo(
-    () => deposits.reduce((s, d) => s + Math.max(0, Number(d.remaining)), 0),
-    [deposits],
-  )
-
-  const handleOpenPayment = () => {
-    // Pre-fill amount from selected charges if any
-    setPayAmount(selectedChargeIds.size > 0 ? selectedTotal.toFixed(2) : '')
+  const handleOpenCollect = () => {
+    setPayAmount(collectTarget > 0 ? collectTarget.toFixed(2) : '')
     setPayMethod('cash')
     setPayRef('')
     setPayPayer('')
@@ -423,17 +374,22 @@ export default function BillingPage() {
     if (!selectedPatient) return
     setPayError('')
     setSaving(true)
-    const chargesPaidNow = charges.filter(c => selectedChargeIds.has(c.id))
     const amountNum = parseFloat(payAmount) || 0
+    const markPaid = allocatePayment(
+      charges,
+      paymentsTotal,
+      amountNum,
+      selectedChargeIds.size > 0 ? selectedChargeIds : undefined,
+    )
+    const chargesPaidNow = charges.filter(c => markPaid.includes(c.id))
     const ok = await addPayment({
-      patient_id:    selectedPatient.id,
-      amount:        amountNum,
-      method:        payMethod,
-      reference:     payRef || undefined,
-      payer_name:    payPayer || undefined,
-      notes:         payNotes || undefined,
-      chargeIds:     chargesPaidNow.length > 0 ? chargesPaidNow.map(c => c.id) : undefined,
-      chargesTotal:  chargesPaidNow.length > 0 ? selectedTotal : undefined,
+      patient_id:        selectedPatient.id,
+      amount:            amountNum,
+      method:            payMethod,
+      reference:         payRef || undefined,
+      payer_name:        payPayer || undefined,
+      notes:             payNotes || undefined,
+      markPaidChargeIds: markPaid,
     })
     setSaving(false)
     if (!ok) {
@@ -446,17 +402,12 @@ export default function BillingPage() {
     }
     setPaymentOpen(false)
     setSelectedChargeIds(new Set())
-
-    // Show receipt if there were charges paid
-    if (chargesPaidNow.length > 0) {
-      setReceiptData({
-        patient: selectedPatient,
-        chargesPaid: chargesPaidNow,
-        payment: { amount: amountNum, method: payMethod, reference: payRef, payer_name: payPayer },
-      })
-      setReceiptOpen(true)
-    }
-
+    setReceiptData({
+      patient: selectedPatient,
+      chargesPaid: chargesPaidNow,
+      payment: { amount: amountNum, method: payMethod, reference: payRef, payer_name: payPayer },
+    })
+    setReceiptOpen(true)
     fetchPatientBilling(selectedPatient.id)
   }
 
@@ -498,34 +449,6 @@ export default function BillingPage() {
     setInsOpen(true)
   }
 
-  const openProvForm = (p?: InsuranceProvider) => {
-    setProvEdit(p ?? null)
-    setProvName(p?.name ?? '')
-    setProvCopay(p?.default_copay_percent != null ? String(p.default_copay_percent) : '')
-    setProvLimit(p?.default_coverage_limit != null ? String(p.default_coverage_limit) : '')
-    setProvOpen(true)
-  }
-
-  const handleSaveProvider = async () => {
-    const n = provName.trim()
-    if (!n) return
-    setProvSaving(true)
-    const ok = await upsertInsuranceProvider({
-      id: provEdit?.id,
-      name: n,
-      default_copay_percent: provCopay ? parseFloat(provCopay) : undefined,
-      default_coverage_limit: provLimit ? parseFloat(provLimit) : undefined,
-      active: provEdit?.active ?? true,
-    })
-    setProvSaving(false)
-    if (ok) setProvOpen(false)
-  }
-
-  const handleDeleteProvider = async (id: string) => {
-    if (!confirm('Remove this insurance provider from the shared list?')) return
-    await deleteInsuranceProvider(id)
-  }
-
   const handleSaveInsurance = async () => {
     if (!selectedPatient || !insPayer.trim()) return
     setSaving(true)
@@ -555,28 +478,10 @@ export default function BillingPage() {
     window.print()
   }
 
-  // Active insurance for claim button
   const activeInsurance = insurance.find(i => i.is_active)
 
   const canCharge = can('billing.charge')
   const canPay    = can('billing.payment')
-  const canEditInsuranceDirectory = canCharge || canPay || can('billing.manage_fees')
-
-  const pendingApprovalCount = useMemo(
-    () => charges.filter(c => c.status === 'pending_approval').length,
-    [charges],
-  )
-
-  const displayedCharges = useMemo(
-    () =>
-      showPendingApprovalCharges
-        ? charges
-        : charges.filter(c => c.status !== 'pending_approval'),
-    [charges, showPendingApprovalCharges],
-  )
-
-  // Charges eligible for selection (pending payment or pending_insurance)
-  const selectableStatuses = new Set(['pending', 'pending_insurance'])
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -604,7 +509,7 @@ export default function BillingPage() {
       </header>
 
       {!selectedPatient ? (
-        /* ── Search view ── */
+        /* ── Landing: the money queue ── */
         <div className="flex-1 overflow-auto p-4 sm:p-6">
           <div className="max-w-lg mx-auto space-y-4">
             <div className="relative">
@@ -644,193 +549,54 @@ export default function BillingPage() {
             )}
 
             {!query && (
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Pending payment &amp; insurance
-                    </p>
-                  </div>
-                  {loadingActionQueue ? (
-                    <div className="flex justify-center py-6">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : actionQueuePatients.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg bg-muted/20">
-                      No patients with pending payment or insurance charges.
-                    </p>
-                  ) : (
-                    <div className="border rounded-lg divide-y overflow-hidden border-emerald-200/60 dark:border-emerald-900/40">
-                      {actionQueuePatients.map(
-                        ({ patient: pt, pendingCount, insuranceCount, pendingTotal, insuranceTotal }) => {
-                          const grand = pendingTotal + insuranceTotal
-                          return (
-                            <button
-                              key={pt.id}
-                              type="button"
-                              onClick={() => selectPatient(pt as Patient)}
-                              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors"
-                            >
-                              <div className="h-8 w-8 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-xs shrink-0">
-                                {pt.first_name[0]}
-                                {pt.last_name[0]}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium truncate">{fullName(pt, nameFormat)}</p>
-                                <p className="text-xs text-muted-foreground font-mono truncate">{pt.mrn}</p>
-                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                  {pendingCount > 0 && (
-                                    <Badge
-                                      variant="outline"
-                                      className={cn('text-[9px] py-0 px-1.5 font-medium', CHARGE_STATUS_COLORS.pending)}
-                                    >
-                                      {pendingCount} pending payment
-                                    </Badge>
-                                  )}
-                                  {insuranceCount > 0 && (
-                                    <Badge
-                                      variant="outline"
-                                      className={cn('text-[9px] py-0 px-1.5 font-medium', CHARGE_STATUS_COLORS.pending_insurance)}
-                                    >
-                                      {insuranceCount} insurance
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-sm font-mono font-semibold tabular-nums">{grand.toFixed(2)}</p>
-                                <p className="text-[10px] text-muted-foreground">{currencySymbol} total</p>
-                              </div>
-                            </button>
-                          )
-                        },
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recent Charges</p>
+                  <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Waiting to pay
+                  </p>
                 </div>
-                {loadingRecent ? (
-                  <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-                ) : recentChargeRows.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground space-y-2">
-                    <DollarSign className="h-8 w-8 mx-auto opacity-20" />
-                    <p className="text-sm">No charges yet</p>
+                {loadingQueue ? (
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   </div>
+                ) : queueRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg bg-muted/20">
+                    Nobody owes anything. 🎉
+                  </p>
                 ) : (
-                  <div className="border rounded-lg divide-y overflow-hidden">
-                    {recentChargeRows.map(({ patient, lastCharge }) => (
+                  <div className="border rounded-lg divide-y overflow-hidden border-emerald-200/60 dark:border-emerald-900/40">
+                    {queueRows.map(({ patient: pt, due, insuranceTotal, insuranceCount }) => (
                       <button
-                        key={patient.id}
-                        onClick={() => selectPatient(patient as Patient)}
+                        key={pt.id}
+                        type="button"
+                        onClick={() => selectPatient(pt as Patient)}
                         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors"
                       >
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs shrink-0">
-                          {patient.first_name[0]}{patient.last_name[0]}
+                        <div className="h-8 w-8 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-xs shrink-0">
+                          {pt.first_name[0]}{pt.last_name[0]}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{patient.first_name} {patient.last_name}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{patient.mrn} · {lastCharge.description}</p>
+                          <p className="text-sm font-medium truncate">{fullName(pt, nameFormat)}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span className="text-xs text-muted-foreground font-mono">{pt.mrn}</span>
+                            {insuranceCount > 0 && (
+                              <Badge variant="outline" className={cn('text-[9px] py-0 px-1.5 font-medium', CHIP.insurance.cls)}>
+                                insurance {insuranceTotal.toFixed(2)}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right shrink-0 space-y-0.5">
-                          <p className="text-sm font-mono font-medium">{lastCharge.amount.toFixed(2)}</p>
-                          <Badge variant="outline" className={cn('text-[9px] py-0 px-1.5', CHARGE_STATUS_COLORS[lastCharge.status])}>
-                            {CHARGE_STATUS_LABELS[lastCharge.status] ?? lastCharge.status}
-                          </Badge>
-                        </div>
+                        {due > 0 && (
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-mono font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                              {currencySymbol}{due.toFixed(2)}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">due</p>
+                          </div>
+                        )}
                       </button>
                     ))}
-                  </div>
-                )}
-                </div>
-
-                {hasBilling && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <ShieldCheck className="h-3.5 w-3.5 text-purple-600 shrink-0" />
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
-                          Common insurance providers
-                        </p>
-                      </div>
-                      {canEditInsuranceDirectory && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs gap-1 shrink-0"
-                          onClick={() => openProvForm()}
-                        >
-                          <Plus className="h-3 w-3" /> Add
-                        </Button>
-                      )}
-                    </div>
-                    {loadingInsuranceProviders ? (
-                      <div className="flex justify-center py-6">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : insuranceProviders.filter(p => p.active).length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg bg-muted/20">
-                        {canEditInsuranceDirectory
-                          ? 'Add payers you use often — they appear here and when adding patient insurance.'
-                          : 'No shared insurance providers yet.'}
-                      </p>
-                    ) : (
-                      <div className="border rounded-lg divide-y overflow-hidden border-purple-200/50 dark:border-purple-900/40">
-                        {insuranceProviders
-                          .filter(p => p.active)
-                          .map(p => (
-                            <div
-                              key={p.id}
-                              className="flex items-center gap-2 px-3 py-2.5 text-sm"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium truncate">{p.name}</p>
-                                {(p.default_copay_percent != null || p.default_coverage_limit != null) && (
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                                    {p.default_copay_percent != null && (
-                                      <span>{p.default_copay_percent}% patient copay (default)</span>
-                                    )}
-                                    {p.default_copay_percent != null && p.default_coverage_limit != null && ' · '}
-                                    {p.default_coverage_limit != null && (
-                                      <span>limit {p.default_coverage_limit.toFixed(2)} (default)</span>
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                              {canEditInsuranceDirectory && (
-                                <div className="flex items-center gap-0.5 shrink-0">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="h-7 w-7"
-                                    onClick={() => openProvForm(p)}
-                                    title="Edit"
-                                  >
-                                    <Pencil className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="h-7 w-7 text-destructive hover:text-destructive"
-                                    onClick={() => handleDeleteProvider(p.id)}
-                                    title="Remove from list"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -845,22 +611,215 @@ export default function BillingPage() {
               <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             ) : (
               <>
-                {/* Balance cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <BalanceCard label="Total Charges" value={balance?.total_charges ?? 0} icon={TrendingUp} color="text-amber-600" symbol={currencySymbol} />
-                  <BalanceCard label="Total Paid"    value={balance?.total_payments ?? 0} icon={TrendingDown} color="text-green-600" symbol={currencySymbol} />
-                  <BalanceCard label="Deposits"      value={balance?.deposit_balance ?? 0} icon={Wallet} color="text-blue-600" symbol={currencySymbol} />
-                  <BalanceCard
-                    label="Balance"
-                    value={balance?.balance ?? 0}
-                    icon={DollarSign}
-                    color={(balance?.balance ?? 0) > 0 ? 'text-red-600' : 'text-green-600'}
-                    bold
-                    symbol={currencySymbol}
-                  />
+                {/* Due-now hero — the one number, and the one action */}
+                <div className={cn(
+                  'border rounded-lg p-4 flex flex-wrap items-center gap-3',
+                  ledger.dueNow > 0
+                    ? 'border-amber-300/60 bg-amber-50/50 dark:border-amber-800/60 dark:bg-amber-950/20'
+                    : 'bg-muted/20',
+                )}>
+                  <div className="flex-1 min-w-[10rem]">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      {ledger.dueNow > 0 ? 'Due now' : ledger.credit > 0 ? 'On account' : 'Settled'}
+                    </p>
+                    {ledger.dueNow > 0 ? (
+                      <p className="text-2xl font-mono font-bold text-amber-700 dark:text-amber-400">
+                        <span className="text-base opacity-70 mr-0.5">{currencySymbol}</span>
+                        {ledger.dueNow.toFixed(2)}
+                      </p>
+                    ) : ledger.credit > 0 ? (
+                      <p className="text-2xl font-mono font-bold text-blue-600 dark:text-blue-400">
+                        <span className="text-base opacity-70 mr-0.5">{currencySymbol}</span>
+                        {ledger.credit.toFixed(2)}
+                        <span className="text-sm font-sans font-medium text-muted-foreground ml-2">credit</span>
+                      </p>
+                    ) : (
+                      <p className="text-2xl font-mono font-bold text-green-600 dark:text-green-400 flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5" /> <span className="text-base font-sans">All settled</span>
+                      </p>
+                    )}
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      charged {currencySymbol}{ledger.countedTotal.toFixed(2)} · paid {currencySymbol}{paymentsTotal.toFixed(2)}
+                      {depositAvailable > 0 && <> · deposit {currencySymbol}{depositAvailable.toFixed(2)}</>}
+                      {insurancePendingTotal > 0 && <> · insurance pending {currencySymbol}{insurancePendingTotal.toFixed(2)}</>}
+                    </p>
+                  </div>
+                  {canPay && collectTarget > 0 && (
+                    <Button onClick={handleOpenCollect} className="shrink-0">
+                      <DollarSign className="h-4 w-4" />
+                      {selectedChargeIds.size > 0
+                        ? `Collect selected (${currencySymbol}${selectedTotal.toFixed(2)})`
+                        : `Collect ${currencySymbol}${ledger.dueNow.toFixed(2)}`}
+                    </Button>
+                  )}
                 </div>
 
-                {/* Insurance section */}
+                {/* Secondary actions */}
+                <div className="flex flex-wrap gap-2">
+                  {canCharge && (
+                    <Button size="sm" variant="outline" onClick={() => setChargeOpen(true)}>
+                      <Plus className="h-3.5 w-3.5" /> Add Charge
+                    </Button>
+                  )}
+                  {canPay && (
+                    <>
+                      {collectTarget <= 0 && (
+                        <Button size="sm" variant="outline" onClick={handleOpenCollect}>
+                          <DollarSign className="h-3.5 w-3.5" /> Record Payment
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => {
+                        setDepAmount('')
+                        setDepMethod('cash')
+                        setDepRef('')
+                        setDepNotes('')
+                        setDepositOpen(true)
+                      }}>
+                        <Wallet className="h-3.5 w-3.5" /> Accept Deposit
+                      </Button>
+                    </>
+                  )}
+                  {/* Bulk file insurance — only when outstanding charges are selected and insurance exists */}
+                  {canCharge && selectedChargeIds.size > 0 && insurance.some(i => i.is_active) &&
+                    [...selectedChargeIds].every(id => outstandingIds.has(id)) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400"
+                      onClick={() => openClaimDialog([...selectedChargeIds])}
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      File Insurance ({selectedChargeIds.size})
+                    </Button>
+                  )}
+                </div>
+
+                {/* Charges list */}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Charges ({charges.length})
+                    </p>
+                    {selectedChargeIds.size > 0 && (
+                      <button
+                        type="button"
+                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                        onClick={() => setSelectedChargeIds(new Set())}
+                      >
+                        Clear selection
+                      </button>
+                    )}
+                  </div>
+                  {charges.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">No charges</p>
+                  ) : (
+                    <div className="border rounded-lg divide-y overflow-hidden">
+                      {charges.map(c => {
+                        const chip         = chipFor(c, ledger.settledIds)
+                        const isSelectable = outstandingIds.has(c.id)
+                        const isSelected   = selectedChargeIds.has(c.id)
+                        return (
+                          <div
+                            key={c.id}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-2 text-sm transition-colors',
+                              isSelectable && canPay && 'cursor-pointer hover:bg-accent/30',
+                              isSelected && 'bg-primary/5',
+                              c.status === 'pending_approval' && 'opacity-70',
+                            )}
+                            onClick={() => canPay && toggleChargeSelect(c.id, isSelectable)}
+                          >
+                            {/* Checkbox — partial settle */}
+                            {canPay && (
+                              <div className={cn(
+                                'h-4 w-4 rounded border shrink-0 flex items-center justify-center transition-colors',
+                                isSelectable
+                                  ? isSelected
+                                    ? 'border-primary bg-primary text-white'
+                                    : 'border-border bg-background'
+                                  : 'border-transparent',
+                              )}>
+                                {isSelected && <Check className="h-2.5 w-2.5" />}
+                              </div>
+                            )}
+
+                            <div className="flex-1 min-w-0">
+                              <p className={cn('font-medium truncate', c.status === 'void' && 'line-through text-muted-foreground')}>
+                                {c.description}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {formatDateTime(c.created_at)}
+                                {c.source !== 'manual' && <span className="ml-1 opacity-60">· {c.source.replace('_', ' ')}</span>}
+                              </p>
+                            </div>
+
+                            <Badge variant="outline" className={cn('text-[10px] shrink-0', chip.cls)}>
+                              {chip.label}
+                            </Badge>
+
+                            <p className={cn('text-sm font-mono shrink-0 w-16 text-right', c.status === 'void' && 'line-through text-muted-foreground')}>
+                              {chargeAmount(c).toFixed(2)}
+                            </p>
+
+                            {/* Row actions */}
+                            <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                              {c.status === 'pending_approval' && canCharge && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApprove(c.id)}
+                                  disabled={approvingId === c.id}
+                                  title="Approve charge"
+                                  className={cn(
+                                    'h-6 w-6 rounded-full flex items-center justify-center shrink-0 transition-all border',
+                                    'bg-emerald-100 text-emerald-600 border-emerald-300',
+                                    'hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:scale-110',
+                                    approvingId === c.id && 'opacity-60 cursor-wait',
+                                  )}
+                                >
+                                  {approvingId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                </button>
+                              )}
+
+                              {isSelectable && insurance.some(i => i.is_active) && canCharge && (
+                                <button
+                                  type="button"
+                                  onClick={() => openClaimDialog([c.id])}
+                                  title="File insurance claim"
+                                  className={cn(
+                                    'h-6 w-6 rounded-full flex items-center justify-center shrink-0 transition-all border',
+                                    'bg-purple-100 text-purple-600 border-purple-300',
+                                    'hover:bg-purple-500 hover:text-white hover:border-purple-500 hover:scale-110',
+                                    'dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-700',
+                                  )}
+                                >
+                                  <ShieldCheck className="h-3 w-3" />
+                                </button>
+                              )}
+
+                              {(isSelectable || c.status === 'pending_insurance' || c.status === 'pending_approval') &&
+                                (canCharge || c.created_by === user?.id) && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setVoidOpen(c); setVoidReason('') }}
+                                  title="Cancel charge"
+                                  className={cn(
+                                    'h-6 w-6 rounded-full flex items-center justify-center shrink-0 transition-all border',
+                                    'bg-red-50 text-red-400 border-red-200',
+                                    'hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-110',
+                                  )}
+                                >
+                                  <Ban className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Insurance on file */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b">
                     <div className="flex items-center gap-2">
@@ -910,213 +869,6 @@ export default function BillingPage() {
                           )}
                         </div>
                       ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Action buttons */}
-                <div className="flex flex-wrap gap-2">
-                  {canCharge && (
-                    <Button size="sm" onClick={() => {
-                      setChargeMode('service')
-                      setSelectedServiceId(serviceItems[0]?.id ?? '')
-                      setChargeDesc('')
-                      setChargeQty(1)
-                      setChargePrice('')
-                      setChargeOpen(true)
-                    }}>
-                      <Plus className="h-3.5 w-3.5" /> Add Charge
-                    </Button>
-                  )}
-                  {canPay && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant={selectedChargeIds.size > 0 ? 'default' : 'outline'}
-                        onClick={handleOpenPayment}
-                      >
-                        <DollarSign className="h-3.5 w-3.5" />
-                        {selectedChargeIds.size > 0
-                          ? `Pay Selected (${selectedTotal.toFixed(2)})`
-                          : 'Record Payment'}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => {
-                        setDepAmount('')
-                        setDepMethod('cash')
-                        setDepRef('')
-                        setDepNotes('')
-                        setDepositOpen(true)
-                      }}>
-                        <Wallet className="h-3.5 w-3.5" /> Accept Deposit
-                      </Button>
-                    </>
-                  )}
-                  {/* Bulk file insurance — only when pending charges selected and insurance exists */}
-                  {canCharge && selectedChargeIds.size > 0 && insurance.some(i => i.is_active) &&
-                    [...selectedChargeIds].every(id => {
-                      const c = charges.find(x => x.id === id)
-                      return c?.status === 'pending'
-                    }) && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400"
-                      onClick={() => openClaimDialog([...selectedChargeIds])}
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      File Insurance ({selectedChargeIds.size})
-                    </Button>
-                  )}
-                </div>
-
-                {/* Charges list */}
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      <span>
-                        {`Charges (${displayedCharges.length})`}
-                      </span>
-                      {pendingApprovalCount > 0 && !showPendingApprovalCharges && (
-                        <span className="ml-1.5 font-normal normal-case text-muted-foreground/90">
-                          · {pendingApprovalCount} awaiting approval hidden
-                        </span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {pendingApprovalCount > 0 && (
-                        <Button
-                          type="button"
-                          variant={showPendingApprovalCharges ? 'secondary' : 'outline'}
-                          size="sm"
-                          className="h-7 text-[11px] gap-1.5"
-                          onClick={() => setShowPendingApprovalCharges(v => !v)}
-                        >
-                          <Clock className="h-3 w-3" />
-                          {showPendingApprovalCharges
-                            ? 'Hide awaiting approval'
-                            : `Show awaiting approval (${pendingApprovalCount})`}
-                        </Button>
-                      )}
-                      {selectedChargeIds.size > 0 && (
-                        <button
-                          type="button"
-                          className="text-[11px] text-muted-foreground hover:text-foreground"
-                          onClick={() => setSelectedChargeIds(new Set())}
-                        >
-                          Clear selection
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {charges.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">No charges</p>
-                  ) : displayedCharges.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">
-                      All charges are awaiting approval. Use the button above to show them.
-                    </p>
-                  ) : (
-                    <div className="border rounded-lg divide-y overflow-hidden">
-                      {displayedCharges.map(c => {
-                        const isSelectable = selectableStatuses.has(c.status)
-                        const isSelected   = selectedChargeIds.has(c.id)
-                        return (
-                          <div
-                            key={c.id}
-                            className={cn(
-                              'flex items-center gap-2 px-3 py-2 text-sm transition-colors',
-                              isSelectable && canPay && 'cursor-pointer hover:bg-accent/30',
-                              isSelected && 'bg-primary/5',
-                            )}
-                            onClick={() => canPay && toggleChargeSelect(c.id, isSelectable)}
-                          >
-                            {/* Checkbox */}
-                            {canPay && (
-                              <div className={cn(
-                                'h-4 w-4 rounded border shrink-0 flex items-center justify-center transition-colors',
-                                isSelectable
-                                  ? isSelected
-                                    ? 'border-primary bg-primary text-white'
-                                    : 'border-border bg-background'
-                                  : 'border-transparent',
-                              )}>
-                                {isSelected && <Check className="h-2.5 w-2.5" />}
-                              </div>
-                            )}
-
-                            <div className="flex-1 min-w-0">
-                              <p className={cn('font-medium truncate', c.status === 'void' && 'line-through text-muted-foreground')}>
-                                {c.description}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
-                                {formatDateTime(c.created_at)}
-                                {c.source !== 'manual' && <span className="ml-1 opacity-60">· {c.source.replace('_', ' ')}</span>}
-                              </p>
-                            </div>
-
-                            <Badge variant="outline" className={cn('text-[10px] shrink-0', CHARGE_STATUS_COLORS[c.status])}>
-                              {CHARGE_STATUS_LABELS[c.status] ?? c.status}
-                            </Badge>
-
-                            <p className={cn('text-sm font-mono shrink-0 w-16 text-right', c.status === 'void' && 'line-through text-muted-foreground')}>
-                              {(c.quantity * c.unit_price).toFixed(2)}
-                            </p>
-
-                            {/* Action buttons */}
-                            <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                              {/* Approve */}
-                              {c.status === 'pending_approval' && canCharge && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleApprove(c.id)}
-                                  disabled={approvingId === c.id}
-                                  title="Approve charge"
-                                  className={cn(
-                                    'h-6 w-6 rounded-full flex items-center justify-center shrink-0 transition-all border',
-                                    'bg-emerald-100 text-emerald-600 border-emerald-300',
-                                    'hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:scale-110',
-                                    approvingId === c.id && 'opacity-60 cursor-wait',
-                                  )}
-                                >
-                                  {approvingId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                                </button>
-                              )}
-
-                              {/* File Insurance Claim — opens dialog */}
-                              {c.status === 'pending' && insurance.some(i => i.is_active) && canCharge && (
-                                <button
-                                  type="button"
-                                  onClick={() => openClaimDialog([c.id])}
-                                  title="File insurance claim"
-                                  className={cn(
-                                    'h-6 w-6 rounded-full flex items-center justify-center shrink-0 transition-all border',
-                                    'bg-purple-100 text-purple-600 border-purple-300',
-                                    'hover:bg-purple-500 hover:text-white hover:border-purple-500 hover:scale-110',
-                                    'dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-700',
-                                  )}
-                                >
-                                  <ShieldCheck className="h-3 w-3" />
-                                </button>
-                              )}
-
-                              {/* Cancel */}
-                              {c.status !== 'void' && c.status !== 'paid' && (canCharge || c.created_by === user?.id) && (
-                                <button
-                                  type="button"
-                                  onClick={() => { setVoidOpen(c); setVoidReason('') }}
-                                  title="Cancel charge"
-                                  className={cn(
-                                    'h-6 w-6 rounded-full flex items-center justify-center shrink-0 transition-all border',
-                                    'bg-red-50 text-red-400 border-red-200',
-                                    'hover:bg-red-500 hover:text-white hover:border-red-500 hover:scale-110',
-                                  )}
-                                >
-                                  <Ban className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
                     </div>
                   )}
                 </div>
@@ -1174,41 +926,6 @@ export default function BillingPage() {
         </ScrollArea>
       )}
 
-      {/* ── Insurance provider directory (shared list) ── */}
-      <Dialog open={provOpen} onOpenChange={o => { if (!o) setProvOpen(false) }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{provEdit?.id ? 'Edit provider' : 'Add insurance provider'}</DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground -mt-1">
-            Saved for everyone on billing. Picking one when adding patient insurance fills payer and optional defaults.
-          </p>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Payer / company name *</Label>
-              <Input value={provName} onChange={e => setProvName(e.target.value)} placeholder="e.g. NHIF, AAR" autoFocus />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Default patient copay %</Label>
-                <Input type="number" min={0} max={100} value={provCopay} onChange={e => setProvCopay(e.target.value)} placeholder="optional" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Default coverage limit</Label>
-                <Input type="number" value={provLimit} onChange={e => setProvLimit(e.target.value)} placeholder="optional" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setProvOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveProvider} disabled={provSaving || !provName.trim()}>
-                {provSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                Save
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Insurance Claim Dialog ── */}
       <Dialog open={claimOpen} onOpenChange={o => { if (!o) setClaimOpen(false) }}>
         <DialogContent className="max-w-sm">
@@ -1225,13 +942,13 @@ export default function BillingPage() {
               {charges.filter(c => claimChargeIds.includes(c.id)).map(c => (
                 <div key={c.id} className="flex justify-between text-xs">
                   <span className="truncate mr-2">{c.description}</span>
-                  <span className="font-mono shrink-0">{(c.quantity * c.unit_price).toFixed(2)}</span>
+                  <span className="font-mono shrink-0">{chargeAmount(c).toFixed(2)}</span>
                 </div>
               ))}
               <div className="flex justify-between text-xs font-semibold border-t pt-1">
                 <span>Total</span>
                 <span className="font-mono">
-                  {charges.filter(c => claimChargeIds.includes(c.id)).reduce((s, c) => s + c.quantity * c.unit_price, 0).toFixed(2)}
+                  {charges.filter(c => claimChargeIds.includes(c.id)).reduce((s, c) => s + chargeAmount(c), 0).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -1304,7 +1021,7 @@ export default function BillingPage() {
                 </div>
                 {claimPercent && (() => {
                   const pct = parseFloat(claimPercent) || 0
-                  const total = charges.filter(c => claimChargeIds.includes(c.id)).reduce((s, c) => s + c.quantity * c.unit_price, 0)
+                  const total = charges.filter(c => claimChargeIds.includes(c.id)).reduce((s, c) => s + chargeAmount(c), 0)
                   const ins = Math.round(total * pct / 100 * 100) / 100
                   const pat = Math.round((total - ins) * 100) / 100
                   return (
@@ -1338,7 +1055,7 @@ export default function BillingPage() {
                 </div>
                 {claimFixed && (() => {
                   const amt = parseFloat(claimFixed) || 0
-                  const total = charges.filter(c => claimChargeIds.includes(c.id)).reduce((s, c) => s + c.quantity * c.unit_price, 0)
+                  const total = charges.filter(c => claimChargeIds.includes(c.id)).reduce((s, c) => s + chargeAmount(c), 0)
                   const pat = Math.max(0, Math.round((total - amt) * 100) / 100)
                   return (
                     <div className="text-[11px] text-muted-foreground bg-muted/30 rounded p-2 space-y-0.5">
@@ -1377,7 +1094,7 @@ export default function BillingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Insurance Dialog ── */}
+      {/* ── Patient insurance dialog ── */}
       <Dialog open={insOpen} onOpenChange={o => { if (!o) setInsOpen(false) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -1450,46 +1167,29 @@ export default function BillingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Add Charge Dialog ── */}
+      {/* ── Add Charge Dialog — same one-tap picker as the encounter bill ── */}
       <Dialog open={chargeOpen} onOpenChange={setChargeOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Add Charge</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <Button size="sm" variant={chargeMode === 'service' ? 'default' : 'outline'} onClick={() => setChargeMode('service')}>Service Item</Button>
-              <Button size="sm" variant={chargeMode === 'custom'  ? 'default' : 'outline'} onClick={() => setChargeMode('custom')}>Custom</Button>
-            </div>
-            {chargeMode === 'service' ? (
-              <div className="space-y-2">
-                <Label>Service</Label>
-                <select
-                  value={selectedServiceId}
-                  onChange={e => setSelectedServiceId(e.target.value)}
-                  className="w-full h-9 text-sm rounded-lg border border-border bg-background px-3 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {serviceItems.filter(s => s.active).map(s => (
-                    <option key={s.id} value={s.id}>{s.name} — {s.default_price.toFixed(2)} ({s.code})</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Input value={chargeDesc} onChange={e => setChargeDesc(e.target.value)} placeholder="Charge description" />
-                <Label>Unit Price</Label>
-                <Input type="number" value={chargePrice} onChange={e => setChargePrice(e.target.value)} placeholder="0.00" />
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <Label>Quantity</Label>
-              <Input type="number" min={1} value={chargeQty} onChange={e => setChargeQty(parseInt(e.target.value) || 1)} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setChargeOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddCharge} disabled={saving || (chargeMode === 'service' && !selectedServiceId) || (chargeMode === 'custom' && !chargeDesc)}>
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                Add Charge
-              </Button>
+          <div className="space-y-3">
+            <ServiceItemPicker
+              allowCustom
+              autoFocus
+              currencySymbol={currencySymbol}
+              onPick={async line => {
+                if (!selectedPatient) return
+                await addCharge({
+                  patient_id:      selectedPatient.id,
+                  service_item_id: line.service_item_id,
+                  description:     line.description,
+                  quantity:        1,
+                  unit_price:      line.unit_price,
+                  source:          'manual',
+                })
+              }}
+            />
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setChargeOpen(false)}>Done</Button>
             </div>
           </div>
         </DialogContent>
@@ -1516,7 +1216,7 @@ export default function BillingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Record Payment Dialog ── */}
+      {/* ── Collect / Record Payment Dialog ── */}
       <Dialog
         open={paymentOpen}
         onOpenChange={o => {
@@ -1525,7 +1225,9 @@ export default function BillingPage() {
         }}
       >
         <DialogContent className="max-w-sm h-[90vh] !flex flex-col overflow-hidden">
-          <DialogHeader className="shrink-0"><DialogTitle>Record Payment</DialogTitle></DialogHeader>
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{collectTarget > 0 ? 'Collect Payment' : 'Record Payment'}</DialogTitle>
+          </DialogHeader>
           <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-1">
             {/* Copay suggestion */}
             {activeInsurance?.copay_percent != null && selectedChargeIds.size > 0 && (
@@ -1541,19 +1243,24 @@ export default function BillingPage() {
               </div>
             )}
 
-            {/* Selected charges summary */}
-            {selectedChargeIds.size > 0 && (
+            {/* What this payment settles */}
+            {(selectedChargeIds.size > 0 ? charges.filter(c => selectedChargeIds.has(c.id)) : ledger.outstanding).length > 0 && (
               <div className="rounded-lg border bg-muted/30 p-2 space-y-1">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Charges being paid</p>
-                {charges.filter(c => selectedChargeIds.has(c.id)).map(c => (
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  {selectedChargeIds.size > 0 ? 'Selected charges' : 'Outstanding charges'}
+                </p>
+                {(selectedChargeIds.size > 0
+                  ? charges.filter(c => selectedChargeIds.has(c.id))
+                  : charges.filter(c => outstandingIds.has(c.id))
+                ).map(c => (
                   <div key={c.id} className="flex justify-between text-xs">
                     <span className="truncate mr-2">{c.description}</span>
-                    <span className="font-mono shrink-0">{(c.quantity * c.unit_price).toFixed(2)}</span>
+                    <span className="font-mono shrink-0">{chargeAmount(c).toFixed(2)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-xs font-semibold border-t pt-1">
-                  <span>Total</span>
-                  <span className="font-mono">{selectedTotal.toFixed(2)}</span>
+                  <span>{selectedChargeIds.size > 0 ? 'Selected total' : 'Due now'}</span>
+                  <span className="font-mono">{collectTarget.toFixed(2)}</span>
                 </div>
               </div>
             )}
@@ -1570,13 +1277,12 @@ export default function BillingPage() {
                 placeholder="0.00"
                 autoFocus
               />
-              {selectedChargeIds.size > 0 && (() => {
+              {collectTarget > 0 && (() => {
                 const amt = parseFloat(payAmount) || 0
-                const rem = Math.round((selectedTotal - amt) * 100) / 100
+                const rem = Math.round((collectTarget - amt) * 100) / 100
                 if (rem > 0.009) return (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1">
-                    <span className="font-semibold">⚠ Partial payment</span>
-                    — remaining <strong>{rem.toFixed(2)}</strong> will be added as a new pending charge
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                    <span className="font-semibold">Partial</span> — <strong>{rem.toFixed(2)}</strong> stays due. Oldest charges are settled first.
                   </p>
                 )
                 return null
@@ -1671,7 +1377,7 @@ export default function BillingPage() {
               })()}
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5" />}
-              Record Payment
+              {collectTarget > 0 ? 'Collect' : 'Record Payment'}
             </Button>
             </div>
           </div>
@@ -1733,23 +1439,25 @@ export default function BillingPage() {
                   </div>
 
                   {/* Charges */}
-                  <div className="border rounded-lg overflow-hidden">
-                    <div className="bg-muted/30 px-3 py-1.5">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Charges Paid</p>
-                    </div>
-                    <div className="divide-y">
-                      {receiptData.chargesPaid.map(c => (
-                        <div key={c.id} className="flex justify-between gap-3 px-3 py-2 text-sm">
-                          <span className="min-w-0 break-words">{c.description}</span>
-                          <span className="font-mono shrink-0 tabular-nums">{(c.quantity * c.unit_price).toFixed(2)}</span>
+                  {receiptData.chargesPaid.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-muted/30 px-3 py-1.5">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Charges Paid</p>
+                      </div>
+                      <div className="divide-y">
+                        {receiptData.chargesPaid.map(c => (
+                          <div key={c.id} className="flex justify-between gap-3 px-3 py-2 text-sm">
+                            <span className="min-w-0 break-words">{c.description}</span>
+                            <span className="font-mono shrink-0 tabular-nums">{chargeAmount(c).toFixed(2)}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between px-3 py-2 text-sm font-bold border-t bg-muted/20">
+                          <span>Total</span>
+                          <span className="font-mono tabular-nums">{receiptData.chargesPaid.reduce((s, c) => s + chargeAmount(c), 0).toFixed(2)}</span>
                         </div>
-                      ))}
-                      <div className="flex justify-between px-3 py-2 text-sm font-bold border-t bg-muted/20">
-                        <span>Total</span>
-                        <span className="font-mono tabular-nums">{receiptData.chargesPaid.reduce((s, c) => s + c.quantity * c.unit_price, 0).toFixed(2)}</span>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Payment details */}
                   <div className="border rounded-lg p-3 space-y-1">
@@ -1790,32 +1498,6 @@ export default function BillingPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
-  )
-}
-
-// ── Balance card ─────────────────────────────────────────────────────────────
-
-function BalanceCard({
-  label, value, icon: Icon, color, bold, symbol,
-}: {
-  label: string
-  value: number
-  icon: React.ComponentType<{ className?: string }>
-  color: string
-  bold?: boolean
-  symbol?: string
-}) {
-  return (
-    <div className="border rounded-lg p-3 space-y-1">
-      <div className="flex items-center gap-1.5">
-        <Icon className={cn('h-3.5 w-3.5', color)} />
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
-      </div>
-      <p className={cn('text-lg font-mono', color, bold && 'font-bold')}>
-        {symbol && <span className="text-sm opacity-70 mr-0.5">{symbol}</span>}
-        {value.toFixed(2)}
-      </p>
     </div>
   )
 }
