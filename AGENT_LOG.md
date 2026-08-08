@@ -621,3 +621,24 @@ browser end-to-end: typed "Zorro Testman" → no match → mini-form prefilled
 → Add to queue → row in WAITING with Assign/stage/Open/Done actions; Done
 opens "Finish visit" with the charge/order heads-up. Test patient +
 encounter deleted from remote after.
+
+## 2026-08-08 — Iteration 41: Patients leaves the nav; "Open" chip on Today
+
+**Item:** "Queues are the app" tier, item 4.
+
+**What:** The Patients nav entry is gone from both sidebars — the sidebar is
+now Today · Settings (+ order departments + Billing). The /patients route
+stays for deep links and ⌘K. Today gains an "Open" chip beside Mine: every
+open encounter regardless of day, newest first, Mine-filterable, one tap
+into the encounter — covering what the registry's Open/Assigned filters
+did.
+
+**Verification:** tsc clean, eslint clean, 152/152 tests, browser: nav
+shows no Patients; Open chip lists open encounters with titles/dates.
+
+**NOTE — foreign changes on disk:** during this iteration
+`src/pages/DepartmentWork.tsx` was modified and `src/lib/deptWorklist.ts`
+(+ tests, 14 of the 152) appeared — NOT my work (another session/editor:
+lane grouping, STAT ordering, save-&-next for the dept worklist). Left
+UNCOMMITTED deliberately; committed only Sidebar.tsx, FrontDeskPage.tsx,
+CLAUDE.md, AGENT_LOG.md. Flagged to the user.

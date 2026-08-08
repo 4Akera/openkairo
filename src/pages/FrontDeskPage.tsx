@@ -11,8 +11,10 @@
  * shared with the per-department Patients tabs.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useVisitQueue } from '../hooks/useVisits'
 import { averageWaitMinutes, dailyAverageWaits } from '../lib/visits'
 import type { Visit } from '../types'
@@ -23,8 +25,11 @@ import {
   Button, Badge,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../components/ui'
-import { ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react'
-import { cn } from '../lib/utils'
+import {
+  ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight,
+  UserCheck, FolderOpen, Loader2,
+} from 'lucide-react'
+import { cn, fullName, formatDateTime } from '../lib/utils'
 
 const GENERAL_QUEUE = 'general'
 
@@ -70,6 +75,8 @@ function dayLabel(offsetDays: number): string {
 
 export default function FrontDeskPage() {
   const { user, hasRole } = useAuthStore()
+  const { nameFormat } = useSettingsStore()
+  const navigate = useNavigate()
   // Day navigation: today is the default; arrows reveal booked future days
   const [dayOffset, setDayOffset] = useState(0)
   const { visits, carriedOver, profileNames, loading } = useVisitQueue(dateKeyFor(dayOffset))
@@ -80,6 +87,10 @@ export default function FrontDeskPage() {
   // "Mine" = visits assigned to me: the clinician's worklist lives in the
   // day view instead of a separate list elsewhere.
   const [mineOnly, setMineOnly] = useState(false)
+  // "Open" = every open encounter regardless of day — covers what the
+  // registry's Open filter used to, now that Patients has no nav entry.
+  const [openOnly, setOpenOnly] = useState(false)
+  const [openRows, setOpenRows] = useState<Visit[] | null>(null)
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [mode, setMode] = useState<'now' | 'book'>('now')
 
@@ -107,6 +118,18 @@ export default function FrontDeskPage() {
         setTrend(dailyAverageWaits((data ?? []) as Pick<Visit, 'arrived_at' | 'finished_at'>[], 7))
       })
   }, [])
+
+  useEffect(() => {
+    if (!openOnly) { setOpenRows(null); return }
+    supabase
+      .from('encounters')
+      .select('*, patients(*)')
+      .eq('status', 'open')
+      .is('cancelled_at', null)
+      .order('created_at', { ascending: false })
+      .limit(100)
+      .then(({ data }) => setOpenRows((data ?? []) as Visit[]))
+  }, [openOnly])
 
   const openCheckIn = (bookMode: 'now' | 'book') => {
     setMode(bookMode)
@@ -197,6 +220,20 @@ export default function FrontDeskPage() {
             <UserCheck className="h-3.5 w-3.5" />
             Mine
           </button>
+          {/* Every open encounter, any day — the old registry Open filter */}
+          <button
+            onClick={() => setOpenOnly(o => !o)}
+            className={cn(
+              'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
+              openOnly
+                ? 'bg-primary/10 border-primary/40 text-primary'
+                : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
+            )}
+            title="All open encounters, any day"
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            Open
+          </button>
           {/* Queue switcher — only rendered for multi-clinic institutions */}
           {patientDepts.length > 0 && (
             <Select value={deptFilter} onValueChange={setDeptFilter}>
@@ -225,26 +262,66 @@ export default function FrontDeskPage() {
         </div>
       </div>
 
-      <VisitQueue
-        visits={filtered}
-        carriedOver={carriedOver.filter(v =>
-          (deptFilter === 'all' || (deptFilter === GENERAL_QUEUE ? !v.department_id : v.department_id === deptFilter))
-          && (!mineOnly || v.assigned_to === user?.id))}
-        profileNames={profileNames}
-        loading={loading}
-        emptyLabel={isToday ? 'No patients today yet' : `No visits booked for ${dayLabel(dayOffset).toLowerCase()}`}
-        emptyAction={
-          isToday ? (
-            <Button size="sm" variant="outline" onClick={() => openCheckIn('now')}>
-              Add the first patient
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => openCheckIn('book')}>
-              Book a visit
-            </Button>
-          )
-        }
-      />
+      {openOnly ? (
+        <div className="flex-1 overflow-y-auto">
+          {openRows === null ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          ) : (() => {
+            const rows = openRows.filter(v => !mineOnly || v.assigned_to === user?.id)
+            return rows.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-12">No open encounters.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {rows.map(v => {
+                  const pt = v.patients ?? null
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => pt && navigate(`/patients/${pt.id}/encounters/${v.id}`)}
+                      className="w-full flex items-center gap-3 px-4 sm:px-6 py-2.5 text-left hover:bg-accent/40 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{pt ? fullName(pt, nameFormat) : 'Unknown patient'}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {v.title?.trim() || 'Encounter'} · {formatDateTime(v.arrived_at ?? v.created_at)}
+                        </p>
+                      </div>
+                      {v.assigned_to && (
+                        <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
+                          {profileNames[v.assigned_to] ?? ''}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
+        </div>
+      ) : (
+        <VisitQueue
+          visits={filtered}
+          carriedOver={carriedOver.filter(v =>
+            (deptFilter === 'all' || (deptFilter === GENERAL_QUEUE ? !v.department_id : v.department_id === deptFilter))
+            && (!mineOnly || v.assigned_to === user?.id))}
+          profileNames={profileNames}
+          loading={loading}
+          emptyLabel={isToday ? 'No patients today yet' : `No visits booked for ${dayLabel(dayOffset).toLowerCase()}`}
+          emptyAction={
+            isToday ? (
+              <Button size="sm" variant="outline" onClick={() => openCheckIn('now')}>
+                Add the first patient
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => openCheckIn('book')}>
+                Book a visit
+              </Button>
+            )
+          }
+        />
+      )}
 
       <CheckInDialog
         open={checkInOpen}

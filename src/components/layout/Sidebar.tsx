@@ -5,7 +5,7 @@ import { useDeptPendingCounts } from '../../hooks/useDeptPendingCounts'
 import { deptIconComponent } from '../../lib/deptIcons'
 import { isQueueDept } from '../../lib/queues'
 import { cn } from '../../lib/utils'
-import { Users, LogOut, Settings, Search, Sun, Moon, Receipt, ClipboardList } from 'lucide-react'
+import { LogOut, Settings, Search, Sun, Moon, Receipt, ClipboardList } from 'lucide-react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import Logo from '../Logo'
@@ -19,9 +19,9 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
   const navDepts = myDepartments.filter(d => !isQueueDept(d))
   const deptCounts = useDeptPendingCounts(navDepts.map(d => d.slug))
 
+  // The registry lives behind search (⌘K) and Today — no nav entry.
   const NAV = [
     ...(hasFrontDesk ? [{ to: '/', label: 'Today', icon: ClipboardList, end: true }] : []),
-    { to: '/patients', label: 'Patients', icon: Users, end: false },
     { to: '/settings', label: 'Settings', icon: Settings, end: false },
   ]
   const { theme, toggle } = useThemeStore()
@@ -255,26 +255,6 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
               <>
                 <ClipboardList className={cn('h-5 w-5', isActive && 'text-blue-400')} />
                 <span className="text-xs font-medium">Today</span>
-              </>
-            )}
-          </NavLink>
-        )}
-
-        {/* Patients — the registry */}
-        {!isDeptOnly && (
-          <NavLink
-            to="/patients"
-            className={({ isActive }) =>
-              cn(
-                'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
-                isActive ? 'text-white' : 'text-slate-500',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Users className={cn('h-5 w-5', isActive && 'text-blue-400')} />
-                <span className="text-xs font-medium">Patients</span>
               </>
             )}
           </NavLink>

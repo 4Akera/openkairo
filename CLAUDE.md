@@ -76,9 +76,11 @@ Today · Settings (+ order departments).
       keep "Book". (2026-08-08 — mini-form prefills from the search text;
       CheckoutDialog titled "Finish visit"; booked rows arrive via
       "Arrived"; CreatePatientDialog no longer used from the queue flow)
-- [ ] Drop the /patients nav entry: ⌘K + Today are the whole surface
+- [x] Drop the /patients nav entry: ⌘K + Today are the whole surface
       ("New patient" lives in + Patient; an "Open" chip on Today covers
       older open encounters). Sidebar: Today · Settings (+ departments).
+      (2026-08-08 — /patients route kept for deep links; Open chip lists
+      all open encounters newest-first, Mine filter applies)
 - [ ] Charging pass, money as a queue: Cashier queue on Today (finished
       visits with unpaid charges), running-bill chip on the encounter
       header (live total → line items), one-tap add charge from the
