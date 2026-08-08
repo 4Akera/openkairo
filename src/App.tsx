@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './stores/themeStore'
+import { isQueueDept } from './lib/queues'
 
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
@@ -29,11 +30,14 @@ function PageFallback() {
 
 function DeptAwareIndex() {
   const { myDepartments, permissions } = useAuthStore()
-  const isDeptOnly = myDepartments.length > 0 && permissions.length === 0
+  // Pure patient queues have no page of their own — only order-fulfilling
+  // departments do, so dept-only users land in the first of those.
+  const workDepts = myDepartments.filter(d => !isQueueDept(d))
+  const isDeptOnly = workDepts.length > 0 && permissions.length === 0
   // The app opens on the day: Today (Front Desk) is home; dept-only users
   // land in their own workspace; the registry lives at /patients.
   return isDeptOnly
-    ? <Navigate to={`/dept/${myDepartments[0].slug}`} replace />
+    ? <Navigate to={`/dept/${workDepts[0].slug}`} replace />
     : <FrontDeskPage />
 }
 
@@ -41,8 +45,9 @@ function DeptAwareIndex() {
 function PortalRedirect() {
   const { myDepartments, loading } = useAuthStore()
   if (loading) return null
-  return myDepartments.length > 0
-    ? <Navigate to={`/dept/${myDepartments[0].slug}`} replace />
+  const workDepts = myDepartments.filter(d => !isQueueDept(d))
+  return workDepts.length > 0
+    ? <Navigate to={`/dept/${workDepts[0].slug}`} replace />
     : <Navigate to="/" replace />
 }
 

@@ -63,10 +63,12 @@ Today · Settings (+ order departments).
       change). (2026-08-08 — isQueueDept in lib/queues; dept form keeps one
       "also sees patients" toggle for hybrids; Settings nav label now
       "Queues & Departments")
-- [ ] Today absorbs clinic queues: pure-clinic /dept/:slug pages and their
+- [x] Today absorbs clinic queues: pure-clinic /dept/:slug pages and their
       sidebar entries go away — their queue is a lane in Today's switcher.
       Hybrid departments (orders + patients) keep the work view; their
-      patient queue moves to Today.
+      patient queue moves to Today. (2026-08-08 — DepartmentPage is
+      work-only, /dept/<queue> redirects home; sidebar + /portal and
+      dept-only landing use non-queue depts)
 - [ ] "+ Patient" one-motion arrival on Today: search-first; no match →
       inline new-patient mini-form (name + phone) that creates AND queues
       in one motion. Retire "check in / check out" wording app-wide —

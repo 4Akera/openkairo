@@ -573,3 +573,27 @@ clinic-as-department) in one pass.
 (3 new), browser: Cardiology listed under Queues; Lab/Radiology under
 Departments; created "Dermatology" via the one-field flow → appeared in
 Today's queue switcher instantly; test row deleted from remote after.
+
+## 2026-08-08 — Iteration 39: Today absorbs clinic queues
+
+**Item:** "Queues are the app" tier, item 2.
+
+**What:** Pure patient queues no longer have pages or nav entries.
+DepartmentPage is now the work view only — tab toggle, VisitQueue,
+CheckInDialog, and the Clinic chip deleted from it; /dept/<queue> redirects
+home (the lane lives in Today's switcher, which already lists every
+patient-facing department). Sidebar (desktop + mobile) shows only
+order-fulfilling departments; DeptAwareIndex and the /portal redirect
+land dept-only users in their first non-queue department, else Today.
+DepartmentPage.tsx: 175 → 93 lines.
+
+**Why highest value:** next unchecked item in the user-approved restructure;
+deletes a whole navigation surface (clinic pages) without losing any
+function.
+
+**Verification:** tsc clean, eslint clean (3 touched files), 138/138 tests,
+browser: /dept/card redirected to Today; sidebar lists only Lab/Radiology;
+/dept/lab work queue renders (39 orders). One stale HMR ReferenceError in
+console from mid-edit state — did not recur across two fresh reloads.
+Realtime websocket errors observed are environmental (supabase wss
+unreachable at the moment), unrelated to this change.

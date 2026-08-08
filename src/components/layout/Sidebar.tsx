@@ -3,6 +3,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { useDeptPendingCounts } from '../../hooks/useDeptPendingCounts'
 import { deptIconComponent } from '../../lib/deptIcons'
+import { isQueueDept } from '../../lib/queues'
 import { cn } from '../../lib/utils'
 import { Users, LogOut, Settings, Search, Sun, Moon, Receipt, ClipboardList } from 'lucide-react'
 
@@ -13,7 +14,10 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
   const { user, profile, signOut, inDept, myDepartments, hasBilling, permissions, hasRole } = useAuthStore()
   const isDeptOnly = inDept && permissions.length === 0
   const hasFrontDesk = hasRole('receptionist') || hasRole('physician') || hasRole('nurse') || hasRole('admin')
-  const deptCounts = useDeptPendingCounts(myDepartments.map(d => d.slug))
+  // Pure patient queues live on Today, not in the nav — only order-fulfilling
+  // departments get their own entry.
+  const navDepts = myDepartments.filter(d => !isQueueDept(d))
+  const deptCounts = useDeptPendingCounts(navDepts.map(d => d.slug))
 
   const NAV = [
     ...(hasFrontDesk ? [{ to: '/', label: 'Today', icon: ClipboardList, end: true }] : []),
@@ -103,8 +107,8 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           ))}
 
           {/* One entry per membership department */}
-          {myDepartments.length > 0 && <div className="w-8 h-px bg-white/10 my-2 mx-auto" />}
-          {myDepartments.map(dept => {
+          {navDepts.length > 0 && <div className="w-8 h-px bg-white/10 my-2 mx-auto" />}
+          {navDepts.map(dept => {
             const DeptIcon = deptIconComponent(dept.icon)
             const count = deptCounts[dept.slug] ?? 0
             return (
@@ -305,7 +309,7 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           )}
         </NavLink>
 
-        {myDepartments.map(dept => {
+        {navDepts.map(dept => {
           const DeptIcon = deptIconComponent(dept.icon)
           const count = deptCounts[dept.slug] ?? 0
           return (
