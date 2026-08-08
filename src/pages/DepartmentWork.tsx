@@ -50,8 +50,8 @@ interface PastEntry {
   share_to_record: boolean
 }
 
-/** Registry View/Edit key for portal previews (variants, joined registry_slug, orphaned defs). */
-function portalRegistryRenderKey(
+/** Registry View/Edit key for work-view previews (variants, joined registry_slug, orphaned defs). */
+function workRegistryRenderKey(
   def: BlockDefinition | null,
   blockType: string,
   registrySlugWhenNoDef: string | null = null,
@@ -87,7 +87,7 @@ function applyEmptyContentForDef(def: BlockDefinition): Record<string, unknown> 
 
 // ─── Entry modal: post-save charge actions (shared with history card pattern) ─
 
-type PortalChargeAct =
+type WorkChargeAct =
   | { mode: 'single'; id: string; op: 'approve' | 'void' }
   | { mode: 'bulk'; op: 'approve' | 'void' }
 
@@ -139,9 +139,9 @@ function OrderRequestPreviewPanel({ order }: { order: OrderWithContext }) {
       </button>
       {open && (
         <div className="border-t border-violet-200/60 dark:border-violet-900/40 px-3 py-2.5 max-h-[min(40vh,18rem)] overflow-y-auto text-xs bg-background/60">
-          {hasContent && BLOCK_REGISTRY[portalRegistryRenderKey(def, ob.type, null)] ? (
+          {hasContent && BLOCK_REGISTRY[workRegistryRenderKey(def, ob.type, null)] ? (
             (() => {
-              const regKey = portalRegistryRenderKey(def, ob.type, null)
+              const regKey = workRegistryRenderKey(def, ob.type, null)
               const Renderer = BLOCK_REGISTRY[regKey].View
               const stub = {
                 ...stubBase,
@@ -211,7 +211,7 @@ function EntryModal({
   const [savedChargeMsg, setSavedChargeMsg] = useState<string | null>(null)
   const [blockCharges, setBlockCharges] = useState<Charge[]>([])
   const [billingDefinition, setBillingDefinition] = useState<BlockDefinition | null>(null)
-  const [chargeAct, setChargeAct] = useState<PortalChargeAct | null>(null)
+  const [chargeAct, setChargeAct] = useState<WorkChargeAct | null>(null)
   const formBusy = deptBlockTypesLoading || loading
 
   // Sync chosen block type when department block types finish loading
@@ -517,7 +517,7 @@ function EntryModal({
     setChargeAct({ mode: 'single', id: chargeId, op: 'void' })
     await supabase
       .from('charges')
-      .update({ status: 'void', voided_reason: 'Voided from department portal' })
+      .update({ status: 'void', voided_reason: 'Voided from the department workspace' })
       .eq('id', chargeId)
     setChargeAct(null)
     void refreshBlockCharges()
@@ -526,7 +526,7 @@ function EntryModal({
   const voidManualInModal = async (chargeId: string) => {
     await supabase
       .from('charges')
-      .update({ status: 'void', voided_reason: 'Voided from department portal' })
+      .update({ status: 'void', voided_reason: 'Voided from the department workspace' })
       .eq('id', chargeId)
     void refreshBlockCharges()
   }
@@ -652,7 +652,7 @@ function EntryModal({
                           for (const c of rows) {
                             await supabase
                               .from('charges')
-                              .update({ status: 'void', voided_reason: 'Voided from department portal' })
+                              .update({ status: 'void', voided_reason: 'Voided from the department workspace' })
                               .eq('id', c.id)
                           }
                           await refreshBlockCharges()
@@ -1423,10 +1423,10 @@ function OrderCard({
       {/* Expandable order content */}
       {expanded && hasContent && (
         <div className="border-t px-4 pb-3 pt-2.5 bg-muted/20 text-xs">
-          {ob && BLOCK_REGISTRY[portalRegistryRenderKey(def, ob.type, null)] ? (
+          {ob && BLOCK_REGISTRY[workRegistryRenderKey(def, ob.type, null)] ? (
             // Built-in block — use registry's typed View
             (() => {
-              const regKey = portalRegistryRenderKey(def, ob.type, null)
+              const regKey = workRegistryRenderKey(def, ob.type, null)
               const Renderer = BLOCK_REGISTRY[regKey].View
                 const stub = {
                   id: order.id,
@@ -1479,7 +1479,7 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
   const [loadingDef, setLoadingDef]   = useState(false)
   const [shareToRecord, setShare]     = useState(entry.share_to_record)
   const [blockCharges, setBlockCharges] = useState<Charge[]>([])
-  const [chargeAct, setChargeAct] = useState<PortalChargeAct | null>(null)
+  const [chargeAct, setChargeAct] = useState<WorkChargeAct | null>(null)
   const { nameFormat, currencySymbol, billingEnabled } = useSettingsStore()
   const { user, hasRole, can }        = useAuthStore()
   const canEditShare = !!user && (entry.created_by === null || user.id === entry.created_by || hasRole('admin'))
@@ -1528,7 +1528,7 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
   const voidManualBlockFee = async (chargeId: string) => {
     await supabase
       .from('charges')
-      .update({ status: 'void', voided_reason: 'Voided from department portal' })
+      .update({ status: 'void', voided_reason: 'Voided from the department workspace' })
       .eq('id', chargeId)
     loadCharges()
   }
@@ -1548,7 +1548,7 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
     setChargeAct({ mode: 'single', id: chargeId, op: 'void' })
     await supabase
       .from('charges')
-      .update({ status: 'void', voided_reason: 'Voided from department portal' })
+      .update({ status: 'void', voided_reason: 'Voided from the department workspace' })
       .eq('id', chargeId)
     setChargeAct(null)
     loadCharges()
@@ -1712,7 +1712,7 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
                         for (const c of pendingCharges) {
                           await supabase
                             .from('charges')
-                            .update({ status: 'void', voided_reason: 'Voided from department portal' })
+                            .update({ status: 'void', voided_reason: 'Voided from the department workspace' })
                             .eq('id', c.id)
                         }
                         loadCharges()
@@ -1767,10 +1767,10 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
               <div className="flex justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
-            ) : BLOCK_REGISTRY[portalRegistryRenderKey(def, entry.block_type, entry.registry_slug)] ? (
+            ) : BLOCK_REGISTRY[workRegistryRenderKey(def, entry.block_type, entry.registry_slug)] ? (
               // Built-in block (vitals, note, …) — use registry's typed View
               (() => {
-                const regKey = portalRegistryRenderKey(def, entry.block_type, entry.registry_slug)
+                const regKey = workRegistryRenderKey(def, entry.block_type, entry.registry_slug)
                 const Renderer = BLOCK_REGISTRY[regKey].View
                 const stub = {
                   id: entry.block_id ?? entry.id,
@@ -1923,8 +1923,8 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
 
 const HISTORY_PAGE_SIZE = 20
 
-/** Shared select for portal queue (full load + single-row realtime hydrate) */
-const PORTAL_QUEUE_SELECT = `
+/** Shared select for the work queue (full load + single-row realtime hydrate) */
+const WORK_QUEUE_SELECT = `
   *,
   patients(id,first_name,middle_name,last_name,mrn),
   order_block:blocks!block_actions_block_id_fkey(
@@ -1943,7 +1943,7 @@ function mergeQueueOrder(prev: OrderWithContext[], row: OrderWithContext): Order
   return next
 }
 
-export function DeptTab({ dept }: { dept: Department }) {
+export function DepartmentWork({ dept }: { dept: Department }) {
   const { user: _user, can } = useAuthStore()
   const { billingEnabled, currencySymbol } = useSettingsStore()
   const [view, setView]     = useState<'queue' | 'history'>('queue')
@@ -2025,7 +2025,7 @@ export function DeptTab({ dept }: { dept: Department }) {
     try {
       const { data } = await supabase
         .from('block_actions')
-        .select(PORTAL_QUEUE_SELECT)
+        .select(WORK_QUEUE_SELECT)
         .eq('action_type', dept.slug)
         .not('status', 'in', '(completed,cancelled)')
         .order('triggered_at', { ascending: true })
@@ -2056,7 +2056,7 @@ export function DeptTab({ dept }: { dept: Department }) {
   const fetchOrderWithContext = useCallback(async (actionId: string): Promise<OrderWithContext | null> => {
     const { data, error } = await supabase
       .from('block_actions')
-      .select(PORTAL_QUEUE_SELECT)
+      .select(WORK_QUEUE_SELECT)
       .eq('id', actionId)
       .maybeSingle()
     if (error || !data) return null
@@ -2232,7 +2232,7 @@ export function DeptTab({ dept }: { dept: Department }) {
       return n?.action_type === slug || o?.action_type === slug
     }
     const channel = supabase
-      .channel(`portal:${dept.slug}`)
+      .channel(`dept-work:${dept.slug}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'block_actions' },
@@ -2583,8 +2583,9 @@ export function DeptTab({ dept }: { dept: Department }) {
   )
 }
 
-// ─── Main portal page ─────────────────────────────────────────────────────────
+// ─── Department work view ─────────────────────────────────────────────────────
 
-// The standalone "Department Portal" shell was removed: department workspaces
-// now live inside the main app shell at /dept/:slug (see DepartmentPage),
-// with one sidebar entry per membership department.
+// DepartmentWork is the order/fulfilment workspace rendered inside
+// DepartmentPage at /dept/:slug — the old standalone "portal" shell is gone.
+// TODO(cleanup): split EntryModal / OrderCard / walk-in pieces into their
+// own files under src/components/department/.

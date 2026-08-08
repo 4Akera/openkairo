@@ -521,3 +521,30 @@ journey live when the desk moves the patient.
 **Verification:** tsc clean, eslint clean, 135/135 tests; browser-verified
 Jacob's encounter — strip renders identically from page-fed props with
 Finish in the header.
+
+## 2026-08-08 — Iteration 37: the "portal" is dead in name too
+
+**Item:** Post-restructure cleanup — DeptPortal.tsx rename (highest-priority
+tier; the last non-schema cleanup item).
+
+**What:** `git mv DeptPortal.tsx → DepartmentWork.tsx`; exported component
+`DeptTab` → `DepartmentWork` (DepartmentPage updated). Renamed every internal
+"portal" identifier (`portalRegistryRenderKey` → `workRegistryRenderKey`,
+`PortalChargeAct` → `WorkChargeAct`, `PORTAL_QUEUE_SELECT` →
+`WORK_QUEUE_SELECT`, realtime channel `portal:` → `dept-work:`) and retired
+"portal" from user-facing copy: Settings block editor/library now say
+"department workspace", `blockVisibility` summary reads "Department workspace
+only" (test updated), void reason string updated. The full component split
+was deferred — it moves 2.5k lines without removing a concept; TODO noted in
+the file header.
+
+**Why highest value:** the portal shell was deleted in the restructure, but
+the name survived in code and Settings copy — users were still being taught a
+concept that no longer exists. Naming is the cheapest simplification.
+
+**Verification:** tsc clean, eslint clean on all 8 touched files, 135/135
+tests, browser: /dept/lab renders the Laboratory work queue (39 orders,
+actions intact), zero console errors.
+
+**Remaining in tier:** both schema-gated (visits table drop, pg_trgm) —
+blocked on user approval per charter.

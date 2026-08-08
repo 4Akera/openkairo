@@ -651,7 +651,7 @@ export interface BlockDefinitionBillingConfig {
 }
 
 export interface BlockDefinitionConfig {
-  dept_role?: 'order' | 'result'  // 'order' = doctor places it; ActionPanel renders; 'result' = dept fills via department portal
+  dept_role?: 'order' | 'result'  // 'order' = doctor places it; ActionPanel renders; 'result' = dept fills via the department workspace
   score?: {
     label: string
     fields: string[]

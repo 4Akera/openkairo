@@ -25,12 +25,12 @@ describe('blockVisibilitySummary', () => {
 
   it('dept-only blocks are portal-only', () => {
     expect(blockVisibilitySummary(def({ is_dept_only: true }), ROLES))
-      .toBe('Department portal only')
+      .toBe('Department workspace only')
   })
 
   it('dept result blocks are portal-only even without the flag', () => {
     expect(blockVisibilitySummary(def({ config: { dept_role: 'result' } }), ROLES))
-      .toBe('Department portal only')
+      .toBe('Department workspace only')
   })
 
   it('no role restriction means all clinical staff', () => {

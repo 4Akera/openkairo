@@ -53,9 +53,11 @@ on Today (Front Desk as home).
       props-driven (encounter + patient from the page); delete its own
       fetch/channel and EncounterPage's linkedVisit mirror — the page's
       encounter row already carries the journey. (2026-08-08)
-- [ ] DeptPortal.tsx (~2.5k lines) rename/split: it is the department Work
-      view now, not a "portal"; extract EntryModal/OrderCard/etc. and drop
-      any code dead since the shell was removed.
+- [x] DeptPortal.tsx renamed → DepartmentWork.tsx (DeptTab → DepartmentWork);
+      every "portal" identifier and UI string retired ("department
+      workspace" in Settings copy, blockVisibility, comments).
+      (2026-08-08 — file split into components deferred: mechanical churn,
+      no concept removed; TODO left in the file header)
 - [ ] Drop the frozen legacy `visits` table and the /portal redirect
       (SCHEMA — ask user before dropping the table).
 - [ ] pg_trgm index for patient name search at registry scale (SCHEMA —

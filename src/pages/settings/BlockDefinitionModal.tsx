@@ -678,7 +678,7 @@ export function BlockDefinitionModal({
                       {([
                         { value: '', label: 'None', desc: 'Regular block' },
                         { value: 'order', label: 'Order', desc: 'Doctor places on timeline; "Send to dept" button appears' },
-                        { value: 'result', label: 'Result', desc: 'Department staff fills in via portal' },
+                        { value: 'result', label: 'Result', desc: 'Department staff fills in from their workspace' },
                       ] as const).map(opt => (
                         <button
                           key={opt.value || 'none'}
@@ -698,7 +698,7 @@ export function BlockDefinitionModal({
                     </div>
                     <p className="text-[10px] text-muted-foreground">
                       {form.config?.dept_role === 'order' && 'Doctors can add this block to an encounter. A "Send to department" action will appear on the block.'}
-                      {form.config?.dept_role === 'result' && 'Created by department staff via the portal when fulfilling an order or doing a direct entry.'}
+                      {form.config?.dept_role === 'result' && 'Created by department staff in their workspace when fulfilling an order or doing a direct entry.'}
                       {!form.config?.dept_role && 'Standard block — no department routing.'}
                     </p>
                   </div>
@@ -710,7 +710,7 @@ export function BlockDefinitionModal({
                 {blockAddRoles.length > 0 && (
                   isDeptResultBlock ? (
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      Block is created by department staff via the portal — role access is controlled by department membership.
+                      Block is created by department staff in their department workspace — role access is controlled by department membership.
                     </p>
                   ) : (
                     <>
@@ -993,7 +993,7 @@ export function BlockDefinitionModal({
                   {([
                     { value: '', label: 'None', desc: 'Regular block' },
                     { value: 'order', label: 'Order', desc: 'Doctor places on timeline; "Send to dept" button appears' },
-                    { value: 'result', label: 'Result', desc: 'Department staff fills in via portal' },
+                    { value: 'result', label: 'Result', desc: 'Department staff fills in from their workspace' },
                   ] as const).map(opt => (
                     <button
                       key={opt.value}
@@ -1013,7 +1013,7 @@ export function BlockDefinitionModal({
                 </div>
                 <p className="text-[10px] text-muted-foreground">
                   {form.config?.dept_role === 'order' && 'Doctors can add this block to an encounter. A "Send to department" action will appear on the block.'}
-                  {form.config?.dept_role === 'result' && 'Created by department staff via the portal when fulfilling an order or doing a direct entry.'}
+                  {form.config?.dept_role === 'result' && 'Created by department staff in their workspace when fulfilling an order or doing a direct entry.'}
                   {!form.config?.dept_role && 'Standard block — no department routing.'}
                 </p>
               </div>
@@ -1293,7 +1293,7 @@ export function BlockDefinitionModal({
             {blockAddRoles.length > 0 && (
               isDeptResultBlock ? (
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Block is created by department staff via the portal — role access is controlled by department membership.
+                  Block is created by department staff in their department workspace — role access is controlled by department membership.
                 </p>
               ) : (
                 <>

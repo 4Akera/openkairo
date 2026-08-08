@@ -14,7 +14,7 @@ export function blockVisibilitySummary(
 ): string {
   if (!def.active) return 'Off — hidden everywhere'
   if (def.is_dept_only || def.config?.dept_role === 'result') {
-    return 'Department portal only'
+    return 'Department workspace only'
   }
   const slugs = def.visible_to_roles ?? []
   if (slugs.length === 0) return 'All clinical staff'

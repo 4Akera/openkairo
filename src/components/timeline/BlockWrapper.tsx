@@ -338,7 +338,7 @@ export default function BlockWrapper({
 
   // Use DB definition when available; fall back to BUILTIN_METADATA for the header
   const def = definition ?? null
-  /** Department-originated blocks on the encounter timeline: charges/fees are managed in the department portal */
+  /** Department-originated blocks on the encounter timeline: charges/fees are managed in the department workspace */
   const hideDeptBlockChargeUi = Boolean(block.department_id)
   const headerMeta = useMemo(() => {
     if (definition) return { name: definition.name, icon: definition.icon, color: definition.color }

@@ -163,7 +163,7 @@ function BlockVisibilityCard({
         isDeptResultDef ? (
           <div className="border-t bg-muted/30 px-3 py-2">
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Block is created by department staff via the portal — role access is controlled by department membership.
+              Block is created by department staff in their department workspace — role access is controlled by department membership.
             </p>
           </div>
         ) : (
@@ -273,7 +273,7 @@ export function StandardBlocksSection() {
         'DESTRUCTIVE ACTION — SYSTEM BUILT-IN\n\n'
         + 'You are about to delete a core block type from the database. This is almost never appropriate in production.\n\n'
         + 'Likely consequences:\n'
-        + '• Patient timelines and department portals may error or show broken blocks\n'
+        + '• Patient timelines and department workspaces may error or show broken blocks\n'
         + '• Templates, orders, charges, and automation tied to this slug can fail\n'
         + '• Foreign keys may block the delete, or orphans may be left if constraints differ\n\n'
         + 'There is no undo. Prefer leaving built-ins alone or using a duplicate + disable workflow.\n\n'

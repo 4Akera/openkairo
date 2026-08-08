@@ -2,7 +2,7 @@
  * DepartmentPage — a department's workspace inside the main app shell,
  * one sidebar entry per membership department (route /dept/:slug).
  *
- * "Work" is the order/fulfilment queue (DeptTab, the former portal content).
+ * "Work" is the order/fulfilment queue (DepartmentWork).
  * Departments flagged can_receive_patients also get a "Patient queue" tab —
  * their slice of the same visit system the Front Desk uses.
  */
@@ -11,7 +11,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useVisitQueue } from '../hooks/useVisits'
-import { DeptTab } from './DeptPortal'
+import { DepartmentWork } from './DepartmentWork'
 import { VisitQueue } from '../components/visits/VisitQueue'
 import { CheckInDialog } from '../components/visits/CheckInDialog'
 import { deptIconComponent, deptColorClasses } from '../lib/deptIcons'
@@ -158,7 +158,7 @@ export default function DepartmentPage() {
         />
       ) : (
         <div className="flex-1 flex overflow-hidden min-h-0">
-          <DeptTab key={dept.slug} dept={dept} />
+          <DepartmentWork key={dept.slug} dept={dept} />
         </div>
       )}
 
