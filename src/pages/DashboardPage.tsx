@@ -1,49 +1,19 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+/**
+ * Patients — the registry. Search and browse every patient; filters cover
+ * open/assigned encounters. The operational "who's here today" view lives
+ * on the Front Desk (with its Mine filter), and ⌘K searches from anywhere —
+ * two surfaces plus search, on purpose.
+ */
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import type { Patient, Visit } from '../types'
-import { pushRecentPatientId, getRecentEncounterRefs } from '../lib/recentItems'
-import { fetchTodayVisits, visitPatient, visitEncounter } from '../lib/visits'
-import { useNow } from '../hooks/useNow'
+import type { Patient } from '../types'
+import { pushRecentPatientId } from '../lib/recentItems'
 import { CreatePatientDialog } from '../components/patients/CreatePatientDialog'
 
-type RecentEncounterDisplay = {
-  encounterId: string
-  patientId:   string
-  patientName: string
-  mrn:         string
-  title:       string | null
-  status:      'open' | 'closed'
-  /** ISO time shown as “time ago” (visit time for recent, updated_at for assigned) */
-  visitedAt:   string
-}
-
-
 const PAGE_SIZE = 50
-
-type Pt = { first_name: string; middle_name: string | null; last_name: string; mrn: string }
-type EncRow = {
-  id: string
-  title: string | null
-  status: string
-  patient_id: string
-  updated_at?: string
-  patients: Pt | Pt[] | null
-}
-
-function patientNameFromRow(enc: EncRow): string {
-  const ptRaw = enc.patients
-  const pt = Array.isArray(ptRaw) ? ptRaw[0] ?? null : ptRaw
-  return [pt?.first_name, pt?.middle_name, pt?.last_name].filter(Boolean).join(' ') || 'Unknown'
-}
-
-function patientMrnFromRow(enc: EncRow): string {
-  const ptRaw = enc.patients
-  const pt = Array.isArray(ptRaw) ? ptRaw[0] ?? null : ptRaw
-  return pt?.mrn ?? ''
-}
 
 import {
   calcAge, formatDate, formatDateTime, fullName,
@@ -54,14 +24,13 @@ import {
   Button, Input, Badge,
   ScrollArea,
 } from '../components/ui'
-import { Search, UserPlus, ChevronRight, Loader2, Users, SlidersHorizontal, Check, Clock, Activity, UserCheck, Hourglass } from 'lucide-react'
+import { Search, UserPlus, ChevronRight, Loader2, Users, SlidersHorizontal, Check } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const { nameFormat } = useSettingsStore()
-  const now = useNow()
 
   const [patients, setPatients]       = useState<Patient[]>([])
   const [loading, setLoading]         = useState(true)
@@ -75,10 +44,6 @@ export default function DashboardPage() {
   const [assignedToMe, setAssignedToMe] = useState(false)
   const [openOnly, setOpenOnly]       = useState(false)
 
-  const [assignedEncounters, setAssignedEncounters] = useState<RecentEncounterDisplay[]>([])
-  const [recentEncounters, setRecentEncounters] = useState<RecentEncounterDisplay[]>([])
-  const [myQueue, setMyQueue] = useState<Visit[]>([])
-  const [mobileTab, setMobileTab] = useState<'patients' | 'recent'>('patients')
   const [open, setOpen]       = useState(false)
 
   const isFirstLoad = useRef(true)
@@ -88,113 +53,6 @@ export default function DashboardPage() {
   useEffect(() => {
     searchRef.current?.focus()
   }, [])
-
-  // Recent (session) + encounters assigned to current user (DB, RLS)
-  const userId = user?.id
-  const loadEncounterSidebar = useCallback(async () => {
-    const refs = getRecentEncounterRefs()
-    const ids = refs.map(r => r.encounterId)
-
-    // My waiting room: today's arrived, unfinished visits assigned to me
-    if (userId) {
-      fetchTodayVisits().then(rows => {
-        setMyQueue(rows.filter(v => v.assigned_to === userId && v.arrived_at && !v.finished_at))
-      })
-    } else {
-      setMyQueue([])
-    }
-
-    const [assignedRes, recentRes] = await Promise.all([
-      userId
-        ? supabase
-            .from('encounters')
-            .select('id, title, status, patient_id, updated_at, patients(first_name, middle_name, last_name, mrn)')
-            .eq('assigned_to', userId)
-            .eq('status', 'open')
-        : Promise.resolve({ data: null as EncRow[] | null, error: null }),
-      ids.length
-        ? supabase
-            .from('encounters')
-            .select('id, title, status, patient_id, patients(first_name, middle_name, last_name, mrn)')
-            .in('id', ids)
-        : Promise.resolve({ data: null as EncRow[] | null, error: null }),
-    ])
-    const assignedData = assignedRes.data
-    const recentByIdData = recentRes.data
-
-    const normStatus = (s: string): 'open' | 'closed' =>
-      s === 'open' || s === 'closed' ? s : 'open'
-
-    if (userId && assignedData) {
-      const rows = [...(assignedData as EncRow[])].sort((a, b) => {
-        const ta = new Date(a.updated_at ?? 0).getTime()
-        const tb = new Date(b.updated_at ?? 0).getTime()
-        return tb - ta
-      })
-      setAssignedEncounters(
-        rows.map(enc => ({
-          encounterId: enc.id,
-          patientId:   enc.patient_id,
-          patientName: patientNameFromRow(enc),
-          mrn:         patientMrnFromRow(enc),
-          title:       enc.title ?? null,
-          status:      normStatus(enc.status),
-          visitedAt:   enc.updated_at ?? new Date().toISOString(),
-        })),
-      )
-    } else {
-      setAssignedEncounters([])
-    }
-
-    if (!refs.length) {
-      setRecentEncounters([])
-      return
-    }
-    if (!recentByIdData) {
-      setRecentEncounters([])
-      return
-    }
-    const map = Object.fromEntries((recentByIdData as EncRow[]).map(e => [e.id, e]))
-    setRecentEncounters(
-      refs.map(ref => {
-        const enc = map[ref.encounterId]
-        if (!enc) return null
-        return {
-          encounterId: ref.encounterId,
-          patientId:   ref.patientId,
-          patientName: patientNameFromRow(enc),
-          mrn:         patientMrnFromRow(enc),
-          title:       enc.title ?? null,
-          status:      ref.status,
-          visitedAt:   ref.visitedAt,
-        }
-      }).filter(Boolean) as RecentEncounterDisplay[],
-    )
-  }, [userId])
-
-  const clearRecentHistory = useCallback(() => {
-    sessionStorage.removeItem('ok_recent_encounters')
-    void loadEncounterSidebar()
-  }, [loadEncounterSidebar])
-
-  useEffect(() => { loadEncounterSidebar() }, [loadEncounterSidebar])
-
-  const assignedIds = useMemo(
-    () => new Set(assignedEncounters.map(e => e.encounterId)),
-    [assignedEncounters],
-  )
-  const recentOnlyEncounters = useMemo(
-    () => recentEncounters.filter(e => !assignedIds.has(e.encounterId)),
-    [recentEncounters, assignedIds],
-  )
-  const sidebarTotalCount = myQueue.length + assignedEncounters.length + recentOnlyEncounters.length
-
-  const navigateToVisit = (v: Visit) => {
-    const pt = visitPatient(v)
-    if (!pt) return
-    const enc = visitEncounter(v)
-    navigate(enc ? `/patients/${pt.id}/encounters/${enc.id}` : `/patients/${pt.id}`)
-  }
 
   const fetchPatients = useCallback(async (
     q: string,
@@ -261,19 +119,7 @@ export default function DashboardPage() {
 
   const openDialog = () => { setOpen(true) }
 
-  // ─── Derived ────────────────────────────────────────────────────────────────
-
   const filtersActive = mineOnly || assignedToMe || openOnly || search.trim() !== ''
-
-  function timeAgo(iso: string): string {
-    const diff = now - new Date(iso).getTime()
-    const m = Math.floor(diff / 60000)
-    if (m < 1)  return 'just now'
-    if (m < 60) return `${m}m ago`
-    const h = Math.floor(m / 60)
-    if (h < 24) return `${h}h ago`
-    return `${Math.floor(h / 24)}d ago`
-  }
 
   return (
     <div className="h-full flex flex-col">
@@ -295,41 +141,8 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* Mobile-only tab strip */}
-      <div className="md:hidden flex border-b bg-card shrink-0">
-        {([
-          { id: 'patients', label: 'Patients', icon: <Users className="h-4 w-4" /> },
-          { id: 'recent',   label: 'Recent',   icon: <Clock  className="h-4 w-4" /> },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => { setMobileTab(tab.id); if (tab.id === 'recent') loadEncounterSidebar() }}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 min-h-[44px] py-2.5 text-sm font-medium border-b-2 transition-colors',
-              mobileTab === tab.id
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tab.icon}{tab.label}
-            {tab.id === 'recent' && sidebarTotalCount > 0 && (
-              <span className="flex items-center justify-center h-4 w-4 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
-                {sidebarTotalCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Body: patients list + recent sidebar */}
-      <div className="flex-1 flex overflow-hidden">
-
-        {/* ── Left: patients ───────────────────────────────────────────────── */}
-        <div className={cn('flex-1 flex-col overflow-hidden', mobileTab === 'patients' ? 'flex' : 'hidden md:flex')}>
-
       {/* Search + filter bar */}
       <div className="px-4 sm:px-6 py-3 border-b bg-card shrink-0">
-        {/* Single search + filter row */}
         <div className="flex items-center gap-2">
           {/* Search input — full width on mobile, capped on desktop */}
           <div className="relative flex-1 sm:max-w-md">
@@ -545,289 +358,6 @@ export default function DashboardPage() {
         )}
       </ScrollArea>
 
-        </div>{/* end left column */}
-
-        {/* ── Mobile: Recent + assigned encounters ─────────────────────────── */}
-        {mobileTab === 'recent' && (
-          <div className="flex flex-col flex-1 overflow-hidden md:hidden">
-            <ScrollArea className="flex-1">
-              {sidebarTotalCount === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-2 px-4 text-center">
-                  <Clock className="h-8 w-8 opacity-25" />
-                  <p className="text-sm">No encounters here yet</p>
-                  <p className="text-xs opacity-60">Open encounters assigned to you and ones you open show up here</p>
-                </div>
-              ) : (
-                <div>
-                  {myQueue.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        <Hourglass className="h-3.5 w-3.5" />
-                        Waiting for me
-                      </div>
-                      <div className="divide-y divide-border border-b border-border">
-                        {myQueue.map(v => {
-                          const pt = visitPatient(v)
-                          return (
-                            <button
-                              key={v.id}
-                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent transition-colors text-left"
-                              onClick={() => navigateToVisit(v)}
-                            >
-                              <div className="h-9 w-9 rounded-full bg-amber-500/10 text-amber-700 flex items-center justify-center shrink-0">
-                                <Hourglass className="h-4 w-4" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{pt ? fullName(pt, nameFormat) : 'Unknown'}</p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {v.stage || 'In queue'}{v.reason ? ` · ${v.reason}` : ''}
-                                </p>
-                              </div>
-                              <span className="text-[10px] text-muted-foreground shrink-0">
-                                {v.arrived_at ? timeAgo(v.arrived_at) : ''}
-                              </span>
-                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {assignedEncounters.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        <UserCheck className="h-3.5 w-3.5" />
-                        Assigned to me
-                      </div>
-                      <div className="divide-y divide-border border-b border-border">
-                        {assignedEncounters.map(enc => (
-                          <button
-                            key={enc.encounterId}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent transition-colors text-left"
-                            onClick={() => navigate(`/patients/${enc.patientId}/encounters/${enc.encounterId}`)}
-                          >
-                            <div className={cn(
-                              'h-9 w-9 rounded-full flex items-center justify-center shrink-0',
-                              enc.status === 'open' ? 'bg-emerald-500/10 text-emerald-700' : 'bg-muted text-muted-foreground',
-                            )}>
-                              <UserCheck className="h-4 w-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{enc.patientName}</p>
-                              <p className="text-xs text-muted-foreground truncate">{enc.title || 'Encounter'} · <span className="font-mono">{enc.mrn}</span></p>
-                            </div>
-                            <div className="flex flex-col items-end gap-1 shrink-0">
-                              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', enc.status === 'open' ? 'bg-emerald-500/10 text-emerald-700' : 'bg-muted text-muted-foreground')}>
-                                {enc.status}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">{timeAgo(enc.visitedAt)}</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {recentOnlyEncounters.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        <Clock className="h-3.5 w-3.5" />
-                        Recently opened
-                      </div>
-                      <div className="divide-y divide-border">
-                        {recentOnlyEncounters.map(enc => (
-                          <button
-                            key={enc.encounterId}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent transition-colors text-left"
-                            onClick={() => navigate(`/patients/${enc.patientId}/encounters/${enc.encounterId}`)}
-                          >
-                            <div className={cn(
-                              'h-9 w-9 rounded-full flex items-center justify-center shrink-0',
-                              enc.status === 'open' ? 'bg-emerald-500/10 text-emerald-700' : 'bg-muted text-muted-foreground',
-                            )}>
-                              <Activity className="h-4 w-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{enc.patientName}</p>
-                              <p className="text-xs text-muted-foreground truncate">{enc.title || 'Encounter'} · <span className="font-mono">{enc.mrn}</span></p>
-                            </div>
-                            <div className="flex flex-col items-end gap-1 shrink-0">
-                              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', enc.status === 'open' ? 'bg-emerald-500/10 text-emerald-700' : 'bg-muted text-muted-foreground')}>
-                                {enc.status}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">{timeAgo(enc.visitedAt)}</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {recentEncounters.length > 0 && (
-                    <div className="py-3 text-center">
-                      <button
-                        type="button"
-                        onClick={clearRecentHistory}
-                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Clear recent history
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </ScrollArea>
-          </div>
-        )}
-
-        {/* ── Desktop: assigned + recent encounters sidebar ───────────────── */}
-        <div className="hidden md:flex flex-col w-64 border-l bg-card shrink-0 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-            <div className="flex items-center gap-1.5 text-sm font-medium">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              Encounters
-            </div>
-            {recentEncounters.length > 0 && (
-              <button
-                type="button"
-                onClick={clearRecentHistory}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          <ScrollArea className="flex-1">
-            {sidebarTotalCount === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2 px-4 text-center">
-                <Clock className="h-7 w-7 opacity-25" />
-                <p className="text-xs">Open assigned and recently opened encounters appear here</p>
-              </div>
-            ) : (
-              <div>
-                {myQueue.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-1 px-4 pt-2.5 pb-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      <Hourglass className="h-3 w-3" />
-                      Waiting
-                    </div>
-                    <div className="divide-y divide-border border-b border-border">
-                      {myQueue.map(v => {
-                        const pt = visitPatient(v)
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            className="w-full flex items-start gap-2.5 px-4 py-2.5 hover:bg-accent/50 active:bg-accent transition-colors text-left"
-                            onClick={() => navigateToVisit(v)}
-                          >
-                            <div className="h-7 w-7 rounded-full bg-amber-500/10 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
-                              <Hourglass className="h-3.5 w-3.5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium truncate leading-snug">{pt ? fullName(pt, nameFormat) : 'Unknown'}</p>
-                              <p className="text-[11px] text-muted-foreground truncate">{v.stage || 'In queue'}{v.reason ? ` · ${v.reason}` : ''}</p>
-                              <span className="text-[10px] text-muted-foreground">
-                                {v.arrived_at ? timeAgo(v.arrived_at) : ''}
-                              </span>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-                {assignedEncounters.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-1 px-4 pt-2.5 pb-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      <UserCheck className="h-3 w-3" />
-                      Assigned
-                    </div>
-                    <div className="divide-y divide-border border-b border-border">
-                      {assignedEncounters.map(enc => (
-                        <button
-                          key={enc.encounterId}
-                          type="button"
-                          className="w-full flex items-start gap-2.5 px-4 py-2.5 hover:bg-accent/50 active:bg-accent transition-colors text-left"
-                          onClick={() => navigate(`/patients/${enc.patientId}/encounters/${enc.encounterId}`)}
-                        >
-                          <div className={cn(
-                            'h-7 w-7 rounded-full flex items-center justify-center shrink-0 mt-0.5',
-                            enc.status === 'open'
-                              ? 'bg-emerald-500/10 text-emerald-700'
-                              : 'bg-muted text-muted-foreground',
-                          )}>
-                            <UserCheck className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate leading-snug">{enc.patientName}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">{enc.title || 'Encounter'}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className={cn(
-                                'text-[10px] font-medium px-1 py-px rounded',
-                                enc.status === 'open'
-                                  ? 'bg-emerald-500/10 text-emerald-700'
-                                  : 'bg-muted text-muted-foreground',
-                              )}>
-                                {enc.status}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">{timeAgo(enc.visitedAt)}</span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {recentOnlyEncounters.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-1 px-4 pt-2.5 pb-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      <Clock className="h-3 w-3" />
-                      Recent
-                    </div>
-                    <div className="divide-y divide-border">
-                      {recentOnlyEncounters.map(enc => (
-                        <button
-                          key={enc.encounterId}
-                          type="button"
-                          className="w-full flex items-start gap-2.5 px-4 py-2.5 hover:bg-accent/50 active:bg-accent transition-colors text-left"
-                          onClick={() => navigate(`/patients/${enc.patientId}/encounters/${enc.encounterId}`)}
-                        >
-                          <div className={cn(
-                            'h-7 w-7 rounded-full flex items-center justify-center shrink-0 mt-0.5',
-                            enc.status === 'open'
-                              ? 'bg-emerald-500/10 text-emerald-700'
-                              : 'bg-muted text-muted-foreground',
-                          )}>
-                            <Activity className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate leading-snug">{enc.patientName}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">{enc.title || 'Encounter'}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className={cn(
-                                'text-[10px] font-medium px-1 py-px rounded',
-                                enc.status === 'open'
-                                  ? 'bg-emerald-500/10 text-emerald-700'
-                                  : 'bg-muted text-muted-foreground',
-                              )}>
-                                {enc.status}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">{timeAgo(enc.visitedAt)}</span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-
-      </div>{/* end body flex row */}
       <CreatePatientDialog
         open={open}
         onOpenChange={setOpen}

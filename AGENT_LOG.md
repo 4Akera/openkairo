@@ -357,3 +357,24 @@ the queue switcher and day navigation.
 — Mine dropped the carried-over list from 3 to 2, hiding the unassigned
 visit. (Also fixed en route, prior commit: sidebar nav scrolls when
 memberships overflow.)
+
+## 2026-08-08 — Iteration 20: Patients = registry (TIER + BACKLOG DONE)
+
+**Item:** Delete the Dashboard's triple sidebar — the second and final
+slice of "one place for patients".
+
+**What changed:** DashboardPage lost the desktop Encounters sidebar
+(Waiting for me / Assigned / Recently opened), the mobile Patients/Recent
+tab strip, and all the queue/recents state feeding them (~350 lines).
+It is now purely the registry: search, filters, list. recentItems.ts
+stays — patient recents feed GlobalSearch and the DeptPortal walk-in
+picker, and encounter refs feed EncounterPage's access-revoked heuristic.
+
+**The answer to the user's complaint:** patients now live in exactly two
+surfaces plus search — Patients (registry), Front Desk (the day, with
+Mine/queue/date filters; clinic tabs are the same view scoped), ⌘K.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+the registry renders single-pane with no tab strip or sidebar.
+
+**Loop state:** backlog fully ticked — stopping the loop.
