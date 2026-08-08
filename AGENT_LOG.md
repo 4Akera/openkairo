@@ -938,3 +938,38 @@ visitPatient().
 moving 2 encounters into Cardiology → "From: All queues · 39 / General ·
 37 / Cardiology · 2", picking Cardiology showed exactly those 2 orders.
 Test data reverted.
+
+## 2026-08-08 — Iteration 49: privacy pass opens — ONE access predicate
+
+**Item:** Privacy pass step 1 (user approved the pass with "Ok go" after
+the privacy-model review this session): consolidate the encounter
+visibility predicate, stated five times in SQL and twice in the client.
+
+**What:** `can_access_encounter(e encounters)` in schema.sql — the single
+statement of staff/assigned/admin/restricted-roles — now backs
+encounter_select (+ its creator grant), encounter_update,
+block_staff_access, audit_log_select, and reassign_encounter (v_enc record
+→ encounters). Client mirror `lib/encounterAccess.ts` (+8 tests, 180
+total) replaces EncounterPage's canView IIFE and PatientPage's
+canNavigateEncounter. Semantics preserved except one real drift FIXED:
+EncounterPage denied the creator on private encounters (PatientPage and
+RLS both granted it), so a receptionist who registered a private encounter
+got a clickable card that dead-ended in "Access Restricted". Documented
+drift kept as-is: creator grant is SELECT-only (no update/block access);
+audit additionally honors encounter.view_all.
+
+**Charter gate:** schema.sql is STAGED only — `can_access_encounter` +
+rewritten policies take effect on the next user-approved apply. Behavior
+is identical by construction, so there is no urgency; the remote keeps
+running on the expanded copies until then.
+
+**Verification:** tsc --build clean, eslint clean, 180/180 tests. Browser
+(own preview :56008, physician demo): Front Desk → Open → encounter
+renders through the new predicate; patient page Visits cards render/route.
+Privacy popover flip to Private not exercised (popover clicks wouldn't
+land in the driver; save handler untouched by this change) — private/
+restricted/creator branches are pinned by the unit tests instead. Two
+console 403s traced to pre-existing noise, no Supabase mutation fired.
+
+**Next in the pass:** sub-table RLS hole (block_entries/attachments/acks +
+block-media storage ignore the encounter wall) — SCHEMA, stage + ask.

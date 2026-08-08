@@ -34,6 +34,33 @@ When working autonomously (e.g. via /loop), follow this contract:
 
 ## Backlog (edit freely — user curates this list)
 
+### Privacy pass (user-approved 2026-08-08 — "Ok go")
+Target model: privacy lives in TWO places — the encounter carries the wall
+(blocks inherit it); per-block mask hides within the team, share-to-record
+surfaces. Sequence agreed with user:
+
+- [x] One access predicate: `can_access_encounter()` in schema.sql replaces
+      the five hand-copied visibility gates (encounter select/update
+      policies, block_staff_access, audit_log_select, reassign_encounter —
+      drift found: audit honored view_all, RPC dropped created_by, client
+      copies disagreed on creator). Client mirror `lib/encounterAccess.ts`
+      (tested) feeds EncounterPage canView + PatientPage cards; fixes the
+      creator being locked out of the page for private encounters they
+      registered. SCHEMA STAGED — remote apply awaits user approval.
+      (2026-08-08)
+- [ ] Sub-table RLS hole: block_entries / block_attachments / block_acks /
+      block-media storage are gated only by block.add — private-encounter
+      payloads readable via direct API. Policies must derive from the
+      parent block → encounter. SCHEMA — stage + ask user.
+- [ ] Remove per-block visible_to_roles (UI first: role picker leaves the
+      block menu, default_visible_to_roles leaves Settings; columns stay
+      dormant). Mask + encounter visibility cover the need; kills silent
+      different-staff-see-different-charts defaults.
+- [ ] Encounter visibility → two states (Everyone / Care team) replacing
+      restricted + role picker; break-the-glass (sealed-but-visible, open
+      with a logged reason) as the power follow-up. Ask user before
+      building this one.
+
 ### Ground-up restructure (user-approved 2026-08-08): ENCOUNTER IS THE EVENT
 The encounter absorbs the visit: one object carries the clinical record AND
 the journey (scheduled/arrived/stage/finished, department queue, referral).
