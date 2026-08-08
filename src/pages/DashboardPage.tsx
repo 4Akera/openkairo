@@ -1,8 +1,9 @@
 /**
- * Patients — the registry. Search and browse every patient; filters cover
- * open/assigned encounters. The operational "who's here today" view lives
- * on the Front Desk (with its Mine filter), and ⌘K searches from anywhere —
- * two surfaces plus search, on purpose.
+ * Patients — find one person fast, or register a new one. That is the
+ * registry's whole job: at hospital scale (hundreds of thousands of
+ * patients) browsing a list is meaningless, so nothing loads until you
+ * type — name, MRN, phone, or birth year. "Who's here today" lives on
+ * Today; ⌘K is this same search from anywhere.
  */
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -33,9 +34,11 @@ export default function DashboardPage() {
   const { nameFormat } = useSettingsStore()
 
   const [patients, setPatients]       = useState<Patient[]>([])
-  const [loading, setLoading]         = useState(true)
+  const [loading, setLoading]         = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [totalCount, setTotalCount]   = useState(0)
+  /** Whole-registry head count — the badge; search totals live in totalCount */
+  const [registryCount, setRegistryCount] = useState<number | null>(null)
   const [hasMore, setHasMore]         = useState(false)
   const [page, setPage]               = useState(0)
 
@@ -95,9 +98,25 @@ export default function DashboardPage() {
     setLoadingMore(false)
   }, [user])
 
-  // Re-fetch from page 0 when search/filters change
+  // Total on record — a cheap head count for the badge, not a list fetch
+  useEffect(() => {
+    supabase
+      .from('patients')
+      .select('id', { count: 'exact', head: true })
+      .then(({ count }) => { if (count !== null) setRegistryCount(count) })
+  }, [])
+
+  // Search-first: fetch only when there is a query or an active filter
   useEffect(() => {
     setPage(0)
+    const hasQuery = search.trim() !== '' || mineOnly || assignedToMe || openOnly
+    if (!hasQuery) {
+      setPatients([])
+      setHasMore(false)
+      setLoading(false)
+      isFirstLoad.current = false
+      return
+    }
     const delay = isFirstLoad.current ? 0 : 300
     const timer = setTimeout(() => {
       fetchPatients(search, mineOnly, assignedToMe, openOnly, 0, false)
@@ -130,7 +149,9 @@ export default function DashboardPage() {
           <h1 className="text-base font-semibold">Patients</h1>
           {!loading && (
             <Badge variant="secondary" className="ml-1">
-              {filtersActive ? `${patients.length}${hasMore ? '+' : ''} of ${totalCount}` : totalCount}
+              {filtersActive
+                ? `${patients.length}${hasMore ? '+' : ''} of ${totalCount}`
+                : registryCount ?? '…'}
             </Badge>
           )}
         </div>
@@ -240,15 +261,23 @@ export default function DashboardPage() {
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading patients…
           </div>
+        ) : !filtersActive ? (
+          /* Search-first: at registry scale there is nothing to browse */
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 px-6 text-center">
+            <Search className="h-8 w-8 opacity-25" />
+            <p className="text-sm font-medium text-foreground/80">
+              Find a patient{registryCount ? ` — ${registryCount.toLocaleString()} on record` : ''}
+            </p>
+            <p className="text-xs">Search by name, MRN, phone, or birth year — or register someone new.</p>
+            <Button size="sm" variant="outline" onClick={openDialog} className="mt-1">
+              <UserPlus className="h-3.5 w-3.5" />
+              New Patient
+            </Button>
+          </div>
         ) : patients.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-2">
             <Users className="h-8 w-8 opacity-30" />
-            <p className="text-sm">{filtersActive ? 'No patients match' : 'No patients yet'}</p>
-            {!filtersActive && (
-              <Button size="sm" variant="outline" onClick={openDialog}>
-                Add first patient
-              </Button>
-            )}
+            <p className="text-sm">No patients match</p>
           </div>
         ) : (
           <>

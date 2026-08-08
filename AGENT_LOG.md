@@ -490,3 +490,18 @@ end-to-end — signed in lands on Today; Jacob's migrated row (user-authored
 note + title) opened as ONE record showing clinical timeline + journey
 strip + Finish; registry works at /patients. Migration counts checked in
 SQL (4 encounters carry journeys).
+
+## 2026-08-08 — Registry becomes search-first (user critique)
+
+**User:** the patient list is pointless at scale — a hospital can register
+500k patients a year; nobody browses page 1 of 10,000.
+
+**What changed:** /patients no longer fetches anything until you type or
+filter. The default view is a search hero ("Find a patient — N on record ·
+search by name, MRN, phone, or birth year · New Patient"); the header badge
+uses a cheap head-count instead of a list fetch. Results and pagination
+appear only for queries; the browse-all default is gone.
+
+**Verification:** tsc clean, eslint clean, 135/135 tests; browser-verified
+— empty registry shows the hero with the live count and no list request;
+typing "chopin" returned 1 of 1 instantly.
