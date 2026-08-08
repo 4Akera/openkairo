@@ -411,3 +411,19 @@ Start Encounter; no state or logic changed — pure progressive disclosure.
 — dialog opened collapsed, one tap on Start Encounter created and
 navigated into a fresh open encounter (header correctly read "Close",
 not "Finish", since no visit was linked). Test encounter removed.
+
+## 2026-08-08 — Iteration 23: result-ready notifications
+
+**Item:** Close the ordering loop in realtime.
+
+**What changed:** new `ResultToasts` mounted once in the app shell:
+subscribes to block_actions updates; when an order the current user placed
+transitions to completed, a toast appears bottom-right ("<Department>
+result ready — <patient> · tap to open") linking to the encounter.
+Self-contained mini-toaster (no library), auto-dismisses, dedupes by
+action id.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+— flipped a live in-progress lab order (placed by the logged-in admin) to
+completed via SQL and the toast appeared with patient name; reverted the
+order's status afterwards.

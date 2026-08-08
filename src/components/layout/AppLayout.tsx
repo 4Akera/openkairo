@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { TooltipProvider } from '../ui'
 import GlobalSearch from '../GlobalSearch'
+import ResultToasts from '../ResultToasts'
 
 export default function AppLayout() {
   const [searchOpen, setSearchOpen] = useState(false)
@@ -28,6 +29,7 @@ export default function AppLayout() {
         </main>
       </div>
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <ResultToasts />
     </TooltipProvider>
   )
 }

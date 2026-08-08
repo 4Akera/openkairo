@@ -44,8 +44,9 @@ result loop. Judged against: one journey, no new concepts.
       title/template/visibility — matching the queue's one-tap path.
       (2026-08-08 — nurses/receptionists still see the physician picker
       upfront; everything else collapsed)
-- [ ] Result-ready notifications: realtime toast for the ordering physician
+- [x] Result-ready notifications: realtime toast for the ordering physician
       when their lab/radiology order completes, linking to the encounter.
+      (2026-08-08 — ResultToasts in the app shell; self-contained toaster)
 - [ ] AI-filled blocks pilot: dictate/paste free text → Claude fills the
       structured fields of the Vitals block. HARD STOP before deploying the
       Edge Function or wiring an API key — ask the user first.
