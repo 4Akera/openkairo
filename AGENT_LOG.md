@@ -844,3 +844,38 @@ white-screened the tab mid-verification.
 **Note:** parallel session actively editing (VisitQueue, utils, visits,
 FrontDeskPage, PatientPage + tests — count now 170); their files left
 uncommitted, DepartmentWork diff verified mine-only.
+
+## 2026-08-08 — Iteration 47: journey-line feedback pass + inline header edit (user-driven)
+
+**Items (3, all direct user feedback this session):**
+1. Sparkline removed. User: "I don't think this is useful" — the 7-day
+   avg-visit sparkline (shipped earlier today) read as an unlabeled blip.
+   WaitTrend, its encounters fetch, dailyAverageWaits + tests all deleted.
+2. "Make this more useful but simple" (patient-page visit line):
+   formatDayTime day words (Today/Yesterday/Tomorrow, same-year dates drop
+   the year), duration on finished visits ("44m visit"), live "here 12m"
+   on today's active ones. Applied to patient page, bookings, and the
+   journey strip; VisitQueue's leftover "checked out" strings → "finished";
+   Front Desk avg stat now shares formatMinutes.
+3. "Add the ability to add title and physician from there" (encounter
+   header): title is click-to-edit in place ("Add title" affordance),
+   physician is an always-visible "→ name / Assign physician" chip opening
+   a search picker (get_physicians_list + reassign_encounter, error shown
+   in the picker, admin-only unassign row). The Settings gear popover is
+   DELETED — both abilities moved inline, one menu fewer. Mobile keeps
+   both (tap title; UserCircle icon button).
+
+**Verification:** tsc clean, eslint clean on touched files, 170/170 tests
+(new formatDayTime/minutesBetween/formatMinutes suites). Browser on own
+preview (:55339, physician demo): Front Desk shows "3 in queue" with no
+sparkline; title typed inline → header + audit log updated; physician
+reassigned to Clinician (chip, audit entry, Finish button appeared for
+new assignee) then restored to Dr. James Harrison; strip reads "Arrived
+Today · 10:21 PM · in clinic 14m"; patient page line reads "Arrived
+Today · 10:21 PM · With doctor · here 19m" with the new title on the card.
+
+**Commits:** c728c47 (line pass), fcad84a (inline header edit).
+
+**Note:** harness Enter keypress didn't reach the title input's onKeyDown
+during browser testing (blur path proven instead; Tab saved fine) —
+believed a driver quirk, not app code; re-test Enter by hand if it recurs.

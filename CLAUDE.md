@@ -169,8 +169,19 @@ result loop. Judged against: one journey, no new concepts.
       become one). (2026-08-08 — Settings nav 10 → 8 entries)
 - [ ] AI visit summary: one click drafts a visit-summary note block from
       the encounter's blocks (after the AI pilot lands).
-- [x] Wait-time trend: 7-day avg-visit sparkline beside the Front Desk stat.
-      (2026-08-08 — hidden until ≥2 days have completed visits)
+- [x] ~~Wait-time trend sparkline~~ REMOVED same day it shipped: user
+      verdict "I don't think this is useful" — an unlabeled mini-chart is
+      noise, not information. Lesson: no decorative data-viz; every element
+      must explain itself. (2026-08-08)
+- [x] Journey lines say something useful (user-directed 2026-08-08):
+      formatDayTime day words ("Today · 10:21 PM"), visit duration on
+      finished visits ("44m visit"), live "here 12m" on active ones —
+      patient page, bookings, journey strip; last "checked out" strings
+      retired.
+- [x] Title + physician edited right in the encounter header
+      (user-requested 2026-08-08): "Add title" click-to-edit + "→ physician"
+      chip with search picker; the Settings gear popover is deleted — one
+      less menu, same abilities, now discoverable.
 
 ### One place for patients (done)
 User complaint 2026-08-08: patients appear in too many places (Recent tab,
