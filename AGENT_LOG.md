@@ -879,3 +879,34 @@ Today · 10:21 PM · With doctor · here 19m" with the new title on the card.
 **Note:** harness Enter keypress didn't reach the title input's onKeyDown
 during browser testing (blur path proven instead; Tab saved fine) —
 believed a driver quirk, not app code; re-test Enter by hand if it recurs.
+
+## 2026-08-08 — Iteration 48: subheader consolidation + one ending (user-driven)
+
+**Items (2, direct user feedback on iteration 47):**
+1. "Title and physician in subheader would be better" — moved both from
+   the top header into the subheader, which is now the encounter's single
+   context bar: title (click-to-edit) · → physician (picker) · journey
+   (Footprints · Arrived Today · in clinic Xm ticking via isolated
+   InClinicLabel/useNow · stage select · Done ✓) · Finish pinned right.
+   Top header slims to patient identity + Open/Closed badge + Export/
+   Privacy. Mobile drops last iteration's cramped title cluster + icon
+   button — the one subheader serves all widths (journey scrolls).
+2. "There is finish and done buttons" — real duplication since the
+   encounter absorbed the visit. The strip's ungated Done (checkout) is
+   removed; Finish (canClose-gated, chains close → checkout) is the one
+   ending, per the charter's "One ending" item. Non-owners still end
+   visits from the Front Desk queue rows. VisitJourneyStrip.tsx deleted
+   (folded into EncounterPage — net −87 lines).
+
+**Verification:** tsc/eslint clean, 170/170 tests, browser: subheader
+renders title → physician | journey; picker anchors under the chip;
+Finish correctly hidden for non-assignee (appeared earlier when assigned);
+mobile 375px shows title+physician tappable, journey scrolls.
+
+**Commit:** eb9853a.
+
+**Incident:** first commit attempt used `git add -A` and swept in a
+parallel session's uncommitted files (deptWorklist, DepartmentWork) —
+caught immediately, soft-reset, recommitted mine only, theirs restored to
+working tree untouched. Rule for future iterations: ALWAYS stage explicit
+file lists, never `git add -A`, while parallel sessions share this tree.

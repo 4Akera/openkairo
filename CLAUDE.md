@@ -178,10 +178,13 @@ result loop. Judged against: one journey, no new concepts.
       finished visits ("44m visit"), live "here 12m" on active ones —
       patient page, bookings, journey strip; last "checked out" strings
       retired.
-- [x] Title + physician edited right in the encounter header
-      (user-requested 2026-08-08): "Add title" click-to-edit + "→ physician"
-      chip with search picker; the Settings gear popover is deleted — one
-      less menu, same abilities, now discoverable.
+- [x] Title + physician edited in place, one context bar (user-requested
+      2026-08-08, refined same day): the subheader under the encounter
+      header is the single context bar — click-to-edit title, "→ physician"
+      chip + search picker, journey (arrived · in clinic Xm · stage / Done),
+      and the ONE Finish ending (the strip's duplicate Done button and the
+      Settings gear popover are both deleted; VisitJourneyStrip.tsx folded
+      into EncounterPage).
 
 ### One place for patients (done)
 User complaint 2026-08-08: patients appear in too many places (Recent tab,
