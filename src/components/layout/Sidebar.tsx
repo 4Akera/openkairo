@@ -68,8 +68,8 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
         {/* Divider */}
         <div className="w-8 h-px bg-white/10 mb-3 shrink-0" />
 
-        {/* Nav links */}
-        <nav className="flex-1 flex flex-col gap-0.5 w-full px-2.5">
+        {/* Nav links — scrolls when memberships outgrow the viewport */}
+        <nav className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-0.5 w-full px-2.5">
           {!isDeptOnly && NAV.map(({ to, label, icon: Icon, end }) => (
             <Tooltip key={to} delayDuration={200}>
               <TooltipTrigger asChild>
@@ -234,7 +234,7 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
       </aside>
 
       {/* ── Mobile bottom nav (< md) ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-white/10 flex items-center justify-around h-14 px-2 pb-safe">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-white/10 flex items-center justify-around h-14 px-2 pb-safe overflow-x-auto no-scrollbar">
         {/* Patients */}
         {!isDeptOnly && (
           <NavLink
