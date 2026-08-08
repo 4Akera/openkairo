@@ -18,7 +18,7 @@ import {
 import {
   ArrowLeft, Activity, CheckCircle2, XCircle, Loader2,
   Lock, Users, Globe, ChevronDown, ShieldCheck, UserCircle, ClipboardList,
-  AlertTriangle, Settings2, Search, X, Check, DollarSign, Ban, FileDown,
+  AlertTriangle, Search, Check, DollarSign, Ban, FileDown,
 } from 'lucide-react'
 import PatientRecord from '../components/patient-record/PatientRecord'
 import Timeline, { type TimelineHandle } from '../components/timeline/Timeline'
@@ -63,8 +63,8 @@ export default function EncounterPage() {
   const [editVisibleToRoles, setEditVisibleToRoles] = useState<string[]>([])
   const [savingVis, setSavingVis] = useState(false)
 
-  // Settings popover state
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // Inline title edit + physician picker (in the header, no settings menu)
+  const [titleEditing, setTitleEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [savingTitle, setSavingTitle] = useState(false)
   const [editAssignedTo, setEditAssignedTo] = useState('')
@@ -73,7 +73,6 @@ export default function EncounterPage() {
   const [physicians, setPhysicians] = useState<{ id: string; full_name: string }[]>([])
   const [physicianSearch, setPhysicianSearch] = useState('')
   const [physicianDropOpen, setPhysicianDropOpen] = useState(false)
-  const physicianInputRef = useRef<HTMLDivElement>(null)
   const timelineRef = useRef<TimelineHandle>(null)
   const [physicianDropRect, setPhysicianDropRect] = useState<{ top: number; left: number; width: number } | null>(null)
 
@@ -270,23 +269,34 @@ export default function EncounterPage() {
     setVisPopoverOpen(false)
   }
 
-  const openSettings = async () => {
+  const startTitleEdit = () => {
     if (!encounter) return
     setEditTitle(encounter.title ?? '')
+    setTitleEditing(true)
+  }
+
+  /** Anchor the physician dropdown to whichever chip was clicked. */
+  const openAssignPicker = async (e: React.MouseEvent<HTMLElement>) => {
+    if (!encounter) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    setPhysicianDropRect({
+      top: rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 272)),
+      width: 264,
+    })
     setEditAssignedTo(encounter.assigned_to ?? '')
     setPhysicianSearch('')
-    setPhysicianDropOpen(false)
     setAssignSaveError(null)
-    setSettingsOpen(true)
-    // Fetch physicians list
-    const { data } = await supabase.rpc('get_physicians_list')
-    if (data) {
-      setPhysicians(data as { id: string; full_name: string }[])
+    setPhysicianDropOpen(true)
+    if (physicians.length === 0) {
+      const { data } = await supabase.rpc('get_physicians_list')
+      if (data) setPhysicians(data as { id: string; full_name: string }[])
     }
   }
 
   const handleSaveTitle = async () => {
     if (!encounterId || !encounter) return
+    setTitleEditing(false)
     const trimmed = editTitle.trim() || null
     if (trimmed === (encounter.title ?? null)) return
     setSavingTitle(true)
@@ -329,7 +339,6 @@ export default function EncounterPage() {
     if (!encounterId) return
     setSavingAssignment(true)
     setAssignSaveError(null)
-    setSettingsOpen(false)
     setPhysicianDropOpen(false)
     const { error } = await supabase.rpc('reassign_encounter', {
       p_encounter_id: encounterId,
@@ -337,7 +346,7 @@ export default function EncounterPage() {
     })
     if (error) {
       setAssignSaveError(error.message ?? 'Failed to save assignment')
-      setSettingsOpen(true)
+      setPhysicianDropOpen(true)
     } else {
       await fetchData()
       void timelineRef.current?.refreshAuditLog()
@@ -386,6 +395,8 @@ export default function EncounterPage() {
   const canManage = isAssigned || hasRole('physician') || hasRole('admin')
   // Close requires ownership — only assigned physician or admin may close an encounter
   const canClose = isAssigned || hasRole('admin')
+  // Title + physician are edited straight in the header while the encounter is open
+  const canEditInline = canManage && encounter.status === 'open'
 
   // View access: must have block.add permission; private/restricted are further gated
   const canView = (() => {
@@ -455,29 +466,111 @@ export default function EncounterPage() {
 
             <Separator orientation="vertical" className="h-5 shrink-0 hidden sm:block" />
 
-            {/* Encounter info (desktop) */}
+            {/* Encounter info (desktop) — title and physician edit in place */}
             <div className="items-center gap-2 min-w-0 hidden sm:flex">
               <Activity className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <p className="text-sm text-muted-foreground truncate">
-                {encounter.title ?? `Encounter #${encounter.id.slice(0, 8).toUpperCase()}`}
-              </p>
+              {titleEditing ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  onBlur={() => void handleSaveTitle()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                    if (e.key === 'Escape') setTitleEditing(false)
+                  }}
+                  placeholder="Encounter title"
+                  className="text-sm w-44 rounded-md border border-border bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              ) : canEditInline ? (
+                <button
+                  type="button"
+                  onClick={startTitleEdit}
+                  title="Rename encounter"
+                  className={cn(
+                    'text-sm truncate text-left hover:text-foreground transition-colors',
+                    encounter.title ? 'text-muted-foreground' : 'text-muted-foreground/60 italic',
+                  )}
+                >
+                  {encounter.title ?? 'Add title'}
+                </button>
+              ) : (
+                <p className="text-sm text-muted-foreground truncate">
+                  {encounter.title ?? `Encounter #${encounter.id.slice(0, 8).toUpperCase()}`}
+                </p>
+              )}
+              {savingTitle && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />}
               <Badge variant={encounter.status === 'open' ? 'success' : 'muted'}>
                 {encounter.status === 'open' ? 'Open' : 'Closed'}
               </Badge>
-              {encounter.assigned_profile?.full_name && (
-                <span className="text-xs text-primary/70 whitespace-nowrap hidden lg:inline">
-                  → {encounter.assigned_profile.full_name}
-                </span>
+              {canEditInline ? (
+                <button
+                  type="button"
+                  onClick={e => void openAssignPicker(e)}
+                  title="Assign physician"
+                  className={cn(
+                    'text-xs whitespace-nowrap truncate max-w-[160px] transition-colors',
+                    encounter.assigned_profile?.full_name
+                      ? 'text-primary/70 hover:text-primary'
+                      : 'text-muted-foreground/60 italic hover:text-primary',
+                  )}
+                >
+                  → {encounter.assigned_profile?.full_name ?? 'Assign physician'}
+                </button>
+              ) : (
+                encounter.assigned_profile?.full_name && (
+                  <span className="text-xs text-primary/70 whitespace-nowrap hidden lg:inline">
+                    → {encounter.assigned_profile.full_name}
+                  </span>
+                )
               )}
             </div>
-            {/* Mobile: title + status badge */}
+            {/* Mobile: title + status badge, same inline editing */}
             <div className="sm:hidden flex items-center gap-1.5 shrink-0 min-w-0">
-              <p className="text-[10px] text-muted-foreground truncate max-w-[100px]">
-                {encounter.title ?? `Enc #${encounter.id.slice(0, 6).toUpperCase()}`}
-              </p>
+              {titleEditing ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  onBlur={() => void handleSaveTitle()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                    if (e.key === 'Escape') setTitleEditing(false)
+                  }}
+                  placeholder="Title"
+                  className="text-[10px] w-24 rounded-md border border-border bg-background px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              ) : canEditInline ? (
+                <button
+                  type="button"
+                  onClick={startTitleEdit}
+                  className={cn(
+                    'text-[10px] truncate max-w-[100px] text-left',
+                    encounter.title ? 'text-muted-foreground' : 'text-muted-foreground/60 italic',
+                  )}
+                >
+                  {encounter.title ?? 'Add title'}
+                </button>
+              ) : (
+                <p className="text-[10px] text-muted-foreground truncate max-w-[100px]">
+                  {encounter.title ?? `Enc #${encounter.id.slice(0, 6).toUpperCase()}`}
+                </p>
+              )}
               <Badge variant={encounter.status === 'open' ? 'success' : 'muted'} className="shrink-0">
                 {encounter.status === 'open' ? 'Open' : 'Closed'}
               </Badge>
+              {canEditInline && (
+                <button
+                  type="button"
+                  onClick={e => void openAssignPicker(e)}
+                  title="Assign physician"
+                  className="text-muted-foreground hover:text-primary shrink-0"
+                >
+                  <UserCircle className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -494,152 +587,66 @@ export default function EncounterPage() {
               <span className="hidden sm:inline">Export</span>
             </Button>
 
-            {/* Encounter Settings popover */}
-            {canManage && encounter.status === 'open' && (
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={openSettings}
-                  title="Encounter settings"
-                  className="h-9 w-9 sm:h-7 sm:w-auto gap-1 text-xs text-muted-foreground p-0 sm:px-2.5"
+            {/* Physician picker — anchored to whichever chip opened it */}
+            {physicianDropOpen && physicianDropRect && (
+              <>
+                <div className="fixed inset-0 z-[90]" onClick={() => setPhysicianDropOpen(false)} />
+                <div
+                  className="fixed z-[100] rounded-lg border border-border bg-card shadow-xl overflow-hidden"
+                  style={{ top: physicianDropRect.top, left: physicianDropRect.left, width: physicianDropRect.width }}
                 >
-                  <Settings2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 shrink-0" />
-                  <span className="hidden sm:inline">Settings</span>
-                </Button>
-
-                {settingsOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => { setSettingsOpen(false); setPhysicianDropOpen(false) }} />
-                    <div className="absolute right-0 top-full mt-1.5 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border bg-card shadow-xl overflow-hidden flex flex-col max-h-[min(480px,calc(100vh-80px))]">
-                      {/* Header */}
-                      <div className="px-4 py-3 border-b bg-muted/30 rounded-t-xl shrink-0">
-                        <div className="flex items-center gap-2">
-                          <Settings2 className="h-4 w-4 text-primary" />
-                          <p className="text-xs font-semibold">Encounter Settings</p>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Edit title and assignment</p>
-                      </div>
-
-                      <div className="p-3 space-y-4 overflow-y-auto flex-1 min-h-0 bg-card">
-                        {/* Title */}
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Title</p>
-                          <div className="flex gap-1.5">
-                            <input
-                              type="text"
-                              value={editTitle}
-                              onChange={e => setEditTitle(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); handleSaveTitle() } }}
-                              onBlur={handleSaveTitle}
-                              placeholder="Encounter title (optional)"
-                              className="flex-1 text-xs rounded-lg border border-border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                            />
-                            {savingTitle && <Loader2 className="h-3.5 w-3.5 animate-spin self-center text-muted-foreground" />}
-                          </div>
-                        </div>
-
-                        {/* Assigned to */}
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Assigned Physician</p>
-                          <div ref={physicianInputRef} className="relative">
-                            <div className="relative flex items-center">
-                              <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                              <input
-                                type="text"
-                                placeholder="Search physician…"
-                                value={physicianDropOpen
-                                  ? physicianSearch
-                                  : (physicians.find(p => p.id === editAssignedTo)?.full_name
-                                    ?? (encounter.assigned_profile?.full_name || ''))}
-                                onFocus={() => {
-                                  setPhysicianSearch('')
-                                  setPhysicianDropOpen(true)
-                                  if (physicianInputRef.current) {
-                                    const rect = physicianInputRef.current.getBoundingClientRect()
-                                    setPhysicianDropRect({ top: rect.bottom + 4, left: rect.left, width: rect.width })
-                                  }
-                                }}
-                                onChange={e => setPhysicianSearch(e.target.value)}
-                                className="w-full text-xs rounded-lg border border-border bg-background pl-8 pr-7 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                              />
-                              {savingAssignment
-                                ? <Loader2 className="absolute right-2.5 h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                                : editAssignedTo && !physicianDropOpen && hasRole('admin')
-                                  ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => { setEditAssignedTo(''); handleSaveAssignment('') }}
-                                      className="absolute right-2 text-muted-foreground hover:text-foreground"
-                                    >
-                                      <X className="h-3.5 w-3.5" />
-                                    </button>
-                                  ) : null}
-                            </div>
-
-                            {physicianDropOpen && physicianDropRect && (
-                              <>
-                                <div className="fixed inset-0 z-[90]" onClick={() => setPhysicianDropOpen(false)} />
-                                <div
-                                  className="fixed z-[100] rounded-lg border border-border bg-card shadow-lg overflow-hidden"
-                                  style={{ top: physicianDropRect.top, left: physicianDropRect.left, width: physicianDropRect.width }}
-                                >
-                                  <div className="max-h-44 overflow-y-auto overscroll-contain">
-                                    {hasRole('admin') && (
-                                      <button
-                                        type="button"
-                                        onClick={() => { setEditAssignedTo(''); handleSaveAssignment('') }}
-                                        className="w-full px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 transition-colors italic"
-                                      >
-                                        — No assignment —
-                                      </button>
-                                    )}
-                                    {physicians
-                                      .filter(p => p.full_name.toLowerCase().includes(physicianSearch.toLowerCase()))
-                                      .map(p => (
-                                        <button
-                                          key={p.id}
-                                          type="button"
-                                          onClick={() => { setEditAssignedTo(p.id); handleSaveAssignment(p.id) }}
-                                          className={cn(
-                                            'w-full px-3 py-2 text-left text-xs hover:bg-accent/60 transition-colors flex items-center gap-2',
-                                            editAssignedTo === p.id && 'bg-accent/40',
-                                          )}
-                                        >
-                                          <UserCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                          <span className="flex-1">{p.full_name}</span>
-                                          {editAssignedTo === p.id && <Check className="h-3 w-3 text-primary shrink-0" />}
-                                        </button>
-                                      ))}
-                                    {physicians.filter(p => p.full_name.toLowerCase().includes(physicianSearch.toLowerCase())).length === 0 && (
-                                      <p className="px-3 py-2 text-xs text-muted-foreground italic">No physicians match</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Assignment error */}
-                      {assignSaveError && (
-                        <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/30 text-xs text-destructive">
-                          {assignSaveError}
-                        </div>
-                      )}
-                      {/* Footer */}
-                      <div className="px-3 py-3 border-t flex justify-end gap-1.5 rounded-b-xl bg-card shrink-0">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSettingsOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button size="sm" className="h-7 text-xs" onClick={() => setSettingsOpen(false)}>
-                          Done
-                        </Button>
-                      </div>
+                  <div className="relative flex items-center border-b border-border">
+                    <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Search physician…"
+                      value={physicianSearch}
+                      onChange={e => setPhysicianSearch(e.target.value)}
+                      className="w-full text-xs bg-transparent pl-8 pr-7 py-2 text-foreground focus:outline-none"
+                    />
+                    {savingAssignment && <Loader2 className="absolute right-2.5 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                  </div>
+                  {assignSaveError && (
+                    <div className="px-3 py-2 text-xs text-destructive bg-destructive/10 border-b border-border">
+                      {assignSaveError}
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+                  <div className="max-h-44 overflow-y-auto overscroll-contain">
+                    {hasRole('admin') && (
+                      <button
+                        type="button"
+                        onClick={() => { setEditAssignedTo(''); void handleSaveAssignment('') }}
+                        className="w-full px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 transition-colors italic"
+                      >
+                        — No assignment —
+                      </button>
+                    )}
+                    {physicians
+                      .filter(p => p.full_name.toLowerCase().includes(physicianSearch.toLowerCase()))
+                      .map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setEditAssignedTo(p.id); void handleSaveAssignment(p.id) }}
+                          className={cn(
+                            'w-full px-3 py-2 text-left text-xs hover:bg-accent/60 transition-colors flex items-center gap-2',
+                            editAssignedTo === p.id && 'bg-accent/40',
+                          )}
+                        >
+                          <UserCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="flex-1">{p.full_name}</span>
+                          {editAssignedTo === p.id && <Check className="h-3 w-3 text-primary shrink-0" />}
+                        </button>
+                      ))}
+                    {physicians.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-muted-foreground italic">Loading…</p>
+                    ) : physicians.filter(p => p.full_name.toLowerCase().includes(physicianSearch.toLowerCase())).length === 0 && (
+                      <p className="px-3 py-2 text-xs text-muted-foreground italic">No physicians match</p>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
 
             {/* Running bill — live total, tap for lines + one-tap add */}
