@@ -1,16 +1,17 @@
 /**
- * Billing — the cashier's screen, built around ONE question: how much do
- * I collect right now?
+ * The money view — one patient at the till, built around ONE question:
+ * how much do I collect right now?
  *
- * Landing = the money queue: patients owing (patient_balance view) plus
- * patients with charges waiting on an insurer. Detail = a Due-now hero
- * whose Collect button settles everything outstanding in one motion;
- * checkbox selection exists only for partial settles. All amounts come
- * from lib/billing's ledger walk so this page, the Cashier lane on
- * Today, and the DB view can never disagree.
+ * Reached only from the Cashier lane on Today (or a deep link):
+ * /billing?patient=<id>. There is no landing here — the queue and the
+ * walk-up search live in the Cashier lane; a bare /billing goes home.
+ * A Due-now hero's Collect button settles everything outstanding in one
+ * motion; checkbox selection exists only for partial settles. All
+ * amounts come from lib/billing's ledger walk so this view, the Cashier
+ * lane, and the DB view can never disagree.
  */
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -25,7 +26,7 @@ import {
   ScrollArea,
 } from '../components/ui'
 import {
-  Search, Loader2, DollarSign, Receipt, CreditCard, Plus, XCircle,
+  Loader2, DollarSign, Receipt, CreditCard, Plus, XCircle,
   Check, ArrowLeft, Wallet, Ban, CheckCircle2, Pencil, Trash2,
   ShieldCheck, Printer,
 } from 'lucide-react'
@@ -63,24 +64,6 @@ const PAYMENT_METHODS = [
   { value: 'deposit',       label: 'Deposit' },
 ] as const
 
-// ── Query row shapes ─────────────────────────────────────────────────────────
-
-type ChargePatientRef = Pick<Patient, 'id' | 'first_name' | 'last_name' | 'mrn'>
-
-type InsurancePendingRow = {
-  patient_id: string
-  unit_price: number
-  quantity: number
-  patients: ChargePatientRef | null
-}
-
-type QueueRow = {
-  patient: ChargePatientRef
-  due: number
-  insuranceTotal: number
-  insuranceCount: number
-}
-
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function BillingPage() {
@@ -95,13 +78,10 @@ export default function BillingPage() {
     insuranceProviders, fetchInsuranceProviders,
   } = useBillingStore()
 
-  // ── Patient search ──────────────────────────────────────────────────────
-  const [query, setQuery]               = useState('')
-  const [searchResults, setSearchResults] = useState<Patient[]>([])
-  const [searching, setSearching]       = useState(false)
+  const navigate = useNavigate()
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
 
-  // Deep link from the Cashier lane on Today: /billing?patient=<id>
+  // The only way in: /billing?patient=<id> (Cashier lane rows, deep links)
   const [searchParams, setSearchParams] = useSearchParams()
   const linkedPatientId = searchParams.get('patient')
   useEffect(() => {
@@ -114,81 +94,13 @@ export default function BillingPage() {
       .then(({ data }) => {
         if (data) {
           setSelectedPatient(data as Patient)
+          setSelectedChargeIds(new Set())
           fetchPatientBilling((data as Patient).id)
         }
         setSearchParams({}, { replace: true })
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedPatientId])
-
-  // ── Waiting-to-pay queue (landing) ──────────────────────────────────────
-  const [queueRows, setQueueRows] = useState<QueueRow[]>([])
-  const [loadingQueue, setLoadingQueue] = useState(true)
-
-  useEffect(() => {
-    if (selectedPatient !== null) return
-    let cancelled = false
-    setLoadingQueue(true)
-    Promise.all([
-      supabase
-        .from('patient_balance')
-        .select('patient_id, balance')
-        .gt('balance', 0)
-        .order('balance', { ascending: false })
-        .limit(200),
-      supabase
-        .from('charges')
-        .select('patient_id, unit_price, quantity, patients(id, first_name, last_name, mrn)')
-        .eq('status', 'pending_insurance'),
-    ]).then(async ([balRes, insRes]) => {
-      if (cancelled) return
-      const dueByPatient = new Map<string, number>()
-      for (const r of (balRes.data ?? []) as { patient_id: string; balance: number }[]) {
-        dueByPatient.set(r.patient_id, Number(r.balance))
-      }
-      const patientRefs = new Map<string, ChargePatientRef>()
-      const insByPatient = new Map<string, { total: number; count: number }>()
-      // supabase-js (untyped client) infers the joined `patients` as an array,
-      // but this many-to-one embed returns a single object at runtime.
-      for (const r of (insRes.data ?? []) as unknown as InsurancePendingRow[]) {
-        if (!r.patients) continue
-        patientRefs.set(r.patient_id, r.patients)
-        const agg = insByPatient.get(r.patient_id) ?? { total: 0, count: 0 }
-        agg.total += Number(r.quantity) * Number(r.unit_price)
-        agg.count += 1
-        insByPatient.set(r.patient_id, agg)
-      }
-      const missingIds = [...dueByPatient.keys()].filter(id => !patientRefs.has(id))
-      if (missingIds.length > 0) {
-        const { data } = await supabase
-          .from('patients')
-          .select('id, first_name, last_name, mrn')
-          .in('id', missingIds)
-        if (cancelled) return
-        for (const p of (data ?? []) as ChargePatientRef[]) patientRefs.set(p.id, p)
-      }
-      const ids = new Set([...dueByPatient.keys(), ...insByPatient.keys()])
-      const rows: QueueRow[] = []
-      for (const id of ids) {
-        const patient = patientRefs.get(id)
-        if (!patient) continue
-        rows.push({
-          patient,
-          due: dueByPatient.get(id) ?? 0,
-          insuranceTotal: insByPatient.get(id)?.total ?? 0,
-          insuranceCount: insByPatient.get(id)?.count ?? 0,
-        })
-      }
-      rows.sort((a, b) =>
-        b.due - a.due ||
-        b.insuranceTotal - a.insuranceTotal ||
-        `${a.patient.last_name} ${a.patient.first_name}`.localeCompare(
-          `${b.patient.last_name} ${b.patient.first_name}`, undefined, { sensitivity: 'base' }))
-      setQueueRows(rows)
-      setLoadingQueue(false)
-    })
-    return () => { cancelled = true }
-  }, [selectedPatient])
 
   // ── Dialogs state ───────────────────────────────────────────────────────
   const [chargeOpen, setChargeOpen]   = useState(false)
@@ -249,29 +161,6 @@ export default function BillingPage() {
   useEffect(() => {
     fetchInsuranceProviders()
   }, [fetchInsuranceProviders])
-
-  const handleSearch = useCallback(async () => {
-    const q = query.trim()
-    if (!q) { setSearchResults([]); return }
-    setSearching(true)
-    const tokens = q.split(/\s+/).filter(Boolean)
-    const { data } = await supabase.rpc('search_patients', { p_tokens: tokens, p_limit: 20 })
-    setSearchResults((data ?? []) as Patient[])
-    setSearching(false)
-  }, [query])
-
-  useEffect(() => {
-    const t = setTimeout(handleSearch, 300)
-    return () => clearTimeout(t)
-  }, [handleSearch])
-
-  const selectPatient = (pt: Patient) => {
-    setSelectedPatient(pt)
-    setSearchResults([])
-    setQuery('')
-    setSelectedChargeIds(new Set())
-    fetchPatientBilling(pt.id)
-  }
 
   // ── The ledger — one computation feeds every number on this screen ──────
   const paymentsTotal = useMemo(
@@ -483,13 +372,17 @@ export default function BillingPage() {
   const canCharge = can('billing.charge')
   const canPay    = can('billing.payment')
 
+  // No landing here — the queue and walk-up search are the Cashier lane on
+  // Today. A bare /billing (or a dead deep link) goes home.
+  if (!selectedPatient && !linkedPatientId) return <Navigate to="/" replace />
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <header className="border-b bg-card px-4 sm:px-6 py-3 flex items-center gap-3 shrink-0">
         {selectedPatient ? (
           <>
-            <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setSelectedPatient(null)}>
+            <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate('/')}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
@@ -509,99 +402,9 @@ export default function BillingPage() {
       </header>
 
       {!selectedPatient ? (
-        /* ── Landing: the money queue ── */
-        <div className="flex-1 overflow-auto p-4 sm:p-6">
-          <div className="max-w-lg mx-auto space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search patient by name, MRN, or phone…"
-                className="pl-10"
-                autoFocus
-              />
-              {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
-            </div>
-
-            {searchResults.length > 0 && (
-              <div className="border rounded-lg divide-y overflow-hidden">
-                {searchResults.map(pt => (
-                  <button
-                    key={pt.id}
-                    onClick={() => selectPatient(pt)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs shrink-0">
-                      {pt.first_name[0]}{pt.last_name[0]}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{fullName(pt, nameFormat)}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{pt.mrn}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {query && !searching && searchResults.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">No patients found</p>
-            )}
-
-            {!query && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Waiting to pay
-                  </p>
-                </div>
-                {loadingQueue ? (
-                  <div className="flex justify-center py-6">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                ) : queueRows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg bg-muted/20">
-                    Nobody owes anything. 🎉
-                  </p>
-                ) : (
-                  <div className="border rounded-lg divide-y overflow-hidden border-emerald-200/60 dark:border-emerald-900/40">
-                    {queueRows.map(({ patient: pt, due, insuranceTotal, insuranceCount }) => (
-                      <button
-                        key={pt.id}
-                        type="button"
-                        onClick={() => selectPatient(pt as Patient)}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors"
-                      >
-                        <div className="h-8 w-8 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-xs shrink-0">
-                          {pt.first_name[0]}{pt.last_name[0]}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{fullName(pt, nameFormat)}</p>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                            <span className="text-xs text-muted-foreground font-mono">{pt.mrn}</span>
-                            {insuranceCount > 0 && (
-                              <Badge variant="outline" className={cn('text-[9px] py-0 px-1.5 font-medium', CHIP.insurance.cls)}>
-                                insurance {insuranceTotal.toFixed(2)}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        {due > 0 && (
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-mono font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                              {currencySymbol}{due.toFixed(2)}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">due</p>
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        /* Deep link resolving — the only no-patient state this page has */
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : (
         /* ── Patient billing detail ── */

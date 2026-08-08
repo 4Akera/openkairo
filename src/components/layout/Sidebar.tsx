@@ -5,7 +5,7 @@ import { useDeptPendingCounts } from '../../hooks/useDeptPendingCounts'
 import { deptIconComponent } from '../../lib/deptIcons'
 import { isQueueDept } from '../../lib/queues'
 import { cn } from '../../lib/utils'
-import { LogOut, Settings, Search, Sun, Moon, Receipt, ClipboardList } from 'lucide-react'
+import { LogOut, Settings, Search, Sun, Moon, ClipboardList } from 'lucide-react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import Logo from '../Logo'
@@ -19,9 +19,11 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
   const navDepts = myDepartments.filter(d => !isQueueDept(d))
   const deptCounts = useDeptPendingCounts(navDepts.map(d => d.slug))
 
-  // The registry lives behind search (⌘K) and Today — no nav entry.
+  // The registry lives behind search (⌘K) and Today — no nav entry. Billing
+  // staff get Today too: the Cashier lane there IS their surface (/billing
+  // is only the per-patient money view it opens).
   const NAV = [
-    ...(hasFrontDesk ? [{ to: '/', label: 'Today', icon: ClipboardList, end: true }] : []),
+    ...(hasFrontDesk || hasBilling ? [{ to: '/', label: 'Today', icon: ClipboardList, end: true }] : []),
     { to: '/settings', label: 'Settings', icon: Settings, end: false },
   ]
   const { theme, toggle } = useThemeStore()
@@ -149,34 +151,6 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
             )
           })}
 
-          {hasBilling && (
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <NavLink
-                  to="/billing"
-                  className={({ isActive }) =>
-                    cn(
-                      'group relative flex items-center justify-center h-10 w-full rounded-xl transition-all duration-150',
-                      isActive
-                        ? 'bg-white/15 text-white shadow-inner'
-                        : 'text-slate-500 hover:bg-white/8 hover:text-slate-200',
-                    )
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-400 rounded-r-full" />
-                      )}
-                      <Receipt className="h-[18px] w-[18px]" />
-                      <span className="sr-only">Billing</span>
-                    </>
-                  )}
-                </NavLink>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="text-xs font-medium">Billing</TooltipContent>
-            </Tooltip>
-          )}
         </nav>
 
         {/* Bottom section */}
@@ -239,8 +213,8 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
 
       {/* ── Mobile bottom nav (< md) ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-white/10 flex items-center justify-around h-14 px-2 pb-safe overflow-x-auto no-scrollbar">
-        {/* Today — the app opens on the day */}
-        {!isDeptOnly && hasFrontDesk && (
+        {/* Today — the app opens on the day (billing staff live in its Cashier lane) */}
+        {!isDeptOnly && (hasFrontDesk || hasBilling) && (
           <NavLink
             to="/"
             end
@@ -317,25 +291,6 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
             </NavLink>
           )
         })}
-
-        {hasBilling && (
-          <NavLink
-            to="/billing"
-            className={({ isActive }) =>
-              cn(
-                'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
-                isActive ? 'text-white' : 'text-slate-500',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Receipt className={cn('h-5 w-5', isActive && 'text-blue-400')} />
-                <span className="text-xs font-medium">Billing</span>
-              </>
-            )}
-          </NavLink>
-        )}
 
         {/* Theme toggle */}
         <button

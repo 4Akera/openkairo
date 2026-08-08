@@ -1109,3 +1109,46 @@ observable.
 **Next in the pass:** step 3 (remove per-block visible_to_roles, UI
 first) touches Timeline.tsx/BlockWrapper.tsx — both currently dirty from
 the co-session's consult work; re-check the tree before starting it.
+
+## 2026-08-08 — Iteration 52: Billing collapses into Today — lanes, scoped controls
+
+**Why:** User, after phase 1: "what is billing screen used for then? isn't
+a duplicate?" — correct: the Billing landing and Today's Cashier lane had
+become the same queue behind two doors. Plus the Front Desk toolbar
+("this need rearrangement and scoped and fxn better"): Mine, Cashier,
+Open, All-queues, Book and + Patient sat in one undifferentiated row —
+filters, mutually-exclusive views and actions interleaved, secretly
+untoggling each other.
+
+**What:** Front Desk header rebuilt around ONE lane switcher — a real
+segmented control (Queue · Cashier · Open) instead of three independent-
+looking toggles — with every control scoped to the lane it affects: day
+nav, queue Select and Mine on Queue; Mine on Open; a walk-up patient
+search on Cashier. Book / + Patient are the day's constant actions,
+top-right. Lane-scoped count badge (in queue / waiting / open). The
+Cashier lane absorbs everything the Billing landing had: the
+patient_balance queue, insurance-pending chips, and the search box
+(search_patients RPC). BillingPage's landing is deleted — the page IS
+the per-patient money view; bare /billing (or a dead deep link)
+redirects home; the back arrow goes to Today. Sidebar loses the Billing
+entry (desktop + mobile); Today's nav gate admits billing staff, and
+billing-only users get the Cashier lane alone, titled "Cashier" (the
+iteration-51 /billing redirect is gone). Net: sidebar −1 entry, one
+money queue, one door.
+
+**Verification:** tsc --build clean, eslint clean, 204/204 tests.
+Browser: Billing demo → lands on "Cashier" (3 waiting, search, no
+Book/day-nav/lanes, no Billing sidebar icon); row tap → money view; back
+→ Cashier lane; search "fryc" finds a non-owing patient (walk-up path).
+Reception demo → segmented lanes switch: Queue (day nav + All queues +
+Mine + stage groups), Cashier (search + chips), Open (Mine + 100 open).
+No console errors. Side-finding: search_patients is diacritic-sensitive
+("pawel" ≠ "Paweł") — flagged as a spawned task, ties into the pg_trgm
+backlog item.
+
+**Shared tree:** parallel session's consult WIP (ActionPanel, Timeline,
+EncounterPage, DepartmentWork, deptWorklist, queues, ConsultAnswerBanner,
+ResultToasts) left untouched and uncommitted; committing only
+FrontDeskPage, BillingPage, Sidebar + docs. (AGENT_LOG iteration numbers
+collided across parallel sessions — 50/51 each appear twice; this entry
+takes 52 by append order.)

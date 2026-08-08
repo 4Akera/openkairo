@@ -224,6 +224,17 @@ shrinks the schema behind it (approval-gated).
       one-tap picker (shared ServiceItemPicker, custom-amount escape
       hatch). Insurance-provider CRUD moved to Settings → Service Items;
       billing-only users land on /billing. (2026-08-08)
+- [x] Billing collapses into Today (user: "isn't a duplicate?" +
+      toolbar "rearrangement and scoped"): the standalone Billing landing
+      is deleted — /billing is only the per-patient money view the
+      Cashier lane opens (bare /billing goes home); the Billing sidebar
+      entry is gone. Front Desk header rebuilt as ONE lane switcher
+      (Queue · Cashier · Open segmented control) with controls scoped to
+      their lane — day nav + queue filter + Mine on Queue, Mine on Open,
+      walk-up patient search on Cashier (absorbed from the landing, with
+      insurance-pending chips); Book/+ Patient stay constant top-right.
+      Billing-only staff now live on Today: Cashier lane alone, titled
+      "Cashier". (2026-08-08)
 - [ ] Schema shrink (SCHEMA — ask user before any of it): drop the
       never-written invoices table (nothing inserts one; charges/
       payments invoice_id columns and the invoice settings knob go with

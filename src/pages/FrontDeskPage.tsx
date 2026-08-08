@@ -1,17 +1,23 @@
 /**
- * Front Desk — today's patient queue across every queue in the facility.
+ * Front Desk — the day, as three lanes behind one switcher:
  *
- * One adaptive view for every clinic shape:
- *  - No stages configured  → a single arrival-ordered list.
- *  - Stages configured     → the same list grouped by stage.
- *  - No bookings ever made → the Upcoming section simply never renders.
- *  - Patient-facing departments exist → a queue switcher appears.
+ *  - Queue   — today's patient queue (day nav, per-queue filter, Mine).
+ *  - Cashier — patients who owe money or wait on an insurer; rows open the
+ *              money view (/billing?patient=…), a search box covers
+ *              walk-ups. This IS the billing surface — the old standalone
+ *              Billing landing collapsed into it.
+ *  - Open    — every open encounter, any day (the old registry filter).
  *
- * Queue rendering lives in VisitQueue and "+ Patient" in CheckInDialog — both
- * shared with the per-department Patients tabs.
+ * Controls are scoped to the lane they affect: day nav, queue filter and
+ * Mine belong to Queue/Open; search belongs to Cashier; Book and
+ * "+ Patient" are the day's constant actions on the right. Billing-only
+ * staff get the Cashier lane alone (titled "Cashier").
+ *
+ * Queue rendering lives in VisitQueue and "+ Patient" in CheckInDialog —
+ * both shared with the per-department Patients tabs.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Patient } from '../types'
 import { useAuthStore } from '../stores/authStore'
@@ -23,16 +29,25 @@ import { VisitQueue } from '../components/visits/VisitQueue'
 import { CheckInDialog } from '../components/visits/CheckInDialog'
 import type { Department } from '../types'
 import {
-  Button, Badge,
+  Button, Badge, Input,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../components/ui'
 import {
   ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight, ChevronDown,
-  UserCheck, FolderOpen, Loader2, Receipt,
+  UserCheck, FolderOpen, Loader2, Receipt, Search, Users,
 } from 'lucide-react'
 import { cn, fullName, formatDateTime, formatMinutes } from '../lib/utils'
 
 const GENERAL_QUEUE = 'general'
+
+type Lane = 'queue' | 'cashier' | 'open'
+
+type CashierRow = {
+  patient: Patient
+  due: number
+  insuranceTotal: number
+  insuranceCount: number
+}
 
 function dateKeyFor(offsetDays: number): string {
   const d = new Date()
@@ -66,6 +81,12 @@ export default function FrontDeskPage() {
   const { user, hasRole, hasBilling } = useAuthStore()
   const { nameFormat, billingEnabled, currencySymbol } = useSettingsStore()
   const navigate = useNavigate()
+
+  const canUse = hasRole('receptionist') || hasRole('admin') || hasRole('physician') || hasRole('nurse')
+  const showCashier = billingEnabled && hasBilling
+  // Billing-only staff: the Cashier lane IS their day view.
+  const billingOnly = !canUse && showCashier
+
   // Day navigation: today is the default; arrows reveal booked future days
   const [dayOffset, setDayOffset] = useState(0)
   const { visits, carriedOver, profileNames, loading } = useVisitQueue(dateKeyFor(dayOffset))
@@ -76,15 +97,18 @@ export default function FrontDeskPage() {
   // "Mine" = visits assigned to me: the clinician's worklist lives in the
   // day view instead of a separate list elsewhere.
   const [mineOnly, setMineOnly] = useState(false)
+
+  const [laneChoice, setLaneChoice] = useState<Lane>('queue')
+  const lane: Lane = billingOnly ? 'cashier' : laneChoice
+
   // "Open" = every open encounter regardless of day — covers what the
   // registry's Open filter used to, now that Patients has no nav entry.
-  const [openOnly, setOpenOnly] = useState(false)
   const [openRows, setOpenRows] = useState<Visit[] | null>(null)
-  // "Cashier" = patients who owe money — money is a queue too.
-  const [cashierOnly, setCashierOnly] = useState(false)
-  const [cashierRows, setCashierRows] =
-    useState<{ patient: Patient; total: number }[] | null>(null)
-  const showCashier = billingEnabled && hasBilling
+  const [cashierRows, setCashierRows] = useState<CashierRow[] | null>(null)
+  // Cashier walk-up search (deposits, old debts — patients not in the list)
+  const [cashQuery, setCashQuery] = useState('')
+  const [cashResults, setCashResults] = useState<Patient[] | null>(null)
+
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [mode, setMode] = useState<'now' | 'book'>('now')
 
@@ -99,34 +123,77 @@ export default function FrontDeskPage() {
   }, [])
 
   useEffect(() => {
-    if (!cashierOnly) { setCashierRows(null); return }
-    // Same ledger as the Billing page (patient_balance = charges − payments),
-    // so the amount here always matches what Collect will ask for.
-    supabase
-      .from('patient_balance')
-      .select('patient_id, balance')
-      .gt('balance', 0)
-      .order('balance', { ascending: false })
-      .limit(200)
-      .then(async ({ data }) => {
-        const dueRows = (data ?? []) as { patient_id: string; balance: number }[]
-        if (dueRows.length === 0) { setCashierRows([]); return }
-        const { data: pts } = await supabase
-          .from('patients')
-          .select('*')
-          .in('id', dueRows.map(r => r.patient_id))
-        const byId = new Map(((pts ?? []) as Patient[]).map(p => [p.id, p]))
-        setCashierRows(
-          dueRows.flatMap(r => {
-            const patient = byId.get(r.patient_id)
-            return patient ? [{ patient, total: Number(r.balance) }] : []
-          }),
-        )
+    if (lane !== 'cashier') { setCashierRows(null); return }
+    let cancelled = false
+    // Same ledger as the money view (patient_balance = charges − payments),
+    // so the amount here always matches what Collect will ask for; patients
+    // waiting only on an insurer are included with an insurance chip.
+    Promise.all([
+      supabase
+        .from('patient_balance')
+        .select('patient_id, balance')
+        .gt('balance', 0)
+        .order('balance', { ascending: false })
+        .limit(200),
+      supabase
+        .from('charges')
+        .select('patient_id, quantity, unit_price')
+        .eq('status', 'pending_insurance'),
+    ]).then(async ([balRes, insRes]) => {
+      if (cancelled) return
+      const dueById = new Map<string, number>()
+      for (const r of (balRes.data ?? []) as { patient_id: string; balance: number }[]) {
+        dueById.set(r.patient_id, Number(r.balance))
+      }
+      const insById = new Map<string, { total: number; count: number }>()
+      for (const r of (insRes.data ?? []) as { patient_id: string; quantity: number; unit_price: number }[]) {
+        const agg = insById.get(r.patient_id) ?? { total: 0, count: 0 }
+        agg.total += Number(r.quantity) * Number(r.unit_price)
+        agg.count += 1
+        insById.set(r.patient_id, agg)
+      }
+      const ids = [...new Set([...dueById.keys(), ...insById.keys()])]
+      if (ids.length === 0) { setCashierRows([]); return }
+      const { data: pts } = await supabase.from('patients').select('*').in('id', ids)
+      if (cancelled) return
+      const byId = new Map(((pts ?? []) as Patient[]).map(p => [p.id, p]))
+      const rows = ids.flatMap(id => {
+        const patient = byId.get(id)
+        if (!patient) return []
+        return [{
+          patient,
+          due: dueById.get(id) ?? 0,
+          insuranceTotal: insById.get(id)?.total ?? 0,
+          insuranceCount: insById.get(id)?.count ?? 0,
+        }]
       })
-  }, [cashierOnly])
+      rows.sort((a, b) =>
+        b.due - a.due ||
+        b.insuranceTotal - a.insuranceTotal ||
+        fullName(a.patient, nameFormat).localeCompare(fullName(b.patient, nameFormat), undefined, { sensitivity: 'base' }))
+      setCashierRows(rows)
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lane])
+
+  // Walk-up search inside the Cashier lane
+  useEffect(() => {
+    const q = cashQuery.trim()
+    if (lane !== 'cashier' || !q) { setCashResults(null); return }
+    let cancelled = false
+    const t = setTimeout(async () => {
+      const { data } = await supabase.rpc('search_patients', {
+        p_tokens: q.split(/\s+/).filter(Boolean),
+        p_limit: 20,
+      })
+      if (!cancelled) setCashResults((data ?? []) as Patient[])
+    }, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [cashQuery, lane])
 
   useEffect(() => {
-    if (!openOnly) { setOpenRows(null); return }
+    if (lane !== 'open') { setOpenRows(null); return }
     supabase
       .from('encounters')
       .select('*, patients(*)')
@@ -135,7 +202,7 @@ export default function FrontDeskPage() {
       .order('created_at', { ascending: false })
       .limit(100)
       .then(({ data }) => setOpenRows((data ?? []) as Visit[]))
-  }, [openOnly])
+  }, [lane])
 
   const openCheckIn = (bookMode: 'now' | 'book') => {
     setMode(bookMode)
@@ -153,12 +220,19 @@ export default function FrontDeskPage() {
   const activeCount = filtered.filter(v => v.arrived_at && !v.finished_at).length
   const avgWait = averageWaitMinutes(filtered)
 
-  const canUse = hasRole('receptionist') || hasRole('admin') || hasRole('physician') || hasRole('nurse')
+  const owingById = useMemo(
+    () => new Map((cashierRows ?? []).map(r => [r.patient.id, r])),
+    [cashierRows],
+  )
+
+  const lanes: { id: Lane; label: string; icon: typeof Users }[] = [
+    { id: 'queue', label: 'Queue', icon: Users },
+    ...(showCashier ? [{ id: 'cashier' as Lane, label: 'Cashier', icon: Receipt }] : []),
+    { id: 'open', label: 'Open', icon: FolderOpen },
+  ]
 
   if (!user) return null
-  if (!canUse) {
-    // Billing-only staff: their day view is the Billing queue, not a dead end.
-    if (hasBilling) return <Navigate to="/billing" replace />
+  if (!canUse && !showCashier) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
         <ClipboardList className="h-8 w-8 opacity-30" />
@@ -167,118 +241,151 @@ export default function FrontDeskPage() {
     )
   }
 
+  const renderCashierRow = (patient: Patient, due: number, insuranceTotal: number, insuranceCount: number) => (
+    <button
+      key={patient.id}
+      onClick={() => navigate(`/billing?patient=${patient.id}`)}
+      className="w-full flex items-center gap-3 px-4 sm:px-6 py-2.5 text-left hover:bg-accent/40 transition-colors"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium truncate">{fullName(patient, nameFormat)}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted-foreground font-mono">{patient.mrn}</span>
+          {insuranceCount > 0 && (
+            <Badge
+              variant="outline"
+              className="text-[9px] py-0 px-1.5 font-medium bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-800"
+            >
+              insurance {insuranceTotal.toFixed(2)}
+            </Badge>
+          )}
+        </div>
+      </div>
+      {due > 0 && (
+        <span className="font-mono text-sm text-emerald-700 dark:text-emerald-400 shrink-0">
+          {currencySymbol}{due.toFixed(2)}
+        </span>
+      )}
+    </button>
+  )
+
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="border-b bg-card px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 shrink-0 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0">
-          <ClipboardList className="h-5 w-5 text-muted-foreground shrink-0" />
-          <h1 className="text-base font-semibold truncate">Front Desk</h1>
+      {/* Header — row 1: identity, day scope, lane count · the day's actions */}
+      <div className="border-b bg-card px-4 sm:px-6 py-3 shrink-0 space-y-2.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <ClipboardList className="h-5 w-5 text-muted-foreground shrink-0" />
+            <h1 className="text-base font-semibold truncate">{billingOnly ? 'Cashier' : 'Front Desk'}</h1>
 
-          {/* Day navigation — arrows step a day; the label opens a date picker */}
-          <div className="flex items-center gap-0.5 ml-1 shrink-0">
-            <button
-              onClick={() => setDayOffset(o => o - 1)}
-              className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Previous day"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div
-              className={cn(
-                'relative px-2 h-7 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
-                'flex items-center gap-1 hover:bg-accent focus-within:ring-2 focus-within:ring-ring',
-                isToday ? 'text-foreground' : 'text-primary',
-              )}
-              title="Pick a date"
-            >
-              {dayLabel(dayOffset)}
-              <ChevronDown className="h-3 w-3 opacity-60" />
-              <input
-                type="date"
-                aria-label="Pick a date"
-                value={dateKeyFor(dayOffset)}
-                onChange={e => { if (e.target.value) setDayOffset(offsetForDateKey(e.target.value)) }}
-                onClick={e => {
-                  try { (e.target as HTMLInputElement).showPicker?.() } catch { /* arrows still work */ }
-                }}
-                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-              />
-            </div>
-            <button
-              onClick={() => setDayOffset(o => o + 1)}
-              className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Next day"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            {!isToday && (
-              <button
-                onClick={() => setDayOffset(0)}
-                className="px-2 h-7 rounded-md text-xs font-medium text-primary hover:bg-accent transition-colors whitespace-nowrap"
-                title="Back to today"
-              >
-                Today
-              </button>
+            {/* Day navigation — belongs to the Queue lane; Cashier/Open are day-independent */}
+            {lane === 'queue' && (
+              <div className="flex items-center gap-0.5 ml-1 shrink-0">
+                <button
+                  onClick={() => setDayOffset(o => o - 1)}
+                  className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  title="Previous day"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div
+                  className={cn(
+                    'relative px-2 h-7 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
+                    'flex items-center gap-1 hover:bg-accent focus-within:ring-2 focus-within:ring-ring',
+                    isToday ? 'text-foreground' : 'text-primary',
+                  )}
+                  title="Pick a date"
+                >
+                  {dayLabel(dayOffset)}
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                  <input
+                    type="date"
+                    aria-label="Pick a date"
+                    value={dateKeyFor(dayOffset)}
+                    onChange={e => { if (e.target.value) setDayOffset(offsetForDateKey(e.target.value)) }}
+                    onClick={e => {
+                      try { (e.target as HTMLInputElement).showPicker?.() } catch { /* arrows still work */ }
+                    }}
+                    className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                  />
+                </div>
+                <button
+                  onClick={() => setDayOffset(o => o + 1)}
+                  className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  title="Next day"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                {!isToday && (
+                  <button
+                    onClick={() => setDayOffset(0)}
+                    className="px-2 h-7 rounded-md text-xs font-medium text-primary hover:bg-accent transition-colors whitespace-nowrap"
+                    title="Back to today"
+                  >
+                    Today
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Count badge — scoped to the active lane */}
+            {lane === 'queue' && !loading && isToday && activeCount > 0 && (
+              <Badge variant="secondary" className="ml-1">{activeCount} in queue</Badge>
+            )}
+            {lane === 'queue' && !loading && isToday && avgWait !== null && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                avg visit today {formatMinutes(avgWait)}
+              </span>
+            )}
+            {lane === 'cashier' && cashierRows !== null && cashierRows.length > 0 && (
+              <Badge variant="secondary" className="ml-1">{cashierRows.length} waiting</Badge>
+            )}
+            {lane === 'open' && openRows !== null && openRows.length > 0 && (
+              <Badge variant="secondary" className="ml-1">{openRows.length} open</Badge>
             )}
           </div>
 
-          {!loading && isToday && activeCount > 0 && (
-            <Badge variant="secondary" className="ml-1">{activeCount} in queue</Badge>
-          )}
-          {!loading && isToday && avgWait !== null && (
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              avg visit today {formatMinutes(avgWait)}
-            </span>
+          {/* The day's actions — constant on the right */}
+          {!billingOnly && (
+            <div className="flex items-center gap-2 shrink-0">
+              <Button size="sm" variant="outline" onClick={() => openCheckIn('book')}>
+                <CalendarPlus className="h-4 w-4" />
+                <span className="hidden sm:inline">Book</span>
+              </Button>
+              {isToday && (
+                <Button size="sm" onClick={() => openCheckIn('now')}>
+                  <UserPlus className="h-4 w-4" />
+                  <span className="hidden sm:inline">Patient</span>
+                </Button>
+              )}
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          {/* My worklist, inside the day view */}
-          <button
-            onClick={() => setMineOnly(m => !m)}
-            className={cn(
-              'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
-              mineOnly
-                ? 'bg-primary/10 border-primary/40 text-primary'
-                : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
-            )}
-            title="Only visits assigned to me"
-          >
-            <UserCheck className="h-3.5 w-3.5" />
-            Mine
-          </button>
-          {/* Cashier lane — patients with unpaid charges, tap → Billing */}
-          {showCashier && (
-            <button
-              onClick={() => { setCashierOnly(c => !c); setOpenOnly(false) }}
-              className={cn(
-                'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
-                cashierOnly
-                  ? 'bg-primary/10 border-primary/40 text-primary'
-                  : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
-              )}
-              title="Patients with unpaid charges"
-            >
-              <Receipt className="h-3.5 w-3.5" />
-              Cashier
-            </button>
+
+        {/* Header — row 2: lane switcher + the filters scoped to that lane */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!billingOnly && (
+            <div className="flex items-center rounded-lg border border-border p-0.5 gap-0.5">
+              {lanes.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setLaneChoice(id)}
+                  className={cn(
+                    'flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-colors',
+                    lane === id
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
-          {/* Every open encounter, any day — the old registry Open filter */}
-          <button
-            onClick={() => { setOpenOnly(o => !o); setCashierOnly(false) }}
-            className={cn(
-              'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
-              openOnly
-                ? 'bg-primary/10 border-primary/40 text-primary'
-                : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
-            )}
-            title="All open encounters, any day"
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            Open
-          </button>
-          {/* Queue switcher — only rendered for multi-clinic institutions */}
-          {patientDepts.length > 0 && (
+
+          {/* Queue lane: which queue + my worklist */}
+          {lane === 'queue' && patientDepts.length > 0 && (
             <Select value={deptFilter} onValueChange={setDeptFilter}>
               <SelectTrigger className="h-9 w-[150px] text-xs">
                 <SelectValue />
@@ -292,22 +399,55 @@ export default function FrontDeskPage() {
               </SelectContent>
             </Select>
           )}
-          <Button size="sm" variant="outline" onClick={() => openCheckIn('book')}>
-            <CalendarPlus className="h-4 w-4" />
-            <span className="hidden sm:inline">Book</span>
-          </Button>
-          {isToday && (
-            <Button size="sm" onClick={() => openCheckIn('now')}>
-              <UserPlus className="h-4 w-4" />
-              <span className="hidden sm:inline">Patient</span>
-            </Button>
+          {(lane === 'queue' || lane === 'open') && (
+            <button
+              onClick={() => setMineOnly(m => !m)}
+              className={cn(
+                'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
+                mineOnly
+                  ? 'bg-primary/10 border-primary/40 text-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30',
+              )}
+              title="Only visits assigned to me"
+            >
+              <UserCheck className="h-3.5 w-3.5" />
+              Mine
+            </button>
+          )}
+
+          {/* Cashier lane: walk-up search (deposit, old debt — anyone, owing or not) */}
+          {lane === 'cashier' && (
+            <div className="relative flex-1 min-w-[10rem] max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={cashQuery}
+                onChange={e => setCashQuery(e.target.value)}
+                placeholder="Search any patient…"
+                className="h-9 pl-8 text-sm"
+              />
+            </div>
           )}
         </div>
       </div>
 
-      {cashierOnly ? (
+      {lane === 'cashier' ? (
         <div className="flex-1 overflow-y-auto">
-          {cashierRows === null ? (
+          {cashQuery.trim() ? (
+            cashResults === null ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            ) : cashResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-12">No patients found.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {cashResults.map(pt => {
+                  const owing = owingById.get(pt.id)
+                  return renderCashierRow(pt, owing?.due ?? 0, owing?.insuranceTotal ?? 0, owing?.insuranceCount ?? 0)
+                })}
+              </div>
+            )
+          ) : cashierRows === null ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
             </div>
@@ -315,25 +455,11 @@ export default function FrontDeskPage() {
             <p className="text-sm text-muted-foreground text-center py-12">Nobody owes anything. 🎉</p>
           ) : (
             <div className="divide-y divide-border">
-              {cashierRows.map(({ patient, total }) => (
-                <button
-                  key={patient.id}
-                  onClick={() => navigate(`/billing?patient=${patient.id}`)}
-                  className="w-full flex items-center gap-3 px-4 sm:px-6 py-2.5 text-left hover:bg-accent/40 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{fullName(patient, nameFormat)}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{patient.mrn}</p>
-                  </div>
-                  <span className="font-mono text-sm text-emerald-700 dark:text-emerald-400 shrink-0">
-                    {currencySymbol}{total.toFixed(2)}
-                  </span>
-                </button>
-              ))}
+              {cashierRows.map(r => renderCashierRow(r.patient, r.due, r.insuranceTotal, r.insuranceCount))}
             </div>
           )}
         </div>
-      ) : openOnly ? (
+      ) : lane === 'open' ? (
         <div className="flex-1 overflow-y-auto">
           {openRows === null ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
