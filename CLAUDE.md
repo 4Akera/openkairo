@@ -30,7 +30,31 @@ When working autonomously (e.g. via /loop), follow this contract:
 
 ## Backlog (edit freely — user curates this list)
 
-### One place for patients (highest priority)
+### Simple power pass (highest priority)
+Simplify the endings and beginnings; add power through AI and closing the
+result loop. Judged against: one journey, no new concepts.
+
+- [x] One ending: "Finish visit" merges Close Encounter + checkout. Closing
+      the encounter flows straight into the visit checkout (charge/order
+      heads-up) in one chain; button reads "Finish visit" when an active
+      visit is linked, "Close Encounter" otherwise. (2026-08-08 — journey
+      strip reports the linked visit up via onVisitChange)
+- [ ] One-tap New Encounter on the patient page: create immediately
+      (physician auto/carried, private), with an Options disclosure for
+      title/template/visibility — matching the queue's one-tap path.
+- [ ] Result-ready notifications: realtime toast for the ordering physician
+      when their lab/radiology order completes, linking to the encounter.
+- [ ] AI-filled blocks pilot: dictate/paste free text → Claude fills the
+      structured fields of the Vitals block. HARD STOP before deploying the
+      Edge Function or wiring an API key — ask the user first.
+- [ ] One Blocks place in Settings: merge My Blocks / Templates / Block
+      Library into a single "Blocks" section with tabs (three nav items
+      become one).
+- [ ] AI visit summary: one click drafts a visit-summary note block from
+      the encounter's blocks (after the AI pilot lands).
+- [ ] Wait-time trend: 7-day avg-visit sparkline beside the Front Desk stat.
+
+### One place for patients (done)
 User complaint 2026-08-08: patients appear in too many places (Recent tab,
 Assigned, Front Desk, department tabs, patient list). Collapse to TWO
 surfaces + search: Patients = the registry; Front Desk = the day.

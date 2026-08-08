@@ -378,3 +378,20 @@ Mine/queue/date filters; clinic tabs are the same view scoped), ⌘K.
 the registry renders single-pane with no tab strip or sidebar.
 
 **Loop state:** backlog fully ticked — stopping the loop.
+
+## 2026-08-08 — Iteration 21: one ending — "Finish visit"
+
+**Item:** New "Simple power" tier (user: keep simplifying, add power).
+First item: merge the two endings.
+
+**What changed:** the encounter's Close button becomes **Finish visit**
+when an active visit is linked (VisitJourneyStrip reports its visit up via
+a new onVisitChange prop): confirming close now chains straight into the
+shared CheckoutDialog — encounter closed and patient checked out in one
+flow. Encounters without visits keep the plain "Close Encounter" ending.
+
+**Verification:** tsc clean, eslint clean, 133/133 tests; browser-verified
+end-to-end on a carried-over visit — Start encounter → header shows
+"Finish" → dialog "Finish visit? … Checkout follows right after" → billing
+review → checkout auto-opened → confirmed; DB shows encounter closed AND
+visit finished. Test data removed.

@@ -17,7 +17,14 @@ import { formatDateTime } from '../../lib/utils'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui'
 import { Footprints, LogOut, CheckCircle2 } from 'lucide-react'
 
-export function VisitJourneyStrip({ encounterId }: { encounterId: string }) {
+export function VisitJourneyStrip({
+  encounterId,
+  onVisitChange,
+}: {
+  encounterId: string
+  /** Reports the linked visit upward (e.g. so Finish can chain checkout) */
+  onVisitChange?: (visit: Visit | null) => void
+}) {
   const { flowStages } = useSettingsStore()
   const now = useNow()
   const [visit, setVisit] = useState<Visit | null>(null)
@@ -31,7 +38,10 @@ export function VisitJourneyStrip({ encounterId }: { encounterId: string }) {
       .is('cancelled_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
-    setVisit(((data ?? [])[0] as Visit | undefined) ?? null)
+    const v = ((data ?? [])[0] as Visit | undefined) ?? null
+    setVisit(v)
+    onVisitChange?.(v)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encounterId])
 
   useEffect(() => {

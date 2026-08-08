@@ -7,6 +7,8 @@ import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, cn } from '../lib/utils'
 import { VisitJourneyStrip } from '../components/visits/VisitJourneyStrip'
+import { CheckoutDialog } from '../components/visits/CheckoutDialog'
+import type { Visit } from '../types'
 import {
   Button, Badge, Separator,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -45,6 +47,10 @@ export default function EncounterPage() {
   const [encounter, setEncounter] = useState<Encounter | null>(null)
   const [loading, setLoading] = useState(true)
   const [closing, setClosing] = useState(false)
+  // One ending: the linked visit (reported by the journey strip) lets
+  // "Finish visit" chain encounter close straight into visit checkout
+  const [linkedVisit, setLinkedVisit] = useState<Visit | null>(null)
+  const [checkoutVisit, setCheckoutVisit] = useState<Visit | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [accessRevoked, setAccessRevoked] = useState(false)
   const [encounterCharges, setEncounterCharges] = useState<Charge[]>([])
@@ -222,7 +228,15 @@ export default function EncounterPage() {
       .from('encounters')
       .update({ status: 'closed', closed_at: new Date().toISOString() })
       .eq('id', encounterId)
-    if (!error) { await fetchData(); setConfirmClose(false); void timelineRef.current?.refreshAuditLog() }
+    if (!error) {
+      await fetchData()
+      setConfirmClose(false)
+      void timelineRef.current?.refreshAuditLog()
+      // Finish visit: flow straight into checkout when a visit is in clinic
+      if (linkedVisit && linkedVisit.arrived_at && !linkedVisit.finished_at) {
+        setCheckoutVisit(linkedVisit)
+      }
+    }
     setClosing(false)
   }
 
@@ -745,15 +759,22 @@ export default function EncounterPage() {
                 className="text-xs h-9 sm:h-7 gap-1 text-amber-600 border-amber-200 hover:bg-amber-50 px-3 sm:px-2.5"
               >
                 <CheckCircle2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Close Encounter</span>
-                <span className="sm:hidden">Close</span>
+                <span className="hidden sm:inline">
+                  {linkedVisit && linkedVisit.arrived_at && !linkedVisit.finished_at ? 'Finish visit' : 'Close Encounter'}
+                </span>
+                <span className="sm:hidden">
+                  {linkedVisit && linkedVisit.arrived_at && !linkedVisit.finished_at ? 'Finish' : 'Close'}
+                </span>
               </Button>
             )}
           </div>
         </header>
 
         {/* Visit journey — arrived → stage → checkout, advanceable in place */}
-        {encounterId && <VisitJourneyStrip encounterId={encounterId} />}
+        {encounterId && <VisitJourneyStrip encounterId={encounterId} onVisitChange={setLinkedVisit} />}
+
+        {/* Finish visit: checkout chained after encounter close */}
+        <CheckoutDialog visit={checkoutVisit} onClose={() => setCheckoutVisit(null)} />
 
         {/* Mobile tab bar */}
         <div className="md:hidden flex border-b bg-card shrink-0">
@@ -850,12 +871,16 @@ export default function EncounterPage() {
       <Dialog open={confirmClose} onOpenChange={setConfirmClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Close Encounter?</DialogTitle>
+            <DialogTitle>
+              {linkedVisit && linkedVisit.arrived_at && !linkedVisit.finished_at ? 'Finish visit?' : 'Close Encounter?'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 max-h-[60vh] overflow-y-auto">
             <p className="text-sm text-muted-foreground">
               This will mark the encounter as closed. No new blocks can be added.
               The encounter will remain viewable.
+              {linkedVisit && linkedVisit.arrived_at && !linkedVisit.finished_at &&
+                ' Checkout follows right after.'}
             </p>
 
             {requiredIncomplete.length > 0 && (
@@ -993,7 +1018,7 @@ export default function EncounterPage() {
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               {closing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              Close Encounter
+              {linkedVisit && linkedVisit.arrived_at && !linkedVisit.finished_at ? 'Finish visit' : 'Close Encounter'}
             </Button>
           </div>
         </DialogContent>
