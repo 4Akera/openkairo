@@ -684,3 +684,50 @@ and re-verified.
 
 **Note:** parallel session still active (test count 152→153, queue rows
 changing live, deptWorklist files still uncommitted — again excluded).
+
+## 2026-08-08 — Iteration: department worklist at volume
+
+**Item:** Department worklist at volume (user-approved 2026-08-08 in chat:
+"Dept need simplifying and to be powerful… say lab 100k test per month").
+
+**What changed:**
+- `DepartmentWork.tsx` queue: dense rows replace the big order cards
+  (~14 visible per screen vs ~8) — name · MRN · service chip · waited-time
+  ("12m/3h 05m/2d", ticks every 60s) · one **Result** button. STAT orders
+  pinned on top with a red tint. Row click expands to the original request,
+  encounter link, and reject/cancel with reason.
+- The separate Start step is gone (one concept removed): opening the entry
+  form marks the order in-progress for other staff. Rows someone else
+  started show "In progress" and stay openable.
+- Lane chips above the list (All + one per service, busiest first, STAT
+  flame on lanes that have one) filter the queue; hidden when there's only
+  one lane.
+- Save-&-next: after saving an order's result, an interstitial (or the
+  billing-review footer) offers **Next** — chains straight into the next
+  open order of the same lane, modal remounts per order via key.
+- Scale fixes: queue load bounded to oldest 300 with an exact total count
+  (badge shows the true count; realtime events adjust it, over-cap notice
+  under the list); history's walk-in dedupe now checks only the fetched
+  page of direct blocks instead of every `result_block_id` the department
+  ever produced (was an unbounded query — a genuine 100k/month bug);
+  `startOrder`'s redundant full-queue refetch removed.
+- New `src/lib/deptWorklist.ts` (laneOf with payload block_type_id
+  resolution, laneCounts, sortWorklist, nextInLane, waitedLabel,
+  isStatOrder) + 15 tests.
+
+**Why highest value:** user picked it this session; the unbounded history
+query alone was a scale correctness bug, and the card-modal-one-at-a-time
+flow was the biggest throughput bottleneck in the app.
+
+**Verification:** tsc clean, eslint clean on touched files, 153/153 tests,
+browser-verified as demo Lab user on Radiology (20 open orders): dense rows
++ STAT pinning rendered, one-click Result opened the entry form, saving
+showed "Result saved — Next in Diagnostic imaging: …", Next chained into
+the next patient's form, queue badge dropped 20→19 via realtime, History
+showed the new entry, row expansion + Cancel order render. No console
+errors. (Lane chips not visible in demo — single-lane dept, correct.)
+
+**Deferred:** batch entry grid and analyzer/CSV import path added to the
+backlog as future items; Enter-to-advance relies on button autofocus, which
+held focus in testing but the synthetic-key event in the browser tool didn't
+activate it — clicking Next works; worth a quick manual keyboard check.

@@ -20,6 +20,7 @@ import { getRecentPatientIds, pushRecentPatientId } from '../lib/recentItems'
 import { parseSearchQuery } from '../lib/patientSearch'
 import { readWalkInLastBlockType, writeWalkInLastBlockType } from '../lib/walkInPreferences'
 import { CreatePatientDialog } from '../components/patients/CreatePatientDialog'
+import { isStatOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel } from '../lib/deptWorklist'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface OrderWithContext extends BlockAction {
@@ -63,16 +64,6 @@ function workRegistryRenderKey(
   })
   if (fromJoin in BLOCK_REGISTRY) return fromJoin
   return orphanRegistryRenderKey(blockType)
-}
-
-// ─── Status config ────────────────────────────────────────────────────────────
-
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  pending:      { label: 'Pending',     cls: 'bg-amber-100 text-amber-800 border-amber-300' },
-  in_progress:  { label: 'In Progress', cls: 'bg-blue-100 text-blue-800 border-blue-300' },
-  completed:    { label: 'Completed',   cls: 'bg-green-100 text-green-800 border-green-300' },
-  acknowledged: { label: 'Acknowledged',cls: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
-  cancelled:    { label: 'Cancelled',   cls: 'bg-red-100 text-red-800 border-red-300' },
 }
 
 function applyEmptyContentForDef(def: BlockDefinition): Record<string, unknown> {
@@ -180,6 +171,8 @@ function EntryModal({
   selectedBTId,
   onClose,
   onDone,
+  next,
+  onNext,
   deptBlockTypes,
   deptBlockTypesLoading,
   prefetchedDefinitions,
@@ -190,6 +183,9 @@ function EntryModal({
   selectedBTId?: string | null       // pre-selected block type for walk-ins
   onClose: () => void
   onDone: (chargeMsg?: string | null) => void
+  /** Next open order in the same lane — enables save-&-next chaining. */
+  next?: OrderWithContext | null
+  onNext?: (chargeMsg?: string | null) => void
   deptBlockTypes: DepartmentBlockType[]
   deptBlockTypesLoading: boolean
   prefetchedDefinitions: Record<string, BlockDefinition>
@@ -205,7 +201,7 @@ function EntryModal({
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
   const [content, setContent]       = useState<Record<string, unknown>>({})
-  const [phase, setPhase]           = useState<'form' | 'billing'>('form')
+  const [phase, setPhase]           = useState<'form' | 'billing' | 'saved'>('form')
   const [savedBlockId, setSavedBlockId] = useState<string | null>(null)
   const [savedEncounterId, setSavedEncounterId] = useState<string | null>(null)
   const [savedChargeMsg, setSavedChargeMsg] = useState<string | null>(null)
@@ -471,6 +467,10 @@ function EntryModal({
       setBlockCharges(chList)
       setBillingDefinition(manualDef)
       setPhase('billing')
+    } else if (orderAction && next && onNext) {
+      // More work in this lane — offer save-&-next instead of closing
+      setSavedChargeMsg(chargeMsg)
+      setPhase('saved')
     } else {
       onDone(chargeMsg)
     }
@@ -533,6 +533,43 @@ function EntryModal({
 
   const dismissBackdrop = () => {
     if (phase === 'form') onClose()
+  }
+
+  // Saved interstitial — Enter chains straight into the next order in the lane
+  if (phase === 'saved') {
+    const nextName = next?.patients ? fullName(next.patients as Patient, nameFormat) : null
+    const nextLane = next ? laneOf(next, new Map(deptBlockTypes.map(bt => [bt.id, bt.name]))) : null
+    return (
+      <div className="fixed inset-0 z-50 flex items-start justify-center pt-[14vh] px-4">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => onDone(savedChargeMsg)} />
+        <div className="relative w-full max-w-sm bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <p className="text-sm font-medium">Result saved</p>
+            </div>
+            {savedChargeMsg && <p className="text-xs text-muted-foreground">{savedChargeMsg}</p>}
+            {next && onNext ? (
+              <p className="text-xs text-muted-foreground">
+                Next in {nextLane}: <span className="font-medium text-foreground">{nextName ?? 'Unknown patient'}</span>
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Lane complete — nothing else waiting.</p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" autoFocus={!next} onClick={() => onDone(savedChargeMsg)}>
+                Close
+              </Button>
+              {next && onNext && (
+                <Button size="sm" autoFocus onClick={() => onNext(savedChargeMsg)}>
+                  Next <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (phase === 'billing' && savedBlockId && patient) {
@@ -695,6 +732,7 @@ function EntryModal({
             </Button>
             <Button
               type="button"
+              variant={orderAction && next && onNext ? 'outline' : 'default'}
               size="sm"
               onClick={() => {
                 const stillPending = blockCharges.some(c => c.status === 'pending_approval')
@@ -703,6 +741,18 @@ function EntryModal({
             >
               Done
             </Button>
+            {orderAction && next && onNext && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const stillPending = blockCharges.some(c => c.status === 'pending_approval')
+                  onNext(stillPending ? savedChargeMsg : null)
+                }}
+              >
+                Next <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1236,32 +1286,33 @@ function WalkInIntakeModal({
 
 // ─── Order card ───────────────────────────────────────────────────────────────
 
-function OrderCard({
+/** Dense worklist row: one line per order, click to expand, one action. */
+function OrderRow({
   order,
-  onStart,
-  onFulfill,
+  laneName,
+  nowMs,
+  onOpen,
   onCancel,
 }: {
   order: OrderWithContext
-  onStart: () => Promise<void>
-  onFulfill: () => void
+  laneName: string
+  nowMs: number
+  onOpen: () => Promise<void>
   onCancel: (reason: string) => void
 }) {
   const { nameFormat } = useSettingsStore()
-  const [expanded, setExpanded]             = useState(false)
-  const [rejectOpen, setRejectOpen]         = useState(false)
-  const [rejectReason, setRejectReason]     = useState('')
-  const [rejecting, setRejecting]           = useState(false)
-  const [starting, setStarting]             = useState(false)
-  const badge        = STATUS_BADGE[order.status] ?? STATUS_BADGE.pending
-  const pt           = order.patients
-  const ob           = order.order_block
-  const serviceName  = ob?.order_block_type?.name ?? null
-  const blockName    = ob?.order_def?.name ?? null
-  const def          = ob?.order_def ?? null
-  const content      = ob?.content ?? {}
-  const hasContent   = Object.keys(content).length > 0
-  const isStat       = (order.action_payload as { priority?: string } | null)?.priority === 'stat'
+  const [expanded, setExpanded]         = useState(false)
+  const [rejectOpen, setRejectOpen]     = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejecting, setRejecting]       = useState(false)
+  const [opening, setOpening]           = useState(false)
+  const pt         = order.patients
+  const ob         = order.order_block
+  const def        = ob?.order_def ?? null
+  const content    = ob?.content ?? {}
+  const hasContent = Object.keys(content).length > 0
+  const isStat     = isStatOrder(order)
+  const inProgress = order.status === 'in_progress'
 
   const encounterLink =
     order.patient_id && order.encounter_id
@@ -1278,192 +1329,143 @@ function OrderCard({
   }
 
   return (
-    <div className="border rounded-lg bg-card overflow-hidden">
-      {/* Header row */}
-      <div className="flex items-start gap-3 p-3">
-        {/* Patient avatar */}
-        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
-          {pt ? `${pt.first_name[0]}${nameFormat === 'three' && pt.middle_name ? pt.middle_name[0] : pt.last_name[0]}` : '?'}
-        </div>
+    <div className={cn(isStat && 'bg-red-50/40 dark:bg-red-950/10')}>
+      {/* Compact row */}
+      <div
+        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <ChevronRight
+          className={cn('h-3 w-3 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-90')}
+        />
+        {isStat && <Flame className="h-3.5 w-3.5 shrink-0 text-red-600" aria-label="STAT" />}
+        <span className="text-sm font-medium truncate">
+          {pt ? fullName(pt as Patient, nameFormat) : 'Unknown patient'}
+        </span>
+        {pt && (
+          <span className="hidden sm:inline text-[11px] text-muted-foreground font-mono shrink-0">{pt.mrn}</span>
+        )}
+        <span className="text-[10px] px-1.5 py-0 rounded border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800 font-medium shrink-0 truncate max-w-[9rem]">
+          {laneName}
+        </span>
+        {inProgress && (
+          <span className="hidden sm:inline text-[10px] text-blue-600 dark:text-blue-400 shrink-0">In progress</span>
+        )}
+        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground shrink-0">
+          {waitedLabel(order.triggered_at, nowMs)}
+        </span>
+        <Button
+          size="sm"
+          className="h-7 px-2.5 text-xs shrink-0"
+          disabled={opening}
+          onClick={async e => {
+            e.stopPropagation()
+            setOpening(true)
+            try {
+              await onOpen()
+            } finally {
+              setOpening(false)
+            }
+          }}
+        >
+          {opening ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Result'}
+        </Button>
+      </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium">
-              {pt ? fullName(pt as Patient, nameFormat) : 'Unknown patient'}
-            </span>
-            {pt && <span className="text-xs text-muted-foreground font-mono">{pt.mrn}</span>}
-            <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border font-medium', badge.cls)}>
-              {badge.label}
-            </span>
-            {isStat && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-400 dark:border-red-700">
-                <Flame className="h-2.5 w-2.5" /> STAT
-              </span>
-            )}
+      {/* Expanded detail: request content, encounter link, reject */}
+      {expanded && (
+        <div className="border-t border-border/60 px-4 pb-3 pt-2.5 bg-muted/20 text-xs space-y-2.5">
+          <div className="flex items-center gap-3 flex-wrap text-[11px] text-muted-foreground">
+            <span>Ordered {formatDateTime(order.triggered_at)}</span>
             {encounterLink && (
               <Link
                 to={encounterLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-0.5 text-[10px] text-primary hover:underline font-medium"
-                title="Open encounter"
+                className="flex items-center gap-0.5 text-primary hover:underline font-medium"
               >
                 <ExternalLink className="h-2.5 w-2.5" />
                 Encounter
               </Link>
             )}
-          </div>
-
-          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            {serviceName && (
-              <span className="text-[10px] px-1.5 py-0 rounded border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800 font-medium shrink-0">
-                {serviceName}
-              </span>
-            )}
-            {blockName && (
-              <span className="text-[11px] text-muted-foreground truncate">{blockName}</span>
-            )}
-            <span className="text-[11px] text-muted-foreground shrink-0">{formatDateTime(order.triggered_at)}</span>
-            {hasContent && (
-              <button
-                type="button"
-                onClick={() => setExpanded(e => !e)}
-                className="flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ChevronRight className={cn('h-3 w-3 transition-transform', expanded && 'rotate-90')} />
-                {expanded ? 'Hide order' : 'View order'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex flex-col gap-1.5 shrink-0">
-          {order.status === 'pending' && (
-            <>
-              <Button
-                size="sm"
-                className="h-9 text-xs"
-                disabled={starting}
-                onClick={async () => {
-                  setStarting(true)
-                  try {
-                    await onStart()
-                  } finally {
-                    setStarting(false)
-                  }
-                }}
-              >
-                {starting ? <><Loader2 className="h-3 w-3 animate-spin" /> Starting…</> : 'Start'}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                onClick={() => setRejectOpen(r => !r)}
-              >
-                <XCircle className="h-3 w-3" /> Reject
-              </Button>
-            </>
-          )}
-          {order.status === 'in_progress' && (
-            <>
-              <Button size="sm" className="h-9 text-xs" onClick={onFulfill}>
-                Enter Result
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                onClick={() => setRejectOpen(r => !r)}
-              >
-                <XCircle className="h-3 w-3" /> Cancel
-              </Button>
-            </>
-          )}
-          {order.status === 'completed' && (
-            <span className="flex items-center gap-1 text-[11px] text-green-600">
-              <CheckCircle2 className="h-3 w-3" /> Done
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Reject / Cancel reason input */}
-      {rejectOpen && (
-        <div className="border-t px-3 pb-3 pt-2.5 bg-red-50/50 dark:bg-red-950/10 space-y-2">
-          <p className="text-[11px] font-medium text-red-700 dark:text-red-400">
-            {order.status === 'pending' ? 'Reject order' : 'Cancel order'} — provide a reason
-          </p>
-          <div className="flex gap-2">
-            <input
-              autoFocus
-              value={rejectReason}
-              onChange={e => setRejectReason(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleReject(); if (e.key === 'Escape') setRejectOpen(false) }}
-              placeholder="e.g. Duplicate, patient declined, wrong department…"
-              className="flex-1 rounded-md border border-red-200 bg-white dark:bg-background dark:border-red-800 px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-red-400"
-            />
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-8 text-xs"
-              disabled={!rejectReason.trim() || rejecting}
-              onClick={handleReject}
+            <button
+              type="button"
+              onClick={() => setRejectOpen(r => !r)}
+              className="ml-auto flex items-center gap-0.5 text-red-600 hover:text-red-700 dark:text-red-400 font-medium"
             >
-              {rejecting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirm'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setRejectOpen(false)}>
-              Back
-            </Button>
+              <XCircle className="h-3 w-3" />
+              {inProgress ? 'Cancel order' : 'Reject order'}
+            </button>
           </div>
-        </div>
-      )}
 
-      {/* Expandable order content */}
-      {expanded && hasContent && (
-        <div className="border-t px-4 pb-3 pt-2.5 bg-muted/20 text-xs">
-          {ob && BLOCK_REGISTRY[workRegistryRenderKey(def, ob.type, null)] ? (
-            // Built-in block — use registry's typed View
-            (() => {
-              const regKey = workRegistryRenderKey(def, ob.type, null)
-              const Renderer = BLOCK_REGISTRY[regKey].View
+          {rejectOpen && (
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleReject(); if (e.key === 'Escape') setRejectOpen(false) }}
+                placeholder="Reason — e.g. Duplicate, patient declined, wrong department…"
+                className="flex-1 rounded-md border border-red-200 bg-white dark:bg-background dark:border-red-800 px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-red-400"
+              />
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-8 text-xs"
+                disabled={!rejectReason.trim() || rejecting}
+                onClick={handleReject}
+              >
+                {rejecting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirm'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setRejectOpen(false)}>
+                Back
+              </Button>
+            </div>
+          )}
+
+          {hasContent && (
+            ob && BLOCK_REGISTRY[workRegistryRenderKey(def, ob.type, null)] ? (
+              // Built-in block — use registry's typed View
+              (() => {
+                const regKey = workRegistryRenderKey(def, ob.type, null)
+                const Renderer = BLOCK_REGISTRY[regKey].View
                 const stub = {
                   id: order.id,
                   type: ob.type,
-                content,
-                state: 'active',
-                sequence_order: 0,
-                created_at: order.triggered_at,
-                author_name: null,
-                encounter_id: order.encounter_id ?? null,
-                patient_id: order.patient_id ?? null,
-                department_id: null,
-                department_block_type_id: ob.department_block_type_id ?? null,
-                definition_id: ob.definition_id ?? null,
-                share_to_record: false,
-                visible_to_roles: [],
-                is_template_seed: false,
-                is_pinned: false,
-                supersedes_block_id: null,
-                locked_by: null,
-                locked_at: null,
-                created_by: null,
-                updated_at: '',
+                  content,
+                  state: 'active',
+                  sequence_order: 0,
+                  created_at: order.triggered_at,
+                  author_name: null,
+                  encounter_id: order.encounter_id ?? null,
+                  patient_id: order.patient_id ?? null,
+                  department_id: null,
+                  department_block_type_id: ob.department_block_type_id ?? null,
+                  definition_id: ob.definition_id ?? null,
+                  share_to_record: false,
+                  visible_to_roles: [],
+                  is_template_seed: false,
+                  is_pinned: false,
+                  supersedes_block_id: null,
+                  locked_by: null,
+                  locked_at: null,
+                  created_by: null,
+                  updated_at: '',
                 } as import('../types').Block
-              return <Renderer block={stub} />
-            })()
-          ) : def ? (
-            <DynamicBlockView definition={def} content={content} />
-          ) : (
-            <dl className="space-y-1">
-              {Object.entries(content).map(([k, v]) => v !== '' && v != null ? (
-                <div key={k} className="flex gap-1.5">
-                  <dt className="text-muted-foreground capitalize shrink-0">{k.replace(/_/g, ' ')}:</dt>
-                  <dd className="font-medium break-words">{String(v)}</dd>
-                </div>
-              ) : null)}
-            </dl>
+                return <Renderer block={stub} />
+              })()
+            ) : def ? (
+              <DynamicBlockView definition={def} content={content} />
+            ) : (
+              <dl className="space-y-1">
+                {Object.entries(content).map(([k, v]) => v !== '' && v != null ? (
+                  <div key={k} className="flex gap-1.5">
+                    <dt className="text-muted-foreground capitalize shrink-0">{k.replace(/_/g, ' ')}:</dt>
+                    <dd className="font-medium break-words">{String(v)}</dd>
+                  </div>
+                ) : null)}
+              </dl>
+            )
           )}
         </div>
       )}
@@ -1923,6 +1925,9 @@ function PastEntryCard({ entry }: { entry: PastEntry }) {
 
 const HISTORY_PAGE_SIZE = 20
 
+/** Oldest-first cap on the loaded work queue; the true open total comes from the count query. */
+const QUEUE_LIMIT = 300
+
 /** Shared select for the work queue (full load + single-row realtime hydrate) */
 const WORK_QUEUE_SELECT = `
   *,
@@ -1948,6 +1953,9 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   const { billingEnabled, currencySymbol } = useSettingsStore()
   const [view, setView]     = useState<'queue' | 'history'>('queue')
   const [orders, setOrders] = useState<OrderWithContext[]>([])
+  const [totalOpen, setTotalOpen] = useState(0)
+  const [lane, setLane]     = useState<string | null>(null)
+  const [nowMs, setNowMs]   = useState(() => Date.now())
   const [history, setHistory] = useState<PastEntry[]>([])
   const [loading, setLoading]         = useState(true)
   const [chargeNotice, setChargeNotice] = useState<string | null>(null)
@@ -2019,17 +2027,39 @@ export function DepartmentWork({ dept }: { dept: Department }) {
       })
   }, [deptBlockTypes])
 
+  // Keep the "waited" labels on queue rows fresh
+  useEffect(() => {
+    if (view !== 'queue') return
+    const t = setInterval(() => setNowMs(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [view])
+
+  const btNameMap = useMemo(
+    () => new Map(deptBlockTypes.map(bt => [bt.id, bt.name])),
+    [deptBlockTypes],
+  )
+  const lanes = useMemo(() => laneCounts(orders, btNameMap), [orders, btNameMap])
+  const activeLane = lane && lanes.some(l => l.lane === lane) ? lane : null
+  const visibleOrders = useMemo(
+    () => sortWorklist(activeLane ? orders.filter(o => laneOf(o, btNameMap) === activeLane) : orders),
+    [orders, activeLane, btNameMap],
+  )
+
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     const quiet = opts?.quiet === true
     if (!quiet) setLoading(true)
     try {
-      const { data } = await supabase
+      const { data, count } = await supabase
         .from('block_actions')
-        .select(WORK_QUEUE_SELECT)
+        .select(WORK_QUEUE_SELECT, { count: 'exact' })
         .eq('action_type', dept.slug)
         .not('status', 'in', '(completed,cancelled)')
         .order('triggered_at', { ascending: true })
-      if (data) setOrders(data as unknown as OrderWithContext[])
+        .limit(QUEUE_LIMIT)
+      if (data) {
+        setOrders(data as unknown as OrderWithContext[])
+        setTotalOpen(count ?? data.length)
+      }
     } finally {
       if (!quiet) setLoading(false)
     }
@@ -2084,6 +2114,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
           return
         }
         setOrders((prev) => mergeQueueOrder(prev, row))
+        setTotalOpen((t) => t + 1)
         return
       }
 
@@ -2096,10 +2127,12 @@ export function DepartmentWork({ dept }: { dept: Department }) {
 
         if (isOurs && n?.status && QUEUE_DONE.has(n.status)) {
           setOrders((prev) => prev.filter((x) => x.id !== id))
+          setTotalOpen((t) => Math.max(0, t - 1))
           return
         }
         if (!isOurs && wasOurs) {
           setOrders((prev) => prev.filter((x) => x.id !== id))
+          setTotalOpen((t) => Math.max(0, t - 1))
           return
         }
         if (isOurs) {
@@ -2115,6 +2148,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
 
       if (payload.eventType === 'DELETE' && o?.action_type === slug && o.id) {
         setOrders((prev) => prev.filter((x) => x.id !== o.id))
+        setTotalOpen((t) => Math.max(0, t - 1))
       }
     },
     [dept.slug, fetchOrderWithContext, load],
@@ -2126,7 +2160,7 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     // Fetch limit+1 to detect whether more pages exist
     const fetchLimit = limit + 1
 
-    const [{ data: actions }, { data: directs }, { data: linkedResults }] = await Promise.all([
+    const [{ data: actions }, { data: directs }] = await Promise.all([
       supabase
         .from('block_actions')
         .select(`
@@ -2157,12 +2191,17 @@ export function DepartmentWork({ dept }: { dept: Department }) {
         .eq('state', 'active')
         .order('created_at', { ascending: false })
         .limit(fetchLimit),
-      supabase
-        .from('block_actions')
-        .select('result_block_id')
-        .eq('action_type', dept.slug)
-        .not('result_block_id', 'is', null),
     ])
+
+    // Dedupe only against the page of direct blocks we actually fetched —
+    // never scan the department's full order history.
+    const directIds = (directs ?? []).map((b: { id: string }) => b.id)
+    const { data: linkedResults } = directIds.length
+      ? await supabase
+          .from('block_actions')
+          .select('result_block_id')
+          .in('result_block_id', directIds)
+      : { data: [] as { result_block_id: string | null }[] }
 
     const linkedResultIds = new Set(
       (linkedResults ?? [])
@@ -2254,21 +2293,38 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     if (view === 'history' && history.length === 0 && !loadingHistory) loadHistory(historyLimit)
   }, [view, history.length, loadingHistory, loadHistory, historyLimit])
 
-  const startOrder = async (order: OrderWithContext) => {
+  /** One motion: opening the entry form IS starting the order (marks it in progress for other staff). */
+  const openOrder = async (order: OrderWithContext) => {
     setQueueActionError(null)
-    const { error } = await supabase
-      .from('block_actions')
-      .update({ status: 'in_progress' })
-      .eq('id', order.id)
-    if (error) {
-      setQueueActionError(error.message)
-      return
+    if (order.status === 'pending') {
+      const { error } = await supabase
+        .from('block_actions')
+        .update({ status: 'in_progress' })
+        .eq('id', order.id)
+      if (error) {
+        setQueueActionError(error.message)
+        return
+      }
     }
     const btId = (order.action_payload as { block_type_id?: string } | null)?.block_type_id ?? null
     setFulfillOrder({ ...order, status: 'in_progress' })
     setSelectedBTId(btId)
     setShowEntry(true)
-    await load({ quiet: true })
+  }
+
+  /** Save-&-next: swap the entry modal to the next open order in the same lane. */
+  const advanceToNext = (chargeMsg?: string | null) => {
+    const current = fulfillOrder
+    const next = current ? nextInLane(orders, current, btNameMap) : null
+    if (chargeMsg) {
+      setChargeNotice(chargeMsg)
+      setTimeout(() => setChargeNotice(null), 5000)
+    }
+    if (!next) {
+      dismissEntryModal()
+      return
+    }
+    void openOrder(next)
   }
 
   const cancelOrder = async (order: OrderWithContext, reason: string) => {
@@ -2309,9 +2365,9 @@ export function DepartmentWork({ dept }: { dept: Department }) {
             >
               <Clock className="h-3 w-3" />
               Queue
-              {!loading && orders.length > 0 && (
+              {!loading && totalOpen > 0 && (
                 <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded-full font-medium">
-                  {orders.length}
+                  {totalOpen}
                 </span>
               )}
             </button>
@@ -2391,20 +2447,60 @@ export function DepartmentWork({ dept }: { dept: Department }) {
                 <p className="text-sm">No pending orders</p>
               </div>
             ) : (
-              orders.map(order => (
-                <OrderCard
-                  key={order.id}
-                  order={order}
-                  onStart={() => startOrder(order)}
-                  onCancel={(reason) => cancelOrder(order, reason)}
-                  onFulfill={() => {
-                    const btId = (order.action_payload as { block_type_id?: string } | null)?.block_type_id ?? null
-                    setFulfillOrder(order)
-                    setSelectedBTId(btId)
-                    setShowEntry(true)
-                  }}
-                />
-              ))
+              <>
+                {/* Lane chips — one per service, busiest first */}
+                {lanes.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setLane(null)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                        activeLane === null
+                          ? 'bg-primary text-primary-foreground border-primary font-medium'
+                          : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                      )}
+                    >
+                      All <span className="opacity-70">{orders.length}</span>
+                    </button>
+                    {lanes.map(l => (
+                      <button
+                        key={l.lane}
+                        type="button"
+                        onClick={() => setLane(prev => (prev === l.lane ? null : l.lane))}
+                        className={cn(
+                          'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
+                          activeLane === l.lane
+                            ? 'bg-primary text-primary-foreground border-primary font-medium'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                        )}
+                      >
+                        {l.lane} <span className="opacity-70">{l.count}</span>
+                        {l.statCount > 0 && <Flame className="h-3 w-3 text-red-500" aria-label={`${l.statCount} STAT`} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="rounded-lg border bg-card divide-y divide-border/60 overflow-hidden">
+                  {visibleOrders.map(order => (
+                    <OrderRow
+                      key={order.id}
+                      order={order}
+                      laneName={laneOf(order, btNameMap)}
+                      nowMs={nowMs}
+                      onOpen={() => openOrder(order)}
+                      onCancel={(reason) => cancelOrder(order, reason)}
+                    />
+                  ))}
+                </div>
+
+                {totalOpen > orders.length && (
+                  <p className="text-center text-[11px] text-muted-foreground py-1">
+                    Showing the oldest {orders.length} of {totalOpen} open orders — finish these to load more.
+                  </p>
+                )}
+              </>
             )
           )}
 
@@ -2568,10 +2664,13 @@ export function DepartmentWork({ dept }: { dept: Department }) {
       </Dialog>
       {showEntry && (
         <EntryModal
+          key={fulfillOrder?.id ?? 'walk-in'}
           dept={dept}
           orderAction={fulfillOrder}
           patientForWalkIn={walkInPt}
           selectedBTId={selectedBTId}
+          next={fulfillOrder ? nextInLane(orders, fulfillOrder, btNameMap) : null}
+          onNext={advanceToNext}
           deptBlockTypes={deptBlockTypes}
           deptBlockTypesLoading={deptBlockTypesLoading}
           prefetchedDefinitions={prefetchedDefinitions}

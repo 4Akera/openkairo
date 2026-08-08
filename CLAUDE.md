@@ -90,6 +90,27 @@ Today · Settings (+ order departments).
       /billing?patient=<id> deep link; price list already existed as
       Service Items)
 
+### Department worklist at volume (user-approved 2026-08-08)
+The department work view must hold up for a high-volume lab (target range
+5–20k orders/month by hand; beyond that the real answer is analyzer
+import + verify-release, listed below as future work).
+
+- [x] Worklist redesign: dense rows replace order cards (STAT pinned +
+      tinted, waited-time label, one **Result** action — the separate
+      Start step is gone, opening the form marks in-progress); lane chips
+      by service with counts filter the queue; save-&-next chains through
+      a lane from inside the entry modal (interstitial or billing-review
+      footer). Query fixes folded in: queue load bounded (oldest 300 +
+      exact count, realtime keeps count in step), history's walk-in dedupe
+      no longer scans every result ever. Helpers in `lib/deptWorklist.ts`
+      (tested). (2026-08-08)
+- [ ] Batch entry grid: pick a lane → one row per pending order, columns =
+      result fields, save all (build only if lanes prove out at real
+      volume).
+- [ ] Analyzer/import path for true 100k-scale labs: results arrive as
+      data (CSV first, HL7 later), staff verify & release instead of
+      typing (bigger feature — ask user before starting).
+
 ### Post-restructure cleanup (pure simplification)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes
       props-driven (encounter + patient from the page); delete its own
