@@ -26,7 +26,7 @@ const SETTINGS_NAV = (isAdmin: boolean, canManageSettings: boolean, canManageBlo
   { id: 'patient-fields',label: 'Patient Fields',   icon: User,          show: isAdmin },
   { id: 'roles',         label: 'Roles',            icon: ShieldCheck,   show: isAdmin },
   { id: 'users',         label: 'Users',            icon: Users,         show: isAdmin },
-  { id: 'departments',   label: 'Departments',      icon: Building2,     show: isAdmin },
+  { id: 'departments',   label: 'Queues & Departments', icon: Building2, show: isAdmin },
   { id: 'service-items', label: 'Service Items',    icon: Star,          show: canManageFees },
   { id: 'general',       label: 'General',          icon: Settings2,     show: canManageSettings },
 ].filter(n => n.show)

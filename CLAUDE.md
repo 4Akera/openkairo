@@ -1,8 +1,9 @@
 # OpenKairo — Agent Charter
 
 OpenKairo is a block-based EHR. **North star: simple yet powerful.** The block
-is the clinical primitive; visits are the logistics primitive; departments own
-queues (orders and/or patients). Judge every change against this.
+is the clinical primitive; the encounter is the event (clinical record +
+journey); queues are the day's logistics. Departments exist only to fulfil
+orders. Judge every change against this.
 
 ## Autonomous iteration rules
 
@@ -48,7 +49,38 @@ on Today (Front Desk as home).
       /patients; sidebar order Today · Patients · … (Cashier queue later).
       (2026-08-08)
 
-### Post-restructure cleanup (highest priority — pure simplification)
+### Queues are the app (user-approved 2026-08-08 — HIGHEST priority)
+A clinic is not a department — it is just a QUEUE on the Front Desk.
+Departments remain only for order-fulfilling units (lab, radiology,
+pharmacy). Money joins the same queue model. Sidebar target:
+Today · Settings (+ order departments).
+
+- [x] Queues/Departments split in Settings: patient-facing departments
+      present as plain "Queues" (create with one name field); the
+      Departments section lists only order-capable units. Capability
+      checkboxes and the Clinic chip leave the UI. Storage stays the
+      departments table (a queue = a row with no capabilities — NO schema
+      change). (2026-08-08 — isQueueDept in lib/queues; dept form keeps one
+      "also sees patients" toggle for hybrids; Settings nav label now
+      "Queues & Departments")
+- [ ] Today absorbs clinic queues: pure-clinic /dept/:slug pages and their
+      sidebar entries go away — their queue is a lane in Today's switcher.
+      Hybrid departments (orders + patients) keep the work view; their
+      patient queue moves to Today.
+- [ ] "+ Patient" one-motion arrival on Today: search-first; no match →
+      inline new-patient mini-form (name + phone) that creates AND queues
+      in one motion. Retire "check in / check out" wording app-wide —
+      arriving is "+ Patient", the ending action reads "Done", bookings
+      keep "Book".
+- [ ] Drop the /patients nav entry: ⌘K + Today are the whole surface
+      ("New patient" lives in + Patient; an "Open" chip on Today covers
+      older open encounters). Sidebar: Today · Settings (+ departments).
+- [ ] Charging pass, money as a queue: Cashier queue on Today (finished
+      visits with unpaid charges), running-bill chip on the encounter
+      header (live total → line items), one-tap add charge from the
+      encounter, price list in Settings feeding the charge picker.
+
+### Post-restructure cleanup (pure simplification)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes
       props-driven (encounter + patient from the page); delete its own
       fetch/channel and EncounterPage's linkedVisit mirror — the page's

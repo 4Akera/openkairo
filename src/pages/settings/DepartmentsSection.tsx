@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Loader2, Search, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Search, Check, ClipboardList } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
 import type { BlockDefinition, Department, DepartmentMember, DepartmentBlockType } from '../../types'
 import { Button, Input, Badge, ScrollArea, Label } from '../../components/ui'
 import { cn } from '../../lib/utils'
+import { deptColorClasses } from '../../lib/deptIcons'
+import { isQueueDept } from '../../lib/queues'
 import { BLOCK_REGISTRY } from '../../components/timeline/BlockRegistry'
 
 // ============================================================
-// DepartmentsSection
+// DepartmentsSection — "Queues" (patient lanes) + "Departments" (order units)
 // ============================================================
 
 /** Staff row from `profiles` (used in department member picker). */
@@ -130,6 +132,12 @@ export function DepartmentsSection() {
     can_receive_orders: true, can_create_direct: true, can_receive_patients: false, active: true,
   })
 
+  // queues (pure patient lanes) — one-field create + inline rename
+  const [newQueueName, setNewQueueName]   = useState('')
+  const [creatingQueue, setCreatingQueue] = useState(false)
+  const [editingQueue, setEditingQueue]   = useState<Department | null>(null)
+  const [queueForm, setQueueForm]         = useState({ name: '', color: 'blue' })
+
   // per-department block type inline editor
   const [editingBT, setEditingBT] = useState<{ deptId: string; bt: DepartmentBlockType | null } | null>(null)
   const [btForm, setBtForm]       = useState({ name: '', description: '', order_block_def_id: '', entry_block_def_id: '', built_in_type: '', active: true })
@@ -167,6 +175,44 @@ export function DepartmentsSection() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const queues     = departments.filter(isQueueDept)
+  const orderDepts = departments.filter(d => !isQueueDept(d))
+
+  // ── Queue CRUD (a queue = a department row with no capabilities) ──
+
+  const createQueue = async () => {
+    const name = newQueueName.trim()
+    if (!name) return
+    setCreatingQueue(true)
+    await supabase.from('departments').insert({
+      name,
+      slug: name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || `queue_${queues.length + 1}`,
+      icon: 'stethoscope',
+      color: DEPT_COLORS[(queues.length + 1) % DEPT_COLORS.length],
+      can_receive_orders: false, can_create_direct: false, can_receive_patients: true,
+      active: true,
+      created_by: user?.id,
+    })
+    setCreatingQueue(false)
+    setNewQueueName('')
+    load()
+  }
+
+  const saveQueue = async () => {
+    if (!editingQueue || !queueForm.name.trim()) return
+    await supabase.from('departments')
+      .update({ name: queueForm.name.trim(), color: queueForm.color })
+      .eq('id', editingQueue.id)
+    setEditingQueue(null)
+    load()
+  }
+
+  const deleteQueue = async (id: string) => {
+    if (!confirm('Delete this queue? Past visits keep their records.')) return
+    await supabase.from('departments').delete().eq('id', id)
+    load()
+  }
 
   // ── Department CRUD ──────────────────────────────────────────
 
@@ -270,12 +316,76 @@ export function DepartmentsSection() {
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-10">
+      {/* ── Queues — patient lanes on Today; a name is all a clinic needs ── */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">Queues</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Patient lanes on Today&apos;s Front Desk. A clinic is just a queue — a name is all it needs.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={newQueueName}
+            onChange={e => setNewQueueName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') void createQueue() }}
+            placeholder="New queue name — e.g. Cardiology"
+            className="h-8 text-sm max-w-xs"
+          />
+          <Button size="sm" onClick={createQueue} disabled={creatingQueue || !newQueueName.trim()}>
+            {creatingQueue ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            Add queue
+          </Button>
+        </div>
+        {queues.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">No queues yet — add one above; it appears in Today&apos;s queue switcher.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {queues.map(q => editingQueue?.id === q.id ? (
+              <div key={q.id} className="flex items-center gap-2 border rounded-md px-2 py-1.5 bg-muted/20">
+                <Input
+                  value={queueForm.name}
+                  onChange={e => setQueueForm(f => ({ ...f, name: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') void saveQueue() }}
+                  className="h-7 text-xs max-w-[12rem]"
+                  autoFocus
+                />
+                <select
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-background"
+                  value={queueForm.color}
+                  onChange={e => setQueueForm(f => ({ ...f, color: e.target.value }))}
+                >
+                  {DEPT_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <div className="ml-auto flex gap-1">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditingQueue(null)}>Cancel</Button>
+                  <Button size="sm" className="h-7 text-xs" onClick={saveQueue} disabled={!queueForm.name.trim()}>Save</Button>
+                </div>
+              </div>
+            ) : (
+              <div key={q.id} className="flex items-center gap-2.5 border rounded-md px-3 py-1.5">
+                <span className={cn('h-6 w-6 rounded-md flex items-center justify-center shrink-0', deptColorClasses(q.color))}>
+                  <ClipboardList className="h-3.5 w-3.5" />
+                </span>
+                <span className="text-sm font-medium">{q.name}</span>
+                {!q.active && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                <div className="ml-auto flex gap-0.5">
+                  <Button variant="ghost" size="icon-sm" onClick={() => { setEditingQueue(q); setQueueForm({ name: q.name, color: q.color }) }}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" onClick={() => deleteQueue(q.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Departments — order-fulfilling units only ── */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold">Departments</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Create departments, define their services (each with its own order &amp; result block type), and assign staff members.
+            Units that fulfil orders (lab, radiology, pharmacy…): services, result blocks, and staff.
           </p>
         </div>
         <Button size="sm" onClick={openNewDept}><Plus className="h-3.5 w-3.5" /> New Department</Button>
@@ -315,16 +425,8 @@ export function DepartmentsSection() {
           </div>
           <div className="flex items-center gap-6 text-sm">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.can_receive_orders} onChange={e => setForm(f => ({ ...f, can_receive_orders: e.target.checked }))} className="accent-primary" />
-              Can receive orders
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.can_create_direct} onChange={e => setForm(f => ({ ...f, can_create_direct: e.target.checked }))} className="accent-primary" />
-              Walk-in / direct entries
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.can_receive_patients} onChange={e => setForm(f => ({ ...f, can_receive_patients: e.target.checked }))} className="accent-primary" />
-              Clinic — receives patients (Front Desk queue)
+              Also sees patients — own queue on Today
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="accent-primary" />
@@ -341,12 +443,12 @@ export function DepartmentsSection() {
         </div>
       )}
 
-      {departments.length === 0 && !isNewDeptOpen && (
+      {orderDepts.length === 0 && !isNewDeptOpen && (
         <p className="text-sm text-muted-foreground text-center py-8">No departments yet. Create one to get started.</p>
       )}
 
       <div className="space-y-4">
-        {departments.map(dept => {
+        {orderDepts.map(dept => {
           const deptMembers = members[dept.id] ?? []
           const deptBTs     = blockTypes[dept.id] ?? []
           const isBTEditing = editingBT?.deptId === dept.id
@@ -362,15 +464,9 @@ export function DepartmentsSection() {
                     {!dept.active && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
                   </div>
                   {dept.description && <p className="text-xs text-muted-foreground mt-0.5">{dept.description}</p>}
-                  <div className="flex gap-3 mt-1 text-[10px] text-muted-foreground">
-                    {dept.can_receive_orders && <span>● Receives orders</span>}
-                    {dept.can_create_direct && <span>● Walk-in entries</span>}
-                    {dept.can_receive_patients && (
-                      <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 text-primary px-1.5 text-[10px] font-medium">
-                        Clinic
-                      </span>
-                    )}
-                  </div>
+                  {dept.can_receive_patients && (
+                    <div className="mt-1 text-[10px] text-muted-foreground">● Also has a patient queue on Today</div>
+                  )}
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <Button variant="ghost" size="icon-sm" onClick={() => openEditDept(dept)}><Pencil className="h-3.5 w-3.5" /></Button>

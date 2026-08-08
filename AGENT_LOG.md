@@ -548,3 +548,28 @@ actions intact), zero console errors.
 
 **Remaining in tier:** both schema-gated (visits table drop, pg_trgm) —
 blocked on user approval per charter.
+
+## 2026-08-08 — Iteration 38: Queues vs Departments (Settings split)
+
+**Item:** "Queues are the app" tier, item 1 — the Queues/Departments split
+in Settings (new user-approved top priority).
+
+**What:** Settings → Departments became two sections. **Queues**: pure
+patient lanes (capability-less department rows), created with ONE name
+field, inline rename + color, delete. **Departments**: only order-capable
+units keep the full card (services, members). The three capability
+checkboxes collapsed to a single "Also sees patients — own queue on Today"
+toggle for hybrids (orders/direct default true on create, preserved on
+edit); the Clinic chip and capability bullet list left the UI. New
+`lib/queues.ts` (`isQueueDept`) + 3 tests. Nav label: "Queues &
+Departments". NO schema change — a queue is a departments row with
+can_receive_patients only.
+
+**Why highest value:** first item of the user's newly approved restructure;
+removes three user-facing concepts (capability flags, Clinic label,
+clinic-as-department) in one pass.
+
+**Verification:** tsc clean, eslint clean (5 touched files), 138/138 tests
+(3 new), browser: Cardiology listed under Queues; Lab/Radiology under
+Departments; created "Dermatology" via the one-field flow → appeared in
+Today's queue switcher instantly; test row deleted from remote after.
