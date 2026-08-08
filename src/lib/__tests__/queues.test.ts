@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isQueueDept } from '../queues'
+import { deptSummary, isQueueDept } from '../queues'
 import type { Department } from '../../types'
 
 const dept = (caps: Partial<Department>): Department => ({
@@ -19,5 +19,27 @@ describe('isQueueDept', () => {
   })
   it('a unit with no capabilities at all is not a queue', () => {
     expect(isQueueDept(dept({}))).toBe(false)
+  })
+})
+
+describe('deptSummary', () => {
+  it('pure clinic — queue on Today, no service talk', () => {
+    expect(deptSummary(dept({ can_receive_patients: true }), 0)).toBe('Clinic · queue on Today')
+  })
+  it('order department counts its services', () => {
+    expect(deptSummary(dept({ can_receive_orders: true, can_create_direct: true }), 14)).toBe('Fulfils orders · 14 services')
+  })
+  it('hybrid leads with Clinic', () => {
+    expect(deptSummary(dept({ can_receive_patients: true, can_receive_orders: true, can_create_direct: true }), 3))
+      .toBe('Clinic · fulfils orders · 3 services')
+  })
+  it('direct-only unit reads walk-in entries', () => {
+    expect(deptSummary(dept({ can_create_direct: true }), 3)).toBe('Walk-in entries · 3 services')
+  })
+  it('singular service', () => {
+    expect(deptSummary(dept({ can_receive_orders: true }), 1)).toBe('Fulfils orders · 1 service')
+  })
+  it('nothing enabled', () => {
+    expect(deptSummary(dept({}), 0)).toBe('No capabilities')
   })
 })

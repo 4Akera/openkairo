@@ -1,10 +1,30 @@
 /**
- * A queue is a patient-facing lane with no order machinery. Stored as a
- * capability-less department row (can_receive_patients only) — the UI never
- * calls it a department. Order-capable departments may ALSO have a patient
- * queue (hybrid); those are departments, not queues.
+ * One departments table is the whole org model; a department composes
+ * capabilities (clinic queue, order fulfilment, direct entries — ward later).
+ * A "queue" is the patients-only flavor: it presents as a lane on Today and
+ * never gets a work view. Settings shows every flavor in one Departments
+ * list, self-described via deptSummary.
  */
 import type { Department } from '../types'
 
 export const isQueueDept = (d: Department) =>
   !!d.can_receive_patients && !d.can_receive_orders && !d.can_create_direct
+
+/**
+ * Plain-language one-liner for a department row in Settings — derived from
+ * capabilities, so the row explains itself without capability checkboxes.
+ */
+export function deptSummary(
+  d: Pick<Department, 'can_receive_orders' | 'can_create_direct' | 'can_receive_patients'>,
+  serviceCount: number,
+): string {
+  const svc = `${serviceCount} ${serviceCount === 1 ? 'service' : 'services'}`
+  const parts: string[] = []
+  if (d.can_receive_patients) parts.push('Clinic')
+  if (d.can_receive_orders) parts.push('fulfils orders', svc)
+  else if (d.can_create_direct) parts.push('walk-in entries', svc)
+  else if (d.can_receive_patients) parts.push('queue on Today')
+  if (parts.length === 0) return 'No capabilities'
+  const s = parts.join(' · ')
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}

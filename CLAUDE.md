@@ -70,11 +70,14 @@ Consultation), and — schema-gated — a ward. The ENTITY unifies; the
 SURFACES stay specialized: Today = patients, work view = orders, Wards
 page = census. Department pages must never become patient surfaces again.
 
-- [ ] Settings merge: Queues/Departments split → one "Departments" section;
+- [x] Settings merge: Queues/Departments split → one "Departments" section;
       create = name + kind choice (Clinic / Order department) presetting
       flags; raw capability toggles behind an Advanced disclosure; rows
       self-describe via a derived summary ("Clinic · receives consults",
-      "Fulfils orders: 14 services"). Net concepts −1.
+      "Fulfils orders: 14 services"). Net concepts −1. (2026-08-08 —
+      deptSummary in lib/queues, tested; collapsed self-describing cards;
+      clinics gain the Members picker = the consult-routing prereq; nav
+      label now "Departments")
 - [ ] Consults as orders (zero schema): "Receives consults" on a clinic =
       can_receive_orders on + a Consultation service (order block =
       question; entry block = existing Consultation block). Work-view

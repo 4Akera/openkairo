@@ -1037,3 +1037,35 @@ and logs them.)
 **Phase 2 (staged in backlog, NOT started):** schema shrink — drop the
 never-written invoices table, collapse charge statuses, deposits as
 payments-in-advance, payer-on-payment insurance. SCHEMA — ask user.
+
+## 2026-08-08 — Iteration 51: Settings merge — one Departments section
+
+**Why:** First item of the user-approved "Departments are the unit" pass.
+Consults make every specialty patients+orders, so the Queues/Departments
+split stops being the simpler read — one list of self-describing
+capability flavors is.
+
+**What:** DepartmentsSection rewritten: one-motion create (name + kind
+select presetting flags — Clinic / Order department), ONE list of
+collapsed cards (icon chip · name · derived summary via new
+`deptSummary` in lib/queues, tested), expand → Services (only where
+order machinery exists) + Members (now for EVERY flavor — clinics get
+staff, which consult routing needs). Edit form: Simple (name,
+description, icon, color) + "Advanced — capabilities & routing"
+disclosure (slug + the three raw capability checkboxes + active).
+Queue-specific CRUD paths deleted; Settings nav label "Queues &
+Departments" → "Departments". isQueueDept semantics untouched.
+
+**Watch out:** `src/lib/__tests__/queues.test.ts` already existed; my
+first write clobbered its 3 isQueueDept tests (momentarily absent from
+disk — parallel session suspected). Restored from HEAD and merged, now
+9 tests in file. Also adopted the corrected gate: `npx tsc --build`
+(plain --noEmit is vacuous here).
+
+**Verification:** tsc --build clean, eslint clean on touched files,
+199/199 tests. Browser (own preview :56425, admin demo): nav label,
+one-motion create (Dermatology → correct summary + rotated color →
+deleted again), Cardiology expand = Members only, Laboratory expand =
+Services + Members, Advanced disclosure shows slug `card` + capability
+states. No console errors. Parallel session's billing WIP untouched and
+excluded from the commit.
