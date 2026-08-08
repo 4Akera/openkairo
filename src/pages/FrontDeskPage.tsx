@@ -27,7 +27,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../components/ui'
 import {
-  ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight,
+  ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight, ChevronDown,
   UserCheck, FolderOpen, Loader2, Receipt,
 } from 'lucide-react'
 import { cn, fullName, formatDateTime } from '../lib/utils'
@@ -71,7 +71,20 @@ function dayLabel(offsetDays: number): string {
   if (offsetDays === -1) return 'Yesterday'
   const d = new Date()
   d.setDate(d.getDate() + offsetDays)
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  })
+}
+
+function offsetForDateKey(key: string): number {
+  const [y, m, d] = key.split('-').map(Number)
+  const picked = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  // Round absorbs DST-shortened/lengthened days
+  return Math.round((picked.getTime() - today.getTime()) / 86_400_000)
 }
 
 export default function FrontDeskPage() {
@@ -195,7 +208,7 @@ export default function FrontDeskPage() {
           <ClipboardList className="h-5 w-5 text-muted-foreground shrink-0" />
           <h1 className="text-base font-semibold truncate">Front Desk</h1>
 
-          {/* Day navigation — today by default, arrows for booked days */}
+          {/* Day navigation — arrows step a day; the label opens a date picker */}
           <div className="flex items-center gap-0.5 ml-1 shrink-0">
             <button
               onClick={() => setDayOffset(o => o - 1)}
@@ -204,16 +217,27 @@ export default function FrontDeskPage() {
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => setDayOffset(0)}
+            <div
               className={cn(
-                'px-2 h-7 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
-                isToday ? 'text-foreground cursor-default' : 'text-primary hover:bg-accent',
+                'relative px-2 h-7 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
+                'flex items-center gap-1 hover:bg-accent focus-within:ring-2 focus-within:ring-ring',
+                isToday ? 'text-foreground' : 'text-primary',
               )}
-              title={isToday ? undefined : 'Back to today'}
+              title="Pick a date"
             >
               {dayLabel(dayOffset)}
-            </button>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+              <input
+                type="date"
+                aria-label="Pick a date"
+                value={dateKeyFor(dayOffset)}
+                onChange={e => { if (e.target.value) setDayOffset(offsetForDateKey(e.target.value)) }}
+                onClick={e => {
+                  try { (e.target as HTMLInputElement).showPicker?.() } catch { /* arrows still work */ }
+                }}
+                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+              />
+            </div>
             <button
               onClick={() => setDayOffset(o => o + 1)}
               className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -221,6 +245,15 @@ export default function FrontDeskPage() {
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+            {!isToday && (
+              <button
+                onClick={() => setDayOffset(0)}
+                className="px-2 h-7 rounded-md text-xs font-medium text-primary hover:bg-accent transition-colors whitespace-nowrap"
+                title="Back to today"
+              >
+                Today
+              </button>
+            )}
           </div>
 
           {!loading && isToday && activeCount > 0 && (

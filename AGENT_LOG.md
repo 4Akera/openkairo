@@ -758,3 +758,19 @@ back to in_progress, charges removed).
 **Note:** parallel session actively editing (EncounterPage export,
 FrontDesk date picker, CheckoutDialog, HistoricalArchive…) — those files
 left uncommitted; DepartmentWork diff verified mine-only before staging.
+
+## 2026-08-08 — Iteration 45: date picker on Today's day nav (user-driven)
+
+**Item:** User asked for a date picker on Today ("make today and picker so
+u can pick up a date").
+
+**What:** The day label between the ‹ › arrows is now a native date picker
+(`input type="date"` overlay + `showPicker()`, same pattern as Billing's
+date inputs) — tap "Today ▾" to jump to any date; a "Today" reset chip
+appears when viewing another day. Far dates outside the current year get
+the year in the label. `offsetForDateKey` converts the picked date to the
+existing dayOffset state (no new state concept).
+
+**Verification:** tsc clean, eslint clean, 165/165 tests, browser: picked
+Aug 12 → view switched ("No visits booked for wed, aug 12", label tinted,
+walk-in hidden), Today chip reset back to the live queue.
