@@ -12,12 +12,12 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useNow } from '../../hooks/useNow'
 import {
   visitPatient, arriveVisit, cancelVisit, updateVisit,
-  referralSourceLabel, dayBoundsIso,
+  referralSourceLabel, waitSeverity, isArrivableBooking,
 } from '../../lib/visits'
 import { CheckoutDialog } from './CheckoutDialog'
 import { SearchSelect } from '../ui/SearchSelect'
 import type { Visit } from '../../types'
-import { fullName, formatDateTime } from '../../lib/utils'
+import { fullName, formatDateTime, minutesBetween, formatMinutes, cn } from '../../lib/utils'
 import {
   Button, Input, ScrollArea,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
@@ -53,6 +53,15 @@ export function VisitQueue({
   const [physicians, setPhysicians] = useState<{ id: string; full_name: string }[]>([])
   const [reasonEditId, setReasonEditId] = useState<string | null>(null)
   const [reasonDraft, setReasonDraft] = useState('')
+  // Removing from the queue is the row's one destructive action — it takes
+  // two taps: the X arms ("Remove?"), a second tap within 4s confirms.
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!confirmCancelId) return
+    const t = setTimeout(() => setConfirmCancelId(null), 4000)
+    return () => clearTimeout(t)
+  }, [confirmCancelId])
 
   useEffect(() => {
     supabase.rpc('get_physicians_list').then(({ data }) => {
@@ -166,9 +175,27 @@ export function VisitQueue({
           ) : (
             <p className="text-xs text-muted-foreground truncate">
               {v.finished_at
-                ? <>finished {formatDateTime(v.finished_at)}</>
+                ? (() => {
+                    const mins = minutesBetween(v.arrived_at, v.finished_at)
+                    return (
+                      <>
+                        finished {formatDateTime(v.finished_at)}
+                        {mins != null && mins > 0 && <> · {formatMinutes(mins)} visit</>}
+                      </>
+                    )
+                  })()
                 : v.arrived_at
-                  ? <>waiting <span className="font-medium text-foreground/70">{waitTime(v.arrived_at)}</span></>
+                  ? (() => {
+                      const severity = waitSeverity(v.arrived_at, now)
+                      return (
+                        <>waiting <span className={cn(
+                          'font-medium',
+                          severity === 'ok' && 'text-foreground/70',
+                          severity === 'long' && 'text-amber-600 dark:text-amber-400',
+                          severity === 'critical' && 'text-red-600 dark:text-red-400',
+                        )}>{waitTime(v.arrived_at)}</span></>
+                      )
+                    })()
                   : v.scheduled_at ? formatDateTime(v.scheduled_at) : null}
               {referredFrom && <> · <span className="text-primary/80">← from {referredFrom}</span></>}
               {assignedName && <> · {assignedName}</>}
@@ -213,8 +240,8 @@ export function VisitQueue({
         )}
 
         <div className="flex items-center gap-1 shrink-0">
-          {/* Bookings can only arrive once their day has come */}
-          {!v.arrived_at && v.scheduled_at && v.scheduled_at < dayBoundsIso().end && (
+          {/* Bookings arrive only on their own day — never early, never from a stale past-day view */}
+          {isArrivableBooking(v) && (
             <Button size="sm" variant="outline" onClick={() => void arriveVisit(v.id, firstStage)}>
               Arrived
             </Button>
@@ -241,14 +268,27 @@ export function VisitQueue({
             </Button>
           )}
           {!v.finished_at && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-muted-foreground opacity-0 group-hover:opacity-100"
-              onClick={() => void cancelVisit(v.id)}
-            >
-              <XCircle className="h-3.5 w-3.5" />
-            </Button>
+            confirmCancelId === v.id ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-600 dark:text-red-400 hover:text-red-600"
+                onClick={() => { setConfirmCancelId(null); void cancelVisit(v.id) }}
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                Remove?
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground/60 hover:text-foreground"
+                title="Remove from queue"
+                onClick={() => setConfirmCancelId(v.id)}
+              >
+                <XCircle className="h-3.5 w-3.5" />
+              </Button>
+            )
           )}
           {v.finished_at && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
         </div>

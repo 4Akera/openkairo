@@ -1551,16 +1551,15 @@ values
   ('Vitals',             'vitals',           'activity',       'red',     'Vital signs record with NEWS2 scoring',                             true, false, false,  20, '[]'::jsonb, '{}',                      '{}'),
   ('H&P',                'hx_physical',      'stethoscope',    'violet',  'History and Physical — CC, HPI, ROS, Exam',                         true, false, false,  15, '[]'::jsonb, array['physician','admin'], '{}'),
   ('Assessment & Plan',  'plan',             'clipboard-list', 'emerald', 'Problem-based plan with chart problem import',                      true, false, false,  25, '[]'::jsonb, array['physician','admin'], '{}'),
-  ('Media',              'media',            'camera',         'cyan',    'Photo and file attachments with optional caption',                  true, true,  false,  30, '[]'::jsonb, array['physician','admin'], '{}'),
   ('Clinical Score',     'score',            'calculator',     'indigo',  'GCS, CURB-65, Wells DVT/PE, HEART — calculated scores',             true, false, false,  35, '[]'::jsonb, array['physician','admin'], '{}'),
-  ('Ward Round Note',    'tour',             'clipboard',      'teal',    'SOAP ward round note with task list',                               true, false, false,  40, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Progress Note',      'tour',             'clipboard',      'teal',    'SOAP progress note with task list',                                 true, false, false,  40, '[]'::jsonb, array['physician','admin'], '{}'),
   ('Procedure Note',     'procedure_note',   'scissors',       'orange',  'Structured operative and procedural note',                          true, true,  true,   45, '[]'::jsonb, array['physician','admin'], '{}'),
   ('Anaesthetic Note',   'anaesthetic_note', 'zap',            'rose',    'General, regional, spinal, epidural anaesthetic record',            true, false, true,   50, '[]'::jsonb, array['physician','admin'], '{}'),
-  ('Pain Assessment',    'pain_assessment',  'heart',          'pink',    '0–10 pain score with character, location, intervention',            true, false, false,  55, '[]'::jsonb, array['physician','admin'], '{}'),
-  ('Wound Care',         'wound_care',       'layers',         'amber',   'Wound assessment, appearance, dressing, and plan',                  true, true,  false,  60, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Pain Assessment',    'pain_assessment',  'heart',          'pink',    '0–10 pain score with character, location, intervention',            true, false, false,  55, '[]'::jsonb, '{}',                      '{}'),
+  ('Wound Care',         'wound_care',       'layers',         'amber',   'Wound assessment, appearance, dressing, and plan',                  true, true,  false,  60, '[]'::jsonb, '{}',                      '{}'),
   ('Lab Order',          'lab_order',        'flask-conical',  'sky',     'Order a lab panel — routed to the laboratory department',           true, false, false,  22, '[]'::jsonb, array['physician','admin'], '{}'),
   ('Lab Result',         'lab_result',       'test-tube',      'green',   'Enter structured lab results with auto ref-range flagging',         true, false, false,  23, '[]'::jsonb, array['physician','admin'], '{}'),
-  ('Radiology Request',  'radiology_request','scan',           'violet',  'Order imaging studies — routed to the radiology department',          true, false, false,  21, '[]'::jsonb, array['physician','admin'], '{}'),
+  ('Radiology Order',    'radiology_request','scan',           'violet',  'Order imaging studies — routed to the radiology department',          true, false, false,  21, '[]'::jsonb, array['physician','admin'], '{}'),
   ('Radiology Result',   'radiology_result', 'scan',           'purple',  'Structured radiology report — technique, findings, and impression',   true, false, false,  24, '[]'::jsonb, array['physician','admin'], '{}'),
   ('Nurse Note',         'nurse_note',       'book-open',      'purple',  'Chronological nursing observation and care log',                    true, false, false,  30, '[]'::jsonb, '{}',                      '{}'),
   ('Consultation',       'consultation',     'message-square', 'fuchsia', 'Specialist consultation request with question and response',        true, false, false,  35, '[]'::jsonb, array['physician','admin'], '{}'),
@@ -1578,10 +1577,19 @@ on conflict (slug) do update set
   visible_to_roles         = excluded.visible_to_roles,
   default_visible_to_roles = excluded.default_visible_to_roles;
 
--- Result blocks are entered only via department portal / fulfilment (not Add Block on timeline).
-update block_definitions set is_dept_only = true where slug in ('lab_result', 'radiology_result');
+-- Fulfilment blocks are entered only via department work views (not Add Block on timeline).
+update block_definitions set is_dept_only = true
+  where slug in ('lab_result', 'radiology_result', 'pharmacy_fulfillment');
+
+-- Retired built-ins: Media is an attachment strip with a caption — every
+-- cap_media block (Note, Wound Care, Procedure Note) already has the strip,
+-- so it isn't a document type of its own. Deactivate, never delete: deleting
+-- would cascade into user_block_templates, and existing media blocks keep
+-- rendering via the registry.
+update block_definitions set active = false where is_builtin = true and slug = 'media';
 
 -- Remove legacy built-in blocks no longer in the registry
+-- ('media' stays listed: retired-but-kept, see above)
 delete from block_definitions where is_builtin = true and slug not in (
   'note','vitals','hx_physical','plan','media','score','tour',
   'procedure_note','anaesthetic_note','pain_assessment','wound_care','lab_order','lab_result','radiology_request','radiology_result',
@@ -2426,3 +2434,35 @@ create policy "encounter_insert" on encounters for insert with check (
 --
 -- create index if not exists idx_block_actions_dept_completed
 --   on block_actions (action_type, completed_at desc) where status = 'completed';
+--
+-- Live Cashier lane: realtime on money tables so the lane updates the
+-- moment a charge lands or a payment is taken elsewhere. Until applied,
+-- the lane polls every 30s + refetches on window focus (FrontDeskPage).
+--
+-- do $$ begin alter publication supabase_realtime add table charges;  exception when duplicate_object then null; end $$;
+-- do $$ begin alter publication supabase_realtime add table payments; exception when duplicate_object then null; end $$;
+--
+-- WARDS (user-approved direction 2026-08-08; staged 2026-08-09) — admission
+-- is a PHASE of the same encounter, never a separate inpatient record. A
+-- ward is a department flavor with an EXPLICIT discriminator (never
+-- inferred from absent capabilities — isQueueDept and every picker learn
+-- one honest `kind` check when the ward UI lands). Creating the first ward
+-- IS the feature toggle; beds stay free text (no beds table, no bed
+-- states); capacity is optional census garnish ("14/20"). Ward staffing =
+-- department_members, Settings CRUD and RLS come free with the table.
+-- Client rules shipping with the UI: Today's queues and carried-over
+-- EXCLUDE admitted encounters (ward_id set, not finished); "Finish visit"
+-- reads "Discharge" when admitted; census = open encounters grouped by
+-- ward with "day n" from admitted_at.
+--
+-- alter table departments add column if not exists kind text not null default 'unit'
+--   check (kind in ('unit','ward'));
+-- alter table departments add column if not exists capacity integer;
+--
+-- alter table encounters add column if not exists ward_id uuid references departments(id) on delete set null;
+-- alter table encounters add column if not exists admitted_at timestamptz;
+-- alter table encounters add column if not exists bed text;
+--
+-- Census query support: open admitted encounters by ward.
+-- create index if not exists idx_encounters_ward_open
+--   on encounters (ward_id) where ward_id is not null and finished_at is null;

@@ -200,3 +200,28 @@ export async function createReferralVisit(
     arrived_at: new Date().toISOString(),
   })
 }
+
+/**
+ * Escalation for the queue's waited label — the front desk's core signal.
+ * Quiet under 30 minutes, 'long' from 30, 'critical' from an hour.
+ */
+export function waitSeverity(arrivedAtIso: string, nowMs: number): 'ok' | 'long' | 'critical' {
+  const mins = (nowMs - new Date(arrivedAtIso).getTime()) / 60000
+  if (mins >= 60) return 'critical'
+  if (mins >= 30) return 'long'
+  return 'ok'
+}
+
+/**
+ * A booking can be arrived only on its own day — never early (the existing
+ * rule) and never from a stale past-day view, where tapping Arrived would
+ * start a wait clock today against a visit dated last week.
+ */
+export function isArrivableBooking(
+  v: Pick<Visit, 'arrived_at' | 'scheduled_at'>,
+  date: Date = new Date(),
+): boolean {
+  if (v.arrived_at || !v.scheduled_at) return false
+  const { start, end } = dayBoundsIso(date)
+  return v.scheduled_at >= start && v.scheduled_at < end
+}

@@ -258,6 +258,19 @@ shrinks the schema behind it (approval-gated).
       payer-on-the-payment (claim-splitting that rewrites unit_price
       goes). Stage SQL in schema.sql section 20 and stop.
 
+### Front Desk polish (user-approved 2026-08-09 — "go")
+- [x] Five rough edges in one pass: queue cancel is two-tap (X arms
+      "Remove?", 4s auto-revert) and always visible — was a hover-only
+      instant delete, invisible on touch; waited label escalates
+      (waitSeverity: amber ≥30m, red ≥60m — the dept worklist pattern);
+      Cashier lane stays fresh (30s poll + focus refetch; realtime
+      publication for charges/payments STAGED in schema section 20,
+      approval-gated) and shows "collected today" (payments since
+      midnight); bookings arrive only on their own day
+      (isArrivableBooking — past-day "Arrived" started a wait clock
+      today against last week's visit); finished queue rows say the
+      visit duration. Helpers in lib/visits, tested. (2026-08-09)
+
 ### Post-restructure cleanup (pure simplification)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes
       props-driven (encounter + patient from the page); delete its own

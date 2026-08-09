@@ -23,7 +23,7 @@ import type { Patient } from '../types'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useVisitQueue } from '../hooks/useVisits'
-import { averageWaitMinutes, visitPatient } from '../lib/visits'
+import { averageWaitMinutes, visitPatient, dayBoundsIso } from '../lib/visits'
 import type { Visit } from '../types'
 import { VisitQueue } from '../components/visits/VisitQueue'
 import { CheckInDialog } from '../components/visits/CheckInDialog'
@@ -105,6 +105,12 @@ export default function FrontDeskPage() {
   // registry's Open filter used to, now that Patients has no nav entry.
   const [openRows, setOpenRows] = useState<Visit[] | null>(null)
   const [cashierRows, setCashierRows] = useState<CashierRow[] | null>(null)
+  // The cashier's closing number: sum of payments taken today.
+  const [collectedToday, setCollectedToday] = useState<number | null>(null)
+  // charges/payments aren't in the realtime publication yet (staged, schema
+  // section 20) — until then the lane stays fresh via a 30s poll + refetch
+  // on window focus, both bumping this tick.
+  const [cashierTick, setCashierTick] = useState(0)
   // Cashier walk-up search (deposits, old debts — patients not in the list)
   const [cashQuery, setCashQuery] = useState('')
   const [cashResults, setCashResults] = useState<Patient[] | null>(null)
@@ -122,8 +128,20 @@ export default function FrontDeskPage() {
       .then(({ data }) => setPatientDepts((data ?? []) as Department[]))
   }, [])
 
+  // Keep the Cashier lane fresh without realtime: poll + window focus.
   useEffect(() => {
-    if (lane !== 'cashier') { setCashierRows(null); return }
+    if (lane !== 'cashier') return
+    const bump = () => setCashierTick(t => t + 1)
+    const interval = setInterval(bump, 30_000)
+    window.addEventListener('focus', bump)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', bump)
+    }
+  }, [lane])
+
+  useEffect(() => {
+    if (lane !== 'cashier') { setCashierRows(null); setCollectedToday(null); return }
     let cancelled = false
     // Same ledger as the money view (patient_balance = charges − payments),
     // so the amount here always matches what Collect will ask for; patients
@@ -139,7 +157,16 @@ export default function FrontDeskPage() {
         .from('charges')
         .select('patient_id, quantity, unit_price')
         .eq('status', 'pending_insurance'),
-    ]).then(async ([balRes, insRes]) => {
+      supabase
+        .from('payments')
+        .select('amount')
+        .gte('created_at', dayBoundsIso().start),
+    ]).then(async ([balRes, insRes, payRes]) => {
+      if (!cancelled) {
+        setCollectedToday(
+          ((payRes.data ?? []) as { amount: number }[]).reduce((s, p) => s + Number(p.amount), 0),
+        )
+      }
       if (cancelled) return
       const dueById = new Map<string, number>()
       for (const r of (balRes.data ?? []) as { patient_id: string; balance: number }[]) {
@@ -175,7 +202,7 @@ export default function FrontDeskPage() {
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lane])
+  }, [lane, cashierTick])
 
   // Walk-up search inside the Cashier lane
   useEffect(() => {
@@ -339,6 +366,11 @@ export default function FrontDeskPage() {
             )}
             {lane === 'cashier' && cashierRows !== null && cashierRows.length > 0 && (
               <Badge variant="secondary" className="ml-1">{cashierRows.length} waiting</Badge>
+            )}
+            {lane === 'cashier' && collectedToday !== null && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                collected today {currencySymbol}{collectedToday.toFixed(2)}
+              </span>
             )}
             {lane === 'open' && openRows !== null && openRows.length > 0 && (
               <Badge variant="secondary" className="ml-1">{openRows.length} open</Badge>

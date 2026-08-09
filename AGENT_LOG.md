@@ -1292,3 +1292,41 @@ action, "Discharge" wording, Today exclusions, isQueueDept kind check)
 wait for the user's word. Consults follow-ups worth watching: curated
 Block Preferences hide new consult defs until re-saved; arrival-side
 toast for dept members only if a real consult gets missed.
+
+## 2026-08-09 — Iteration 53: Front Desk polish — five rough edges, one pass
+
+**Why:** User asked "anything to add for frontdesk"; the audit found no
+missing feature but five sharp edges, then "go".
+
+**What:**
+1. Queue cancel was a hover-only, instant, unconfirmed delete — invisible
+   on touch and one mis-click from losing a queue entry. Now two-tap: the
+   always-visible X arms to a red "Remove?", a second tap within 4s
+   confirms, otherwise it auto-reverts.
+2. Waited label escalates: waitSeverity (lib/visits, tested) — quiet
+   under 30m, amber to an hour, red past it. Same threshold-tint pattern
+   the dept worklist established.
+3. Cashier lane liveness without schema: 30s poll + refetch on window
+   focus (charges/payments aren't in the realtime publication; the two
+   `alter publication` lines are STAGED in schema.sql section 20 behind
+   user approval). Plus the closing number: "collected today" = sum of
+   payments since midnight, next to the waiting badge.
+4. Bookings arrive only on their own day: isArrivableBooking (tested)
+   replaces the `scheduled_at < end-of-today` gate that let a stale
+   past-day booking be "arrived" — starting a wait clock today against a
+   visit dated last week.
+5. Finished queue rows say the duration ("finished 3:51 PM · 17h 31m
+   visit"), matching the journey-words pass everywhere else.
+
+**Verification:** tsc --build clean, eslint clean, 209/209 tests (5 new
+in visits.test.ts). Browser (reception demo): carried-over rows render
+red waits (24h 30m); X arms to "Remove?" and auto-reverts — repeated
+stray clicks during testing never deleted a row, which is the point;
+finished a stale seeded test visit → Done row shows the duration;
+Cashier lane header reads "3 waiting · collected today PLN0.00" (honest
+at day open). No console errors. Past-day Arrived gating pinned by unit
+tests (no past bookings in demo data to show visually).
+
+**Shared tree:** parallel session's consult/UI WIP untouched; committed
+only lib/visits + test, VisitQueue, FrontDeskPage, schema.sql (staged
+lines), docs.
