@@ -1946,3 +1946,29 @@ surfaces; sealed encounters open through the glass with a reason on the
 audit trail. Concepts removed along the way: restricted tier + role
 picker, per-block role restriction, default block privacy, five SQL
 predicate copies, two client predicate copies, four zombie policies.
+
+## 2026-08-09 — User-reported fix: Front Desk overflow at high zoom
+
+**Item:** "frontdesk items are overflowing when zooming" (user report —
+UX rough edge). The app itself recommends 150% zoom (ZoomHintBanner), so
+queue rows must survive the narrower effective viewport zoom creates.
+
+**Root cause:** Radix ScrollArea wraps children in an inline-styled
+`display: table` div that sizes to max-content. Our ScrollArea renders
+only a vertical scrollbar, so any content wider than the viewport was
+silently clipped — at ~836px effective width the queue rows measured
+988px: Open clipped, Done and the remove X unreachable. The rows'
+existing `min-w-0`/`truncate` never engaged because the table wrapper
+just grew instead of constraining them.
+
+**What changed:** one line in the shared ScrollArea
+(`src/components/ui/index.tsx`): `[&>div]:!block` on the Viewport forces
+the wrapper to block so content is bounded by the viewport and flex
+truncation works. Global fix — every ScrollArea usage is a vertical
+list, so max-content sizing was pure downside app-wide.
+
+**Verification:** tsc --build clean, eslint clean, 277/277 tests.
+Browser (shared dev server, HMR): at 900px and 700px widths the inner
+wrapper computes `display: block`, scrollWidth == viewport width, all
+row actions (stage select / Open / Done / X) on-screen, sublines
+truncate with ellipsis; header filter rows wrap as designed.
