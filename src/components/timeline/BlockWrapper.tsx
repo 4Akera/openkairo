@@ -19,7 +19,7 @@ import {
   Zap, ArrowRight, Clock, CheckCheck, Star, Activity,
   Pill, Brain, TestTube, FlaskConical, Camera, BarChart2,
   Clipboard, Heart, Layers, Pin, PinOff, EyeOff, Eye,
-  Users, BookOpen, MoreHorizontal, ShieldCheck, Loader2, Building2,
+  BookOpen, MoreHorizontal, ShieldCheck, Loader2, Building2,
   CheckCircle2, Ban, Copy, Trash2,
 } from 'lucide-react'
 import { BLOCK_REGISTRY, orphanRegistryRenderKey, registryRenderKey } from './BlockRegistry'
@@ -31,7 +31,6 @@ import { BlockManualFeesPanel } from './capabilities/BlockManualFeesPanel'
 import { AcknowledgmentPanel } from './capabilities/AcknowledgmentPanel'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
-import { useEncounterStore } from '../../stores/encounterStore'
 import { blockAllowsManualBlockFees } from '../../lib/blockBilling'
 
 // ============================================================
@@ -119,7 +118,6 @@ const BUILTIN_METADATA: Record<string, { name: string; icon: string; color: stri
 // store) but whose existing blocks still carry attachments to show.
 const RETIRED_CAP_MEDIA_TYPES = new Set(['media'])
 
-const BLOCK_ROLE_OPTIONS = ['physician', 'nurse', 'receptionist', 'admin']
 
 // ============================================================
 // Props
@@ -239,7 +237,6 @@ export default function BlockWrapper({
 
   const anyPendingApproval = chargeLinesAwaitingApproval.length > 0
   const { roleSlugs } = useAuthStore()
-  const updateBlock = useEncounterStore((s) => s.updateBlock)
   const [editing, setEditing] = useState(false)
   const editingRef = useRef(editing)
   useEffect(() => { editingRef.current = editing }, [editing])
@@ -267,8 +264,6 @@ export default function BlockWrapper({
         right: window.innerWidth - r.right,
       })
     }
-    setDraftRoles(block.visible_to_roles ?? [])
-    setRolesSaveError(null)
     setHardDeleteConfirm(false)
     setMenuOpen(true)
   }
@@ -303,33 +298,13 @@ export default function BlockWrapper({
     }
   }, [menuOpen, menuTriggerRect])
 
-  // Block privacy — role restriction
-  const [draftRoles, setDraftRoles] = useState<string[]>(block.visible_to_roles ?? [])
-  const [savingRoles, setSavingRoles] = useState(false)
-  const [rolesSaveError, setRolesSaveError] = useState<string | null>(null)
   const [hardDeleteConfirm, setHardDeleteConfirm] = useState(false)
 
   // Optimistic local share state — syncs from prop after realtime arrives
   const [localShare, setLocalShare] = useState(block.share_to_record)
   useEffect(() => { setLocalShare(block.share_to_record) }, [block.share_to_record])
 
-  useEffect(() => {
-    if (!menuOpen) setDraftRoles(block.visible_to_roles ?? [])
-  }, [block.visible_to_roles, menuOpen])
   const [hardDeleting, setHardDeleting] = useState(false)
-
-  const handleSaveRoles = async () => {
-    setSavingRoles(true)
-    setRolesSaveError(null)
-    const { error } = await supabase.from('blocks').update({ visible_to_roles: draftRoles }).eq('id', block.id)
-    setSavingRoles(false)
-    if (error) {
-      setRolesSaveError(error.message)
-      return
-    }
-    updateBlock({ ...block, visible_to_roles: draftRoles })
-    setMenuOpen(false)
-  }
 
   const handleToggleShareToRecord = async () => {
     const newVal = !localShare
@@ -671,8 +646,7 @@ export default function BlockWrapper({
                   title="More options"
                   className={cn(
                     'h-5 w-5',
-                    (block.is_pinned || localShare || (block.visible_to_roles?.length ?? 0) > 0)
-                      && 'text-primary/70',
+                    (block.is_pinned || localShare) && 'text-primary/70',
                   )}
                 >
                   <MoreHorizontal className="h-3 w-3" />
@@ -827,46 +801,6 @@ export default function BlockWrapper({
                             </button>
                           </div>
 
-                          {/* Role restriction */}
-                          <div className="rounded-lg border bg-muted/20 px-2.5 py-2 space-y-2">
-                            <div className="flex items-start gap-2">
-                              <Users className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', (draftRoles.length > 0) ? 'text-amber-600' : 'text-muted-foreground')} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[11px] font-medium">Restrict to roles</p>
-                                <p className="text-[10px] text-muted-foreground leading-tight">This block only — empty means all encounter viewers can see it</p>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {BLOCK_ROLE_OPTIONS.map(role => (
-                                <button
-                                  key={role}
-                                  type="button"
-                                  onClick={() =>
-                                    setDraftRoles(prev =>
-                                      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role],
-                                    )
-                                  }
-                                  className={cn(
-                                    'text-[10px] px-2 py-0.5 rounded-full border capitalize transition-all font-medium',
-                                    draftRoles.includes(role)
-                                      ? 'border-amber-400 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
-                                      : 'border-border text-muted-foreground hover:border-amber-300',
-                                  )}
-                                >
-                                  {role}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-2" onClick={() => { setDraftRoles(block.visible_to_roles ?? []); setRolesSaveError(null) }}>Reset</Button>
-                              <Button size="sm" className="h-5 text-[10px] px-2" onClick={handleSaveRoles} disabled={savingRoles}>
-                                {savingRoles ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
-                              </Button>
-                            </div>
-                            {rolesSaveError && (
-                              <p className="text-[10px] text-red-600 dark:text-red-400 leading-snug">{rolesSaveError}</p>
-                            )}
-                          </div>
                         </div>
                         )}
                       </div>

@@ -1277,13 +1277,9 @@ create policy "block_staff_access" on blocks for all using (
       )
     )
   )
-  -- Block-level role restriction (instance visible_to_roles — not the definition add-gate).
-  -- Admins always pass; creators do not bypass, so restricted blocks stay restricted.
-  and (
-    array_length(visible_to_roles, 1) is null
-    or has_role_in(visible_to_roles)
-    or has_role_in(array['admin'])
-  )
+  -- Per-block role restriction retired (2026-08-09): the encounter carries the
+  -- wall, mask hides within the team. blocks.visible_to_roles stays as a dormant
+  -- column; any legacy values are ignored.
 );
 
 -- Hard-delete requires creator ownership or admin; RESTRICTIVE so it ANDs with
@@ -1294,8 +1290,8 @@ create policy "block_delete_restrict" on blocks as restrictive for delete
 -- Block sub-tables: clinical permission (block.add) AND visibility of the
 -- parent block. The exists() runs under blocks RLS for the querying user, so
 -- entries/attachments/acks inherit the whole wall (encounter visibility,
--- instance visible_to_roles, dept arm) with zero restatement — a private
--- encounter's payloads are no longer readable by unrelated staff via the API.
+-- dept arm) with zero restatement — a private encounter's payloads are no
+-- longer readable by unrelated staff via the API.
 -- block_actions: the department arm stays parent-INDEPENDENT on purpose —
 -- orders must reach the fulfilling department (its queue reads block_actions
 -- directly) even when the encounter is private.
