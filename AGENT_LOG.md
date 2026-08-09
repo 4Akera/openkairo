@@ -1576,3 +1576,23 @@ dropped), 216/216 tests (2 new). Browser (lab): chips render "STAT 3 ·
 Not started 30 · In progress 9"; clicking Not started shows exactly 30
 rows with zero In-progress rows. Origin chips correctly absent — demo
 lab orders all come from one queue.
+
+## 2026-08-09 — Iteration 59: bulk "Close all" on Loose ends
+
+**Why:** User mid-turn: "add a button to close all encounters that left
+at once" — the Open-notes pile (100 deep in demo data) needed more than
+one-tap-per-row.
+
+**What:** "Close all" button on the Open notes section header, two-tap
+armed like the queue cancel ("Close all N?", 4s auto-revert). Closes the
+listed notes in one update (respects the Mine filter — you close what
+you see), RLS quietly skips records the caller can't touch, and the
+header notice reports honestly: "Closed 99 records · 1 skipped (no
+access)". Closed rows drop from the list by returned id.
+
+**Verification:** tsc clean on my files (BlockWrapper errors are the
+co-session's live WIP), eslint clean, 216/216 tests. Browser (reception):
+armed → confirmed → "Closed 99 records · 1 skipped (no access)", badge
+100 → 1 — the survivor is a private note only its physician can close,
+which is the design. First attempt taught me the 4s revert wins races
+against slow tooling — a human tapping twice is well inside it.

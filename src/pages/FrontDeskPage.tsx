@@ -114,6 +114,37 @@ export default function FrontDeskPage() {
   const [looseNotes, setLooseNotes] = useState<Visit[] | null>(null)
   const [noShowRows, setNoShowRows] = useState<Visit[] | null>(null)
   const [sweepNotice, setSweepNotice] = useState<string | null>(null)
+  // Bulk "Close all" on Open notes: two-tap like the queue cancel
+  const [bulkCloseArmed, setBulkCloseArmed] = useState(false)
+  const [bulkClosing, setBulkClosing] = useState(false)
+
+  useEffect(() => {
+    if (!bulkCloseArmed) return
+    const t = setTimeout(() => setBulkCloseArmed(false), 4000)
+    return () => clearTimeout(t)
+  }, [bulkCloseArmed])
+
+  const closeAllNotes = async (ids: string[]) => {
+    if (ids.length === 0 || bulkClosing) return
+    setBulkClosing(true)
+    setBulkCloseArmed(false)
+    // RLS quietly skips records the caller can't close — report honestly.
+    const { data } = await supabase
+      .from('encounters')
+      .update({ status: 'closed', closed_at: new Date().toISOString() })
+      .in('id', ids)
+      .eq('status', 'open')
+      .select('id')
+    const closedIds = new Set(((data ?? []) as { id: string }[]).map(r => r.id))
+    setLooseNotes(prev => prev ? prev.filter(n => !closedIds.has(n.id)) : prev)
+    const skipped = ids.length - closedIds.size
+    setSweepNotice(
+      `Closed ${closedIds.size} record${closedIds.size === 1 ? '' : 's'}` +
+      (skipped > 0 ? ` · ${skipped} skipped (no access)` : ''),
+    )
+    setTimeout(() => setSweepNotice(null), 12_000)
+    setBulkClosing(false)
+  }
   const [cashierRows, setCashierRows] = useState<CashierRow[] | null>(null)
   // At volume the till serves who's HERE; historic debt is the exception.
   const [cashScope, setCashScope] = useState<'today' | 'all'>('today')
@@ -691,6 +722,29 @@ export default function FrontDeskPage() {
                     <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-4 pb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       <FileClock className="h-3.5 w-3.5" /> Open notes
                       <span className="flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold">{notes.length}</span>
+                      <span className="flex-1" />
+                      {bulkCloseArmed ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-7 text-xs normal-case tracking-normal"
+                          disabled={bulkClosing}
+                          onClick={() => void closeAllNotes(notes.map(n => n.id))}
+                        >
+                          {bulkClosing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                          Close all {notes.length}?
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs normal-case tracking-normal"
+                          disabled={bulkClosing}
+                          onClick={() => setBulkCloseArmed(true)}
+                        >
+                          Close all
+                        </Button>
+                      )}
                     </div>
                     <p className="px-4 sm:px-6 pb-1.5 -mt-1 text-[11px] text-muted-foreground">
                       The visit is over but the record was never closed.
