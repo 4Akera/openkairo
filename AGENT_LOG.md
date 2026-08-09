@@ -1902,3 +1902,47 @@ clinician identities (privates hidden, ledger role-gated).
 an admitted encounter (EncounterPage was the co-session's live WIP —
 stayed off it); Settings CRUD for creating wards; ward as a worklist
 origin label.
+
+## 2026-08-09 — Iteration 55: PRIVACY PASS APPLIED TO REMOTE (user: "apply it")
+
+**Approval:** explicit — user replied "apply it" to the staged-schema
+summary. Applied as ONE migration
+(privacy_pass_predicate_subtables_glass) via MCP apply_migration.
+
+**Pre-apply live inspection caught two real hazards** (this is why the
+check-before-apply step exists):
+1. blocks carried a `block_portal_select` policy absent from schema.sql —
+   dead patient-portal leftover (portal_visible + a 'patient' role the
+   app no longer has). Dropped in the migration.
+2. storage.objects carried THREE legacy policies absent from schema.sql,
+   including `public read block-media` — permissive policies OR
+   together, so this alone would have silently bypassed the new
+   attachment-derived download wall. All three dropped in the migration.
+   schema.sql now carries all four drops (commit f6e9b62) so future full
+   applies reproduce the remote exactly.
+
+**Post-apply verification:**
+- SQL: 10/10 state checks (predicate live with glass arm, sub-tables
+  derived, instance arm gone, portal zombie gone, public-read gone,
+  glass table/trigger/RPCs + grants live).
+- Browser, nurse demo: GlassDoor on the walled encounter → reason →
+  OPENED, rose audit line on the timeline ("Opened sealed encounter —
+  reason"); patient page sealed card → knock dialog → opened the second
+  (closed) sensitive encounter, audit line there too; Front Desk fully
+  healthy (12-row queue hydrated under new policies).
+- Browser, radiology demo (order-dept member, no block.add): work queue
+  loads 5 orders with STAT + lanes — the parent-independent dept arm
+  works as designed.
+- Bug found during verification, fixed live (f6e9b62): the Sensitive
+  sealed-cards section was inside the visits non-empty branch, so a
+  patient whose ONLY encounters are sealed rendered "No visits yet" —
+  exactly the sealed-only case. Empty state now also requires zero
+  sealed rows.
+
+**PRIVACY PASS COMPLETE.** End state, live: the encounter carries the
+wall (Everyone / Sensitive); blocks and their sub-tables + files inherit
+it with zero restatement; mask hides within the team; share-to-record
+surfaces; sealed encounters open through the glass with a reason on the
+audit trail. Concepts removed along the way: restricted tier + role
+picker, per-block role restriction, default block privacy, five SQL
+predicate copies, two client predicate copies, four zombie policies.
