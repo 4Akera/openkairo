@@ -47,6 +47,10 @@ type CashierRow = {
   due: number
   insuranceTotal: number
   insuranceCount: number
+  /** Pending charge lines behind the due amount — loaded for today's patients only. */
+  itemCount: number | null
+  /** Patient has a journey today (in the building, or left today). */
+  hereToday: boolean
 }
 
 function dateKeyFor(offsetDays: number): string {
@@ -108,8 +112,14 @@ export default function FrontDeskPage() {
   // registry's Open filter used to, now that Patients has no nav entry.
   const [openRows, setOpenRows] = useState<Visit[] | null>(null)
   const [cashierRows, setCashierRows] = useState<CashierRow[] | null>(null)
-  // The cashier's closing number: sum of payments taken today.
+  // At volume the till serves who's HERE; historic debt is the exception.
+  const [cashScope, setCashScope] = useState<'today' | 'all'>('today')
+  const [cashInsOnly, setCashInsOnly] = useState(false)
+  // How many patients owe in total (the list itself is capped at the top 200).
+  const [owingTotal, setOwingTotal] = useState<number | null>(null)
+  // The cashier's closing numbers: sum of payments taken today, by method.
   const [collectedToday, setCollectedToday] = useState<number | null>(null)
+  const [collectedByMethod, setCollectedByMethod] = useState<[string, number][]>([])
   // charges/payments aren't in the realtime publication yet (staged, schema
   // section 20) — until then the lane stays fresh via a 30s poll + refetch
   // on window focus, both bumping this tick.
@@ -144,15 +154,21 @@ export default function FrontDeskPage() {
   }, [lane])
 
   useEffect(() => {
-    if (lane !== 'cashier') { setCashierRows(null); setCollectedToday(null); return }
+    if (lane !== 'cashier') {
+      setCashierRows(null)
+      setCollectedToday(null)
+      setOwingTotal(null)
+      return
+    }
     let cancelled = false
+    const { start: todayStart } = dayBoundsIso()
     // Same ledger as the money view (patient_balance = charges − payments),
     // so the amount here always matches what Collect will ask for; patients
     // waiting only on an insurer are included with an insurance chip.
     Promise.all([
       supabase
         .from('patient_balance')
-        .select('patient_id, balance')
+        .select('patient_id, balance', { count: 'exact' })
         .gt('balance', 0)
         .order('balance', { ascending: false })
         .limit(200),
@@ -162,15 +178,27 @@ export default function FrontDeskPage() {
         .eq('status', 'pending_insurance'),
       supabase
         .from('payments')
-        .select('amount')
-        .gte('created_at', dayBoundsIso().start),
-    ]).then(async ([balRes, insRes, payRes]) => {
-      if (!cancelled) {
-        setCollectedToday(
-          ((payRes.data ?? []) as { amount: number }[]).reduce((s, p) => s + Number(p.amount), 0),
-        )
-      }
+        .select('amount, method')
+        .gte('created_at', todayStart),
+      // Who is HERE: a journey today — in the building, or left today.
+      supabase
+        .from('encounters')
+        .select('patient_id')
+        .not('arrived_at', 'is', null)
+        .is('cancelled_at', null)
+        .or(`finished_at.is.null,finished_at.gte.${todayStart}`)
+        .limit(1000),
+    ]).then(async ([balRes, insRes, payRes, hereRes]) => {
       if (cancelled) return
+      const payRows = (payRes.data ?? []) as { amount: number; method: string }[]
+      setCollectedToday(payRows.reduce((s, p) => s + Number(p.amount), 0))
+      const byMethod = new Map<string, number>()
+      for (const p of payRows) {
+        byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + Number(p.amount))
+      }
+      setCollectedByMethod([...byMethod.entries()].sort((a, b) => b[1] - a[1]))
+      setOwingTotal(balRes.count ?? null)
+
       const dueById = new Map<string, number>()
       for (const r of (balRes.data ?? []) as { patient_id: string; balance: number }[]) {
         dueById.set(r.patient_id, Number(r.balance))
@@ -182,10 +210,25 @@ export default function FrontDeskPage() {
         agg.count += 1
         insById.set(r.patient_id, agg)
       }
+      const hereIds = new Set(
+        ((hereRes.data ?? []) as { patient_id: string }[]).map(r => r.patient_id),
+      )
       const ids = [...new Set([...dueById.keys(), ...insById.keys()])]
       if (ids.length === 0) { setCashierRows([]); return }
-      const { data: pts } = await supabase.from('patients').select('*').in('id', ids)
+
+      // "N items" context — bounded: only for today's patients at the till.
+      const todayIds = ids.filter(id => hereIds.has(id))
+      const [{ data: pts }, pendingRes] = await Promise.all([
+        supabase.from('patients').select('*').in('id', ids),
+        todayIds.length > 0
+          ? supabase.from('charges').select('patient_id').eq('status', 'pending').in('patient_id', todayIds).limit(2000)
+          : Promise.resolve({ data: [] as { patient_id: string }[] }),
+      ])
       if (cancelled) return
+      const itemsById = new Map<string, number>()
+      for (const r of (pendingRes.data ?? []) as { patient_id: string }[]) {
+        itemsById.set(r.patient_id, (itemsById.get(r.patient_id) ?? 0) + 1)
+      }
       const byId = new Map(((pts ?? []) as Patient[]).map(p => [p.id, p]))
       const rows = ids.flatMap(id => {
         const patient = byId.get(id)
@@ -195,6 +238,8 @@ export default function FrontDeskPage() {
           due: dueById.get(id) ?? 0,
           insuranceTotal: insById.get(id)?.total ?? 0,
           insuranceCount: insById.get(id)?.count ?? 0,
+          itemCount: itemsById.has(id) ? itemsById.get(id)! : null,
+          hereToday: hereIds.has(id),
         }]
       })
       rows.sort((a, b) =>
@@ -264,6 +309,15 @@ export default function FrontDeskPage() {
     [cashierRows],
   )
 
+  // The till serves who's here; "All owing" widens to historic debt.
+  const displayedCashierRows = useMemo(() => {
+    if (cashierRows === null) return null
+    let rows = cashierRows
+    if (cashScope === 'today') rows = rows.filter(r => r.hereToday)
+    if (cashInsOnly) rows = rows.filter(r => r.insuranceCount > 0)
+    return rows
+  }, [cashierRows, cashScope, cashInsOnly])
+
   const lanes: { id: Lane; label: string; icon: typeof Users }[] = [
     { id: 'queue', label: 'Queue', icon: Users },
     ...(showCashier ? [{ id: 'cashier' as Lane, label: 'Cashier', icon: Receipt }] : []),
@@ -280,7 +334,7 @@ export default function FrontDeskPage() {
     )
   }
 
-  const renderCashierRow = (patient: Patient, due: number, insuranceTotal: number, insuranceCount: number) => (
+  const renderCashierRow = (patient: Patient, due: number, insuranceTotal: number, insuranceCount: number, itemCount: number | null = null) => (
     <button
       key={patient.id}
       onClick={() => navigate(`/billing?patient=${patient.id}`)}
@@ -290,6 +344,11 @@ export default function FrontDeskPage() {
         <p className="text-sm font-medium truncate">{fullName(patient, nameFormat)}</p>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs text-muted-foreground font-mono">{patient.mrn}</span>
+          {itemCount !== null && itemCount > 0 && (
+            <span className="text-xs text-muted-foreground">
+              · {itemCount} item{itemCount > 1 ? 's' : ''}
+            </span>
+          )}
           {insuranceCount > 0 && (
             <Badge
               variant="outline"
@@ -376,12 +435,17 @@ export default function FrontDeskPage() {
                 avg visit today {formatMinutes(avgWait)}
               </span>
             )}
-            {lane === 'cashier' && cashierRows !== null && cashierRows.length > 0 && (
-              <Badge variant="secondary" className="ml-1">{cashierRows.length} waiting</Badge>
+            {lane === 'cashier' && displayedCashierRows !== null && displayedCashierRows.length > 0 && (
+              <Badge variant="secondary" className="ml-1">{displayedCashierRows.length} waiting</Badge>
             )}
             {lane === 'cashier' && collectedToday !== null && (
               <span className="text-xs text-muted-foreground hidden sm:inline">
                 collected today {currencySymbol}{collectedToday.toFixed(2)}
+                {collectedByMethod.length > 0 && (
+                  <span className="opacity-70">
+                    {' '}({collectedByMethod.map(([m, amt]) => `${m.replace('_', ' ')} ${amt.toFixed(2)}`).join(' · ')})
+                  </span>
+                )}
               </span>
             )}
             {lane === 'open' && openRows !== null && openRows.length > 0 && (
@@ -470,17 +534,49 @@ export default function FrontDeskPage() {
             </div>
           )}
 
-          {/* Cashier lane: walk-up search (deposit, old debt — anyone, owing or not) */}
+          {/* Cashier lane: scope (the till serves who's here), insurance
+              follow-up, and walk-up search (anyone, owing or not) */}
           {lane === 'cashier' && (
-            <div className="relative flex-1 min-w-[10rem] max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                value={cashQuery}
-                onChange={e => setCashQuery(e.target.value)}
-                placeholder="Search any patient…"
-                className="h-9 pl-8 text-sm"
-              />
-            </div>
+            <>
+              <div className="flex items-center rounded-lg border border-border p-0.5 gap-0.5">
+                {([['today', 'Today'], ['all', 'All owing']] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setCashScope(id)}
+                    className={cn(
+                      'h-8 px-3 rounded-md text-xs font-medium transition-colors',
+                      cashScope === id
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {label}
+                    {id === 'all' && owingTotal !== null && <span className="opacity-70"> {owingTotal}</span>}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setCashInsOnly(v => !v)}
+                title="Only patients with charges waiting on an insurer"
+                className={cn(
+                  'flex items-center gap-1.5 h-9 px-3 rounded-lg border text-xs font-medium transition-colors',
+                  cashInsOnly
+                    ? 'bg-purple-100 border-purple-400 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-700'
+                    : 'border-border text-muted-foreground hover:text-foreground hover:border-purple-400/50',
+                )}
+              >
+                Insurance
+              </button>
+              <div className="relative flex-1 min-w-[10rem] max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={cashQuery}
+                  onChange={e => setCashQuery(e.target.value)}
+                  placeholder="Search any patient…"
+                  className="h-9 pl-8 text-sm"
+                />
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -498,20 +594,33 @@ export default function FrontDeskPage() {
               <div className="divide-y divide-border">
                 {cashResults.map(pt => {
                   const owing = owingById.get(pt.id)
-                  return renderCashierRow(pt, owing?.due ?? 0, owing?.insuranceTotal ?? 0, owing?.insuranceCount ?? 0)
+                  return renderCashierRow(pt, owing?.due ?? 0, owing?.insuranceTotal ?? 0, owing?.insuranceCount ?? 0, owing?.itemCount ?? null)
                 })}
               </div>
             )
-          ) : cashierRows === null ? (
+          ) : displayedCashierRows === null ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
             </div>
-          ) : cashierRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">Nobody owes anything. 🎉</p>
+          ) : displayedCashierRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">
+              {cashInsOnly
+                ? 'No one is waiting on an insurer.'
+                : cashScope === 'today' && (cashierRows?.length ?? 0) > 0
+                  ? 'Nobody here today owes anything — "All owing" has the rest.'
+                  : 'Nobody owes anything. 🎉'}
+            </p>
           ) : (
-            <div className="divide-y divide-border">
-              {cashierRows.map(r => renderCashierRow(r.patient, r.due, r.insuranceTotal, r.insuranceCount))}
-            </div>
+            <>
+              <div className="divide-y divide-border">
+                {displayedCashierRows.map(r => renderCashierRow(r.patient, r.due, r.insuranceTotal, r.insuranceCount, r.itemCount))}
+              </div>
+              {cashScope === 'all' && owingTotal !== null && owingTotal > (cashierRows?.length ?? 0) && (
+                <p className="text-center text-[11px] text-muted-foreground py-2">
+                  Showing the top {cashierRows?.length} of {owingTotal} owing by amount — search finds anyone.
+                </p>
+              )}
+            </>
           )}
         </div>
       ) : lane === 'open' ? (

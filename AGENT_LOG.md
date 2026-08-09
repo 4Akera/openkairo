@@ -1470,3 +1470,29 @@ like private always was.
 header chip reads "Privacy · Sensitive" rose-tinted on the sensitive
 encounter; popover offers two options, role chips gone. Commit 2f2c17c,
 explicit 5-file list (DepartmentWork/FrontDeskPage left to co-session).
+
+## 2026-08-09 — Iteration 55: cashier at volume — scope, honest counts, drawer math
+
+**Why:** User point 1 ("cashier front desk can't handle 10k charges/day").
+At volume the deeper flaw was scope, not just search: the lane mixed the
+patient at the till with every historic debtor, sorted by amount.
+
+**What:** Cashier lane defaults to "Today" — patients WITH a journey
+today (arrived, in the building, or left today; encounters query joined
+against the owing set). "All owing" widens to historic debt and shows
+the TRUE count from patient_balance ({ count: 'exact' }); when the
+top-200 window caps the list, a note says so and points at search. An
+Insurance chip narrows to insurer-pending patients. Rows gain "N items"
+context (pending charge lines, loaded bounded — only for today's
+patients). "Collected today" now breaks down by method — "PLN3.60
+(cash 3.60)" — the numbers a drawer is reconciled with. Walk-up search
+untouched and scope-independent.
+
+**Verification:** tsc --build clean, eslint clean, 209/209 tests.
+Browser (reception): Today scope shows only the patient here (Taylor ·
+1 item · 28.00), insurance-only patients correctly excluded; All owing
+→ 3 waiting; Insurance chip → 2; method breakdown renders in the
+header. Active-segment styling confirmed via DOM (screenshot downscale
+had me second-guessing).
+
+**Shared tree:** co-session WIP untouched; committed FrontDeskPage only.
