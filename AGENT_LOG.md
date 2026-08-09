@@ -1439,3 +1439,34 @@ landed) — clean on reload.
 **Shared tree:** co-session's privacy-pass WIP (PatientPage,
 EncounterPage, encounterAccess, TemplatesSection) untouched; committing
 only DepartmentWork + FrontDeskPage + docs.
+
+## 2026-08-09 — Iteration 52: two-state visibility — Everyone / Sensitive (user-directed)
+
+**Item:** User pointed at the New Encounter modal still offering
+All Staff / Restricted / Private — the direct cue to ship the UI half of
+privacy-pass step 4 (the design refined together this session).
+
+**What:** Visibility is two states everywhere it appears — create
+dialog, encounter header chip + popover, template Default Encounter
+Privacy — labeled Everyone / Sensitive. Sensitive REUSES the stored
+'private' value: zero schema change. Restricted is retired from the UI;
+legacy rows display as Sensitive (lock icon), keep their role lists
+honored by RLS + canAccessEncounter, and converge to private (roles
+cleared) on the next visibility save; restricted template defaults
+collapse at creation via normalizeVisibility. Shared VISIBILITY_OPTIONS
+/ visibilityLabel / normalizeVisibility live in lib/encounterAccess
+(+2 test groups, 211 total). Lock-page copy now states the actual gate
+(assigned + creator + admins). Net: one visibility tier and three role
+pickers removed.
+
+**Not in this commit:** break-the-glass (sealed-but-visible + logged
+reason) — the schema-touching half of step 4; design agreed, build next
+with staged SQL + ask. Until it ships, Sensitive is a hard wall exactly
+like private always was.
+
+**Checks:** tsc --build clean, eslint clean, 211/211 tests. Browser
+(preview :59017, admin): create dialog shows exactly Everyone/Sensitive
+(Sensitive preselected — the dialog's private default carries over);
+header chip reads "Privacy · Sensitive" rose-tinted on the sensitive
+encounter; popover offers two options, role chips gone. Commit 2f2c17c,
+explicit 5-file list (DepartmentWork/FrontDeskPage left to co-session).

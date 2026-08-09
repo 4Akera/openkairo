@@ -68,14 +68,20 @@ surfaces. Sequence agreed with user:
       staged removal of the instance-roles arm in block_staff_access —
       BlockWrapper.tsx was the co-session's live WIP, retry when free.)
 - [ ] Encounter visibility → two states — Everyone / Sensitive — WITH
-      break-the-glass in the same pass (design refined with user
-      2026-08-09: "Care team" label rejected as over-promising — nurses
-      involved in care aren't in the gate, and auto-membership can't
-      bootstrap since you can't document on what you can't open; so the
-      sealed tier makes no membership claim and everyone else opens
-      through the glass with a one-line logged reason in
-      encounter_audit_log; restricted → Sensitive on migration, a
-      narrowing). AWAITING explicit user go before building.
+      break-the-glass (design refined with user 2026-08-09: "Care team"
+      label rejected as over-promising — nurses involved in care aren't
+      in the gate, and auto-membership can't bootstrap since you can't
+      document on what you can't open; so the sealed tier makes no
+      membership claim and everyone else opens through the glass with a
+      one-line logged reason in encounter_audit_log).
+      (2026-08-09 — UI HALF SHIPPED, user-directed via the New Encounter
+      modal: two states everywhere — create dialog, header chip+popover,
+      template defaults — Sensitive reuses 'private', zero schema; legacy
+      restricted displays as Sensitive, roles still honored, converges on
+      next save. REMAINING: break-the-glass — sealed-existence rows +
+      open-with-reason writing encounter_audit_log + a glass-opens arm in
+      can_access_encounter. SCHEMA — stage + ask; until it ships,
+      Sensitive is a hard wall like private always was.)
 
 ### Departments are the unit (user-approved 2026-08-08): capability flavors
 One departments table is the whole org model — a department composes
