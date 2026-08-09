@@ -1940,7 +1940,7 @@ const QUEUE_LIMIT = 300
 const WORK_QUEUE_SELECT = `
   *,
   patients(id,first_name,middle_name,last_name,mrn),
-  encounter:encounters!encounter_id(department_id, departments(name)),
+  encounter:encounters!encounter_id(department_id, departments!department_id(name)),
   order_block:blocks!block_actions_block_id_fkey(
     content, type, definition_id, department_block_type_id,
     order_def:block_definitions(*),

@@ -11,8 +11,10 @@
 import { supabase } from './supabase'
 import type { Patient, Visit, VisitReferralRef } from '../types'
 
+// departments must be hinted: encounters carries TWO FKs to departments
+// (department_id + ward_id since the wards DDL), so a bare embed is ambiguous.
 const JOURNEY_SELECT =
-  '*, patients(*), referred_from:encounters!referred_from_encounter_id(department_id, departments(name))'
+  '*, patients(*), referred_from:encounters!referred_from_encounter_id(department_id, departments!department_id(name))'
 
 export function dayBoundsIso(date = new Date()): { start: string; end: string } {
   const start = new Date(date)
