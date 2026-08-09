@@ -1410,3 +1410,32 @@ commit carries the client half.
 browser-verified as physician (menu renames, media gone, no pharmacy
 fulfilment entry) and nurse (Pain Assessment + Wound Care offered); legacy
 media block renders with attachments intact.
+
+## 2026-08-09 — Iteration 54: search pass — find anyone in any queue
+
+**Why:** User's volume feedback ("go", points 2+3): at 10k charges/day and
+200-patient days, lane chips and stage groups don't find one person.
+
+**What:** Two searches, each scoped to its surface. (1) Today's Queue
+lane: "Find in queue…" filter-as-you-type over the already-loaded day
+(name or MRN, client-side, applies to carried-over too; empty state says
+what didn't match). (2) Department worklist: "Search patient in queue…"
+— server search (search_patients → pending block_actions for the dept by
+patient_id), so it reaches PAST the oldest-300 window; results still
+flow through the origin/lane chips, live-refresh when the queue reloads,
+and the "oldest N of M" cap notice hides while searching. Plus a STAT
+chip (count + red toggle) that filters to STAT orders only — it renders
+even for single-service departments where lane chips don't.
+
+**Verification:** tsc --build clean (after co-session's PatientPage WIP
+landed), eslint clean, 209/209 tests (UI-only — no new lib logic).
+Browser (reception): queue filter matches Arabic name + shows honest
+empty state for "xyz"; lab worklist "kowal" → "4 pending" across three
+different Kowal* patients (server, uncapped); STAT 3 chip isolates the
+three flame rows and toggles back. One stale console error traced to the
+HMR window between two of my own edits (useCallback before its import
+landed) — clean on reload.
+
+**Shared tree:** co-session's privacy-pass WIP (PatientPage,
+EncounterPage, encounterAccess, TemplatesSection) untouched; committing
+only DepartmentWork + FrontDeskPage + docs.

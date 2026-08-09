@@ -16,7 +16,7 @@
  * Queue rendering lives in VisitQueue and "+ Patient" in CheckInDialog —
  * both shared with the per-department Patients tabs.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Patient } from '../types'
@@ -97,6 +97,9 @@ export default function FrontDeskPage() {
   // "Mine" = visits assigned to me: the clinician's worklist lives in the
   // day view instead of a separate list elsewhere.
   const [mineOnly, setMineOnly] = useState(false)
+  // Find one person in a 200-patient day: client-side filter over the
+  // already-loaded rows (name or MRN).
+  const [queueFilter, setQueueFilter] = useState('')
 
   const [laneChoice, setLaneChoice] = useState<Lane>('queue')
   const lane: Lane = billingOnly ? 'cashier' : laneChoice
@@ -236,13 +239,22 @@ export default function FrontDeskPage() {
     setCheckInOpen(true)
   }
 
+  const queueNeedle = queueFilter.trim().toLowerCase()
+  const matchesQueueFilter = useCallback((v: Visit) => {
+    if (!queueNeedle) return true
+    const pt = visitPatient(v)
+    if (!pt) return false
+    return fullName(pt, nameFormat).toLowerCase().includes(queueNeedle)
+      || (pt.mrn ?? '').toLowerCase().includes(queueNeedle)
+  }, [queueNeedle, nameFormat])
+
   const filtered = useMemo(() => {
     let rows = visits
     if (deptFilter === GENERAL_QUEUE) rows = rows.filter(v => !v.department_id)
     else if (deptFilter !== 'all') rows = rows.filter(v => v.department_id === deptFilter)
     if (mineOnly && user) rows = rows.filter(v => v.assigned_to === user.id)
-    return rows
-  }, [visits, deptFilter, mineOnly, user])
+    return rows.filter(matchesQueueFilter)
+  }, [visits, deptFilter, mineOnly, user, matchesQueueFilter])
 
   const activeCount = filtered.filter(v => v.arrived_at && !v.finished_at).length
   const avgWait = averageWaitMinutes(filtered)
@@ -446,6 +458,17 @@ export default function FrontDeskPage() {
               Mine
             </button>
           )}
+          {lane === 'queue' && (
+            <div className="relative flex-1 min-w-[9rem] max-w-[14rem]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={queueFilter}
+                onChange={e => setQueueFilter(e.target.value)}
+                placeholder="Find in queue…"
+                className="h-9 pl-8 text-sm"
+              />
+            </div>
+          )}
 
           {/* Cashier lane: walk-up search (deposit, old debt — anyone, owing or not) */}
           {lane === 'cashier' && (
@@ -534,10 +557,15 @@ export default function FrontDeskPage() {
           visits={filtered}
           carriedOver={carriedOver.filter(v =>
             (deptFilter === 'all' || (deptFilter === GENERAL_QUEUE ? !v.department_id : v.department_id === deptFilter))
-            && (!mineOnly || v.assigned_to === user?.id))}
+            && (!mineOnly || v.assigned_to === user?.id)
+            && matchesQueueFilter(v))}
           profileNames={profileNames}
           loading={loading}
-          emptyLabel={isToday ? 'No patients today yet' : `No visits booked for ${dayLabel(dayOffset).toLowerCase()}`}
+          emptyLabel={
+            queueNeedle
+              ? `No one in the queue matches “${queueFilter.trim()}”`
+              : isToday ? 'No patients today yet' : `No visits booked for ${dayLabel(dayOffset).toLowerCase()}`
+          }
           emptyAction={
             isToday ? (
               <Button size="sm" variant="outline" onClick={() => openCheckIn('now')}>

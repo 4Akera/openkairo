@@ -1968,6 +1968,11 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   // Filter by the queue the order came from ("General", "Cardiology", …);
   // inpatient locations (building/floor) will be more origins later.
   const [originFilter, setOriginFilter] = useState<string | null>(null)
+  // Find one patient's pending orders — server search, so it reaches past
+  // the oldest-300 window; results still flow through origin/lane chips.
+  const [workSearch, setWorkSearch] = useState('')
+  const [searchOrders, setSearchOrders] = useState<OrderWithContext[] | null>(null)
+  const [statOnly, setStatOnly] = useState(false)
   const [nowMs, setNowMs]   = useState(() => Date.now())
   const [history, setHistory] = useState<PastEntry[]>([])
   // History is day-scoped at volume (2k results/day): default = today only,
@@ -2062,19 +2067,26 @@ export function DepartmentWork({ dept }: { dept: Department }) {
     () => new Set(deptBlockTypes.filter(bt => bt.built_in_type === 'consultation').map(bt => bt.id)),
     [deptBlockTypes],
   )
+  // Search results (when typed) replace the loaded queue as the base set;
+  // origin/lane chips and STAT keep working over whichever is active.
+  const searchActive = searchOrders !== null
+  const baseOrders = searchOrders ?? orders
   // Origin filter first (which queue the order came from), lanes within it
-  const origins = useMemo(() => originCounts(orders), [orders])
+  const origins = useMemo(() => originCounts(baseOrders), [baseOrders])
   const activeOrigin = originFilter && origins.some(o => o.origin === originFilter) ? originFilter : null
   const originOrders = useMemo(
-    () => (activeOrigin ? orders.filter(o => originOf(o) === activeOrigin) : orders),
-    [orders, activeOrigin],
+    () => (activeOrigin ? baseOrders.filter(o => originOf(o) === activeOrigin) : baseOrders),
+    [baseOrders, activeOrigin],
   )
   const lanes = useMemo(() => laneCounts(originOrders, btNameMap), [originOrders, btNameMap])
   const activeLane = lane && lanes.some(l => l.lane === lane) ? lane : null
-  const visibleOrders = useMemo(
-    () => sortWorklist(activeLane ? originOrders.filter(o => laneOf(o, btNameMap) === activeLane) : originOrders),
-    [originOrders, activeLane, btNameMap],
-  )
+  const statCount = useMemo(() => originOrders.filter(isStatOrder).length, [originOrders])
+  const activeStatOnly = statOnly && statCount > 0
+  const visibleOrders = useMemo(() => {
+    let rows = activeLane ? originOrders.filter(o => laneOf(o, btNameMap) === activeLane) : originOrders
+    if (activeStatOnly) rows = rows.filter(isStatOrder)
+    return sortWorklist(rows)
+  }, [originOrders, activeLane, btNameMap, activeStatOnly])
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     const quiet = opts?.quiet === true
@@ -2103,6 +2115,34 @@ export function DepartmentWork({ dept }: { dept: Department }) {
       if (!quiet) setLoading(false)
     }
   }, [dept.slug])
+
+  // Worklist search: patient tokens → their pending orders in this
+  // department, uncapped by the oldest-300 window. Depends on `orders` so
+  // live results refresh when the queue reloads (order completed/cancelled).
+  useEffect(() => {
+    const q = workSearch.trim()
+    if (view !== 'queue' || !q) { setSearchOrders(null); return }
+    let cancelled = false
+    const t = setTimeout(async () => {
+      const { data: pts } = await supabase.rpc('search_patients', {
+        p_tokens: q.split(/\s+/).filter(Boolean),
+        p_limit: 20,
+      })
+      if (cancelled) return
+      const ids = ((pts ?? []) as { id: string }[]).map(p => p.id)
+      if (ids.length === 0) { setSearchOrders([]); return }
+      const { data } = await supabase
+        .from('block_actions')
+        .select(WORK_QUEUE_SELECT)
+        .eq('action_type', dept.slug)
+        .not('status', 'in', '(completed,cancelled)')
+        .in('patient_id', ids)
+        .order('triggered_at', { ascending: true })
+        .limit(100)
+      if (!cancelled) setSearchOrders((data ?? []) as unknown as OrderWithContext[])
+    }, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [workSearch, view, dept.slug, orders])
 
   const dismissEntryModal = useCallback(
     (chargeMsg?: string | null) => {
@@ -2564,82 +2604,127 @@ export function DepartmentWork({ dept }: { dept: Department }) {
               </div>
             ) : (
               <>
-                {/* Origin filter — which queue the order came from (a ward/
-                    building/floor becomes just another origin later) */}
-                {origins.length > 1 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground shrink-0">From</span>
-                    <Select
-                      value={activeOrigin ?? '__all__'}
-                      onValueChange={(v: string) => setOriginFilter(v === '__all__' ? null : v)}
-                    >
-                      <SelectTrigger className="h-7 w-auto min-w-[130px] text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">All queues · {orders.length}</SelectItem>
-                        {origins.map(o => (
-                          <SelectItem key={o.origin} value={o.origin}>
-                            {o.origin} · {o.count}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                {/* Search + origin filter — which patient, then which queue
+                    the order came from (a ward/building/floor becomes just
+                    another origin later) */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-56">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      value={workSearch}
+                      onChange={e => setWorkSearch(e.target.value)}
+                      placeholder="Search patient in queue…"
+                      className="h-8 pl-8 text-xs"
+                    />
                   </div>
-                )}
-
-                {/* Lane chips — one per service, busiest first */}
-                {lanes.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setLane(null)}
-                      className={cn(
-                        'px-2.5 py-1 text-xs rounded-full border transition-colors',
-                        activeLane === null
-                          ? 'bg-primary text-primary-foreground border-primary font-medium'
-                          : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                      )}
-                    >
-                      All <span className="opacity-70">{originOrders.length}</span>
-                    </button>
-                    {lanes.map(l => (
-                      <button
-                        key={l.lane}
-                        type="button"
-                        onClick={() => setLane(prev => (prev === l.lane ? null : l.lane))}
-                        className={cn(
-                          'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
-                          activeLane === l.lane
-                            ? 'bg-primary text-primary-foreground border-primary font-medium'
-                            : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                        )}
+                  {searchActive && (
+                    <span className="text-[11px] text-muted-foreground">
+                      {baseOrders.length} pending for “{workSearch.trim()}”
+                    </span>
+                  )}
+                  {origins.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-muted-foreground shrink-0">From</span>
+                      <Select
+                        value={activeOrigin ?? '__all__'}
+                        onValueChange={(v: string) => setOriginFilter(v === '__all__' ? null : v)}
                       >
-                        {l.lane} <span className="opacity-70">{l.count}</span>
-                        {l.statCount > 0 && <Flame className="h-3 w-3 text-red-500" aria-label={`${l.statCount} STAT`} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="rounded-lg border bg-card divide-y divide-border/60 overflow-hidden">
-                  {visibleOrders.map(order => {
-                    const consult = isConsultOrder(order, consultBtIds)
-                    return (
-                      <OrderRow
-                        key={order.id}
-                        order={order}
-                        laneName={laneOf(order, btNameMap)}
-                        nowMs={nowMs}
-                        consult={consult}
-                        onOpen={() => (consult ? openConsult(order) : openOrder(order))}
-                        onCancel={(reason) => cancelOrder(order, reason)}
-                      />
-                    )
-                  })}
+                        <SelectTrigger className="h-7 w-auto min-w-[130px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All queues · {baseOrders.length}</SelectItem>
+                          {origins.map(o => (
+                            <SelectItem key={o.origin} value={o.origin}>
+                              {o.origin} · {o.count}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
 
-                {totalOpen > orders.length && (
+                {/* Lane chips — one per service, busiest first — plus STAT */}
+                {(lanes.length > 1 || statCount > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {lanes.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setLane(null)}
+                          className={cn(
+                            'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                            activeLane === null
+                              ? 'bg-primary text-primary-foreground border-primary font-medium'
+                              : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                          )}
+                        >
+                          All <span className="opacity-70">{originOrders.length}</span>
+                        </button>
+                        {lanes.map(l => (
+                          <button
+                            key={l.lane}
+                            type="button"
+                            onClick={() => setLane(prev => (prev === l.lane ? null : l.lane))}
+                            className={cn(
+                              'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
+                              activeLane === l.lane
+                                ? 'bg-primary text-primary-foreground border-primary font-medium'
+                                : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                            )}
+                          >
+                            {l.lane} <span className="opacity-70">{l.count}</span>
+                            {l.statCount > 0 && <Flame className="h-3 w-3 text-red-500" aria-label={`${l.statCount} STAT`} />}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {statCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setStatOnly(s => !s)}
+                        title="Only STAT orders"
+                        className={cn(
+                          'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
+                          activeStatOnly
+                            ? 'bg-red-600 text-white border-red-600 font-medium'
+                            : 'bg-background border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30',
+                        )}
+                      >
+                        <Flame className="h-3 w-3" />
+                        STAT <span className="opacity-70">{statCount}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {visibleOrders.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8 border border-dashed rounded-lg">
+                    {searchActive
+                      ? `No pending orders for “${workSearch.trim()}”.`
+                      : 'Nothing matches the current filters.'}
+                  </p>
+                ) : (
+                  <div className="rounded-lg border bg-card divide-y divide-border/60 overflow-hidden">
+                    {visibleOrders.map(order => {
+                      const consult = isConsultOrder(order, consultBtIds)
+                      return (
+                        <OrderRow
+                          key={order.id}
+                          order={order}
+                          laneName={laneOf(order, btNameMap)}
+                          nowMs={nowMs}
+                          consult={consult}
+                          onOpen={() => (consult ? openConsult(order) : openOrder(order))}
+                          onCancel={(reason) => cancelOrder(order, reason)}
+                        />
+                      )
+                    })}
+                  </div>
+                )}
+
+                {!searchActive && totalOpen > orders.length && (
                   <p className="text-center text-[11px] text-muted-foreground py-1">
                     Showing the oldest {orders.length} of {totalOpen} open orders — finish these to load more.
                   </p>
