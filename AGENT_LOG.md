@@ -1330,3 +1330,39 @@ tests (no past bookings in demo data to show visually).
 **Shared tree:** parallel session's consult/UI WIP untouched; committed
 only lib/visits + test, VisitQueue, FrontDeskPage, schema.sql (staged
 lines), docs.
+
+## 2026-08-09 — Iteration 51: default block privacy retired (step 3, first half)
+
+**Item:** Privacy pass step 3, the half whose files were free. The full
+item (per-block visible_to_roles removal) needs BlockWrapper.tsx, which
+the co-session has had in flight across two checks — shipping ONLY the
+picker removal would have left Timeline stamping invisible restrictions,
+so the safe decomposition is the reverse: kill the DEFAULTS end-to-end
+first (no invisible walls: the instance picker still exists to reveal
+and clear per-block roles), instance picker next.
+
+**What:** default_visible_to_roles is gone from every surface — the
+"Default view:" chip row on Block Library cards, both "Default Block
+Privacy" sections in BlockDefinitionModal (simple + advanced paths), and
+Timeline's stamp on new blocks (now always []). Stored def values are
+inert. The definition ADD-gate keeps its picker and is now titled "Can
+Add" in both places (it always gated adding, never viewing — the old
+"Role Visibility" label was the misnomer flagged in the privacy review).
+Save payload still passes default_visible_to_roles through unchanged, so
+no def rows are silently mutated. Net: one privacy concept fully
+removed, zero schema change.
+
+**Checks:** tsc --build clean (co-session's tree clean too this time),
+eslint clean on the three files, 209/209 tests. Browser (own preview
+:59017, admin): Block Library custom-block card expands to a single
+"Can add:" row — "Default view:" gone; built-in Note edit modal sections
+are DISPLAY/BILLING/ACCESS/DEPARTMENT ROUTING/CAN ADD — "Default Block
+Privacy" gone (verified via dialog innerText probe; portal dialogs don't
+show in get_page_text). Commit 869ca10, explicit 3-file list.
+
+**Step 4 note:** design refined with the user this session — "Care
+team" label rejected (over-promises: involved nurses aren't in the
+gate; auto-membership can't bootstrap). Revised shape: Everyone /
+Sensitive + break-the-glass in ONE pass (sealed-but-visible, one-line
+logged reason → encounter_audit_log; restricted → Sensitive migration).
+Recorded in the backlog; still awaiting the user's explicit go.

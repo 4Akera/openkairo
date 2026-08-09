@@ -61,10 +61,21 @@ surfaces. Sequence agreed with user:
       block menu, default_visible_to_roles leaves Settings; columns stay
       dormant). Mask + encounter visibility cover the need; kills silent
       different-staff-see-different-charts defaults.
-- [ ] Encounter visibility → two states (Everyone / Care team) replacing
-      restricted + role picker; break-the-glass (sealed-but-visible, open
-      with a logged reason) as the power follow-up. Ask user before
-      building this one.
+      (2026-08-09 — HALF DONE: default_visible_to_roles fully retired —
+      Settings pickers gone from Block Library card + both modal sections,
+      Timeline stamps [] on new blocks, add-gate retitled "Can Add".
+      REMAINING: instance role picker in BlockWrapper's block menu +
+      staged removal of the instance-roles arm in block_staff_access —
+      BlockWrapper.tsx was the co-session's live WIP, retry when free.)
+- [ ] Encounter visibility → two states — Everyone / Sensitive — WITH
+      break-the-glass in the same pass (design refined with user
+      2026-08-09: "Care team" label rejected as over-promising — nurses
+      involved in care aren't in the gate, and auto-membership can't
+      bootstrap since you can't document on what you can't open; so the
+      sealed tier makes no membership claim and everyone else opens
+      through the glass with a one-line logged reason in
+      encounter_audit_log; restricted → Sensitive on migration, a
+      narrowing). AWAITING explicit user go before building.
 
 ### Departments are the unit (user-approved 2026-08-08): capability flavors
 One departments table is the whole org model — a department composes
