@@ -488,7 +488,7 @@ export default function PatientPage() {
                   </p>
                 </div>
               )}
-              {upcoming.length === 0 && history.length === 0 ? (
+              {upcoming.length === 0 && history.length === 0 && sealedEncs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
                   <Activity className="h-10 w-10 opacity-20" />
                   <p className="text-sm">No visits yet for this patient</p>

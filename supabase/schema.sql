@@ -1136,6 +1136,9 @@ drop policy if exists "update_block_defs"                on block_definitions;
 drop policy if exists "delete_block_defs"                on block_definitions;
 -- blocks
 drop policy if exists "block_staff_access"               on blocks;
+-- Dead patient-portal leftover found live on the remote 2026-08-09 (portal_visible
+-- + a 'patient' role neither of which the current app has) — keep it dropped.
+drop policy if exists "block_portal_select"              on blocks;
 drop policy if exists "block_delete_restrict"            on blocks;
 -- block sub-tables
 drop policy if exists "auth_all_block_entries"           on block_entries;
@@ -2287,6 +2290,12 @@ insert into storage.buckets (id, name, public) values ('block-media',    'block-
 insert into storage.buckets (id, name, public) values ('patient-photos', 'patient-photos', false) on conflict (id) do update set public = false;
 insert into storage.buckets (id, name, public) values ('patient-docs',   'patient-docs',   false) on conflict (id) do nothing;
 
+-- Legacy broad policies found live on the remote 2026-08-09 — permissive
+-- policies OR together, so "public read block-media" alone would bypass the
+-- attachment-derived wall below. Keep them dropped.
+drop policy if exists "public read block-media" on storage.objects;
+drop policy if exists "auth upload block-media" on storage.objects;
+drop policy if exists "auth delete block-media" on storage.objects;
 drop policy if exists "block_media_insert"    on storage.objects;
 drop policy if exists "block_media_select"    on storage.objects;
 drop policy if exists "block_media_update"    on storage.objects;
