@@ -19,6 +19,7 @@ const SettingsPage  = lazy(() => import('./pages/SettingsPage'))
 const BillingPage    = lazy(() => import('./pages/BillingPage'))
 const FrontDeskPage  = lazy(() => import('./pages/FrontDeskPage'))
 const DepartmentPage = lazy(() => import('./pages/DepartmentPage'))
+const WardsPage      = lazy(() => import('./pages/WardsPage'))
 
 function PageFallback() {
   return (
@@ -100,6 +101,7 @@ export default function App() {
               <Route index element={<DeptAwareIndex />} />
               <Route path="frontdesk" element={<Navigate to="/" replace />} />
               <Route path="dept/:slug" element={<DepartmentPage />} />
+              <Route path="wards" element={<WardsPage />} />
               <Route path="patients" element={<DashboardPage />} />
               <Route path="patients/:patientId" element={<PatientPage />} />
               <Route path="settings" element={<SettingsPage />} />

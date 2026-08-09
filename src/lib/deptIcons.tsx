@@ -5,7 +5,7 @@
  */
 import {
   Building2, TestTube, Camera, Pill, HeartPulse, Brain,
-  Stethoscope, Activity, Users, FlaskConical,
+  Stethoscope, Activity, Users, FlaskConical, BedDouble, Baby,
 } from 'lucide-react'
 
 const DEPT_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -19,6 +19,8 @@ const DEPT_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>>
   'activity':      Activity,
   'users':         Users,
   'flask-conical': FlaskConical,
+  'bed':           BedDouble,
+  'baby':          Baby,
 }
 
 export function deptIconComponent(slug: string): React.ComponentType<{ className?: string }> {

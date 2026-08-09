@@ -1832,3 +1832,73 @@ to re-verify Vitals fill against the real model when it lands.
 **Shared tree:** co-session is mid-wards-build (App/Sidebar/queues/
 visits/DepartmentWork/WardsPage all dirty) — committed ONLY my five
 files + docs; the scripts/ dir added file-by-file, not wholesale.
+
+## 2026-08-09 — Iteration 64: wards shipped — census, admit/discharge, Today exclusions (user-directed)
+
+**User asked (mid-session):** more departments/clinics + pharmacy with
+roles, "build in pt ward management", complete demo data for every
+capability — on top of the full data reset ("swipe all data, make good
+mock data") done earlier this session.
+
+**Data reset (DB only, no repo change):** full snapshot of the old rows
+into remote schema `backup_20260809` first; then wiped all transactional
+data (159 patients / 266 encounters / 835 blocks and every dependent
+row) and reseeded a coherent demo org: 48 patients (meds, allergies,
+problems, insurance), 55 encounters spanning every surface — live
+queues (General / Cardiology / Pediatrics, referral chain, wait
+escalation), bookings, carried-over, Loose ends, no-shows, history,
+2 sensitive records — lab worklist (10 open, 3 STAT, one 1-day-old,
+6 completed today incl. custom-analyte HbA1c), radiology (5 open,
+reports with findings/impression), consults (2 pending, 1 answered,
+result-block linkage), money (cashier Today lane, insurance-pending,
+historic debtors, one credit, 670 PLN collected today across three
+methods). Junk config cleaned (Tes123/hnsda/Namo-XIZ etc.), facility
+renamed Kairo Medical Centre, consult/procedure service items and two
+real encounter templates added. Seeding needed the blocks role-gate
+triggers disabled per transaction (no auth.uid() on the MCP connection).
+
+**Org expansion:** Pediatrics clinic queue, Pharmacy department with a
+Dispensing service (order = Medications block → entry = Pharmacy
+Fulfillment, auto dispensing fee), Medical Ward (12 beds) + Surgical
+Ward (8) as kind='ward' rows; roles pharmacist / cardiologist /
+pediatrician (specialists as physician children via role_parents, perms
+copied); four demo staff accounts cloned from the seed pattern (same
+demo password hash): Ewa Nowicka, Dr. Anna Lis, Dr. Karol Wanat,
+Joanna Krupa RN; memberships wired. Ward demo data: 6 inpatients
+(day 1–5, beds, ward rounds as Progress Notes, inpatient meds, nurse
+note entries, op note, pre-op STAT coag + hip X-ray with report),
+1 discharged admission with a full Discharge Note; pharmacy queue
+(3 pending, 1 in-progress, 2 dispensed today with fulfillment blocks).
+
+**Ward UI (the code half — DDL was applied in iter 60):**
+- `lib/wards.ts` (+11 tests): admissionDayN, occupancyLabel,
+  groupCensus, fetchWards/fetchCensus, admitEncounter,
+  dischargeEncounter — discharge is the ONE ending, ward flavor:
+  journey ends; record closes unless orders are in flight (then it
+  waits in Loose ends, same as queue Done).
+- `WardsPage` (/wards): census grouped by ward, occupancy "4 / 12",
+  bed + day-n badges (amber ≥ day 8), Open → the SAME encounter,
+  two-tap Discharge, Admit dialog (patient search → continues their
+  open encounter or starts one — one record, clinic to ward).
+- `isWard` in lib/queues (explicit kind check — a ward can never
+  present as a queue even with stray flags); deptSummary says
+  "Ward · 12 beds"; sidebar/mobile-nav Wards entry appears once a ward
+  exists (useHasWards — creating the first ward IS the toggle); ward
+  depts excluded from department nav; bed/baby icons registered.
+- Today exclusions in lib/visits: day list + carried-over skip admitted
+  encounters, and sweepStaleJourneys' auto-finish arm gained
+  `.is('ward_id', null)` — proven necessary live: the old bundle's
+  sweep auto-"finished" the day-5 HF inpatient mid-build (restored).
+
+**Verification:** tsc --build clean, eslint clean, 247/247 tests (11
+new). Browser (shared dev server, HMR): Wards census renders both
+wards with 6 patients, day counts and beds correct; Today shows 12 in
+queue incl. both peds arrivals, carried-over holds only the 2 real
+outpatients (admitted no longer leak in); sidebar gained Wards +
+Pharmacy (badge 4); RLS spot-checks passed as nurse, billing and
+clinician identities (privates hidden, ledger role-gated).
+
+**Left for a future pass:** "Finish visit" should read "Discharge" on
+an admitted encounter (EncounterPage was the co-session's live WIP —
+stayed off it); Settings CRUD for creating wards; ward as a worklist
+origin label.

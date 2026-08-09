@@ -141,6 +141,10 @@ export interface Department {
   can_receive_orders: boolean
   can_create_direct: boolean
   can_receive_patients: boolean
+  /** 'ward' = inpatient location (census, beds) — never a queue or work view */
+  kind?: 'unit' | 'ward'
+  /** Optional bed count for census occupancy ("4 / 12") — wards only */
+  capacity?: number | null
   active: boolean
   sort_order: number
   created_by: string | null
@@ -328,6 +332,11 @@ export interface Encounter {
   stage?: string | null
   reason?: string | null
   referred_from_encounter_id?: string | null
+  // ── Admission is a PHASE of the same encounter (wards) ──
+  // ward_id set + finished_at null = in a bed · bed is free text
+  ward_id?: string | null
+  admitted_at?: string | null
+  bed?: string | null
   created_profile?: { full_name: string } | null
   assigned_profile?: { full_name: string } | null
 }

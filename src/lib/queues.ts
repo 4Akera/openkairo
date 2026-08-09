@@ -7,18 +7,23 @@
  */
 import type { Department } from '../types'
 
+/** Ward = inpatient location. Explicit discriminator — never inferred from
+ * absent capabilities, so a ward can never present as a queue or work view. */
+export const isWard = (d: Pick<Department, 'kind'>) => d.kind === 'ward'
+
 export const isQueueDept = (d: Department) =>
-  !!d.can_receive_patients && !d.can_receive_orders && !d.can_create_direct
+  !isWard(d) && !!d.can_receive_patients && !d.can_receive_orders && !d.can_create_direct
 
 /**
  * Plain-language one-liner for a department row in Settings — derived from
  * capabilities, so the row explains itself without capability checkboxes.
  */
 export function deptSummary(
-  d: Pick<Department, 'can_receive_orders' | 'can_create_direct' | 'can_receive_patients'>,
+  d: Pick<Department, 'can_receive_orders' | 'can_create_direct' | 'can_receive_patients' | 'kind' | 'capacity'>,
   serviceCount: number,
   consultServiceCount = 0,
 ): string {
+  if (isWard(d)) return d.capacity ? `Ward · ${d.capacity} beds` : 'Ward'
   const svc = `${serviceCount} ${serviceCount === 1 ? 'service' : 'services'}`
   const consultsOnly = consultServiceCount > 0 && consultServiceCount === serviceCount
   const parts: string[] = []

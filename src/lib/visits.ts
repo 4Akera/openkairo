@@ -47,6 +47,7 @@ export function referralSourceLabel(v: Pick<Visit, 'referred_from_encounter_id' 
 /**
  * All of a day's journey encounters: arrived that day, or booked for it.
  * Finished ones stay included so the front desk sees the whole day.
+ * Admitted patients live on the Wards census, not the day list.
  */
 export async function fetchTodayVisits(date: Date = new Date()): Promise<Visit[]> {
   const { start, end } = dayBoundsIso(date)
@@ -54,6 +55,7 @@ export async function fetchTodayVisits(date: Date = new Date()): Promise<Visit[]
     .from('encounters')
     .select(JOURNEY_SELECT)
     .is('cancelled_at', null)
+    .is('ward_id', null)
     .or(`arrived_at.gte.${start},and(scheduled_at.gte.${start},scheduled_at.lt.${end})`)
     .order('arrived_at', { ascending: true, nullsFirst: false })
   if (error) {
@@ -74,6 +76,7 @@ export async function fetchCarriedOverVisits(): Promise<Visit[]> {
     .from('encounters')
     .select(JOURNEY_SELECT)
     .is('cancelled_at', null)
+    .is('ward_id', null)
     .is('finished_at', null)
     .not('arrived_at', 'is', null)
     .lt('arrived_at', start)
@@ -269,6 +272,7 @@ export async function sweepStaleJourneys(): Promise<{ noShows: number; autoFinis
       .update({ finished_at: nowIso })
       .is('finished_at', null)
       .is('cancelled_at', null)
+      .is('ward_id', null) // an inpatient's long stay is not a stale journey
       .not('arrived_at', 'is', null)
       .lt('arrived_at', finishCutoff)
       .select('id'),

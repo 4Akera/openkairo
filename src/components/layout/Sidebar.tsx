@@ -3,10 +3,11 @@ import type { ComponentType } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { useDeptPendingCounts } from '../../hooks/useDeptPendingCounts'
+import { useHasWards } from '../../hooks/useHasWards'
 import { deptIconComponent } from '../../lib/deptIcons'
-import { isQueueDept } from '../../lib/queues'
+import { isQueueDept, isWard } from '../../lib/queues'
 import { cn } from '../../lib/utils'
-import { LogOut, Settings, Search, Sun, Moon, ClipboardList } from 'lucide-react'
+import { LogOut, Settings, Search, Sun, Moon, ClipboardList, BedDouble } from 'lucide-react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import Logo from '../Logo'
@@ -80,10 +81,13 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
   const { user, profile, signOut, inDept, myDepartments, hasBilling, permissions, hasRole } = useAuthStore()
   const isDeptOnly = inDept && permissions.length === 0
   const hasFrontDesk = hasRole('receptionist') || hasRole('physician') || hasRole('nurse') || hasRole('admin')
-  // Pure patient queues live on Today, not in the nav — only order-fulfilling
-  // departments get their own entry.
-  const navDepts = myDepartments.filter(d => !isQueueDept(d))
+  // Pure patient queues live on Today and wards on the census page, not in
+  // the nav — only order-fulfilling departments get their own entry.
+  const navDepts = myDepartments.filter(d => !isQueueDept(d) && !isWard(d))
   const deptCounts = useDeptPendingCounts(navDepts.map(d => d.slug))
+  // Wards nav appears once the org has a ward — creating one IS the toggle.
+  const hasWards = useHasWards()
+  const showWards = hasWards && !isDeptOnly && hasFrontDesk
 
   // The registry lives behind search (⌘K) and Today — no nav entry. Billing
   // staff get Today too: the Cashier lane there IS their surface (/billing
@@ -148,6 +152,7 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           {!isDeptOnly && showToday && (
             <NavItem to="/" end label="Today" icon={ClipboardList} />
           )}
+          {showWards && <NavItem to="/wards" label="Wards" icon={BedDouble} />}
 
           {/* One entry per membership department */}
           {navDepts.length > 0 && (
@@ -267,6 +272,26 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
             <Search className="h-5 w-5" />
             <span className="text-xs font-medium">Search</span>
           </button>
+        )}
+
+        {/* Wards — census page, same gate as the desktop entry */}
+        {showWards && (
+          <NavLink
+            to="/wards"
+            className={({ isActive }) =>
+              cn(
+                'flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
+                isActive ? 'text-white' : 'text-slate-500',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <BedDouble className={cn('h-5 w-5', isActive && 'text-blue-400')} />
+                <span className="text-xs font-medium">Wards</span>
+              </>
+            )}
+          </NavLink>
         )}
 
         {/* Departments before Settings — day work first, config last */}
