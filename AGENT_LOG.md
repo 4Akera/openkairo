@@ -1765,3 +1765,32 @@ Michalski's demo encounter (physician can't hard-delete; harmless).
 **Next:** ASR half (local Whisper/MedASR endpoint behind useDictation)
 once the user answers the dictation-language question; wards UI build
 is queued behind it (DDL live since iteration 60).
+
+## 2026-08-09 — Iteration 63: worklist filters compressed to one row (user report)
+
+**Why now:** direct user report — "UI filters in receiving dept are
+taking space." The queue view stacked THREE full-width control rows
+(search; "From" origin chips; lane/STAT/status chips) ≈120px before
+the first order. On a lab screen the orders are the point; filters
+are occasional tools.
+
+**What:** ONE wrapping filter row in DepartmentWork's queue view —
+compact search (w-44, h-7), origins collapsed from a chips row into
+a small native "From" select ("All queues (N)" / per-origin counts;
+the volume-pass backlog spec actually said *select* — the chips were
+an embellishment), then the untouched lane/STAT/Not-started/
+In-progress chips flowing inline; the "N pending for query" hint
+rides the same row only while searching. No behavior change, no new
+concepts; History was already one row.
+
+**Verification:** tsc --build clean, eslint clean, 247/247 tests.
+Browser (Lab demo login, own preview :63178 — co-session's server
+holds 5173): Radiology queue shows search + From select + STAT +
+status chips on one line with rows starting directly below; picking
+"Cardiology (1)" filters to the one order and subset-empty chips
+hide; search "priya" → inline "1 pending" hint + matching row.
+Console shows a transient WardsPage ReferenceError from the
+co-session's in-flight wards work (their files, not touched here).
+
+**Next:** nothing pending on this item; wards UI + ASR follow-ups
+unchanged.

@@ -2609,144 +2609,120 @@ export function DepartmentWork({ dept }: { dept: Department }) {
               </div>
             ) : (
               <>
-                {/* Search + origin filter — which patient, then which queue
-                    the order came from (a ward/building/floor becomes just
-                    another origin later) */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative w-56">
+                {/* ONE filter row — search, origin select, lane/STAT/status
+                    chips; wraps on narrow screens. The queue gets the
+                    vertical space, not the controls. A ward/building/floor
+                    becomes just another origin later. */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="relative w-44 shrink-0">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                     <Input
                       value={workSearch}
                       onChange={e => setWorkSearch(e.target.value)}
-                      placeholder="Search patient in queue…"
-                      className="h-8 pl-8 text-xs"
+                      placeholder="Search patient…"
+                      className="h-7 pl-8 text-xs"
                     />
                   </div>
+                  {origins.length > 1 && (
+                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
+                      From
+                      <select
+                        value={activeOrigin ?? ''}
+                        onChange={e => setOriginFilter(e.target.value || null)}
+                        className="h-7 px-2 text-xs rounded-md border border-border bg-background text-foreground"
+                        title="Filter by the queue the orders came from"
+                      >
+                        <option value="">All queues ({baseOrders.length})</option>
+                        {origins.map(o => (
+                          <option key={o.origin} value={o.origin}>{o.origin} ({o.count})</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {lanes.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setLane(null)}
+                        className={cn(
+                          'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                          activeLane === null
+                            ? 'bg-primary text-primary-foreground border-primary font-medium'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                        )}
+                      >
+                        All <span className="opacity-70">{originOrders.length}</span>
+                      </button>
+                      {lanes.map(l => (
+                        <button
+                          key={l.lane}
+                          type="button"
+                          onClick={() => setLane(prev => (prev === l.lane ? null : l.lane))}
+                          className={cn(
+                            'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
+                            activeLane === l.lane
+                              ? 'bg-primary text-primary-foreground border-primary font-medium'
+                              : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                          )}
+                        >
+                          {l.lane} <span className="opacity-70">{l.count}</span>
+                          {l.statCount > 0 && <Flame className="h-3 w-3 text-red-500" aria-label={`${l.statCount} STAT`} />}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                  {statCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setStatOnly(s => !s)}
+                      title="Only STAT orders"
+                      className={cn(
+                        'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
+                        activeStatOnly
+                          ? 'bg-red-600 text-white border-red-600 font-medium'
+                          : 'bg-background border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30',
+                      )}
+                    >
+                      <Flame className="h-3 w-3" />
+                      STAT <span className="opacity-70">{statCount}</span>
+                    </button>
+                  )}
+                  {statusTally.notStarted > 0 && statusTally.inProgress > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter(f => (f === 'pending' ? 'all' : 'pending'))}
+                        title="Only orders nobody has started"
+                        className={cn(
+                          'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                          statusFilter === 'pending'
+                            ? 'bg-primary text-primary-foreground border-primary font-medium'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                        )}
+                      >
+                        Not started <span className="opacity-70">{statusTally.notStarted}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter(f => (f === 'in_progress' ? 'all' : 'in_progress'))}
+                        title="Only orders someone already picked up"
+                        className={cn(
+                          'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                          statusFilter === 'in_progress'
+                            ? 'bg-primary text-primary-foreground border-primary font-medium'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                        )}
+                      >
+                        In progress <span className="opacity-70">{statusTally.inProgress}</span>
+                      </button>
+                    </>
+                  )}
                   {searchActive && (
                     <span className="text-[11px] text-muted-foreground">
                       {baseOrders.length} pending for “{workSearch.trim()}”
                     </span>
                   )}
                 </div>
-
-                {/* Origin chips — which queue the orders came from ("the
-                    cardio queue's tests"); a ward becomes another origin */}
-                {origins.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground shrink-0">From</span>
-                    <button
-                      type="button"
-                      onClick={() => setOriginFilter(null)}
-                      className={cn(
-                        'px-2.5 py-1 text-xs rounded-full border transition-colors',
-                        activeOrigin === null
-                          ? 'bg-primary text-primary-foreground border-primary font-medium'
-                          : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                      )}
-                    >
-                      All queues <span className="opacity-70">{baseOrders.length}</span>
-                    </button>
-                    {origins.map(o => (
-                      <button
-                        key={o.origin}
-                        type="button"
-                        onClick={() => setOriginFilter(prev => (prev === o.origin ? null : o.origin))}
-                        className={cn(
-                          'px-2.5 py-1 text-xs rounded-full border transition-colors',
-                          activeOrigin === o.origin
-                            ? 'bg-primary text-primary-foreground border-primary font-medium'
-                            : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                        )}
-                      >
-                        {o.origin} <span className="opacity-70">{o.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Lane chips — one per service, busiest first — plus STAT + status */}
-                {(lanes.length > 1 || statCount > 0 || (statusTally.notStarted > 0 && statusTally.inProgress > 0)) && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {lanes.length > 1 && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setLane(null)}
-                          className={cn(
-                            'px-2.5 py-1 text-xs rounded-full border transition-colors',
-                            activeLane === null
-                              ? 'bg-primary text-primary-foreground border-primary font-medium'
-                              : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                          )}
-                        >
-                          All <span className="opacity-70">{originOrders.length}</span>
-                        </button>
-                        {lanes.map(l => (
-                          <button
-                            key={l.lane}
-                            type="button"
-                            onClick={() => setLane(prev => (prev === l.lane ? null : l.lane))}
-                            className={cn(
-                              'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
-                              activeLane === l.lane
-                                ? 'bg-primary text-primary-foreground border-primary font-medium'
-                                : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                            )}
-                          >
-                            {l.lane} <span className="opacity-70">{l.count}</span>
-                            {l.statCount > 0 && <Flame className="h-3 w-3 text-red-500" aria-label={`${l.statCount} STAT`} />}
-                          </button>
-                        ))}
-                      </>
-                    )}
-                    {statCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setStatOnly(s => !s)}
-                        title="Only STAT orders"
-                        className={cn(
-                          'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
-                          activeStatOnly
-                            ? 'bg-red-600 text-white border-red-600 font-medium'
-                            : 'bg-background border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30',
-                        )}
-                      >
-                        <Flame className="h-3 w-3" />
-                        STAT <span className="opacity-70">{statCount}</span>
-                      </button>
-                    )}
-                    {statusTally.notStarted > 0 && statusTally.inProgress > 0 && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setStatusFilter(f => (f === 'pending' ? 'all' : 'pending'))}
-                          title="Only orders nobody has started"
-                          className={cn(
-                            'px-2.5 py-1 text-xs rounded-full border transition-colors',
-                            statusFilter === 'pending'
-                              ? 'bg-primary text-primary-foreground border-primary font-medium'
-                              : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                          )}
-                        >
-                          Not started <span className="opacity-70">{statusTally.notStarted}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStatusFilter(f => (f === 'in_progress' ? 'all' : 'in_progress'))}
-                          title="Only orders someone already picked up"
-                          className={cn(
-                            'px-2.5 py-1 text-xs rounded-full border transition-colors',
-                            statusFilter === 'in_progress'
-                              ? 'bg-primary text-primary-foreground border-primary font-medium'
-                              : 'bg-background border-border text-muted-foreground hover:border-primary/50',
-                          )}
-                        >
-                          In progress <span className="opacity-70">{statusTally.inProgress}</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
 
                 {visibleOrders.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8 border border-dashed rounded-lg">
