@@ -57,16 +57,17 @@ surfaces. Sequence agreed with user:
       needs a visible attachment row (owner arm covers upload-then-link) +
       storage_path index. (2026-08-08 — STAGED in schema.sql; remote apply
       awaits user approval)
-- [ ] Remove per-block visible_to_roles (UI first: role picker leaves the
+- [x] Remove per-block visible_to_roles (UI first: role picker leaves the
       block menu, default_visible_to_roles leaves Settings; columns stay
       dormant). Mask + encounter visibility cover the need; kills silent
       different-staff-see-different-charts defaults.
-      (2026-08-09 — HALF DONE: default_visible_to_roles fully retired —
-      Settings pickers gone from Block Library card + both modal sections,
-      Timeline stamps [] on new blocks, add-gate retitled "Can Add".
-      REMAINING: instance role picker in BlockWrapper's block menu +
-      staged removal of the instance-roles arm in block_staff_access —
-      BlockWrapper.tsx was the co-session's live WIP, retry when free.)
+      (2026-08-09 — DONE in two halves: defaults retired first — Settings
+      pickers gone from Block Library card + both modal sections, Timeline
+      stamps [] on new blocks, add-gate retitled "Can Add"; then the
+      instance picker left BlockWrapper's menu (privacy surface = mask +
+      share-to-record only) and the instance-roles arm left
+      block_staff_access — STAGED, applies with the rest on approval;
+      columns stay dormant, legacy values ignored once applied.)
 - [ ] Encounter visibility → two states — Everyone / Sensitive — WITH
       break-the-glass (design refined with user 2026-08-09: "Care team"
       label rejected as over-promising — nurses involved in care aren't

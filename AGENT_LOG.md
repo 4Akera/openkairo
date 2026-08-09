@@ -1596,3 +1596,31 @@ armed → confirmed → "Closed 99 records · 1 skipped (no access)", badge
 100 → 1 — the survivor is a private note only its physician can close,
 which is the design. First attempt taught me the 4s revert wins races
 against slow tooling — a human tapping twice is well inside it.
+
+## 2026-08-09 — Iteration 53: per-block roles fully retired (step 3 done)
+
+**Item:** Privacy pass step 3, second half — BlockWrapper.tsx finally
+free after three ticks of co-session WIP.
+
+**What:** The "Restrict to roles" section left the block menu: draft
+state, save handler, reset, error display, the amber Users indicator,
+and the menu-dot condition arm all deleted (~70 lines); the menu's
+privacy surface is now exactly mask + share-to-record. In schema.sql
+the instance-roles AND-arm left block_staff_access (STAGED with the
+other privacy-pass SQL; once applied, legacy blocks.visible_to_roles
+values become inert — column stays, no data deleted). The target model
+from the pass header is now real end-to-end in the UI: the encounter
+carries the wall; blocks inherit it.
+
+**Checks:** tsc --build clean, eslint clean, 216/216 tests. Browser
+(preview :59017, admin): block ⋯ menu shows Actions (pin, versions,
+duplicate, mask) + Privacy & Sharing (share toggle only) — role chips
+gone. One false alarm during verification: mid-HMR the encounter
+rendered empty and Add Block said "no block types available"; a hard
+reload restored everything — stale HMR from the co-session's parallel
+edits, not a regression (their demo-data testing also reshaped the
+encounter's blocks between my visits).
+
+**Remaining in the pass:** break-the-glass only (schema — stage + ask).
+Three staged schema pieces now await one user approval: predicate
+consolidation, sub-table RLS derivation, instance-arm removal.
