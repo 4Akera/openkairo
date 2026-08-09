@@ -129,11 +129,11 @@ page = census. Department pages must never become patient surfaces again.
       "Discharge" when admitted; Today queues and carried-over EXCLUDE
       admitted encounters. Beds stay free text — no beds table, no bed
       states. Creating the first ward IS the feature toggle — no settings
-      flag. (2026-08-09 — SQL STAGED as a commented section-20 block in
-      schema.sql: departments.kind check ('unit','ward') + capacity,
-      encounters ward_id / admitted_at / bed, partial census index.
-      REMOTE APPLY + the ward UI (census page, Admit/Discharge, Today
-      exclusions, isQueueDept kind check) await user approval.)
+      flag. (2026-08-09 — DDL APPLIED to remote with the approved
+      section-20 subset: departments.kind check ('unit','ward') +
+      capacity, encounters ward_id / admitted_at / bed, partial census
+      index. REMAINING: the ward UI — census page, Admit/Discharge,
+      Today exclusions, isQueueDept kind check — approved, next up.)
 
 ### Ground-up restructure (user-approved 2026-08-08): ENCOUNTER IS THE EVENT
 The encounter absorbs the visit: one object carries the clinical record AND
@@ -213,8 +213,8 @@ import + verify-release, listed below as future work).
       work only, ‹ day › nav like Today) + an MRN/name search box that
       queries the server for cross-day lookups; tab badge shows today's
       count, not the all-time total. Supporting index
-      block_actions(action_type, completed_at) goes into staged schema
-      section 20 (approval-gated). (2026-08-08 — historyLoaded flag also
+      block_actions(action_type, completed_at) APPLIED to remote
+      2026-08-09. (2026-08-08 — historyLoaded flag also
       fixes a pre-existing infinite refetch on empty history; badge is a
       head-count query refreshed with the queue)
 - [x] Origin filter on the worklist (user-requested 2026-08-08): "From"
@@ -309,8 +309,8 @@ shrinks the schema behind it (approval-gated).
       instant delete, invisible on touch; waited label escalates
       (waitSeverity: amber ≥30m, red ≥60m — the dept worklist pattern);
       Cashier lane stays fresh (30s poll + focus refetch; realtime
-      publication for charges/payments STAGED in schema section 20,
-      approval-gated) and shows "collected today" (payments since
+      publication for charges/payments APPLIED to remote 2026-08-09 —
+      the lane goes live-update) and shows "collected today" (payments since
       midnight); bookings arrive only on their own day
       (isArrivableBooking — past-day "Arrived" started a wait clock
       today against last week's visit); finished queue rows say the
@@ -335,11 +335,13 @@ shrinks the schema behind it (approval-gated).
       no concept removed; TODO left in the file header)
 - [ ] Drop the frozen legacy `visits` table and the /portal redirect
       (SCHEMA — ask user before dropping the table).
-      (2026-08-08 — /portal redirect REMOVED (catch-all covers it); drop
-      SQL + pg_trgm index STAGED as commented section 20 in schema.sql;
-      ONLY the remote `drop table` still awaits user approval)
-- [ ] pg_trgm index for patient name search at registry scale (SCHEMA —
-      ask user first).
+      (2026-08-08 — /portal redirect REMOVED (catch-all covers it);
+      2026-08-09 — user approved the REST of section 20 but HELD this
+      drop; SQL waits commented in schema section 21. Only an explicit
+      "drop visits" applies it — deletes legacy rows permanently.)
+- [x] pg_trgm index for patient name search at registry scale.
+      (2026-08-09 — applied to remote with the approved section-20
+      subset; extension lives in the `extensions` schema.)
 
 ### Simple power pass (highest priority)
 Simplify the endings and beginnings; add power through AI and closing the

@@ -2408,57 +2408,69 @@ create policy "encounter_insert" on encounters for insert with check (
 );
 
 -- ============================================================
--- 20. PENDING USER APPROVAL — staged, intentionally commented out
+-- 20. APPLIED 2026-08-09 — approved section-20 subset (live)
 -- ============================================================
--- The app no longer reads or writes the legacy `visits` table (journeys
--- live on encounters since section 19), and the /portal redirect is gone.
--- Uncomment and apply ONLY after the user approves dropping the table —
--- this deletes the migrated-from legacy rows permanently.
+-- User approved 2026-08-09; applied to remote as migrations
+-- section20_indexes_realtime_wards + move_pg_trgm_to_extensions.
+-- The legacy `visits` drop was explicitly HELD — see section 21.
+
+-- Patient name search at registry scale (500k+): trigram index feeding
+-- search_patients' ILIKE tokens.
+create extension if not exists pg_trgm with schema extensions;
+create index if not exists idx_patients_name_trgm on patients
+  using gin ((first_name || ' ' || coalesce(middle_name,'') || ' ' || last_name) gin_trgm_ops);
+
+-- Department History at 2k results/day: day-scoped completed-work query
+-- (action_type = dept, completed_at within one day, newest first).
+create index if not exists idx_block_actions_dept_completed
+  on block_actions (action_type, completed_at desc) where status = 'completed';
+
+-- Live Cashier lane: realtime on money tables so the lane updates the
+-- moment a charge lands or a payment is taken elsewhere.
+do $$ begin alter publication supabase_realtime add table charges;  exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table payments; exception when duplicate_object then null; end $$;
+
+-- WARDS (direction user-approved 2026-08-08; DDL applied 2026-08-09) —
+-- admission is a PHASE of the same encounter, never a separate inpatient
+-- record. A ward is a department flavor with an EXPLICIT discriminator
+-- (never inferred from absent capabilities — isQueueDept and every picker
+-- learn one honest `kind` check when the ward UI lands). Creating the
+-- first ward IS the feature toggle; beds stay free text (no beds table,
+-- no bed states); capacity is optional census garnish ("14/20"). Ward
+-- staffing = department_members, Settings CRUD and RLS come free with the
+-- table. Client rules shipping with the UI: Today's queues and
+-- carried-over EXCLUDE admitted encounters (ward_id set, not finished);
+-- "Finish visit" reads "Discharge" when admitted; census = open
+-- encounters grouped by ward with "day n" from admitted_at.
+alter table departments add column if not exists kind text not null default 'unit'
+  check (kind in ('unit','ward'));
+alter table departments add column if not exists capacity integer;
+
+alter table encounters add column if not exists ward_id uuid references departments(id) on delete set null;
+alter table encounters add column if not exists admitted_at timestamptz;
+alter table encounters add column if not exists bed text;
+
+-- Census query support: open admitted encounters by ward.
+create index if not exists idx_encounters_ward_open
+  on encounters (ward_id) where ward_id is not null and finished_at is null;
+
+-- ============================================================
+-- 21. PENDING USER APPROVAL — staged, intentionally commented out
+-- ============================================================
+-- Legacy `visits` drop: the app no longer reads or writes the table
+-- (journeys live on encounters since section 19). The user HELD this
+-- drop when approving the rest of section 20 (2026-08-09) — it deletes
+-- the migrated-from legacy rows permanently. Apply only on explicit
+-- approval.
 --
 -- drop table if exists visits cascade;
 --
--- Patient name search at registry scale (500k+): trigram index feeding
--- search_patients' ILIKE tokens. Safe (no data loss) but schema — same
--- approval gate applies.
---
--- create extension if not exists pg_trgm;
--- create index if not exists idx_patients_name_trgm on patients
---   using gin ((first_name || ' ' || coalesce(middle_name,'') || ' ' || last_name) gin_trgm_ops);
---
--- Department History at 2k results/day: day-scoped completed-work query
--- (action_type = dept, completed_at within one day, newest first).
---
--- create index if not exists idx_block_actions_dept_completed
---   on block_actions (action_type, completed_at desc) where status = 'completed';
---
--- Live Cashier lane: realtime on money tables so the lane updates the
--- moment a charge lands or a payment is taken elsewhere. Until applied,
--- the lane polls every 30s + refetches on window focus (FrontDeskPage).
---
--- do $$ begin alter publication supabase_realtime add table charges;  exception when duplicate_object then null; end $$;
--- do $$ begin alter publication supabase_realtime add table payments; exception when duplicate_object then null; end $$;
---
--- WARDS (user-approved direction 2026-08-08; staged 2026-08-09) — admission
--- is a PHASE of the same encounter, never a separate inpatient record. A
--- ward is a department flavor with an EXPLICIT discriminator (never
--- inferred from absent capabilities — isQueueDept and every picker learn
--- one honest `kind` check when the ward UI lands). Creating the first ward
--- IS the feature toggle; beds stay free text (no beds table, no bed
--- states); capacity is optional census garnish ("14/20"). Ward staffing =
--- department_members, Settings CRUD and RLS come free with the table.
--- Client rules shipping with the UI: Today's queues and carried-over
--- EXCLUDE admitted encounters (ward_id set, not finished); "Finish visit"
--- reads "Discharge" when admitted; census = open encounters grouped by
--- ward with "day n" from admitted_at.
---
--- alter table departments add column if not exists kind text not null default 'unit'
---   check (kind in ('unit','ward'));
--- alter table departments add column if not exists capacity integer;
---
--- alter table encounters add column if not exists ward_id uuid references departments(id) on delete set null;
--- alter table encounters add column if not exists admitted_at timestamptz;
--- alter table encounters add column if not exists bed text;
---
--- Census query support: open admitted encounters by ward.
--- create index if not exists idx_encounters_ward_open
---   on encounters (ward_id) where ward_id is not null and finished_at is null;
+-- ALSO PENDING (no statements here — the live text above IS the staged
+-- version): the privacy-pass policy SQL diverges from the REMOTE in three
+-- places awaiting one approval: (1) can_access_encounter predicate
+-- consolidation (encounter select/update, audit select, reassign RPC),
+-- (2) sub-table RLS deriving from parent-block visibility (block_entries /
+-- block_attachments / block_acks / block-media storage), (3) the
+-- block_staff_access instance visible_to_roles arm removal. Until applied,
+-- the remote enforces the old gates — legacy per-block role values are
+-- still honored even though the UI can no longer set them.

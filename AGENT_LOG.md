@@ -1624,3 +1624,36 @@ encounter's blocks between my visits).
 **Remaining in the pass:** break-the-glass only (schema — stage + ask).
 Three staged schema pieces now await one user approval: predicate
 consolidation, sub-table RLS derivation, instance-arm removal.
+
+## 2026-08-09 — Iteration 60: approved schema applied to remote (section-20 subset)
+
+**Why:** User answered the "what's next" assessment with "go w/ 1" —
+approving the staged section-20 schema. This was the single approval
+blocking five shipped-but-dormant improvements.
+
+**What:** Applied to remote (project ktbtvbuplfrngahsxmud) as migrations
+`section20_indexes_realtime_wards` + `move_pg_trgm_to_extensions`:
+pg_trgm + patients name trigram index (extension moved out of `public` —
+it pre-existed there, advisor 0014), block_actions history index,
+realtime publication for charges/payments (Cashier lane goes live),
+and the full WARDS DDL (departments.kind/capacity, encounters
+ward_id/admitted_at/bed, census index). The `visits` DROP was
+explicitly HELD per my own recommendation — destructive; stays
+commented in new schema section 21. schema.sql restructured: section
+20 is now the LIVE applied subset, 21 holds the pending pieces, incl.
+an honest note that the three privacy-pass policy rewrites (predicate,
+sub-tables, instance-arm) still await their own remote apply.
+
+**Verification:** post-apply SQL probe confirmed all 10 objects (3
+indexes, 5 columns, 2 publication tables); pg_extension shows pg_trgm
+in `extensions`. Security advisors: pre-existing warnings only, nothing
+new from this apply. No app code touched — tests/tsc not implicated.
+
+**Coordination:** co-session landed 16e27f5/8ba27c0/4d0f95b mid-turn —
+I dodged BlockWrapper (they did the roles-picker removal I'd scoped),
+waited for schema.sql to free, committed only my files.
+
+**Next:** wards UI build (census page, Admit/Discharge, Today
+exclusions, isQueueDept kind check) — DDL is live, item claimed in
+CLAUDE.md as next up. AI pilot model choice (Claude API vs self-hosted
+MedGemma) put to the user — hard stop holds until they pick.
