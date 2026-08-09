@@ -20,8 +20,9 @@ import {
 import {
   ArrowLeft, CheckCircle2, XCircle, Loader2, Footprints,
   Lock, Globe, ChevronDown, ShieldCheck, UserCircle, ClipboardList,
-  AlertTriangle, Search, Check, DollarSign, Ban, FileDown,
+  AlertTriangle, Search, Check, DollarSign, Ban, FileDown, Sparkles,
 } from 'lucide-react'
+import { AiHelperPanel } from '../components/encounter/AiHelperPanel'
 import PatientRecord from '../components/patient-record/PatientRecord'
 import Timeline, { type TimelineHandle } from '../components/timeline/Timeline'
 import { pushRecentEncounterRef, getRecentEncounterRefs } from '../lib/recentItems'
@@ -153,6 +154,7 @@ export default function EncounterPage() {
 
   // Export HTML
   const [exportOpen, setExportOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [exportIncludeChart, setExportIncludeChart] = useState(true)
   const [exportLoading, setExportLoading] = useState(false)
 
@@ -561,6 +563,17 @@ export default function EncounterPage() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setAiOpen(true)}
+              title="AI Helper — chat about this encounter (local model)"
+              className="h-9 w-9 sm:h-7 sm:w-auto gap-1 text-xs text-muted-foreground p-0 sm:px-2.5"
+            >
+              <Sparkles className="h-4 w-4 sm:h-3.5 sm:w-3.5 shrink-0" />
+              <span className="hidden sm:inline">AI</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => { setExportIncludeChart(true); setExportOpen(true) }}
               title="Export encounter as HTML"
               className="h-9 w-9 sm:h-7 sm:w-auto gap-1 text-xs text-muted-foreground p-0 sm:px-2.5"
@@ -899,6 +912,24 @@ export default function EncounterPage() {
           </div>
         </div>
       </div>
+
+      {/* AI Helper — local-model chat over this encounter */}
+      <AiHelperPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        patientId={patient.id}
+        patientLine={{
+          name: fullName(patient, nameFormat),
+          age: calcAge(patientDob) || null,
+          gender: patientGender,
+          mrn: patient.mrn,
+        }}
+        encounterLine={{
+          title: encounter.title,
+          reason: encounter.reason ?? null,
+          status: encounter.status,
+        }}
+      />
 
       {/* Export HTML */}
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>
