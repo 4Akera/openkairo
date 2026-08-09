@@ -70,11 +70,6 @@ function TemplateModal({
     [allRoles],
   )
 
-  const blockAddRoles = useMemo(
-    () => allRoles.filter((r) => r.permissions.includes('block.add')),
-    [allRoles],
-  )
-
   const setF = (patch: Partial<TemplateFormState>) => setForm((f) => ({ ...f, ...patch }))
 
   const toggleBlockDef = (def: BlockDefinition) => {
@@ -245,56 +240,23 @@ function TemplateModal({
                 </p>
               </div>
               <div className="flex gap-2">
-                {(['staff', 'restricted', 'private'] as const).map((opt) => (
+                {(['staff', 'private'] as const).map((opt) => (
                   <button
                     key={opt}
                     type="button"
-                    onClick={() => setF({ default_visibility: opt, default_visible_to_roles: opt !== 'restricted' ? [] : form.default_visible_to_roles })}
+                    onClick={() => setF({ default_visibility: opt, default_visible_to_roles: [] })}
                     className={cn(
                       'flex-1 text-xs py-1.5 rounded-lg border capitalize transition-colors',
-                      form.default_visibility === opt
+                      // Legacy 'restricted' templates highlight Sensitive
+                      (form.default_visibility === opt || (opt === 'private' && form.default_visibility === 'restricted'))
                         ? 'border-primary/60 bg-primary/10 text-primary font-medium'
                         : 'border-border hover:border-primary/30',
                     )}
                   >
-                    {opt === 'staff' ? 'All Staff' : opt === 'restricted' ? 'Restricted' : 'Private'}
+                    {opt === 'staff' ? 'Everyone' : 'Sensitive'}
                   </button>
                 ))}
               </div>
-              {form.default_visibility === 'restricted' && blockAddRoles.length > 0 && (
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-2">Roles that can view this encounter:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {blockAddRoles.map((role) => {
-                      const active = form.default_visible_to_roles.includes(role.slug)
-                      return (
-                        <label
-                          key={role.id}
-                          className={cn(
-                            'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors',
-                            active ? 'border-amber-500/60 bg-amber-50 text-amber-700 font-medium' : 'border-border hover:border-amber-300',
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            className="w-3 h-3"
-                            checked={active}
-                            onChange={(e) => {
-                              const curr = form.default_visible_to_roles
-                              setF({
-                                default_visible_to_roles: e.target.checked
-                                  ? [...curr, role.slug]
-                                  : curr.filter((s) => s !== role.slug),
-                              })
-                            }}
-                          />
-                          {role.name}
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
             </section>
 
             <Separator />

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { canAccessEncounter, type EncounterAccessInput } from '../encounterAccess'
+import {
+  canAccessEncounter, normalizeVisibility, visibilityLabel,
+  type EncounterAccessInput,
+} from '../encounterAccess'
 
 const ME = 'user-me'
 const OTHER = 'user-other'
@@ -58,5 +61,21 @@ describe('canAccessEncounter', () => {
   it('never matches null assignee/creator against a missing userId', () => {
     const anon = { userId: undefined, roleSlugs: ['physician'], canAddBlocks: true }
     expect(canAccessEncounter(enc({ visibility: 'private' }), anon)).toBe(false)
+  })
+})
+
+describe('two-state visibility mapping', () => {
+  it('labels staff as Everyone, everything else as Sensitive', () => {
+    expect(visibilityLabel('staff')).toBe('Everyone')
+    expect(visibilityLabel('private')).toBe('Sensitive')
+    expect(visibilityLabel('restricted')).toBe('Sensitive')
+    expect(visibilityLabel(null)).toBe('Sensitive')
+  })
+
+  it('normalizes legacy restricted (and unknowns) to private', () => {
+    expect(normalizeVisibility('staff')).toBe('staff')
+    expect(normalizeVisibility('private')).toBe('private')
+    expect(normalizeVisibility('restricted')).toBe('private')
+    expect(normalizeVisibility(undefined)).toBe('private')
   })
 })

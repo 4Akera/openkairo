@@ -7,7 +7,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, formatDayTime, formatMinutes, cn } from '../lib/utils'
 import { updateVisit } from '../lib/visits'
-import { canAccessEncounter } from '../lib/encounterAccess'
+import { canAccessEncounter, normalizeVisibility, type VisibilityValue } from '../lib/encounterAccess'
 import { useNow } from '../hooks/useNow'
 import { EncounterBill } from '../components/billing/EncounterBill'
 import { ConsultAnswerBanner } from '../components/ConsultAnswerBanner'
@@ -21,7 +21,7 @@ import {
 } from '../components/ui'
 import {
   ArrowLeft, CheckCircle2, XCircle, Loader2, Footprints,
-  Lock, Users, Globe, ChevronDown, ShieldCheck, UserCircle, ClipboardList,
+  Lock, Globe, ChevronDown, ShieldCheck, UserCircle, ClipboardList,
   AlertTriangle, Search, Check, DollarSign, Ban, FileDown,
 } from 'lucide-react'
 import PatientRecord from '../components/patient-record/PatientRecord'
@@ -33,13 +33,11 @@ import {
   fetchPatientChartForExport,
 } from '../lib/encounterHtmlExport'
 
-const VISIBILITY_OPTIONS = [
-  { value: 'staff',      label: 'All Staff',  Icon: Globe,  desc: 'Visible to everyone' },
-  { value: 'restricted', label: 'Restricted', Icon: Users,  desc: 'Selected roles only' },
-  { value: 'private',    label: 'Private',    Icon: Lock,   desc: 'Only me' },
+/** Two states; legacy 'restricted' rows display as Sensitive and converge to it on save. */
+const VISIBILITY_UI = [
+  { value: 'staff',   label: 'Everyone',  Icon: Globe, desc: 'Any clinical staff can open' },
+  { value: 'private', label: 'Sensitive', Icon: Lock,  desc: 'Assigned physician, creator & admins' },
 ] as const
-
-const ROLE_OPTIONS = ['physician', 'nurse', 'receptionist', 'admin']
 
 /** Ticking "in clinic Xm" label — isolated so only it re-renders each minute. */
 function InClinicLabel({ since }: { since: string }) {
@@ -69,8 +67,7 @@ export default function EncounterPage() {
 
   // Visibility popover state
   const [visPopoverOpen, setVisPopoverOpen] = useState(false)
-  const [editVisibility, setEditVisibility] = useState<'staff' | 'restricted' | 'private'>('staff')
-  const [editVisibleToRoles, setEditVisibleToRoles] = useState<string[]>([])
+  const [editVisibility, setEditVisibility] = useState<VisibilityValue>('staff')
   const [savingVis, setSavingVis] = useState(false)
 
   // Inline title edit + physician picker (in the header, no settings menu)
@@ -113,8 +110,7 @@ export default function EncounterPage() {
         if (ap) assignedProfile = ap
       }
       setEncounter({ ...enc, assigned_profile: assignedProfile })
-      setEditVisibility(enc.visibility ?? 'staff')
-      setEditVisibleToRoles(enc.visible_to_roles ?? [])
+      setEditVisibility(normalizeVisibility(enc.visibility))
     } else if (encounterId) {
       // enc is null — RLS blocked the fetch. Check if the user previously visited
       // this encounter (stored in sessionStorage); if so, access was revoked.
@@ -271,7 +267,8 @@ export default function EncounterPage() {
       .from('encounters')
       .update({
         visibility: editVisibility,
-        visible_to_roles: editVisibility === 'restricted' ? editVisibleToRoles : [],
+        // Always cleared — saving also converges legacy 'restricted' rows
+        visible_to_roles: [],
       })
       .eq('id', encounterId)
     if (!error) { await fetchData(); void timelineRef.current?.refreshAuditLog() }
@@ -419,9 +416,9 @@ export default function EncounterPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <Lock className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm font-medium">Access Restricted</p>
+        <p className="text-sm font-medium">Sensitive Encounter</p>
         <p className="text-xs text-muted-foreground text-center max-w-xs">
-          This encounter is private. Only the assigned physician and authorized staff can view it.
+          Only the assigned physician, the person who registered it, and admins can open this encounter.
         </p>
         <Button variant="outline" onClick={() => navigate(`/patients/${patientId}`)}>
           <ArrowLeft className="h-4 w-4" />
@@ -430,7 +427,8 @@ export default function EncounterPage() {
       </div>
     )
   }
-  const visOpt = VISIBILITY_OPTIONS.find(o => o.value === encounter.visibility) ?? VISIBILITY_OPTIONS[0]
+  // Legacy 'restricted' resolves to the Sensitive presentation
+  const visOpt = encounter.visibility === 'staff' ? VISIBILITY_UI[0] : VISIBILITY_UI[1]
   const VisIcon = visOpt.Icon
   // The patient is physically here: closing doubles as Finish → checkout
   const inClinic = !!encounter.arrived_at && !encounter.finished_at
@@ -563,17 +561,15 @@ export default function EncounterPage() {
                 size="sm"
                 onClick={() => {
                   if (canManage) {
-                    setEditVisibility(encounter.visibility ?? 'staff')
-                    setEditVisibleToRoles(encounter.visible_to_roles ?? [])
+                    setEditVisibility(normalizeVisibility(encounter.visibility))
                     setVisPopoverOpen(o => !o)
                   }
                 }}
                 title={canManage ? 'Manage visibility & privacy' : `Visibility: ${visOpt.label}`}
                 className={cn(
                   'h-9 w-9 sm:h-7 sm:w-auto gap-1 text-xs p-0 sm:px-2.5',
-                  encounter.visibility === 'private'    && 'border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:border-rose-900',
-                  encounter.visibility === 'restricted' && 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-900',
-                  encounter.visibility === 'staff'      && 'text-muted-foreground',
+                  encounter.visibility !== 'staff' && 'border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:border-rose-900',
+                  encounter.visibility === 'staff' && 'text-muted-foreground',
                   !canManage                  && 'cursor-default pointer-events-none',
                 )}
               >
@@ -605,7 +601,7 @@ export default function EncounterPage() {
                       <div className="space-y-1">
                         <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-0.5">Staff Visibility</p>
                         <div className="space-y-0.5">
-                          {VISIBILITY_OPTIONS.map(opt => (
+                          {VISIBILITY_UI.map(opt => (
                             <button
                               key={opt.value}
                               type="button"
@@ -635,44 +631,13 @@ export default function EncounterPage() {
                         </div>
                       </div>
 
-                      {/* Role chips — only when restricted */}
-                      {editVisibility === 'restricted' && (
-                        <div className="space-y-1.5 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 px-3 py-2.5">
-                          <p className="text-[11px] font-medium text-amber-800 dark:text-amber-400">Accessible to these roles:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {ROLE_OPTIONS.map(role => (
-                              <button
-                                key={role}
-                                type="button"
-                                onClick={() =>
-                                  setEditVisibleToRoles(prev =>
-                                    prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role],
-                                  )
-                                }
-                                className={cn(
-                                  'text-[11px] px-2.5 py-1 rounded-full border capitalize transition-all font-medium',
-                                  editVisibleToRoles.includes(role)
-                                    ? 'border-amber-400 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
-                                    : 'border-border text-muted-foreground hover:border-amber-300 hover:text-amber-700',
-                                )}
-                              >
-                                {role}
-                              </button>
-                            ))}
-                          </div>
-                          {editVisibleToRoles.length === 0 && (
-                            <p className="text-[10px] text-amber-600 dark:text-amber-500 italic">Select at least one role</p>
-                          )}
-                        </div>
-                      )}
-
                     </div>
                     {/* Footer */}
                     <div className="px-3 pb-3 flex justify-end gap-1.5">
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setVisPopoverOpen(false)}>
                         Cancel
                       </Button>
-                      <Button size="sm" className="h-7 text-xs" onClick={handleSaveVisibility} disabled={savingVis || (editVisibility === 'restricted' && editVisibleToRoles.length === 0)}>
+                      <Button size="sm" className="h-7 text-xs" onClick={handleSaveVisibility} disabled={savingVis}>
                         {savingVis && <Loader2 className="h-3 w-3 animate-spin" />}
                         Save
                       </Button>

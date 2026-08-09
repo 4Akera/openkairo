@@ -27,6 +27,28 @@ export type EncounterAccessContext = {
   canAddBlocks: boolean
 }
 
+/**
+ * The two visibility states any surface may offer. 'restricted' is legacy —
+ * nothing creates it anymore; existing rows keep their role lists honored
+ * by canAccessEncounter and display as Sensitive.
+ */
+export const VISIBILITY_OPTIONS = [
+  { value: 'staff',   label: 'Everyone',  desc: 'Any clinical staff can open' },
+  { value: 'private', label: 'Sensitive', desc: 'Assigned physician, creator & admins' },
+] as const
+
+export type VisibilityValue = (typeof VISIBILITY_OPTIONS)[number]['value']
+
+/** Display label for any stored visibility, legacy 'restricted' included. */
+export function visibilityLabel(v: string | null | undefined): string {
+  return v === 'staff' ? 'Everyone' : 'Sensitive'
+}
+
+/** Collapse a stored visibility (template default or encounter row) to an offerable state. */
+export function normalizeVisibility(v: string | null | undefined): VisibilityValue {
+  return v === 'staff' ? 'staff' : 'private'
+}
+
 export function canAccessEncounter(
   enc: EncounterAccessInput,
   ctx: EncounterAccessContext,

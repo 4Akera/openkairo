@@ -7,7 +7,10 @@ import { useSettingsStore as useBillingSettings } from '../stores/settingsStore'
 import { useBillingStore } from '../stores/billingStore'
 import type { Patient, Encounter, EncounterTemplate, UserBlockTemplate } from '../types'
 import { fullName, formatDateTime, formatDayTime, formatMinutes, minutesBetween, cn } from '../lib/utils'
-import { canAccessEncounter } from '../lib/encounterAccess'
+import {
+  canAccessEncounter, normalizeVisibility, visibilityLabel,
+  VISIBILITY_OPTIONS, type VisibilityValue,
+} from '../lib/encounterAccess'
 import {
   Button,
   Badge,
@@ -25,7 +28,7 @@ import {
 import { SearchSelect } from '../components/ui/SearchSelect'
 import {
   ArrowLeft, Plus, ChevronRight, Loader2, Activity, Clock,
-  CheckCircle2, XCircle, LayoutTemplate, Lock, Users, Zap, ClipboardList, UserCircle,
+  CheckCircle2, XCircle, LayoutTemplate, Lock, Zap, ClipboardList, UserCircle,
   Search, X, DollarSign, Trash2, AlertTriangle, CalendarClock, Footprints,
 } from 'lucide-react'
 import PatientRecord from '../components/patient-record/PatientRecord'
@@ -46,8 +49,7 @@ export default function PatientPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   // One-tap by default: title/template/visibility live behind this expander
   const [showEncOptions, setShowEncOptions] = useState(false)
-  const [visibility, setVisibility] = useState<'staff' | 'restricted' | 'private'>('staff')
-  const [visibleToRoles, setVisibleToRoles] = useState<string[]>([])
+  const [visibility, setVisibility] = useState<VisibilityValue>('staff')
   const [assignedTo, setAssignedTo] = useState<string>('')
   const [assignError, setAssignError] = useState(false)
   const [createdForOtherName, setCreatedForOtherName] = useState<string | null>(null)
@@ -185,7 +187,6 @@ export default function PatientPage() {
     setTitle('')
     setSelectedTemplate(null)
     setVisibility('private')
-    setVisibleToRoles([])
     setShowEncOptions(false)
     setAssignedTo(roleSlugs.includes('physician') && user ? user.id : '')
     setAssignError(false)
@@ -220,8 +221,8 @@ export default function PatientPage() {
     setSelectedTemplate(t)
     setBlockContentOverrides({})
     if (t) {
-      setVisibility(t.default_visibility ?? 'staff')
-      setVisibleToRoles(t.default_visible_to_roles ?? [])
+      // Legacy 'restricted' template defaults collapse to Sensitive
+      setVisibility(normalizeVisibility(t.default_visibility))
       setTitle(prev => prev.trim() === '' ? t.name : prev)
     } else {
       // Cleared — wipe the title only if it still matches a template name
@@ -254,7 +255,7 @@ export default function PatientPage() {
         title: title.trim() || null,
         status: 'open',
         visibility,
-        visible_to_roles: visibility === 'restricted' ? visibleToRoles : [],
+        visible_to_roles: [],
         assigned_to: assignedTo || null,
         created_by: user.id,
       })
@@ -297,7 +298,7 @@ export default function PatientPage() {
     }
 
     const canOpenNow = canAccessEncounter(
-      { visibility, assigned_to: assignedTo || null, created_by: user.id, visible_to_roles: visibleToRoles },
+      { visibility, assigned_to: assignedTo || null, created_by: user.id, visible_to_roles: [] },
       { userId: user.id, roleSlugs, canAddBlocks: can('block.add') },
     )
 
@@ -561,7 +562,7 @@ export default function PatientPage() {
             <p className="text-xs text-muted-foreground">
               {upfrontAssign
                 ? 'Pick the physician, then start — everything else has sensible defaults.'
-                : 'Starts a private encounter assigned to you — tweak below if needed.'}
+                : 'Starts a sensitive encounter assigned to you — tweak below if needed.'}
             </p>
 
             <button
@@ -586,15 +587,11 @@ export default function PatientPage() {
               />
             </div>
 
-            {/* Visibility */}
+            {/* Visibility — two states; legacy 'restricted' is never offered */}
             <div className="space-y-1.5">
               <Label>Visibility</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                {([
-                  { value: 'staff',      label: 'All Staff',   desc: 'Visible to everyone' },
-                  { value: 'restricted', label: 'Restricted',  desc: 'Selected roles only' },
-                  { value: 'private',    label: 'Private',     desc: 'Only me or assigned to' },
-                ] as const).map(opt => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {VISIBILITY_OPTIONS.map(opt => (
                   <button
                     key={opt.value}
                     type="button"
@@ -611,34 +608,6 @@ export default function PatientPage() {
                   </button>
                 ))}
               </div>
-
-              {/* Role picker for restricted */}
-              {visibility === 'restricted' && (
-                <div className="pt-1 space-y-1">
-                  <p className="text-[11px] text-muted-foreground">Accessible to:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['physician', 'nurse', 'receptionist', 'admin'].map(role => (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() =>
-                          setVisibleToRoles(prev =>
-                            prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role],
-                          )
-                        }
-                        className={cn(
-                          'text-[11px] px-2 py-1 rounded-md border transition-colors capitalize',
-                          visibleToRoles.includes(role)
-                            ? 'border-primary/50 bg-primary/5 text-primary font-medium'
-                            : 'border-border text-muted-foreground hover:border-primary/30',
-                        )}
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             </>)}
@@ -1039,10 +1008,9 @@ function EncounterCard({
   isAdmin?: boolean
   onDelete?: () => void
 }) {
-  const visIcon = encounter.visibility === 'private'
+  // Legacy 'restricted' rows show the same Sensitive lock
+  const visIcon = encounter.visibility !== 'staff'
     ? <Lock className="h-3 w-3" />
-    : encounter.visibility === 'restricted'
-    ? <Users className="h-3 w-3" />
     : null
 
   return (
@@ -1066,7 +1034,7 @@ function EncounterCard({
               {encounter.title ?? `Encounter #${encounter.id.slice(0, 8).toUpperCase()}`}
             </p>
             {visIcon && (
-              <span className="text-muted-foreground opacity-60 shrink-0 mt-0.5" title={encounter.visibility}>
+              <span className="text-muted-foreground opacity-60 shrink-0 mt-0.5" title={visibilityLabel(encounter.visibility)}>
                 {visIcon}
               </span>
             )}
