@@ -1657,3 +1657,49 @@ waited for schema.sql to free, committed only my files.
 exclusions, isQueueDept kind check) — DDL is live, item claimed in
 CLAUDE.md as next up. AI pilot model choice (Claude API vs self-hosted
 MedGemma) put to the user — hard stop holds until they pick.
+
+## 2026-08-09 — Iteration 54: break the glass (privacy pass — final item built)
+
+**Item:** The last privacy-pass piece: sensitive encounters become
+sealed-not-hidden, opened by any clinical staff with a one-line recorded
+reason. User asked "completed or not?" mid-tick — the remote was checked
+read-only first (can_access_encounter absent, sub-tables underived,
+instance arm still present, no break_glass): NONE of the staged privacy
+SQL is live; the co-session's earlier approved apply was the wards
+subset only.
+
+**Schema (STAGED, awaits approval):** encounter_glass_opens (unique
+per user+encounter, reason non-empty, RLS self-contained on purpose —
+referencing encounters would recurse through can_access_encounter);
+glass arm added to can_access_encounter (grants access INCLUDING update,
+deliberately — one predicate, audit carries accountability);
+glass_open_audit trigger → encounter_audit_log(action='glass_open',
+reason); break_glass(p_encounter_id, p_reason) definer RPC; and
+get_sealed_encounters(p_patient_id) definer RPC returning
+existence-only metadata (id/status/created_at/assigned name — never
+title, reason, or content), excluding creators since they already see
+their rows in lists.
+
+**Client (live now, degrades honestly pre-apply):** GlassDoor on the
+encounter page's RLS-walled branch (clinical staff get reason → "Open —
+recorded"; PGRST202 → "Break-the-glass is not enabled on this server
+yet."); patient page gains a Sensitive section of sealed cards + knock
+dialog (absent RPC → empty list, section hidden); audit trail renders
+glass_open rose with the quoted reason; canViewServedEncounter() in
+lib/encounterAccess (+3 tests, 232 total) lets a served row imply the
+grant so a glass-opened encounter renders instead of re-walling
+client-side.
+
+**Verification:** tsc --build clean, eslint clean, 232/232. Browser:
+as Nurse demo on the seeded private encounter — GlassDoor rendered,
+reason submitted, honest not-enabled error shown (full grant path is
+untestable until the schema applies — expected). Two stale-HMR false
+alarms during the session (old branch rendered pre-reload); hard reload
+resolved both. Commit 06cd9be.
+
+**PASS STATUS:** all four items BUILT. Client-side everything is live.
+The pass COMPLETES when the user approves ONE apply of the staged
+schema: predicate + creator-grant policies, sub-table derivation +
+storage policy + index, instance-arm removal, and the glass objects.
+After apply: re-verify in browser (glass open end-to-end, sealed cards,
+sub-table walls via API probe).
