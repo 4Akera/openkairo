@@ -23,7 +23,7 @@ import type { Patient } from '../types'
 import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useVisitQueue } from '../hooks/useVisits'
-import { averageWaitMinutes, visitPatient, dayBoundsIso } from '../lib/visits'
+import { averageWaitMinutes, visitPatient, dayBoundsIso, sweepStaleJourneys } from '../lib/visits'
 import type { Visit } from '../types'
 import { VisitQueue } from '../components/visits/VisitQueue'
 import { CheckInDialog } from '../components/visits/CheckInDialog'
@@ -34,13 +34,13 @@ import {
 } from '../components/ui'
 import {
   ClipboardList, UserPlus, CalendarPlus, ChevronLeft, ChevronRight, ChevronDown,
-  UserCheck, FolderOpen, Loader2, Receipt, Search, Users,
+  UserCheck, Inbox, Loader2, Receipt, Search, Users, CalendarX2, FileClock,
 } from 'lucide-react'
 import { cn, fullName, formatDateTime, formatMinutes } from '../lib/utils'
 
 const GENERAL_QUEUE = 'general'
 
-type Lane = 'queue' | 'cashier' | 'open'
+type Lane = 'queue' | 'cashier' | 'loose'
 
 type CashierRow = {
   patient: Patient
@@ -108,9 +108,12 @@ export default function FrontDeskPage() {
   const [laneChoice, setLaneChoice] = useState<Lane>('queue')
   const lane: Lane = billingOnly ? 'cashier' : laneChoice
 
-  // "Open" = every open encounter regardless of day — covers what the
-  // registry's Open filter used to, now that Patients has no nav entry.
-  const [openRows, setOpenRows] = useState<Visit[] | null>(null)
+  // "Loose ends" = what needs sweeping, not a haystack: clinically open
+  // notes whose journey is over, and recent no-shows. Auto-hygiene
+  // (sweepStaleJourneys) shrinks it; a human empties the rest.
+  const [looseNotes, setLooseNotes] = useState<Visit[] | null>(null)
+  const [noShowRows, setNoShowRows] = useState<Visit[] | null>(null)
+  const [sweepNotice, setSweepNotice] = useState<string | null>(null)
   const [cashierRows, setCashierRows] = useState<CashierRow[] | null>(null)
   // At volume the till serves who's HERE; historic debt is the exception.
   const [cashScope, setCashScope] = useState<'today' | 'all'>('today')
@@ -139,6 +142,23 @@ export default function FrontDeskPage() {
       .eq('can_receive_patients', true)
       .order('sort_order')
       .then(({ data }) => setPatientDepts((data ?? []) as Department[]))
+  }, [])
+
+  // End-of-day hygiene, once per visit to Today: cancel yesterday's
+  // no-shows, finish long-abandoned journeys. Realtime propagates the
+  // updates into the queue on its own.
+  useEffect(() => {
+    if (!canUse) return
+    sweepStaleJourneys().then(({ noShows, autoFinished }) => {
+      if (noShows === 0 && autoFinished === 0) return
+      const parts: string[] = []
+      if (noShows > 0) parts.push(`${noShows} no-show${noShows > 1 ? 's' : ''} cancelled`)
+      if (autoFinished > 0) parts.push(`${autoFinished} stale visit${autoFinished > 1 ? 's' : ''} finished`)
+      setSweepNotice(`Tidied up: ${parts.join(' · ')}`)
+      const t = setTimeout(() => setSweepNotice(null), 12_000)
+      return () => clearTimeout(t)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Keep the Cashier lane fresh without realtime: poll + window focus.
@@ -268,15 +288,38 @@ export default function FrontDeskPage() {
   }, [cashQuery, lane])
 
   useEffect(() => {
-    if (lane !== 'open') { setOpenRows(null); return }
-    supabase
-      .from('encounters')
-      .select('*, patients(*)')
-      .eq('status', 'open')
-      .is('cancelled_at', null)
-      .order('created_at', { ascending: false })
-      .limit(100)
-      .then(({ data }) => setOpenRows((data ?? []) as Visit[]))
+    if (lane !== 'loose') { setLooseNotes(null); setNoShowRows(null); return }
+    let cancelled = false
+    const { start: todayStart } = dayBoundsIso()
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    Promise.all([
+      // Notes still open after the journey ended (or never had one) —
+      // today's active patients are NOT loose ends, they're the queue.
+      supabase
+        .from('encounters')
+        .select('*, patients(*)')
+        .eq('status', 'open')
+        .is('cancelled_at', null)
+        .lt('created_at', todayStart)
+        .or('finished_at.not.is.null,arrived_at.is.null')
+        .order('created_at', { ascending: true })
+        .limit(100),
+      // Recent no-shows — cancelled bookings that never arrived
+      supabase
+        .from('encounters')
+        .select('*, patients(*)')
+        .not('scheduled_at', 'is', null)
+        .is('arrived_at', null)
+        .not('cancelled_at', 'is', null)
+        .gte('scheduled_at', weekAgo)
+        .order('scheduled_at', { ascending: false })
+        .limit(50),
+    ]).then(([notesRes, nsRes]) => {
+      if (cancelled) return
+      setLooseNotes((notesRes.data ?? []) as Visit[])
+      setNoShowRows((nsRes.data ?? []) as Visit[])
+    })
+    return () => { cancelled = true }
   }, [lane])
 
   const openCheckIn = (bookMode: 'now' | 'book') => {
@@ -321,7 +364,7 @@ export default function FrontDeskPage() {
   const lanes: { id: Lane; label: string; icon: typeof Users }[] = [
     { id: 'queue', label: 'Queue', icon: Users },
     ...(showCashier ? [{ id: 'cashier' as Lane, label: 'Cashier', icon: Receipt }] : []),
-    { id: 'open', label: 'Open', icon: FolderOpen },
+    { id: 'loose', label: 'Loose ends', icon: Inbox },
   ]
 
   if (!user) return null
@@ -448,8 +491,11 @@ export default function FrontDeskPage() {
                 )}
               </span>
             )}
-            {lane === 'open' && openRows !== null && openRows.length > 0 && (
-              <Badge variant="secondary" className="ml-1">{openRows.length} open</Badge>
+            {lane === 'loose' && looseNotes !== null && noShowRows !== null && (looseNotes.length + noShowRows.length) > 0 && (
+              <Badge variant="secondary" className="ml-1">{looseNotes.length + noShowRows.length} to tidy</Badge>
+            )}
+            {sweepNotice && (
+              <span className="text-xs text-amber-700 dark:text-amber-400">{sweepNotice}</span>
             )}
           </div>
 
@@ -507,7 +553,7 @@ export default function FrontDeskPage() {
               </SelectContent>
             </Select>
           )}
-          {(lane === 'queue' || lane === 'open') && (
+          {(lane === 'queue' || lane === 'loose') && (
             <button
               onClick={() => setMineOnly(m => !m)}
               className={cn(
@@ -623,41 +669,87 @@ export default function FrontDeskPage() {
             </>
           )}
         </div>
-      ) : lane === 'open' ? (
-        <div className="flex-1 overflow-y-auto">
-          {openRows === null ? (
+      ) : lane === 'loose' ? (
+        <div className="flex-1 overflow-y-auto pb-6">
+          {looseNotes === null || noShowRows === null ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
             </div>
           ) : (() => {
-            const rows = openRows.filter(v => !mineOnly || v.assigned_to === user?.id)
-            return rows.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-12">No open encounters.</p>
-            ) : (
-              <div className="divide-y divide-border">
-                {rows.map(v => {
-                  const pt = visitPatient(v)
-                  return (
-                    <button
-                      key={v.id}
-                      onClick={() => pt && navigate(`/patients/${pt.id}/encounters/${v.id}`)}
-                      className="w-full flex items-center gap-3 px-4 sm:px-6 py-2.5 text-left hover:bg-accent/40 transition-colors"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{pt ? fullName(pt, nameFormat) : 'Unknown patient'}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {v.title?.trim() || 'Encounter'} · {formatDateTime(v.arrived_at ?? v.created_at)}
-                        </p>
-                      </div>
-                      {v.assigned_to && (
-                        <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
-                          {profileNames[v.assigned_to] ?? ''}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+            const notes = looseNotes.filter(v => !mineOnly || v.assigned_to === user?.id)
+            if (notes.length === 0 && noShowRows.length === 0) {
+              return (
+                <p className="text-sm text-muted-foreground text-center py-12">
+                  Nothing to tidy. ✨
+                </p>
+              )
+            }
+            return (
+              <>
+                {notes.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-4 pb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      <FileClock className="h-3.5 w-3.5" /> Open notes
+                      <span className="flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold">{notes.length}</span>
+                    </div>
+                    <p className="px-4 sm:px-6 pb-1.5 -mt-1 text-[11px] text-muted-foreground">
+                      The visit is over but the record was never closed.
+                    </p>
+                    <div className="divide-y divide-border border-y border-border">
+                      {notes.map(v => {
+                        const pt = visitPatient(v)
+                        return (
+                          <button
+                            key={v.id}
+                            onClick={() => pt && navigate(`/patients/${pt.id}/encounters/${v.id}`)}
+                            className="w-full flex items-center gap-3 px-4 sm:px-6 py-2.5 text-left hover:bg-accent/40 transition-colors"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{pt ? fullName(pt, nameFormat) : 'Unknown patient'}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {v.title?.trim() || 'Encounter'} · {formatDateTime(v.arrived_at ?? v.created_at)}
+                              </p>
+                            </div>
+                            {v.assigned_to && (
+                              <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
+                                {profileNames[v.assigned_to] ?? ''}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {noShowRows.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-4 pb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      <CalendarX2 className="h-3.5 w-3.5 text-amber-600" /> No-shows · last 7 days
+                      <span className="flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold">{noShowRows.length}</span>
+                    </div>
+                    <div className="divide-y divide-border border-y border-border opacity-80">
+                      {noShowRows.map(v => {
+                        const pt = visitPatient(v)
+                        return (
+                          <button
+                            key={v.id}
+                            onClick={() => pt && navigate(`/patients/${pt.id}`)}
+                            className="w-full flex items-center gap-3 px-4 sm:px-6 py-2.5 text-left hover:bg-accent/40 transition-colors"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{pt ? fullName(pt, nameFormat) : 'Unknown patient'}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                booked {formatDateTime(v.scheduled_at!)} · didn&apos;t arrive
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </>
             )
           })()}
         </div>

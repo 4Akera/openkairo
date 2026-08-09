@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { referralSourceLabel, averageWaitMinutes, waitSeverity, isArrivableBooking } from '../visits'
+import { referralSourceLabel, averageWaitMinutes, waitSeverity, isArrivableBooking, isNoShowBooking, isStaleCarriedOver } from '../visits'
 
 describe('referralSourceLabel', () => {
   it('null for non-referral visits', () => {
@@ -90,5 +90,27 @@ describe('isArrivableBooking', () => {
   it('false once arrived or when not a booking at all', () => {
     expect(isArrivableBooking({ arrived_at: bookedAt(viewDay), scheduled_at: bookedAt(viewDay) }, viewDay)).toBe(false)
     expect(isArrivableBooking({ arrived_at: null, scheduled_at: null }, viewDay)).toBe(false)
+  })
+})
+
+describe('journey hygiene predicates', () => {
+  const todayStart = '2026-08-09T00:00:00.000Z'
+  const now = Date.parse('2026-08-09T12:00:00Z')
+
+  it('isNoShowBooking: past booking, never arrived, not cancelled', () => {
+    expect(isNoShowBooking({ scheduled_at: '2026-08-08T09:00:00Z', arrived_at: null, cancelled_at: null }, todayStart)).toBe(true)
+  })
+
+  it('isNoShowBooking: false for today/future bookings, arrivals, cancellations, walk-ins', () => {
+    expect(isNoShowBooking({ scheduled_at: '2026-08-09T09:00:00Z', arrived_at: null, cancelled_at: null }, todayStart)).toBe(false)
+    expect(isNoShowBooking({ scheduled_at: '2026-08-08T09:00:00Z', arrived_at: '2026-08-08T09:10:00Z', cancelled_at: null }, todayStart)).toBe(false)
+    expect(isNoShowBooking({ scheduled_at: '2026-08-08T09:00:00Z', arrived_at: null, cancelled_at: '2026-08-08T20:00:00Z' }, todayStart)).toBe(false)
+    expect(isNoShowBooking({ scheduled_at: null, arrived_at: null, cancelled_at: null }, todayStart)).toBe(false)
+  })
+
+  it('isStaleCarriedOver: 3+ days since arrival', () => {
+    expect(isStaleCarriedOver('2026-08-06T11:59:00Z', now)).toBe(true)
+    expect(isStaleCarriedOver('2026-08-06T12:00:00Z', now)).toBe(true)
+    expect(isStaleCarriedOver('2026-08-07T13:00:00Z', now)).toBe(false)
   })
 })

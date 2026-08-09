@@ -1496,3 +1496,33 @@ header. Active-segment styling confirmed via DOM (screenshot downscale
 had me second-guessing).
 
 **Shared tree:** co-session WIP untouched; committed FrontDeskPage only.
+
+## 2026-08-09 — Iteration 56: auto-hygiene + Loose ends lane (replaces Open)
+
+**Why:** User points 4 + 6: queues need automatic end-of-day cleanup, and
+the Open lane was an unhelpful haystack (every open encounter ever,
+newest first).
+
+**What:** (1) sweepStaleJourneys in lib/visits, run idempotently when
+Today loads: bookings whose day passed without an arrival are cancelled
+(no-shows), journeys carried 3+ days auto-finish (AUTO_FINISH_AFTER_DAYS)
+— the clinical record is NEVER auto-closed; an open note stays the
+clinician's loose end. RLS quietly skips rows the caller can't touch;
+realtime propagates into the queue; a transient "Tidied up: …" line
+reports what happened. Predicates isNoShowBooking / isStaleCarriedOver
+tested. (2) The Open lane is replaced by "Loose ends": open notes whose
+journey ended or never started (created before today, oldest first, Mine
+filter applies, tap → encounter) + no-shows from the last 7 days (tap →
+patient). Badge reads "N to tidy".
+
+**Verification:** tsc --build clean, eslint clean, 214/214 tests (3 new).
+Browser (reception): lane instantly surfaced "100 to tidy" — months-old
+open test encounters from April/May, exactly the pile Open used to bury;
+sweep ran with nothing eligible (no notice — correct). Two FolderOpen
+console errors traced to the HMR window between my own icon edits; zero
+references remain and a hard reload is clean. Known cap: open-notes
+query limits at 100 without a count note — the pile shrinks as notes
+close; revisit if it stays pinned.
+
+**Shared tree:** co-session WIP untouched; committed FrontDeskPage,
+lib/visits + tests, docs.
