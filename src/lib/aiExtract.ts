@@ -80,7 +80,7 @@ export function vitalsMessages(text: string): { role: 'system' | 'user'; content
         'You extract vital signs from clinical text. Reply with ONLY a JSON object, no prose, exactly these keys: ' +
         'bp_systolic, bp_diastolic, pulse_rate, resp_rate, temperature, temp_unit, spo2, avpu. ' +
         'Numbers as numbers. temp_unit is "C" or "F" (only when temperature is present; infer F when the value implies it, e.g. 98.6). ' +
-        'avpu is "A", "V", "P" or "U" only when the level of consciousness is stated ("alert" → "A"). ' +
+        'avpu is the AVPU scale, only when the level of consciousness is stated: fully awake → "A"; drowsy or sleepy but rouses to voice or speech → "V"; responds only to pain → "P"; unresponsive → "U". ' +
         'Use null for anything the text does not state — NEVER guess or fill in normal values. ' +
         'Example: "BP 130 over 85, pulse 72 irregular, sats 96 percent, afebrile at 36.8" → ' +
         '{"bp_systolic":130,"bp_diastolic":85,"pulse_rate":72,"resp_rate":null,"temperature":36.8,"temp_unit":"C","spo2":96,"avpu":null}',
