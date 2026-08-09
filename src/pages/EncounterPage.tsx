@@ -7,7 +7,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, formatDayTime, formatMinutes, cn } from '../lib/utils'
 import { updateVisit, finishVisit } from '../lib/visits'
-import { canAccessEncounter, normalizeVisibility, type VisibilityValue } from '../lib/encounterAccess'
+import { canViewServedEncounter, normalizeVisibility, type VisibilityValue } from '../lib/encounterAccess'
 import { useNow } from '../hooks/useNow'
 import { EncounterBill } from '../components/billing/EncounterBill'
 import { ConsultAnswerBanner } from '../components/ConsultAnswerBanner'
@@ -41,6 +41,77 @@ const VISIBILITY_UI = [
 function InClinicLabel({ since }: { since: string }) {
   const now = useNow()
   return <>{formatMinutes(Math.max(0, Math.floor((now - new Date(since).getTime()) / 60000)))}</>
+}
+
+/**
+ * Break the glass: a sealed sensitive encounter opens for any clinical staff
+ * who records a one-line reason — the open lands in the encounter's audit
+ * trail. Shown whenever RLS returns no row for a clinical user.
+ */
+function GlassDoor({ encounterId, onOpened, backTo }: {
+  encounterId: string
+  onOpened: () => void
+  backTo: () => void
+}) {
+  const [reason, setReason] = useState('')
+  const [opening, setOpening] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const openGlass = async () => {
+    if (!reason.trim()) return
+    setOpening(true)
+    setError(null)
+    const { error: err } = await supabase.rpc('break_glass', {
+      p_encounter_id: encounterId,
+      p_reason: reason.trim(),
+    })
+    setOpening(false)
+    if (err) {
+      // PGRST202 = function absent (staged schema not applied yet)
+      setError(err.code === 'PGRST202'
+        ? 'Break-the-glass is not enabled on this server yet.'
+        : err.message)
+      return
+    }
+    onOpened()
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-3 px-4">
+      <Lock className="h-8 w-8 text-rose-500/70" />
+      <p className="text-sm font-medium">Sensitive encounter</p>
+      <p className="text-xs text-muted-foreground text-center max-w-sm">
+        It is sealed to its care team. You can open it — say why, and the
+        reason is recorded on the encounter&apos;s audit trail.
+      </p>
+      <div className="w-full max-w-sm space-y-2">
+        <input
+          autoFocus
+          type="text"
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !opening) void openGlass() }}
+          placeholder="Reason — e.g. covering for Dr. Harrison"
+          className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-rose-400/60"
+        />
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <div className="flex justify-center gap-2 pt-1">
+          <Button variant="outline" onClick={backTo}>
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <Button
+            onClick={openGlass}
+            disabled={opening || !reason.trim()}
+            className="bg-rose-600 hover:bg-rose-700 text-white"
+          >
+            {opening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+            Open — recorded
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function EncounterPage() {
@@ -369,6 +440,18 @@ export default function EncounterPage() {
   }
 
   if (!patient || !encounter) {
+    // RLS returned nothing. For clinical staff this is usually a SEALED
+    // sensitive encounter (or a stale link) — offer the glass: one logged
+    // reason opens it. break_glass itself distinguishes truly-missing rows.
+    if (can('block.add') && encounterId) {
+      return (
+        <GlassDoor
+          onOpened={() => { setAccessRevoked(false); setLoading(true); void fetchData() }}
+          encounterId={encounterId}
+          backTo={() => navigate(patientId ? `/patients/${patientId}` : '/')}
+        />
+      )
+    }
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         {accessRevoked ? (
@@ -403,8 +486,9 @@ export default function EncounterPage() {
   // Title + physician are edited straight in the header while the encounter is open
   const canEditInline = canManage && encounter.status === 'open'
 
-  // View access — the one shared predicate (mirrors encounter_select RLS)
-  const canView = canAccessEncounter(encounter, {
+  // View access — the row came through RLS, so a served non-staff row means
+  // some server arm (assigned/creator/admin or a glass open) admitted us
+  const canView = canViewServedEncounter(encounter, {
     userId: user?.id,
     roleSlugs,
     canAddBlocks: can('block.add'),

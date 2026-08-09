@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  canAccessEncounter, normalizeVisibility, visibilityLabel,
+  canAccessEncounter, canViewServedEncounter, normalizeVisibility, visibilityLabel,
   type EncounterAccessInput,
 } from '../encounterAccess'
 
@@ -61,6 +61,25 @@ describe('canAccessEncounter', () => {
   it('never matches null assignee/creator against a missing userId', () => {
     const anon = { userId: undefined, roleSlugs: ['physician'], canAddBlocks: true }
     expect(canAccessEncounter(enc({ visibility: 'private' }), anon)).toBe(false)
+  })
+})
+
+describe('canViewServedEncounter (row already admitted by RLS)', () => {
+  it('trusts the serve: clinical staff view a served sensitive row (glass grant)', () => {
+    const sealed = enc({ visibility: 'private', assigned_to: OTHER, created_by: OTHER })
+    expect(canAccessEncounter(sealed, clinician)).toBe(false)
+    expect(canViewServedEncounter(sealed, clinician)).toBe(true)
+  })
+
+  it('still walls staff rows for users without block.add', () => {
+    expect(canViewServedEncounter(enc(), { ...clinician, canAddBlocks: false })).toBe(false)
+    expect(
+      canViewServedEncounter(enc({ visibility: 'private' }), { ...clinician, canAddBlocks: false }),
+    ).toBe(false)
+  })
+
+  it('matches canAccessEncounter for staff rows', () => {
+    expect(canViewServedEncounter(enc(), clinician)).toBe(true)
   })
 })
 

@@ -912,12 +912,41 @@ as $$
   )
 $$;
 
+-- ── Break the glass ─────────────────────────────────────────────────────────
+-- A sensitive encounter is sealed, not hidden: any clinical staff may open it
+-- by recording a one-line reason. The grant is per-user and permanent; every
+-- open lands in encounter_audit_log via trigger. Accountability over walls.
+create table if not exists encounter_glass_opens (
+  id           uuid primary key default gen_random_uuid(),
+  encounter_id uuid not null references encounters(id) on delete cascade,
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  reason       text not null check (length(btrim(reason)) > 0),
+  created_at   timestamptz not null default now(),
+  unique (encounter_id, user_id)
+);
+create index if not exists idx_glass_opens_encounter on encounter_glass_opens(encounter_id, user_id);
+
+alter table encounter_glass_opens enable row level security;
+-- Policies are self-contained ON PURPOSE — they must not reference encounters,
+-- because can_access_encounter subqueries this table (recursion otherwise).
+-- The full trail is visible through encounter_audit_log instead.
+drop policy if exists "glass_opens_select" on encounter_glass_opens;
+create policy "glass_opens_select" on encounter_glass_opens for select
+  using (user_id = auth.uid() or has_role_in(array['admin']));
+drop policy if exists "glass_opens_insert" on encounter_glass_opens;
+create policy "glass_opens_insert" on encounter_glass_opens for insert
+  with check (user_id = auth.uid() and has_permission('block.add'));
+
 -- ONE encounter-access predicate. Every policy/RPC that gates on "can this
 -- user see this encounter" calls this — never restate the visibility logic.
 -- Client mirror: src/lib/encounterAccess.ts (keep the two in step).
 -- Creator access is intentionally NOT here: only the SELECT policy adds it
 -- (a receptionist who registered a private encounter sees it in lists but
 -- gains no update/block access).
+-- The glass arm: a recorded open of a sealed encounter grants that user
+-- access — including update, deliberately: one predicate, and the audit log
+-- (assignment/visibility/status/title changes are all logged) carries the
+-- accountability.
 create or replace function can_access_encounter(e encounters)
 returns boolean language sql stable
 set search_path = public
@@ -926,6 +955,8 @@ as $$
       or e.assigned_to = auth.uid()
       or has_role_in(array['admin'])
       or (e.visibility = 'restricted' and has_role_in(e.visible_to_roles))
+      or exists (select 1 from encounter_glass_opens g
+                 where g.encounter_id = e.id and g.user_id = auth.uid())
 $$;
 
 -- Prevent staff from inserting block types their role is not allowed to add
@@ -2174,6 +2205,66 @@ drop trigger if exists encounter_changes_audit on encounters;
 create trigger encounter_changes_audit
   after update on encounters
   for each row execute function log_encounter_changes();
+
+-- Every glass open lands in the audit trail (definer — RLS-independent)
+create or replace function log_glass_open()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  insert into encounter_audit_log (encounter_id, actor_id, action, new_value)
+  values (new.encounter_id, new.user_id, 'glass_open', new.reason);
+  return new;
+end;
+$$;
+
+drop trigger if exists glass_open_audit on encounter_glass_opens;
+create trigger glass_open_audit
+  after insert on encounter_glass_opens
+  for each row execute function log_glass_open();
+
+-- Knock: record a reason, gain access. Idempotent per user + encounter.
+create or replace function break_glass(p_encounter_id uuid, p_reason text)
+returns void language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not has_permission('block.add') then
+    raise exception 'Clinical permission required';
+  end if;
+  if p_reason is null or length(btrim(p_reason)) = 0 then
+    raise exception 'A reason is required';
+  end if;
+  if not exists (select 1 from encounters where id = p_encounter_id) then
+    raise exception 'Encounter not found';
+  end if;
+  insert into encounter_glass_opens (encounter_id, user_id, reason)
+  values (p_encounter_id, auth.uid(), btrim(p_reason))
+  on conflict (encounter_id, user_id) do nothing;
+end;
+$$;
+
+-- Sealed-existence: minimal metadata for the sensitive encounters the caller
+-- cannot open — enough to render a locked card; never title, reason, or
+-- content. (Definer bypasses RLS; auth.uid() inside stays the caller.)
+create or replace function get_sealed_encounters(p_patient_id uuid)
+returns table (id uuid, status text, created_at timestamptz, assigned_name text)
+language sql security definer stable
+set search_path = public
+as $$
+  select e.id, e.status, e.created_at, p.full_name
+  from encounters e
+  left join profiles p on p.id = e.assigned_to
+  where e.patient_id = p_patient_id
+    and e.visibility <> 'staff'
+    and has_permission('block.add')
+    and e.created_by is distinct from auth.uid()
+    and not can_access_encounter(e)
+  order by e.created_at desc
+$$;
+
+grant execute on function break_glass            to authenticated;
+grant execute on function get_sealed_encounters  to authenticated;
 
 -- ============================================================
 -- 16. REALTIME PUBLICATIONS

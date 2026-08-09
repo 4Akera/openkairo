@@ -939,6 +939,11 @@ export default Timeline
 
 function AuditRow({ log }: { log: AuditEntry }) {
   const actionMeta: Record<string, { icon: React.ReactNode; label: (e: AuditEntry) => string; color: string }> = {
+    glass_open: {
+      icon: <Shield className="h-3 w-3" />,
+      label: (e) => `Opened sealed encounter — “${e.new_value ?? 'no reason recorded'}”`,
+      color: 'text-rose-600 bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800',
+    },
     assignment: {
       icon: <UserCog className="h-3 w-3" />,
       label: (e) => e.new_value

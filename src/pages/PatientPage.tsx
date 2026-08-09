@@ -64,6 +64,13 @@ export default function PatientPage() {
   const [quickChargePrice, setQuickChargePrice] = useState('')
   const [quickChargeSaving, setQuickChargeSaving] = useState(false)
 
+  // Break the glass — sealed sensitive encounters (existence via definer RPC)
+  const [sealedEncs, setSealedEncs] = useState<{ id: string; status: string; created_at: string; assigned_name: string | null }[]>([])
+  const [knockTarget, setKnockTarget] = useState<string | null>(null)
+  const [knockReason, setKnockReason] = useState('')
+  const [knocking, setKnocking] = useState(false)
+  const [knockError, setKnockError] = useState<string | null>(null)
+
   // Admin: encounter delete
   const [encToDelete, setEncToDelete] = useState<Encounter | null>(null)
   const [deletingEnc, setDeletingEnc] = useState(false)
@@ -106,7 +113,7 @@ export default function PatientPage() {
     if (!patientId) return
     setLoading(true)
 
-    const [{ data: pt }, encRes, { data: tmpl }] = await Promise.all([
+    const [{ data: pt }, encRes, { data: tmpl }, sealedRes] = await Promise.all([
       supabase.from('patients').select('*').eq('id', patientId).single(),
       supabase
         .from('encounters')
@@ -114,9 +121,13 @@ export default function PatientPage() {
         .eq('patient_id', patientId)
         .order('created_at', { ascending: false }),
       supabase.from('encounter_templates').select('*').order('is_universal', { ascending: false }),
+      // Sealed sensitive encounters — minimal metadata only; absent RPC
+      // (staged schema not applied) simply yields an error → empty list
+      supabase.rpc('get_sealed_encounters', { p_patient_id: patientId }),
     ])
 
     if (pt) setPatient(pt)
+    setSealedEncs((sealedRes.error ? [] : sealedRes.data ?? []) as typeof sealedEncs)
 
     if (encRes.data) {
       // Batch-fetch creator + assigned-to names from profiles
@@ -165,6 +176,27 @@ export default function PatientPage() {
   const requiresAssignment = !hasRole('admin')
   // Physicians self-assign, so only non-physician creators pick upfront
   const upfrontAssign = requiresAssignment && !hasRole('physician')
+
+  const handleKnock = async () => {
+    if (!knockTarget || !knockReason.trim()) return
+    setKnocking(true)
+    setKnockError(null)
+    const { error } = await supabase.rpc('break_glass', {
+      p_encounter_id: knockTarget,
+      p_reason: knockReason.trim(),
+    })
+    setKnocking(false)
+    if (error) {
+      setKnockError(error.code === 'PGRST202'
+        ? 'Break-the-glass is not enabled on this server yet.'
+        : error.message)
+      return
+    }
+    const target = knockTarget
+    setKnockTarget(null)
+    setKnockReason('')
+    navigate(`/patients/${patientId}/encounters/${target}`)
+  }
 
   const handleDeleteEncounter = async (enc: Encounter) => {
     setDeletingEnc(true)
@@ -528,6 +560,37 @@ export default function PatientPage() {
                           </div>
                           )
                         })}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Sealed sensitive encounters — existence only; tap to break the glass */}
+                  {sealedEncs.length > 0 && (
+                    <section>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <Lock className="h-3.5 w-3.5 text-rose-500/70" />
+                        Sensitive ({sealedEncs.length})
+                      </p>
+                      <div className="space-y-2.5">
+                        {sealedEncs.map(se => (
+                          <button
+                            key={se.id}
+                            type="button"
+                            onClick={() => { setKnockTarget(se.id); setKnockReason(''); setKnockError(null) }}
+                            className="w-full border border-rose-200/60 dark:border-rose-900/40 rounded-lg p-4 flex items-center gap-3 text-left hover:bg-rose-50/40 dark:hover:bg-rose-950/10 transition-colors"
+                          >
+                            <Lock className="h-4 w-4 text-rose-500/70 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium">Sealed encounter</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {formatDayTime(se.created_at)}
+                                {se.assigned_name && <> · {se.assigned_name}</>}
+                                {' '}· open with a recorded reason
+                              </p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          </button>
+                        ))}
                       </div>
                     </section>
                   )}
@@ -905,6 +968,41 @@ export default function PatientPage() {
       </Dialog>
 
       {/* Admin: Delete encounter confirmation */}
+      {/* Break the glass — one recorded reason opens a sealed encounter */}
+      <Dialog open={!!knockTarget} onOpenChange={(o) => { if (!o) setKnockTarget(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-rose-500/70" />
+              Open sealed encounter
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            It is sealed to its care team. Say why you need it — the reason is
+            recorded on the encounter&apos;s audit trail.
+          </p>
+          <Input
+            autoFocus
+            value={knockReason}
+            onChange={e => setKnockReason(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !knocking) void handleKnock() }}
+            placeholder="Reason — e.g. covering for Dr. Harrison"
+          />
+          {knockError && <p className="text-xs text-destructive">{knockError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setKnockTarget(null)}>Cancel</Button>
+            <Button
+              onClick={handleKnock}
+              disabled={knocking || !knockReason.trim()}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {knocking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+              Open — recorded
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!encToDelete} onOpenChange={(o) => { if (!o) setEncToDelete(null) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

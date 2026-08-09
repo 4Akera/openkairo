@@ -49,6 +49,20 @@ export function normalizeVisibility(v: string | null | undefined): VisibilityVal
   return v === 'staff' ? 'staff' : 'private'
 }
 
+/**
+ * Gate for an encounter row the server ALREADY returned (RLS admitted it).
+ * Extends canAccessEncounter with the grant the client cannot derive
+ * locally — a break-the-glass open: holding a non-staff row plus clinical
+ * permission means some server-side arm admitted this user. Never use for
+ * rows that did not come through RLS.
+ */
+export function canViewServedEncounter(
+  enc: EncounterAccessInput,
+  ctx: EncounterAccessContext,
+): boolean {
+  return canAccessEncounter(enc, ctx) || (ctx.canAddBlocks && enc.visibility !== 'staff')
+}
+
 export function canAccessEncounter(
   enc: EncounterAccessInput,
   ctx: EncounterAccessContext,
