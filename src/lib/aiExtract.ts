@@ -20,11 +20,16 @@ import type { VitalsContent } from '../components/timeline/blocks/VitalsBlock'
 export interface LocalAiConfig {
   baseUrl: string
   model: string
+  /** Full URL of a local /v1/audio/transcriptions endpoint (e.g. the MedASR
+   *  server from scripts/medasr-server.py). null → dictation stays on the
+   *  browser's Web Speech API. */
+  asrUrl: string | null
 }
 
 export const DEFAULT_LOCAL_AI: LocalAiConfig = {
   baseUrl: 'http://localhost:11434/v1',
   model: 'gemma3:4b',
+  asrUrl: null,
 }
 
 const CONFIG_KEY = 'openkairo.localAi'
@@ -37,6 +42,7 @@ export function loadLocalAiConfig(): LocalAiConfig {
     return {
       baseUrl: typeof parsed.baseUrl === 'string' && parsed.baseUrl ? parsed.baseUrl.replace(/\/$/, '') : DEFAULT_LOCAL_AI.baseUrl,
       model:   typeof parsed.model   === 'string' && parsed.model   ? parsed.model   : DEFAULT_LOCAL_AI.model,
+      asrUrl:  typeof parsed.asrUrl  === 'string' && parsed.asrUrl  ? parsed.asrUrl  : null,
     }
   } catch {
     return DEFAULT_LOCAL_AI
@@ -246,4 +252,41 @@ export async function extractVitals(text: string, cfg?: LocalAiConfig): Promise<
   const content = data.choices?.[0]?.message?.content
   if (!content) throw new Error('Local AI returned an empty reply')
   return parseVitalsReply(content)
+}
+
+// ─── Local speech-to-text (/v1/audio/transcriptions) ─────────────────────────
+
+/** Pull the transcript out of an OpenAI-shaped transcription reply. */
+export function extractTranscriptText(payload: unknown): string {
+  if (payload && typeof payload === 'object' && 'text' in payload) {
+    const t = (payload as { text: unknown }).text
+    if (typeof t === 'string') return t.trim()
+  }
+  throw new Error('Transcription reply had no text field')
+}
+
+export async function transcribeAudio(audio: Blob, cfg?: LocalAiConfig): Promise<string> {
+  const { asrUrl } = cfg ?? loadLocalAiConfig()
+  if (!asrUrl) throw new Error('No local transcription endpoint configured')
+
+  const form = new FormData()
+  form.append('file', audio, 'dictation.webm')
+  form.append('model', 'medasr')
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60_000)
+  let res: Response
+  try {
+    res = await fetch(asrUrl, { method: 'POST', body: form, signal: controller.signal })
+  } catch (e) {
+    clearTimeout(timer)
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error('Transcription timed out after 60s')
+    }
+    throw new Error(`Transcription server not reachable at ${asrUrl}`)
+  }
+  clearTimeout(timer)
+
+  if (!res.ok) throw new Error(`Transcription failed (${res.status})`)
+  return extractTranscriptText(await res.json())
 }

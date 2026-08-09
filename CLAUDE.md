@@ -373,10 +373,17 @@ result loop. Judged against: one journey, no new concepts.
       reported), mergeExtractedVitals clears unmeasured flags; tested.
       VitalsEdit gains a "Fill from text" panel (paste/dictate → Fill
       fields → review-before-save note). Chain browser-verified against a
-      stub endpoint; REMAINING: user installs Ollama + pulls a model
-      (~3.3GB, asked), then re-verify with a real model. ASR half (local
-      Whisper/MedASR behind useDictation) is a separate follow-up —
-      blocked on the dictation-language answer.)
+      stub endpoint. ASR half BUILT same day (user answered "english" →
+      MedASR): useDictation gains a local-recorder backend (MediaRecorder
+      → POST /v1/audio/transcriptions → same onText contract) active only
+      when asrUrl is set in the openkairo.localAi config — Web Speech
+      stays the zero-setup fallback; DictateButton shows Transcribing…;
+      scripts/medasr-server.py serves google/medasr (HF-gated, needs
+      terms acceptance + ffmpeg) behind that endpoint, CORS-open on
+      :8035. Transport+parse+mic-denial browser-verified; real-mic loop
+      needs a human voice. REMAINING: real-model Vitals verify (Ollama
+      pull in flight on user's machine) + user speaking an actual
+      dictation once medasr-server runs.)
 - [x] One Blocks place in Settings: merge My Blocks / Templates / Block
       Library into a single "Blocks" section with tabs (three nav items
       become one). (2026-08-08 — Settings nav 10 → 8 entries)

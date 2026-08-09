@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { parseVitalsReply, mergeExtractedVitals, type ExtractedVitals } from '../aiExtract'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import {
+  parseVitalsReply, mergeExtractedVitals, extractTranscriptText,
+  loadLocalAiConfig, DEFAULT_LOCAL_AI, type ExtractedVitals,
+} from '../aiExtract'
 import { emptyVitals } from '../../components/timeline/blocks/VitalsBlock'
 
 const noneExtracted = (): ExtractedVitals => ({
@@ -111,5 +114,51 @@ describe('mergeExtractedVitals', () => {
   it('sets AVPU when extracted', () => {
     const merged = mergeExtractedVitals(emptyVitals(), { ...noneExtracted(), avpu: 'V' })
     expect(merged.avpu).toBe('V')
+  })
+})
+
+describe('extractTranscriptText', () => {
+  it('returns the trimmed text field', () => {
+    expect(extractTranscriptText({ text: '  BP 120 over 80 ' })).toBe('BP 120 over 80')
+  })
+
+  it('throws when text is missing or not a string', () => {
+    expect(() => extractTranscriptText({})).toThrow(/no text/)
+    expect(() => extractTranscriptText({ text: 42 })).toThrow(/no text/)
+    expect(() => extractTranscriptText(null)).toThrow(/no text/)
+  })
+})
+
+describe('loadLocalAiConfig', () => {
+  // Tests run under node — shim the minimal localStorage surface the lib touches.
+  const store = new Map<string, string>()
+  const globals = globalThis as { localStorage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> }
+
+  beforeAll(() => {
+    globals.localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v) },
+      removeItem: (k: string) => { store.delete(k) },
+    }
+  })
+  afterAll(() => { delete globals.localStorage })
+
+  it('defaults asrUrl to null and reads an override', () => {
+    store.clear()
+    expect(loadLocalAiConfig()).toEqual(DEFAULT_LOCAL_AI)
+    expect(DEFAULT_LOCAL_AI.asrUrl).toBeNull()
+
+    store.set('openkairo.localAi', JSON.stringify({
+      asrUrl: 'http://localhost:8035/v1/audio/transcriptions',
+    }))
+    const cfg = loadLocalAiConfig()
+    expect(cfg.asrUrl).toBe('http://localhost:8035/v1/audio/transcriptions')
+    expect(cfg.baseUrl).toBe(DEFAULT_LOCAL_AI.baseUrl)
+  })
+
+  it('survives malformed JSON', () => {
+    store.set('openkairo.localAi', '{not json')
+    expect(loadLocalAiConfig()).toEqual(DEFAULT_LOCAL_AI)
+    store.clear()
   })
 })

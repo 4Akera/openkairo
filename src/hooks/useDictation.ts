@@ -1,13 +1,20 @@
 /**
- * useDictation — voice typing via the Web Speech API.
+ * useDictation — voice typing for text-heavy block editors, two backends:
  *
- * Browser support is feature-detected: where SpeechRecognition is missing
- * (Firefox, some WebViews) `supported` is false and callers simply don't
- * render their mic button. Only FINAL results are emitted — no interim
- * flicker — and recognition restarts survive the browser's silence timeouts
- * while listening is on.
+ * 1. LOCAL server (when `asrUrl` is configured in the openkairo.localAi
+ *    localStorage config): records the mic with MediaRecorder and sends the
+ *    clip to a local /v1/audio/transcriptions endpoint (e.g. MedASR via
+ *    scripts/medasr-server.py). Audio never leaves the machine. Text arrives
+ *    once, after tap-to-finish; `busy` is true while transcribing.
+ * 2. Web Speech API fallback (default): browser support is feature-detected —
+ *    where SpeechRecognition is missing (Firefox, some WebViews) `supported`
+ *    is false and callers simply don't render their mic button. Only FINAL
+ *    results are emitted, and recognition restarts survive the browser's
+ *    silence timeouts while listening is on. NOTE: most Chrome setups process
+ *    this audio on Google's servers — the local backend exists to avoid that.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { loadLocalAiConfig, transcribeAudio } from '../lib/aiExtract'
 
 // TS lib.dom has no SpeechRecognition types — declare the minimal surface.
 interface SpeechRecognitionLike {
@@ -26,22 +33,74 @@ function getRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null) as (new () => SpeechRecognitionLike) | null
 }
 
+function canRecord(): boolean {
+  return typeof window !== 'undefined'
+    && typeof MediaRecorder !== 'undefined'
+    && !!navigator.mediaDevices?.getUserMedia
+}
+
 export function useDictation(onText: (text: string) => void) {
-  const [supported] = useState(() => typeof window !== 'undefined' && getRecognitionCtor() !== null)
+  // Backend is picked per mount; the config is a dev/localStorage knob.
+  const [asrUrl] = useState<string | null>(() => loadLocalAiConfig().asrUrl)
+  const [supported] = useState(() =>
+    typeof window !== 'undefined' && (asrUrl ? canRecord() : getRecognitionCtor() !== null),
+  )
   const [listening, setListening] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const recRef = useRef<SpeechRecognitionLike | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
   const onTextRef = useRef(onText)
   const wantListeningRef = useRef(false)
   useEffect(() => { onTextRef.current = onText }, [onText])
 
-  const stop = useCallback(() => {
+  // ── Local-server backend ──
+  const startRecorder = useCallback(async () => {
+    setError(null)
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      setError('Microphone access was blocked — allow it in the browser to dictate.')
+      return
+    }
+    const recorder = new MediaRecorder(stream)
+    const chunks: Blob[] = []
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+    recorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      setListening(false)
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+      if (blob.size === 0) return
+      setBusy(true)
+      try {
+        const text = await transcribeAudio(blob)
+        if (text) onTextRef.current(text)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Transcription failed')
+      } finally {
+        setBusy(false)
+      }
+    }
+    recorderRef.current = recorder
+    recorder.start()
+    setListening(true)
+  }, [])
+
+  const stopRecorder = useCallback(() => {
+    const r = recorderRef.current
+    if (r && r.state !== 'inactive') r.stop()
+    else setListening(false)
+  }, [])
+
+  // ── Web Speech backend ──
+  const stopSpeech = useCallback(() => {
     wantListeningRef.current = false
     recRef.current?.stop()
     setListening(false)
   }, [])
 
-  const start = useCallback(() => {
+  const startSpeech = useCallback(() => {
     const Ctor = getRecognitionCtor()
     if (!Ctor) return
     setError(null)
@@ -77,15 +136,25 @@ export function useDictation(onText: (text: string) => void) {
     setListening(true)
   }, [])
 
+  const stop = useCallback(() => {
+    if (asrUrl) stopRecorder()
+    else stopSpeech()
+  }, [asrUrl, stopRecorder, stopSpeech])
+
+  const start = useCallback(() => {
+    if (asrUrl) void startRecorder()
+    else startSpeech()
+  }, [asrUrl, startRecorder, startSpeech])
+
   const toggle = useCallback(() => {
-    if (wantListeningRef.current) stop()
+    if (listening || wantListeningRef.current) stop()
     else start()
-  }, [start, stop])
+  }, [listening, start, stop])
 
   // Stop cleanly when the editing component unmounts
   useEffect(() => stop, [stop])
 
-  return { supported, listening, error, toggle }
+  return { supported, listening, busy, error, toggle }
 }
 
 /** Append a dictated fragment to existing text with sane spacing. */

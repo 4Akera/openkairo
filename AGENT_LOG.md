@@ -1794,3 +1794,41 @@ co-session's in-flight wards work (their files, not touched here).
 
 **Next:** nothing pending on this item; wards UI + ASR follow-ups
 unchanged.
+
+## 2026-08-09 — Iteration 63: local speech-to-text — the dictation audio comes home
+
+**Why:** User answered the language question ("english") → MedASR is the
+ASR model, and the pilot's ASR half unblocked. Today's Web Speech
+dictation ships mic audio to Google's servers in most Chrome setups —
+the one place PHI still left the machine after the go-local decision.
+
+**What:** useDictation becomes dual-backend behind the SAME hook API:
+when `asrUrl` is set in the openkairo.localAi config, a MediaRecorder
+backend records until tap-stop, POSTs the clip to a local
+/v1/audio/transcriptions endpoint, and emits the transcript through the
+existing onText contract (new `busy` state while transcribing); with no
+asrUrl the Web Speech path is byte-for-byte the old behavior — nothing
+changes for anyone until they opt in. DictateButton grows the
+Transcribing… state. lib/aiExtract gains asrUrl in the config +
+transcribeAudio + extractTranscriptText (tested; localStorage shimmed —
+vitest runs under node). scripts/medasr-server.py is a complete local
+server for google/medasr per the verified HF recipe (transformers>=5
+pipeline, 16kHz mono via ffmpeg, multipart parsing, CORS, port 8035) —
+gated model: the user must accept the Health AI terms + hf auth login.
+Zero new user-facing concepts: same pill, same tap.
+
+**Verification:** tsc --build clean, eslint clean, 247/247 tests (5
+new). Browser: transport proven from the app origin (multipart POST →
+stub :8035 → {text} through CORS, status 200); with asrUrl set the pill
+switches to the recorder backend and the pane's blocked mic surfaced
+the exact inline error ("Microphone access was blocked…") — the denial
+path live-verified; config override removed after testing (demo app
+back on Web Speech default). The real-mic loop (MediaRecorder capture →
+real MedASR) needs a human voice + the gated model — handed to the
+user. Ollama model pull for the LLM half still in flight on the user's
+machine (their own terminal; my duplicate pull killed); watcher armed
+to re-verify Vitals fill against the real model when it lands.
+
+**Shared tree:** co-session is mid-wards-build (App/Sidebar/queues/
+visits/DepartmentWork/WardsPage all dirty) — committed ONLY my five
+files + docs; the scripts/ dir added file-by-file, not wholesale.
