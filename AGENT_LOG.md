@@ -1554,3 +1554,25 @@ demo data.
 two-state visibility landed mid-iteration); my edits merged cleanly
 alongside. Committing only my hunks' files: EncounterPage,
 CheckoutDialog, docs.
+
+## 2026-08-09 — Iteration 58: worklist filters — origin as chips, status split
+
+**Why:** User follow-up on point 2: "per queue filter like these tests of
+cardi queue" — the origin filter existed (iteration 49) but as a small
+"From" Select that only renders with 2+ origins; effectively invisible.
+Plus the missing status filter.
+
+**What:** Origin filter converted from a dropdown to a visible chip row
+("From · All queues N · Cardiology N …", same gating: only when orders
+come from more than one queue). New status chips — "Not started N" /
+"In progress N" (statusCounts in lib/deptWorklist, tested) — the
+what-do-I-grab-next split when several techs share a queue; they render
+even when a single service means no lane chips, and only when both
+buckets are non-empty. All filters compose (origin → lane → STAT →
+status → search).
+
+**Verification:** tsc --build clean, eslint clean (dead Select imports
+dropped), 216/216 tests (2 new). Browser (lab): chips render "STAT 3 ·
+Not started 30 · In progress 9"; clicking Not started shows exactly 30
+rows with zero In-progress rows. Origin chips correctly absent — demo
+lab orders all come from one queue.

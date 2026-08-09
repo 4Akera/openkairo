@@ -14,7 +14,7 @@ import { BlockManualFeesPanel } from '../components/timeline/capabilities/BlockM
 import { fullName, cn, formatDateTime, calcAgeYears } from '../lib/utils'
 import { dayBoundsIso } from '../lib/visits'
 import { Loader2, CheckCircle2, X, Plus, Clock, History, ChevronLeft, ChevronRight, ChevronDown, Search, ExternalLink, BookOpen, DollarSign, Flame, XCircle, AlertCircle, UserPlus, Ban } from 'lucide-react'
-import { Button, ScrollArea, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, Separator, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui'
+import { Button, ScrollArea, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, Separator } from '../components/ui'
 import { SearchSelect } from '../components/ui/SearchSelect'
 import { DynamicBlockEdit, DynamicBlockView } from '../components/timeline/DynamicBlock'
 import { BLOCK_REGISTRY, orphanRegistryRenderKey, registryRenderKey } from '../components/timeline/BlockRegistry'
@@ -22,7 +22,7 @@ import { getRecentPatientIds, pushRecentPatientId } from '../lib/recentItems'
 import { parseSearchQuery } from '../lib/patientSearch'
 import { readWalkInLastBlockType, writeWalkInLastBlockType } from '../lib/walkInPreferences'
 import { CreatePatientDialog } from '../components/patients/CreatePatientDialog'
-import { isStatOrder, isConsultOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel, originOf, originCounts } from '../lib/deptWorklist'
+import { isStatOrder, isConsultOrder, laneOf, laneCounts, sortWorklist, nextInLane, waitedLabel, originOf, originCounts, statusCounts } from '../lib/deptWorklist'
 import { ImportResultsDialog } from '../components/dept/ImportResultsDialog'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1973,6 +1973,8 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   const [workSearch, setWorkSearch] = useState('')
   const [searchOrders, setSearchOrders] = useState<OrderWithContext[] | null>(null)
   const [statOnly, setStatOnly] = useState(false)
+  // Untouched vs picked-up — "what do I grab next" with several techs
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress'>('all')
   const [nowMs, setNowMs]   = useState(() => Date.now())
   const [history, setHistory] = useState<PastEntry[]>([])
   // History is day-scoped at volume (2k results/day): default = today only,
@@ -2082,11 +2084,14 @@ export function DepartmentWork({ dept }: { dept: Department }) {
   const activeLane = lane && lanes.some(l => l.lane === lane) ? lane : null
   const statCount = useMemo(() => originOrders.filter(isStatOrder).length, [originOrders])
   const activeStatOnly = statOnly && statCount > 0
+  const statusTally = useMemo(() => statusCounts(originOrders), [originOrders])
   const visibleOrders = useMemo(() => {
     let rows = activeLane ? originOrders.filter(o => laneOf(o, btNameMap) === activeLane) : originOrders
     if (activeStatOnly) rows = rows.filter(isStatOrder)
+    if (statusFilter === 'pending') rows = rows.filter(o => o.status === 'pending')
+    else if (statusFilter === 'in_progress') rows = rows.filter(o => o.status !== 'pending')
     return sortWorklist(rows)
-  }, [originOrders, activeLane, btNameMap, activeStatOnly])
+  }, [originOrders, activeLane, btNameMap, activeStatOnly, statusFilter])
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     const quiet = opts?.quiet === true
@@ -2622,31 +2627,45 @@ export function DepartmentWork({ dept }: { dept: Department }) {
                       {baseOrders.length} pending for “{workSearch.trim()}”
                     </span>
                   )}
-                  {origins.length > 1 && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-muted-foreground shrink-0">From</span>
-                      <Select
-                        value={activeOrigin ?? '__all__'}
-                        onValueChange={(v: string) => setOriginFilter(v === '__all__' ? null : v)}
-                      >
-                        <SelectTrigger className="h-7 w-auto min-w-[130px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">All queues · {baseOrders.length}</SelectItem>
-                          {origins.map(o => (
-                            <SelectItem key={o.origin} value={o.origin}>
-                              {o.origin} · {o.count}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
                 </div>
 
-                {/* Lane chips — one per service, busiest first — plus STAT */}
-                {(lanes.length > 1 || statCount > 0) && (
+                {/* Origin chips — which queue the orders came from ("the
+                    cardio queue's tests"); a ward becomes another origin */}
+                {origins.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground shrink-0">From</span>
+                    <button
+                      type="button"
+                      onClick={() => setOriginFilter(null)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                        activeOrigin === null
+                          ? 'bg-primary text-primary-foreground border-primary font-medium'
+                          : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                      )}
+                    >
+                      All queues <span className="opacity-70">{baseOrders.length}</span>
+                    </button>
+                    {origins.map(o => (
+                      <button
+                        key={o.origin}
+                        type="button"
+                        onClick={() => setOriginFilter(prev => (prev === o.origin ? null : o.origin))}
+                        className={cn(
+                          'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                          activeOrigin === o.origin
+                            ? 'bg-primary text-primary-foreground border-primary font-medium'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                        )}
+                      >
+                        {o.origin} <span className="opacity-70">{o.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Lane chips — one per service, busiest first — plus STAT + status */}
+                {(lanes.length > 1 || statCount > 0 || (statusTally.notStarted > 0 && statusTally.inProgress > 0)) && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {lanes.length > 1 && (
                       <>
@@ -2695,6 +2714,36 @@ export function DepartmentWork({ dept }: { dept: Department }) {
                         <Flame className="h-3 w-3" />
                         STAT <span className="opacity-70">{statCount}</span>
                       </button>
+                    )}
+                    {statusTally.notStarted > 0 && statusTally.inProgress > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter(f => (f === 'pending' ? 'all' : 'pending'))}
+                          title="Only orders nobody has started"
+                          className={cn(
+                            'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                            statusFilter === 'pending'
+                              ? 'bg-primary text-primary-foreground border-primary font-medium'
+                              : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                          )}
+                        >
+                          Not started <span className="opacity-70">{statusTally.notStarted}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusFilter(f => (f === 'in_progress' ? 'all' : 'in_progress'))}
+                          title="Only orders someone already picked up"
+                          className={cn(
+                            'px-2.5 py-1 text-xs rounded-full border transition-colors',
+                            statusFilter === 'in_progress'
+                              ? 'bg-primary text-primary-foreground border-primary font-medium'
+                              : 'bg-background border-border text-muted-foreground hover:border-primary/50',
+                          )}
+                        >
+                          In progress <span className="opacity-70">{statusTally.inProgress}</span>
+                        </button>
+                      </>
                     )}
                   </div>
                 )}

@@ -10,6 +10,7 @@ import {
   waitedLabel,
   originOf,
   originCounts,
+  statusCounts,
   OTHER_LANE,
   GENERAL_ORIGIN,
   type WorklistOrder,
@@ -209,5 +210,21 @@ describe('originOf / originCounts', () => {
       { origin: 'Antenatal', count: 1 },
       { origin: GENERAL_ORIGIN, count: 1 },
     ])
+  })
+})
+
+describe('statusCounts', () => {
+  it('splits untouched from picked-up, ignoring done work', () => {
+    expect(statusCounts([
+      order({ id: 'a', status: 'pending' }),
+      order({ id: 'b', status: 'pending' }),
+      order({ id: 'c', status: 'in_progress' }),
+      order({ id: 'd', status: 'completed' }),
+      order({ id: 'e', status: 'cancelled' }),
+    ])).toEqual({ notStarted: 2, inProgress: 1 })
+  })
+
+  it('empty queue → zeros', () => {
+    expect(statusCounts([])).toEqual({ notStarted: 0, inProgress: 0 })
   })
 })

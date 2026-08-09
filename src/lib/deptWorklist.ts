@@ -154,3 +154,15 @@ export function waitedLabel(triggeredAt: string, nowMs: number): string {
   }
   return `${Math.floor(hours / 24)}d`
 }
+
+/** Worklist status split: untouched vs picked-up-but-unfinished. */
+export function statusCounts(orders: WorklistOrder[]): { notStarted: number; inProgress: number } {
+  let notStarted = 0
+  let inProgress = 0
+  for (const o of orders) {
+    if (OPEN_DONE.has(o.status)) continue
+    if (o.status === 'pending') notStarted += 1
+    else inProgress += 1
+  }
+  return { notStarted, inProgress }
+}
