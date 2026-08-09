@@ -62,6 +62,17 @@ export function CheckoutDialog({
   const confirm = async () => {
     if (!visit) return
     await finishVisit(visit.id)
+    // ONE ending: finishing the visit closes the record too — unless
+    // orders are still in flight (the note waits for its results and
+    // surfaces in Loose ends). RLS may decline the close for callers
+    // without rights to this note; then it simply stays a loose end.
+    if (visit.status === 'open' && openOrders.length === 0) {
+      await supabase
+        .from('encounters')
+        .update({ status: 'closed', closed_at: new Date().toISOString() })
+        .eq('id', visit.id)
+        .eq('status', 'open')
+    }
     onClose()
     onCheckedOut?.()
   }
@@ -118,6 +129,13 @@ export function CheckoutDialog({
                   You can still finish — this is only a heads-up.
                 </p>
               </div>
+            )}
+            {visit?.status === 'open' && (
+              <p className="text-[11px] text-muted-foreground">
+                {openOrders.length === 0
+                  ? 'Finishing also closes the record.'
+                  : 'The record stays open for the pending results — it will wait in Loose ends.'}
+              </p>
             )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>Cancel</Button>

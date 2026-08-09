@@ -6,13 +6,11 @@ import { useAuthStore } from '../stores/authStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { Patient, Encounter, Charge, BlockLockMap } from '../types'
 import { fullName, calcAge, getPatientDob, getPatientGender, formatDayTime, formatMinutes, cn } from '../lib/utils'
-import { updateVisit } from '../lib/visits'
+import { updateVisit, finishVisit } from '../lib/visits'
 import { canAccessEncounter, normalizeVisibility, type VisibilityValue } from '../lib/encounterAccess'
 import { useNow } from '../hooks/useNow'
 import { EncounterBill } from '../components/billing/EncounterBill'
 import { ConsultAnswerBanner } from '../components/ConsultAnswerBanner'
-import { CheckoutDialog } from '../components/visits/CheckoutDialog'
-import type { Visit } from '../types'
 import {
   Button, Badge, Separator,
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -58,7 +56,6 @@ export default function EncounterPage() {
   const [closing, setClosing] = useState(false)
   // One ending: the encounter row itself carries the journey, so Finish
   // chains close straight into the charges/orders check when the patient is here
-  const [checkoutVisit, setCheckoutVisit] = useState<Visit | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [accessRevoked, setAccessRevoked] = useState(false)
   const [encounterCharges, setEncounterCharges] = useState<Charge[]>([])
@@ -249,13 +246,14 @@ export default function EncounterPage() {
       .update({ status: 'closed', closed_at: new Date().toISOString() })
       .eq('id', encounterId)
     if (!error) {
+      // ONE ending: this dialog already reviewed charges and required
+      // blocks — finishing the journey follows without a second dialog.
+      if (encounter && encounter.arrived_at && !encounter.finished_at) {
+        await finishVisit(encounter.id)
+      }
       await fetchData()
       setConfirmClose(false)
       void timelineRef.current?.refreshAuditLog()
-      // Finish: flow straight into the charges/orders check when the patient is here
-      if (encounter && encounter.arrived_at && !encounter.finished_at) {
-        setCheckoutVisit({ ...encounter, patients: patient })
-      }
     }
     setClosing(false)
   }
@@ -759,7 +757,6 @@ export default function EncounterPage() {
         </div>
 
         {/* Finish: charges/orders check chained after encounter close */}
-        <CheckoutDialog visit={checkoutVisit} onClose={() => setCheckoutVisit(null)} />
 
         {/* Mobile tab bar */}
         <div className="md:hidden flex border-b bg-card shrink-0">
@@ -864,7 +861,7 @@ export default function EncounterPage() {
             <p className="text-sm text-muted-foreground">
               This will mark the encounter as closed. No new blocks can be added.
               The encounter will remain viewable.
-              {inClinic && ' A charges & orders check follows.'}
+              {inClinic && ' Finishing also ends the visit.'}
             </p>
 
             {requiredIncomplete.length > 0 && (

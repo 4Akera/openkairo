@@ -275,6 +275,33 @@ shrinks the schema behind it (approval-gated).
       payer-on-the-payment (claim-splitting that rewrites unit_price
       goes). Stage SQL in schema.sql section 20 and stop.
 
+### Volume pass (user's 6-point list, approved 2026-08-09 — "go")
+- [x] Search everywhere (points 2+3): "Find in queue…" client-side filter
+      on Today's Queue lane (name/MRN, carried-over included); dept
+      worklists get server-side patient search (search_patients →
+      pending block_actions by patient_id — reaches past the oldest-300
+      window, flows through origin/lane chips) + a STAT-only chip that
+      renders even for single-service departments. (2026-08-09)
+- [x] Cashier at volume (point 1): lane defaults to "Today" scope (owing
+      patients WITH a journey today), "All owing" widens with the TRUE
+      count + honest top-200 note; Insurance chip; "N items" per-row
+      context (bounded to today's patients); "collected today" broken
+      down by payment method. (2026-08-09)
+- [x] Auto-hygiene + Loose ends (points 4+6): sweepStaleJourneys on
+      Today load — no-show bookings cancel, 3-day carried-over journeys
+      auto-finish, clinical records NEVER auto-closed; the Open lane is
+      replaced by "Loose ends" (open notes whose visit ended, oldest
+      first + the week's no-shows). (2026-08-09)
+- [x] One Finish (point 5): both endings do the whole thing, once —
+      queue Done finishes the journey AND closes the record unless
+      orders are in flight (then it waits in Loose ends, dialog says
+      so); the encounter's Finish dialog (which already reviews charges
+      + required blocks) finishes the journey itself — the chained
+      second dialog is gone. (2026-08-09)
+- [ ] Later, named-not-built: per-stage timers (schema column),
+      multi-till shift totals / Z-report, queue-length counts in the
+      queue switcher, batch entry grid (existing item).
+
 ### Front Desk polish (user-approved 2026-08-09 — "go")
 - [x] Five rough edges in one pass: queue cancel is two-tap (X arms
       "Remove?", 4s auto-revert) and always visible — was a hover-only

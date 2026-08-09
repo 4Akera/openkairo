@@ -1526,3 +1526,31 @@ close; revisit if it stays pinned.
 
 **Shared tree:** co-session WIP untouched; committed FrontDeskPage,
 lib/visits + tests, docs.
+
+## 2026-08-09 — Iteration 57: One Finish — Done and Finish stop being two things
+
+**Why:** User point 5: "The done and finish modal do the same fxn." They
+did — worse, subtly differently: queue Done finished only the journey
+(leaving the record open), while the encounter's Finish closed the
+record then chained a SECOND dialog for the journey.
+
+**What:** Both endings now do the whole thing, once. CheckoutDialog
+(queue Done): finishes the journey AND closes the record — unless orders
+are still in flight, in which case the note stays open for its results
+and the dialog says it will wait in Loose ends; RLS quietly declines the
+close for callers without rights to the note (same outcome). The
+encounter's Finish dialog — which already reviews charges and required
+blocks — now finishes the journey itself after closing; the chained
+CheckoutDialog is deleted from EncounterPage (state, import, render),
+and its copy reads "Finishing also ends the visit."
+
+**Verification:** tsc --build clean, eslint clean, 214/214 tests.
+Browser: queue Done dialog renders the merged copy (no record line for
+an already-closed record — correct); close-attempt mirrors the exact
+update EncounterPage's own close performs. Cancelled without mutating
+demo data.
+
+**Shared tree:** EncounterPage is the co-session's active file (their
+two-state visibility landed mid-iteration); my edits merged cleanly
+alongside. Committing only my hunks' files: EncounterPage,
+CheckoutDialog, docs.
