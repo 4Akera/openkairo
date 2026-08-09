@@ -1703,3 +1703,65 @@ schema: predicate + creator-grant policies, sub-table derivation +
 storage policy + index, instance-arm removal, and the glass objects.
 After apply: re-verify in browser (glass open end-to-end, sealed cards,
 sub-table walls via API probe).
+
+## 2026-08-09 — Iteration 61: HOTFIX — wards DDL broke every departments embed
+
+**Why:** Post-apply browser verification caught fetchTodayVisits /
+fetchCarriedOverVisits failing on the REAL remote: "more than one
+relationship was found for 'encounters' and 'departments'". The wards
+DDL added a second FK encounters→departments (ward_id next to
+department_id), so PostgREST's bare `departments(...)` embed became
+ambiguous — Today's queue and the dept worklist's origin join were both
+down. Regression introduced by iteration 60's apply; fixed same hour.
+
+**What:** The two encounters-based embeds now hint the FK column:
+`departments!department_id(name)` — JOURNEY_SELECT in lib/visits.ts and
+WORK_QUEUE_SELECT in DepartmentWork.tsx (+ a comment at the first site
+explaining the two-FK ambiguity). Repo-wide sweep confirmed every other
+departments embed hangs off blocks / department_block_types (single FK,
+unambiguous). Rule for the ward UI build: any future departments embed
+from encounters must hint department_id or ward_id.
+
+**Verification:** browser reload — Today loads, no embed errors in
+console; tsc/eslint/tests green (no logic change). The unrelated
+`canAccessEncounter is not defined` console error was the co-session's
+mid-HMR break-the-glass WIP, resolved by their commit 06cd9be.
+
+## 2026-08-09 — Iteration 62: AI-filled Vitals pilot — local model, zero cloud
+
+**Why:** User green-lit the pilot with "go local" after the
+Claude-vs-Gemma discussion: dictated/pasted clinical text is PHI, so the
+extraction model runs on the clinic's own hardware behind an
+OpenAI-compatible endpoint. No Edge Function, no API key — the charter's
+hard stop dissolves because nothing deploys and nothing leaves.
+
+**What:** lib/aiExtract.ts — endpoint client (default
+http://localhost:11434/v1 = Ollama, model gemma3:4b, localStorage
+override `openkairo.localAi`, 30s abort, friendly not-running /
+model-missing errors); parseVitalsReply (fence-tolerant strict JSON,
+string-number coercion, CLINICAL RANGE VALIDATION — impossible values
+are dropped and reported, never shown as fact: temp checked against its
+unit, 98.6°C dies / 98.6°F lives); mergeExtractedVitals (non-null
+overwrites, clears 'unmeasured' flags, unit only travels with a temp,
+untouched fields keep manual entries). 13 tests. VitalsEdit gains a
+compact "Fill from text" panel: textarea + existing DictateButton +
+Fill fields → green "Filled BP 132/84 · … — review before saving" /
+red error line. NOTHING auto-saves; the clinician reviews the filled
+form. Zero new settings — config is code default + localStorage.
+
+**Verification:** tsc --build clean, eslint clean, 232/232 tests.
+Browser (physician, own preview :61891 — co-session's server holds
+5173): stub OpenAI endpoint on Ollama's port proved the DEFAULT config
+end-to-end — panel renders in the Vitals editor, Fill fields populated
+BP 132/84 / PR 91 (Tachycardic hint) / RR 18 / 37.9°C / SpO₂ 95%
+(Borderline) / AVPU A with the review note; NEWS2 recomputed live.
+Error path (endpoint down) covered at unit level; same note element,
+red variant. Known debt: real-model run awaits Ollama install
+(~3.3GB pull, user asked); co-session HMR churn forced two hard
+reloads mid-verify (their commits landing = expected turbulence).
+An empty Vitals block from the first add attempt remains on Adam
+Michalski's demo encounter (physician can't hard-delete; harmless).
+
+**Next:** ASR half (local Whisper/MedASR endpoint behind useDictation)
+once the user answers the dictation-language question; wards UI build
+is queued behind it (DDL live since iteration 60).

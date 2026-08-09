@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Block } from '../../../types'
 import { Button, Input, Separator } from '../../ui'
-import { Loader2, Activity } from 'lucide-react'
+import { Loader2, Activity, Sparkles } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { DictateButton, appendDictation } from './DictateButton'
+import { extractVitals, mergeExtractedVitals } from '../../../lib/aiExtract'
 
 // ============================================================
 // Content types
@@ -610,8 +612,65 @@ export function VitalsEdit({ block, onSave, onCancel }: EditProps) {
     setSaving(false)
   }
 
+  // ── AI fill-from-text (local model — text never leaves the machine) ──
+  const [aiText, setAiText] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiNote, setAiNote] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const handleAiFill = async () => {
+    const text = aiText.trim()
+    if (!text || aiBusy) return
+    setAiBusy(true)
+    setAiNote(null)
+    try {
+      const { fields, filled, dropped } = await extractVitals(text)
+      if (filled.length === 0 && dropped.length === 0) {
+        setAiNote({ ok: false, text: 'No vitals recognized in the text' })
+      } else {
+        if (filled.length > 0) setForm(f => mergeExtractedVitals(f, fields))
+        const parts = []
+        if (filled.length > 0) parts.push(`Filled ${filled.join(' · ')} — review before saving`)
+        if (dropped.length > 0) parts.push(`ignored ${dropped.join(', ')}`)
+        setAiNote({ ok: filled.length > 0, text: parts.join('; ') })
+      }
+    } catch (e) {
+      setAiNote({ ok: false, text: e instanceof Error ? e.message : 'Extraction failed' })
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-0.5">
+      {/* Fill from text */}
+      <div className="mb-2 rounded-lg border border-dashed border-border p-2 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <Sparkles className="h-3 w-3" />
+            Fill from text
+          </span>
+          <DictateButton onText={t => setAiText(prev => appendDictation(prev, t))} />
+        </div>
+        <div className="flex items-start gap-1.5">
+          <textarea
+            rows={2}
+            value={aiText}
+            onChange={e => setAiText(e.target.value)}
+            onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void handleAiFill() } }}
+            placeholder="Paste or dictate — e.g. “BP 120 over 80, pulse 72, sats 98, temp 37.2”"
+            className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => void handleAiFill()} disabled={aiBusy || !aiText.trim()}>
+            {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Fill fields'}
+          </Button>
+        </div>
+        {aiNote && (
+          <p className={cn('text-[11px] leading-snug', aiNote.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+            {aiNote.text}
+          </p>
+        )}
+      </div>
+
       {/* Blood Pressure */}
       <VRow
         label="Blood Pressure"

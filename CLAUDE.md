@@ -363,9 +363,20 @@ result loop. Judged against: one journey, no new concepts.
 - [x] Result-ready notifications: realtime toast for the ordering physician
       when their lab/radiology order completes, linking to the encounter.
       (2026-08-08 — ResultToasts in the app shell; self-contained toaster)
-- [ ] AI-filled blocks pilot: dictate/paste free text → Claude fills the
-      structured fields of the Vitals block. HARD STOP before deploying the
-      Edge Function or wiring an API key — ask the user first.
+- [x] AI-filled blocks pilot: dictate/paste free text → a LOCAL model fills
+      the structured fields of the Vitals block (user redirected from
+      Claude API to self-hosted 2026-08-09 "go local" — PHI never leaves
+      the machine; MedGemma/Gemma via Ollama, no Edge Function, no key).
+      (2026-08-09 — lib/aiExtract: OpenAI-compatible endpoint client
+      (default localhost:11434 = Ollama, localStorage override), strict
+      JSON parse + clinical range validation (out-of-range dropped +
+      reported), mergeExtractedVitals clears unmeasured flags; tested.
+      VitalsEdit gains a "Fill from text" panel (paste/dictate → Fill
+      fields → review-before-save note). Chain browser-verified against a
+      stub endpoint; REMAINING: user installs Ollama + pulls a model
+      (~3.3GB, asked), then re-verify with a real model. ASR half (local
+      Whisper/MedASR behind useDictation) is a separate follow-up —
+      blocked on the dictation-language answer.)
 - [x] One Blocks place in Settings: merge My Blocks / Templates / Block
       Library into a single "Blocks" section with tabs (three nav items
       become one). (2026-08-08 — Settings nav 10 → 8 entries)
