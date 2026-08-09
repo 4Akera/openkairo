@@ -75,14 +75,17 @@ surfaces. Sequence agreed with user:
       document on what you can't open; so the sealed tier makes no
       membership claim and everyone else opens through the glass with a
       one-line logged reason in encounter_audit_log).
-      (2026-08-09 — UI HALF SHIPPED, user-directed via the New Encounter
-      modal: two states everywhere — create dialog, header chip+popover,
-      template defaults — Sensitive reuses 'private', zero schema; legacy
-      restricted displays as Sensitive, roles still honored, converges on
-      next save. REMAINING: break-the-glass — sealed-existence rows +
-      open-with-reason writing encounter_audit_log + a glass-opens arm in
-      can_access_encounter. SCHEMA — stage + ask; until it ships,
-      Sensitive is a hard wall like private always was.)
+      (2026-08-09 — BUILT in full. Two states everywhere (create dialog,
+      header chip+popover, template defaults; Sensitive reuses 'private',
+      legacy restricted converges on save). Break-the-glass: GlassDoor on
+      the walled encounter branch + Sensitive sealed-cards section on the
+      patient page + glass_open in the audit trail; schema STAGED —
+      encounter_glass_opens, glass arm in can_access_encounter (grants
+      update too, deliberately — audit carries accountability),
+      break_glass() + get_sealed_encounters() definer RPCs, audit
+      trigger. Degrades honestly pre-apply. WHOLE PASS completes on ONE
+      user-approved apply of the staged schema; then re-verify glass
+      end-to-end + sub-table walls.)
 
 ### Departments are the unit (user-approved 2026-08-08): capability flavors
 One departments table is the whole org model — a department composes
