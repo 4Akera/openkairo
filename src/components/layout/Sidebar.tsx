@@ -5,27 +5,30 @@ import { useThemeStore } from '../../stores/themeStore'
 import { useDeptPendingCounts } from '../../hooks/useDeptPendingCounts'
 import { useHasWards } from '../../hooks/useHasWards'
 import { deptIconComponent } from '../../lib/deptIcons'
-import { isQueueDept, isWard } from '../../lib/queues'
+import { isWorkDept, isWard } from '../../lib/queues'
 import { cn } from '../../lib/utils'
-import { LogOut, Settings, Search, Sun, Moon, ClipboardList, BedDouble } from 'lucide-react'
+import { LogOut, Settings, Search, Sun, Moon, ClipboardList, BedDouble, Building2 } from 'lucide-react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui'
 import Logo from '../Logo'
 
 /**
  * One nav item serving both sidebar modes: an icon-only rail below xl and a
- * labeled 224px sidebar at xl+. Labels, count pills, and section headers are
- * shown at xl; below that the icon carries a corner badge and a tooltip.
+ * labeled 224px sidebar at xl+. Labels and count pills are shown at xl;
+ * below that the icon carries a corner badge and a tooltip.
  */
 function NavItem({
   to,
   end,
+  match,
   icon: Icon,
   label,
   count = 0,
 }: {
   to: string
   end?: boolean
+  /** Highlight on this path pattern instead of `to` (e.g. any /dept/*) */
+  match?: string
   icon: ComponentType<{ className?: string }>
   label: string
   count?: number
@@ -34,7 +37,7 @@ function NavItem({
   // className: TooltipTrigger's asChild Slot joins className props with
   // .join(' '), which stringifies a function — the class attribute would
   // become the function's source code.
-  const active = useMatch({ path: to, end: end ?? false }) !== null
+  const active = useMatch({ path: match ?? to, end: end ?? false }) !== null
   return (
     <Tooltip delayDuration={250}>
       <TooltipTrigger asChild>
@@ -82,12 +85,20 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
   const isDeptOnly = inDept && permissions.length === 0
   const hasFrontDesk = hasRole('receptionist') || hasRole('physician') || hasRole('nurse') || hasRole('admin')
   // Pure patient queues live on Today and wards on the census page, not in
-  // the nav — only order-fulfilling departments get their own entry.
-  const navDepts = myDepartments.filter(d => !isQueueDept(d) && !isWard(d))
+  // the nav — only order-fulfilling departments get their own entry. And it
+  // is ONE entry no matter how many such departments the user belongs to:
+  // the nav stays the same size, the per-dept switcher lives inside the
+  // work view. The badge is the sum of open orders across them.
+  const navDepts = myDepartments.filter(isWorkDept)
   const deptCounts = useDeptPendingCounts(navDepts.map(d => d.slug))
+  const deptTotal = navDepts.reduce((n, d) => n + (deptCounts[d.slug] ?? 0), 0)
+  const deptEntry = navDepts.length === 0 ? null : navDepts.length === 1
+    ? { to: `/dept/${navDepts[0].slug}`, match: undefined, label: navDepts[0].name, icon: deptIconComponent(navDepts[0].icon) }
+    : { to: `/dept/${navDepts[0].slug}`, match: '/dept', label: 'Departments', icon: Building2 }
   // Wards nav appears once the org has a ward — creating one IS the toggle.
+  // Ward members always get the entry (the census IS their surface).
   const hasWards = useHasWards()
-  const showWards = hasWards && !isDeptOnly && hasFrontDesk
+  const showWards = hasWards && (myDepartments.some(isWard) || (!isDeptOnly && hasFrontDesk))
 
   // The registry lives behind search (⌘K) and Today — no nav entry. Billing
   // staff get Today too: the Cashier lane there IS their surface (/billing
@@ -95,6 +106,9 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
   const showToday = hasFrontDesk || hasBilling
   const { theme, toggle } = useThemeStore()
   const navigate = useNavigate()
+  // Mobile: the merged Departments tab lights on ANY /dept/* route (NavLink
+  // only matches its own `to`); single-dept entries keep exact matching.
+  const anyDeptOpen = useMatch({ path: '/dept', end: false }) !== null && deptEntry?.match !== undefined
 
   const handleSignOut = async () => {
     await signOut()
@@ -154,24 +168,16 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           )}
           {showWards && <NavItem to="/wards" label="Wards" icon={BedDouble} />}
 
-          {/* One entry per membership department */}
-          {navDepts.length > 0 && (
-            <>
-              <div className="xl:hidden w-8 h-px bg-white/[0.06] my-2 mx-auto shrink-0" />
-              <p className="hidden xl:block px-2.5 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500/80">
-                Departments
-              </p>
-            </>
-          )}
-          {navDepts.map(dept => (
+          {/* Departments — one entry; multi-membership switches inside the work view */}
+          {deptEntry && (
             <NavItem
-              key={dept.id}
-              to={`/dept/${dept.slug}`}
-              label={dept.name}
-              icon={deptIconComponent(dept.icon)}
-              count={deptCounts[dept.slug] ?? 0}
+              to={deptEntry.to}
+              match={deptEntry.match}
+              label={deptEntry.label}
+              icon={deptEntry.icon}
+              count={deptTotal}
             />
-          ))}
+          )}
         </nav>
 
         {/* Bottom — Settings by the workspace controls, then the user row */}
@@ -294,35 +300,35 @@ export default function Sidebar({ onSearchOpen }: { onSearchOpen?: () => void })
           </NavLink>
         )}
 
-        {/* Departments before Settings — day work first, config last */}
-        {navDepts.map(dept => {
-          const DeptIcon = deptIconComponent(dept.icon)
-          const count = deptCounts[dept.slug] ?? 0
+        {/* Departments — the same single entry as the desktop nav */}
+        {deptEntry && (() => {
+          const DeptIcon = deptEntry.icon
           return (
             <NavLink
-              key={dept.id}
-              to={`/dept/${dept.slug}`}
+              to={deptEntry.to}
               className={({ isActive }) =>
                 cn(
                   'relative flex flex-col items-center gap-0.5 px-3 min-h-[44px] justify-center rounded-lg transition-colors',
-                  isActive ? 'text-white' : 'text-slate-500',
+                  (isActive || anyDeptOpen) ? 'text-white' : 'text-slate-500',
                 )
               }
             >
               {({ isActive }) => (
                 <>
-                  <DeptIcon className={cn('h-5 w-5', isActive && 'text-blue-400')} />
-                  {count > 0 && (
+                  <DeptIcon className={cn('h-5 w-5', (isActive || anyDeptOpen) && 'text-blue-400')} />
+                  {deptTotal > 0 && (
                     <span className="absolute top-0.5 right-1 flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold leading-none">
-                      {count > 99 ? '99+' : count}
+                      {deptTotal > 99 ? '99+' : deptTotal}
                     </span>
                   )}
-                  <span className="text-xs font-medium truncate max-w-[64px]">{dept.name}</span>
+                  <span className="text-xs font-medium truncate max-w-[64px]">
+                    {navDepts.length > 1 ? 'Depts' : deptEntry.label}
+                  </span>
                 </>
               )}
             </NavLink>
           )
-        })}
+        })()}
 
         {/* Settings */}
         <NavLink

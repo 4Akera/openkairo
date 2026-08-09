@@ -1972,3 +1972,42 @@ Browser (shared dev server, HMR): at 900px and 700px widths the inner
 wrapper computes `display: block`, scrollWidth == viewport width, all
 row actions (stage select / Open / Done / X) on-screen, sublines
 truncate with ellipsis; header filter rows wrap as designed.
+
+## 2026-08-09 — User-directed: sidebar tidy for multi-dept doctors
+
+**Item:** User request: "make sidebar tidy for let say doctors w/ multiple
+depts." A 5-membership physician had five nav entries (desktop) and an
+11-tab horizontally-scrolling mobile bar.
+
+**What changed:** the nav shows ONE Departments entry no matter how many
+work departments you belong to; switching moved into the work view itself.
+- `lib/queues.ts`: `isWorkDept` (= not queue, not ward) — the one cut
+  shared by the nav, the dept-only landing, and the new switcher (tested).
+- `Sidebar.tsx`: single entry — your dept's own name/icon when you have
+  one, "Departments" + summed open-orders badge when several (links to the
+  first, lights on any /dept/*; NavItem gained a `match` prop). The
+  DEPARTMENTS section header/divider deleted. Mobile bottom bar: one
+  badged "Depts" tab replaces the per-dept tabs (11 tabs → 7 for the
+  worst-case doctor). Ward members now always get the Wards entry.
+- `DepartmentPage.tsx`: header gains the switcher — same segmented-control
+  pattern as Today's lane switcher — one chip per membership with live
+  open counts (useDeptPendingCounts); wards redirect to /wards (dead
+  ward work-views were reachable before). Admins browsing a non-member
+  dept get no switcher.
+- `App.tsx`: DeptAwareIndex ward-aware — ward-only staff land on /wards.
+
+**Why:** nav size was O(memberships); per-dept badges only carried counts
+you act on inside the work view anyway. Net concepts −1 (section header
+gone, no new nav concepts; switcher reuses the Front Desk lane pattern).
+
+**Verification:** tsc --build clean (pre-existing errors from a parallel
+session's in-flight MedicationList WIP excluded — none in touched files),
+eslint clean, 267/267 tests. Browser (shared dev server): admin (5 depts)
+→ Today · Wards · Departments 21 · Settings; chips Cardiology 2 /
+Pharmacy 4 / Laboratory 10 / Radiology 5 sum to the badge, ward absent;
+chip switch loads the lab worklist with active states right; rail shows
+one badged icon; mobile shows one Depts tab. lab.tech (1 dept) keeps a
+named Radiology entry, dept-only redirect intact, no switcher.
+
+**Note:** tree shared with live parallel sessions — commit scoped to the
+six files above; waited out the wards iteration before touching Sidebar.

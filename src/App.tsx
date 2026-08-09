@@ -4,7 +4,7 @@ import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './stores/themeStore'
-import { isQueueDept } from './lib/queues'
+import { isWorkDept, isWard } from './lib/queues'
 
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
@@ -31,15 +31,14 @@ function PageFallback() {
 
 function DeptAwareIndex() {
   const { myDepartments, permissions } = useAuthStore()
-  // Pure patient queues have no page of their own — only order-fulfilling
-  // departments do, so dept-only users land in the first of those.
-  const workDepts = myDepartments.filter(d => !isQueueDept(d))
-  const isDeptOnly = workDepts.length > 0 && permissions.length === 0
-  // The app opens on the day: Today (Front Desk) is home; dept-only users
-  // land in their own workspace; the registry lives at /patients.
-  return isDeptOnly
-    ? <Navigate to={`/dept/${workDepts[0].slug}`} replace />
-    : <FrontDeskPage />
+  // The app opens on the day: Today (Front Desk) is home; dept-only staff
+  // land on their own surface instead — the first work view, or the ward
+  // census when their only department is a ward.
+  const workDepts = myDepartments.filter(isWorkDept)
+  const isDeptOnly = myDepartments.length > 0 && permissions.length === 0
+  if (isDeptOnly && workDepts.length > 0) return <Navigate to={`/dept/${workDepts[0].slug}`} replace />
+  if (isDeptOnly && myDepartments.some(isWard)) return <Navigate to="/wards" replace />
+  return <FrontDeskPage />
 }
 
 function ProtectedRoute() {

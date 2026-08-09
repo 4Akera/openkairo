@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deptSummary, isQueueDept } from '../queues'
+import { deptSummary, isQueueDept, isWorkDept } from '../queues'
 import type { Department } from '../../types'
 
 const dept = (caps: Partial<Department>): Department => ({
@@ -19,6 +19,20 @@ describe('isQueueDept', () => {
   })
   it('a unit with no capabilities at all is not a queue', () => {
     expect(isQueueDept(dept({}))).toBe(false)
+  })
+})
+
+describe('isWorkDept', () => {
+  it('order and direct-entry units have a work view', () => {
+    expect(isWorkDept(dept({ can_receive_orders: true }))).toBe(true)
+    expect(isWorkDept(dept({ can_create_direct: true }))).toBe(true)
+  })
+  it('hybrid clinic keeps its work view', () => {
+    expect(isWorkDept(dept({ can_receive_patients: true, can_receive_orders: true }))).toBe(true)
+  })
+  it('pure queues and wards have no work view', () => {
+    expect(isWorkDept(dept({ can_receive_patients: true }))).toBe(false)
+    expect(isWorkDept(dept({ kind: 'ward' }))).toBe(false)
   })
 })
 

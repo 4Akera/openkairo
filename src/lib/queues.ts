@@ -15,6 +15,13 @@ export const isQueueDept = (d: Department) =>
   !isWard(d) && !!d.can_receive_patients && !d.can_receive_orders && !d.can_create_direct
 
 /**
+ * Work dept = has a work view at /dept/:slug (fulfils orders or takes direct
+ * entries). Queues live on Today, wards on the census page — the nav, the
+ * dept-only landing, and the in-page dept switcher all share this cut.
+ */
+export const isWorkDept = (d: Department) => !isQueueDept(d) && !isWard(d)
+
+/**
  * Plain-language one-liner for a department row in Settings — derived from
  * capabilities, so the row explains itself without capability checkboxes.
  */
