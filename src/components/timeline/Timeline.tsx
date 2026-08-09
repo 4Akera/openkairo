@@ -386,7 +386,9 @@ const Timeline = forwardRef<TimelineHandle, Props>(function Timeline(
       author_name: authorName,
       definition_id: definitionId ?? null,
       created_by: user.id,
-      visible_to_roles: def?.default_visible_to_roles ?? [],
+      // Blocks start unrestricted — privacy is the encounter's job
+      // (default_visible_to_roles is retired; stored values are inert).
+      visible_to_roles: [],
     }).select().single()
     if (data) {
       const newBlock = data as Block

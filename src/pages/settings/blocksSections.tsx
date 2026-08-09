@@ -48,7 +48,6 @@ function BlockVisibilityCard({
   savingRoles,
   onToggleActive,
   onToggleRole,
-  onToggleDefaultRole,
   onEdit,
   onDelete,
   onDuplicate,
@@ -59,7 +58,6 @@ function BlockVisibilityCard({
   savingRoles: string | null
   onToggleActive: () => void
   onToggleRole: (slug: string) => void
-  onToggleDefaultRole: (slug: string) => void
   onEdit?: () => void
   onDelete?: () => void
   onDuplicate?: () => void
@@ -67,8 +65,7 @@ function BlockVisibilityCard({
 }) {
   const [expanded, setExpanded] = useState(false)
   const colors      = getDefinitionColors(def.color)
-  const visibleRoles = def.visible_to_roles        ?? []
-  const defaultRoles = def.default_visible_to_roles ?? []
+  const visibleRoles = def.visible_to_roles ?? []
   const blockAddRoles = allRoles.filter((r) => r.permissions.includes('block.add'))
   const isDeptResultDef = def.config?.dept_role === 'result'
   /** Built-ins and registry variants use Edit for roles/billing — same compact header as built-in */
@@ -167,55 +164,29 @@ function BlockVisibilityCard({
             </p>
           </div>
         ) : (
-          <>
-            <div className="border-t bg-muted/30 px-3 py-1.5 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-medium text-muted-foreground shrink-0 w-24">
-                {savingRoles === `${def.id}:vis`
-                  ? <Loader2 className="h-2.5 w-2.5 animate-spin inline" />
-                  : 'Can add:'}
-              </span>
-              {blockAddRoles.map(role => {
-                const on = visibleRoles.includes(role.slug)
-                return (
-                  <button key={role.id} type="button" disabled={savingRoles !== null}
-                    onClick={() => onToggleRole(role.slug)}
-                    className={cn(
-                      'text-[10px] px-2 py-0.5 rounded-full border transition-colors capitalize',
-                      on ? 'bg-primary/10 border-primary/40 text-primary font-medium'
-                         : 'border-border text-muted-foreground hover:border-primary/30 hover:text-foreground',
-                    )}
-                  >
-                    {role.name}
-                  </button>
-                )
-              })}
-              {visibleRoles.length === 0 && <span className="text-[10px] text-muted-foreground italic">Everyone</span>}
-            </div>
-
-            <div className="border-t bg-muted/20 px-3 py-1.5 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-medium text-muted-foreground shrink-0 w-24">
-                {savingRoles === `${def.id}:def`
-                  ? <Loader2 className="h-2.5 w-2.5 animate-spin inline" />
-                  : 'Default view:'}
-              </span>
-              {blockAddRoles.map(role => {
-                const on = defaultRoles.includes(role.slug)
-                return (
-                  <button key={role.id} type="button" disabled={savingRoles !== null}
-                    onClick={() => onToggleDefaultRole(role.slug)}
-                    className={cn(
-                      'text-[10px] px-2 py-0.5 rounded-full border transition-colors capitalize',
-                      on ? 'bg-amber-100 border-amber-300 text-amber-700 font-medium dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-400'
-                         : 'border-border text-muted-foreground hover:border-amber-300 hover:text-foreground',
-                    )}
-                  >
-                    {role.name}
-                  </button>
-                )
-              })}
-              {defaultRoles.length === 0 && <span className="text-[10px] text-muted-foreground italic">All staff</span>}
-            </div>
-          </>
+          <div className="border-t bg-muted/30 px-3 py-1.5 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-medium text-muted-foreground shrink-0 w-24">
+              {savingRoles === `${def.id}:vis`
+                ? <Loader2 className="h-2.5 w-2.5 animate-spin inline" />
+                : 'Can add:'}
+            </span>
+            {blockAddRoles.map(role => {
+              const on = visibleRoles.includes(role.slug)
+              return (
+                <button key={role.id} type="button" disabled={savingRoles !== null}
+                  onClick={() => onToggleRole(role.slug)}
+                  className={cn(
+                    'text-[10px] px-2 py-0.5 rounded-full border transition-colors capitalize',
+                    on ? 'bg-primary/10 border-primary/40 text-primary font-medium'
+                       : 'border-border text-muted-foreground hover:border-primary/30 hover:text-foreground',
+                  )}
+                >
+                  {role.name}
+                </button>
+              )
+            })}
+            {visibleRoles.length === 0 && <span className="text-[10px] text-muted-foreground italic">Everyone</span>}
+          </div>
         )
       )}
     </div>
@@ -391,15 +362,6 @@ export function StandardBlocksSection() {
     setSavingRoles(null)
   }
 
-  const handleToggleDefaultRole = async (def: BlockDefinition, slug: string) => {
-    setSavingRoles(`${def.id}:def`)
-    const current = def.default_visible_to_roles ?? []
-    const next = current.includes(slug) ? current.filter(r => r !== slug) : [...current, slug]
-    const res = await adminApi.updateStandardBlock(def.id, { default_visible_to_roles: next })
-    if (!res.error && res.data) setDefs((prev) => prev.map((d) => (d.id === def.id ? res.data! : d)))
-    setSavingRoles(null)
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -435,7 +397,6 @@ export function StandardBlocksSection() {
                 savingRoles={savingRoles}
                 onToggleActive={() => handleToggleActive(def)}
                 onToggleRole={(slug) => handleToggleRole(def, slug)}
-                onToggleDefaultRole={(slug) => handleToggleDefaultRole(def, slug)}
                 onEdit={() => setEditing(def)}
                 onDuplicate={() => openDuplicateModal(def)}
                 onDelete={() => handleDelete(def)}

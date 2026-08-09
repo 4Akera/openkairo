@@ -715,89 +715,45 @@ export function BlockDefinitionModal({
                       Block is created by department staff in their department workspace — role access is controlled by department membership.
                     </p>
                   ) : (
-                    <>
-                      <section className="space-y-3">
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Can Add</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            Leave all unchecked to allow every role with block-add permission.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {blockAddRoles.map((role) => {
-                            const active = (form.visible_to_roles ?? []).includes(role.slug)
-                            return (
-                              <label
-                                key={role.id}
-                                className={cn(
-                                  'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors',
-                                  active
-                                    ? 'border-primary/50 bg-primary/10 text-primary font-medium'
-                                    : 'border-border hover:border-primary/30',
-                                )}
-                              >
-                                <input
-                                  type="checkbox"
-                                  className="w-3 h-3"
-                                  checked={active}
-                                  onChange={(e) => {
-                                    const curr = form.visible_to_roles ?? []
-                                    set({
-                                      visible_to_roles: e.target.checked
-                                        ? [...curr, role.slug]
-                                        : curr.filter((s) => s !== role.slug),
-                                    })
-                                  }}
-                                />
-                                {role.name}
-                              </label>
-                            )
-                          })}
-                        </div>
-                      </section>
-
-                      <Separator />
-
-                      <section className="space-y-3">
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Default View</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            When added to an encounter, the block will start restricted to these roles. Leave all unchecked for all staff.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {blockAddRoles.map((role) => {
-                            const active = (form.default_visible_to_roles ?? []).includes(role.slug)
-                            return (
-                              <label
-                                key={role.id}
-                                className={cn(
-                                  'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors',
-                                  active
-                                    ? 'border-amber-500/60 bg-amber-50 text-amber-700 font-medium'
-                                    : 'border-border hover:border-amber-300',
-                                )}
-                              >
-                                <input
-                                  type="checkbox"
-                                  className="w-3 h-3"
-                                  checked={active}
-                                  onChange={(e) => {
-                                    const curr = form.default_visible_to_roles ?? []
-                                    set({
-                                      default_visible_to_roles: e.target.checked
-                                        ? [...curr, role.slug]
-                                        : curr.filter((s) => s !== role.slug),
-                                    })
-                                  }}
-                                />
-                                {role.name}
-                              </label>
-                            )
-                          })}
-                        </div>
-                      </section>
-                    </>
+                    <section className="space-y-3">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Can Add</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Leave all unchecked to allow every role with block-add permission.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {blockAddRoles.map((role) => {
+                          const active = (form.visible_to_roles ?? []).includes(role.slug)
+                          return (
+                            <label
+                              key={role.id}
+                              className={cn(
+                                'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors',
+                                active
+                                  ? 'border-primary/50 bg-primary/10 text-primary font-medium'
+                                  : 'border-border hover:border-primary/30',
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="w-3 h-3"
+                                checked={active}
+                                onChange={(e) => {
+                                  const curr = form.visible_to_roles ?? []
+                                  set({
+                                    visible_to_roles: e.target.checked
+                                      ? [...curr, role.slug]
+                                      : curr.filter((s) => s !== role.slug),
+                                  })
+                                }}
+                              />
+                              {role.name}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </section>
                   )
                 )}
 
@@ -1291,7 +1247,7 @@ export function BlockDefinitionModal({
 
             <Separator />
 
-            {/* ── Encounter role gating (standard: Role Visibility + default privacy; hidden for dept result) ── */}
+            {/* ── Encounter role gating (who can add this block type; hidden for dept result) ── */}
             {blockAddRoles.length > 0 && (
               isDeptResultBlock ? (
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
@@ -1304,10 +1260,10 @@ export function BlockDefinitionModal({
                       <section className="space-y-3">
                         <div>
                           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                            Role Visibility
+                            Can Add
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            Leave all unchecked to show this block to every role that can add blocks.
+                            Which roles can add this block type. Leave all unchecked to allow every role with block-add permission.
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -1342,51 +1298,8 @@ export function BlockDefinitionModal({
                           })}
                         </div>
                       </section>
-                      <Separator />
                     </>
                   )}
-
-                  <section className="space-y-3">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        Default Block Privacy
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        When this block type is added to an encounter, it will start with these privacy settings. Staff can still change them per-block.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {blockAddRoles.map((role) => {
-                        const active = (form.default_visible_to_roles ?? []).includes(role.slug)
-                        return (
-                          <label
-                            key={role.id}
-                            className={cn(
-                              'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors',
-                              active
-                                ? 'border-amber-500/60 bg-amber-50 text-amber-700 font-medium'
-                                : 'border-border hover:border-amber-300',
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              className="w-3 h-3"
-                              checked={active}
-                              onChange={(e) => {
-                                const curr = form.default_visible_to_roles ?? []
-                                set({
-                                  default_visible_to_roles: e.target.checked
-                                    ? [...curr, role.slug]
-                                    : curr.filter((s) => s !== role.slug),
-                                })
-                              }}
-                            />
-                            {role.name}
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </section>
                 </>
               )
             )}
