@@ -111,7 +111,11 @@ page = census. Department pages must never become patient surfaces again.
       "Discharge" when admitted; Today queues and carried-over EXCLUDE
       admitted encounters. Beds stay free text — no beds table, no bed
       states. Creating the first ward IS the feature toggle — no settings
-      flag.
+      flag. (2026-08-09 — SQL STAGED as a commented section-20 block in
+      schema.sql: departments.kind check ('unit','ward') + capacity,
+      encounters ward_id / admitted_at / bed, partial census index.
+      REMOTE APPLY + the ward UI (census page, Admit/Discharge, Today
+      exclusions, isQueueDept kind check) await user approval.)
 
 ### Ground-up restructure (user-approved 2026-08-08): ENCOUNTER IS THE EVENT
 The encounter absorbs the visit: one object carries the clinical record AND

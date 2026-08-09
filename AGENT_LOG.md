@@ -1265,3 +1265,30 @@ queue empty, History 1. Completion toast title not visually caught
 built_in_type lookup. Parallel session's files (BlockWrapper, TourBlock,
 addBlockMenuGroups, blockExportHtml, visits, schema.sql) left untouched
 and excluded.
+
+## 2026-08-09 — Iteration 53: wards schema staged (approval-gated, stop)
+
+**Why:** Item 3 of the department-as-unit pass. Hard limit applies: no
+remote schema without explicit user approval — so this iteration stages
+and stops.
+
+**What:** Commented block appended to schema.sql section 20 (PENDING USER
+APPROVAL): departments.kind text check ('unit','ward') — the EXPLICIT
+ward discriminator (never inferred from absent capabilities) + optional
+capacity; encounters.ward_id (FK departments) / admitted_at / bed text;
+partial index for the census (open admitted encounters by ward). Design
+notes captured inline: admission = a phase of the SAME encounter, first
+ward created = feature toggle, beds stay free text, Today/carried-over
+exclude admitted encounters (ships with the UI).
+
+**Deliberately NOT committed: schema.sql.** The file also carries a
+parallel session's in-flight uncommitted edits; committing it would
+entangle their WIP with mine. My wards block sits at the file tail
+(append-only, no conflict) and should ride the next schema.sql commit —
+whichever session lands it first.
+
+**Blocked / next:** Remote apply + the ward UI (Wards census page, Admit
+action, "Discharge" wording, Today exclusions, isQueueDept kind check)
+wait for the user's word. Consults follow-ups worth watching: curated
+Block Preferences hide new consult defs until re-saved; arrival-side
+toast for dept members only if a real consult gets missed.
