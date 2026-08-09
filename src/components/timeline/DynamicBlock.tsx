@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { BlockDefinition, FieldDef } from '../../types'
 import { Input } from '../ui'
 import { cn } from '../../lib/utils'
+import { DictateButton, appendDictation } from './blocks/DictateButton'
 
 // ============================================================
 // Field-level view component
@@ -133,7 +134,13 @@ function FieldEdit({
   if (field.type === 'textarea') {
     return (
       <div>
-        {label}
+        <div className="flex items-end justify-between gap-2 mb-1">
+          <label className="block text-xs text-muted-foreground">
+            {field.label}
+            {field.required && <span className="text-red-400 ml-0.5">*</span>}
+          </label>
+          <DictateButton onText={t => onChange(appendDictation((value as string) ?? '', t))} />
+        </div>
         <textarea
           value={(value as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}

@@ -3,6 +3,7 @@ import type { Block, HxPhysicalContent, RosItemState, RosSystemState, ExamItemSt
 import { Textarea, Button, Label, Separator, Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui'
 import { ChevronDown, ChevronRight, Loader2, RotateCcw, CheckCheck } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { DictateButton, appendDictation } from './DictateButton'
 
 // ─── Static data ─────────────────────────────────────────────────────────────
 
@@ -533,7 +534,10 @@ export function HxPhysicalEdit({ block, onSave, onCancel }: EditProps) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>History of Present Illness</Label>
+            <div className="flex items-end justify-between gap-2">
+              <Label>History of Present Illness</Label>
+              <DictateButton onText={t => setForm(f => ({ ...f, hpi: appendDictation(f.hpi, t) }))} />
+            </div>
             <Textarea
               rows={6}
               placeholder="Onset, duration, character, associated symptoms, modifying factors…"
@@ -553,7 +557,10 @@ export function HxPhysicalEdit({ block, onSave, onCancel }: EditProps) {
           ))}
           <Separator />
           <div className="space-y-1.5">
-            <Label>Additional ROS Notes</Label>
+            <div className="flex items-end justify-between gap-2">
+              <Label>Additional ROS Notes</Label>
+              <DictateButton onText={t => setForm(f => ({ ...f, ros_notes: appendDictation(f.ros_notes, t) }))} />
+            </div>
             <Textarea
               rows={3}
               placeholder="Any ROS findings that don't fit the systems above…"
@@ -573,7 +580,10 @@ export function HxPhysicalEdit({ block, onSave, onCancel }: EditProps) {
           ))}
           <Separator />
           <div className="space-y-1.5">
-            <Label>Additional Exam Notes</Label>
+            <div className="flex items-end justify-between gap-2">
+              <Label>Additional Exam Notes</Label>
+              <DictateButton onText={t => setForm(f => ({ ...f, exam_notes: appendDictation(f.exam_notes, t) }))} />
+            </div>
             <Textarea
               rows={3}
               placeholder="Any exam findings that don't fit the systems above…"

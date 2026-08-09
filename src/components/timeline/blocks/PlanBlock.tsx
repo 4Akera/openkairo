@@ -7,6 +7,7 @@ import {
   Download, AlertCircle, CheckCircle2, Link2,
 } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { DictateButton, appendDictation } from './DictateButton'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -339,7 +340,10 @@ function ProblemRow({
 
       {/* Plan */}
       <div className="space-y-1">
-        <Label className="text-xs">Management Plan</Label>
+        <div className="flex items-end justify-between gap-2">
+          <Label className="text-xs">Management Plan</Label>
+          <DictateButton onText={t => onChange({ plan: appendDictation(problem.plan, t) })} />
+        </div>
         <Textarea
           rows={2}
           className="text-sm"
@@ -397,7 +401,10 @@ export function PlanEdit({ block, onSave, onCancel }: EditProps) {
     <div className="space-y-4">
       {/* Assessment */}
       <div className="space-y-1.5">
-        <Label>Assessment / Impression</Label>
+        <div className="flex items-end justify-between gap-2">
+          <Label>Assessment / Impression</Label>
+          <DictateButton onText={t => setAssessment(prev => appendDictation(prev, t))} />
+        </div>
         <Textarea
           rows={3}
           placeholder="Overall clinical impression, working diagnosis, differential diagnoses…"
@@ -467,7 +474,10 @@ export function PlanEdit({ block, onSave, onCancel }: EditProps) {
 
       {/* Follow-up */}
       <div className="space-y-1.5">
-        <Label>Disposition / Follow-up</Label>
+        <div className="flex items-end justify-between gap-2">
+          <Label>Disposition / Follow-up</Label>
+          <DictateButton onText={t => setFollowup(prev => appendDictation(prev, t))} />
+        </div>
         <Textarea
           rows={2}
           placeholder="Discharge instructions, return precautions, follow-up appointments…"
