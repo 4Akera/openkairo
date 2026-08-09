@@ -283,6 +283,13 @@ shrinks the schema behind it (approval-gated).
       visit duration. Helpers in lib/visits, tested. (2026-08-09)
 
 ### Post-restructure cleanup (pure simplification)
+- [x] Built-in blocks curation (user-directed 2026-08-09): Media retired
+      (attachment is a capability of Note/Wound/Procedure, not a document
+      type; active=false, legacy blocks keep rendering w/ attachments),
+      Pharmacy Fulfillment dept-only like the other fulfilment blocks,
+      Pain Assessment + Wound Care opened to nurses, Ward Round Note →
+      Progress Note, Radiology Request → Radiology Order. Nothing added.
+      DML applied to remote (5 row updates, no DDL). (2026-08-09)
 - [x] Single source in the encounter view: VisitJourneyStrip becomes
       props-driven (encounter + patient from the page); delete its own
       fetch/channel and EncounterPage's linkedVisit mirror — the page's

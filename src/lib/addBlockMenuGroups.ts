@@ -14,7 +14,6 @@ const GROUP_ORDER = [
   'labs',
   'imaging',
   'pharmacy',
-  'media',
   'other',
 ] as const
 
@@ -27,7 +26,6 @@ const GROUP_LABELS: Record<AddBlockMenuGroupId, string> = {
   labs: 'Laboratory',
   imaging: 'Imaging & radiology',
   pharmacy: 'Medications & pharmacy',
-  media: 'Media & attachments',
   other: 'Other',
 }
 
@@ -51,7 +49,6 @@ const SLUG_TO_GROUP: Record<string, AddBlockMenuGroupId> = {
   radiology_result: 'imaging',
   meds: 'pharmacy',
   pharmacy_fulfillment: 'pharmacy',
-  media: 'media',
 }
 
 export function groupIdForDefinition(def: BlockDefinition): AddBlockMenuGroupId {

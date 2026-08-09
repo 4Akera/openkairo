@@ -37,7 +37,7 @@ export function TourView({ block }: { block: Block }) {
   ].filter(s => s.value?.trim())
 
   if (sections.length === 0 && tasks.length === 0) {
-    return <p className="text-sm text-muted-foreground italic">No ward round note documented.</p>
+    return <p className="text-sm text-muted-foreground italic">No progress note documented.</p>
   }
 
   const done    = tasks.filter(t => t.done).length
@@ -193,7 +193,7 @@ export function TourEdit({ block, onSave, onCancel }: EditProps) {
         <Button variant="outline" size="sm" type="button" onClick={onCancel}>Cancel</Button>
         <Button size="sm" type="button" disabled={saving} onClick={handleSave}>
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Save ward round note
+          Save progress note
         </Button>
       </div>
     </div>

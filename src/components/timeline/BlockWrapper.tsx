@@ -112,7 +112,12 @@ const BUILTIN_METADATA: Record<string, { name: string; icon: string; color: stri
   meds:        { name: 'Medications',        icon: 'pill',           color: 'lime'   },
   plan:        { name: 'Assessment & Plan',  icon: 'clipboard',      color: 'teal'   },
   vitals:      { name: 'Vitals',             icon: 'activity',       color: 'red'    },
+  media:       { name: 'Media',              icon: 'camera',         color: 'cyan'   },
 }
+
+// Retired built-in types whose definition row is inactive (absent from the
+// store) but whose existing blocks still carry attachments to show.
+const RETIRED_CAP_MEDIA_TYPES = new Set(['media'])
 
 const BLOCK_ROLE_OPTIONS = ['physician', 'nurse', 'receptionist', 'admin']
 
@@ -979,7 +984,7 @@ export default function BlockWrapper({
       )}
 
       {/* ── Capability panels (always rendered outside expand toggle) ── */}
-      {def?.cap_media && (
+      {(def?.cap_media || (!def && RETIRED_CAP_MEDIA_TYPES.has(block.type))) && (
         <AttachmentTray blockId={block.id} readOnly={encounterClosed || isMasked} />
       )}
       {def?.cap_time_series && (

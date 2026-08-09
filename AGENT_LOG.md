@@ -1366,3 +1366,47 @@ gate; auto-membership can't bootstrap). Revised shape: Everyone /
 Sensitive + break-the-glass in ONE pass (sealed-but-visible, one-line
 logged reason → encounter_audit_log; restricted → Sensitive migration).
 Recorded in the backlog; still awaiting the user's explicit go.
+
+## 2026-08-09 — Iteration 54: built-in blocks curation (user-directed)
+
+**Item:** User instruction: "go thru built in blocks — add/remove/update as
+appropriate and simplicity." Audited all 20 built-in definitions.
+
+**What changed:**
+- **Media retired** (`active=false`, row kept): its content is one caption;
+  every cap_media block (Note, Wound Care, Procedure Note) already has the
+  attachment strip — attachment is a capability, not a document type. NOT
+  deleted: user_block_templates cascades on definition delete, and 3 legacy
+  media blocks exist. Client keeps rendering them: BUILTIN_METADATA gains a
+  media entry and the AttachmentTray shows for retired cap_media types even
+  with no definition loaded (`RETIRED_CAP_MEDIA_TYPES` in BlockWrapper) —
+  verified in preview: legacy block shows name, view, and its 1 attachment.
+- **Pharmacy Fulfillment → dept-only** like lab/radiology results: it's a
+  fulfilment artifact written by the pharmacy work view, not a block a
+  physician hand-adds (it sat in every physician's Add menu as a trap).
+- **Pain Assessment + Wound Care opened to all clinical staff** ('{}' roles,
+  matching Vitals/Nurse Note): core nursing documentation was gated
+  physician/admin. Verified: nurse's Block Preferences now offers both.
+- **Ward Round Note → Progress Note** (SOAP + tasks, nothing ward-specific;
+  wards don't exist yet) — component strings + export updated.
+- **Radiology Request → Radiology Order** — the app speaks "orders"
+  everywhere (Lab Order, order departments); one concept, one word.
+- **Added: nothing.** Gap candidates (allergies, immunizations) are
+  patient-chart features, not timeline blocks.
+- Add menu: "Media & attachments" group removed (addBlockMenuGroups).
+- Physician menu now 15 entries / 6 groups (was 17 / 7).
+
+**DB note:** applied the equivalent DML (5 row updates on block_definitions,
+no DDL, no deletes) to the remote — the user's instruction was precisely to
+change these rows; schema.sql seeds match. Deactivation is reversible from
+Settings → Blocks ("Off — hidden everywhere").
+
+**Cross-session note:** commit 9313b1c (concurrent session) swept the
+schema.sql seed edits into its Front Desk commit while they sat unstaged in
+the shared tree — content correct, attribution co-mingled. This iteration's
+commit carries the client half.
+
+**Verification:** tsc clean, eslint clean on touched files, 209/209 tests;
+browser-verified as physician (menu renames, media gone, no pharmacy
+fulfilment entry) and nurse (Pain Assessment + Wound Care offered); legacy
+media block renders with attachments intact.

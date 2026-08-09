@@ -398,7 +398,7 @@ function renderNurseNote(c: NurseNoteContent): string {
 }
 
 // ============================================================
-// Ward Round (SOAP / Tour)
+// Progress Note (SOAP / Tour)
 // ============================================================
 
 function renderTour(c: TourContent): string {
@@ -409,7 +409,7 @@ function renderTour(c: TourContent): string {
     { label: 'P — Plan', value: c.plan },
   ].filter(s => s.value?.trim())
   const tasks = c.tasks ?? []
-  if (!sections.length && !tasks.length) return emptyState('No ward round note documented.')
+  if (!sections.length && !tasks.length) return emptyState('No progress note documented.')
   const colors: Record<string, string> = {
     'S — Subjective': '#3b82f6',
     'O — Objective': '#8b5cf6',
@@ -691,7 +691,7 @@ function renderLabResult(c: LabResultContent): string {
 }
 
 // ============================================================
-// Radiology Request
+// Radiology Order (slug: radiology_request)
 // ============================================================
 
 function renderRadiologyRequest(c: RadiologyRequestContent): string {
