@@ -68,24 +68,21 @@ surfaces. Sequence agreed with user:
       share-to-record only) and the instance-roles arm left
       block_staff_access — STAGED, applies with the rest on approval;
       columns stay dormant, legacy values ignored once applied.)
-- [ ] Encounter visibility → two states — Everyone / Sensitive — WITH
+- [x] Encounter visibility → two states — Everyone / Sensitive — WITH
       break-the-glass (design refined with user 2026-08-09: "Care team"
       label rejected as over-promising — nurses involved in care aren't
       in the gate, and auto-membership can't bootstrap since you can't
       document on what you can't open; so the sealed tier makes no
       membership claim and everyone else opens through the glass with a
       one-line logged reason in encounter_audit_log).
-      (2026-08-09 — BUILT in full. Two states everywhere (create dialog,
-      header chip+popover, template defaults; Sensitive reuses 'private',
-      legacy restricted converges on save). Break-the-glass: GlassDoor on
-      the walled encounter branch + Sensitive sealed-cards section on the
-      patient page + glass_open in the audit trail; schema STAGED —
-      encounter_glass_opens, glass arm in can_access_encounter (grants
-      update too, deliberately — audit carries accountability),
-      break_glass() + get_sealed_encounters() definer RPCs, audit
-      trigger. Degrades honestly pre-apply. WHOLE PASS completes on ONE
-      user-approved apply of the staged schema; then re-verify glass
-      end-to-end + sub-table walls.)
+      (2026-08-09 — SHIPPED AND LIVE: user said "apply it"; the whole
+      privacy-pass schema went to the remote as one migration and was
+      verified end-to-end in the browser — nurse opens sealed encounters
+      through the glass with the reason on the audit trail, sealed cards
+      list on the patient page, order-dept queues unaffected. Live
+      inspection before applying caught and dropped four zombie policies
+      absent from schema.sql, incl. "public read block-media" which
+      would have OR-bypassed the storage wall. PRIVACY PASS COMPLETE.)
 
 ### Departments are the unit (user-approved 2026-08-08): capability flavors
 One departments table is the whole org model — a department composes
