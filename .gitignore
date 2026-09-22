@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.local
+supabase/.temp/
+supabase/.branches/
+.DS_Store

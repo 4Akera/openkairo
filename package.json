@@ -1,0 +1,11 @@
+{
+  "name": "opencare",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "db:reset": "supabase db reset",
+    "db:test": "bash scripts/db-test.sh",
+    "gen:types": "supabase gen types typescript --local --schema public > src/platform/db/types.generated.ts"
+  }
+}

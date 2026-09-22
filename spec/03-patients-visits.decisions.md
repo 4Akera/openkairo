@@ -1,0 +1,15 @@
+Seven decisions only you can make. Each has my recommendation and one sentence of why.
+
+1. `patients.died_on` now, one nullable partial-date column set at the desk, with `open_visit` refusing `patient_died` and the search hit showing it. Recommend yes. Search is not a record read, so without this column the desk sees a dead patient as a live namesake and can open a visit or register a duplicate against him; it is the one fact the desk must know before the record is opened, and it is additive if you say no.
+
+2. The built-in `nurse` role holds `mark:in_consult`. Recommend yes. In a nurse-led clinic (wound care, diabetes nurse, a group session) nothing else ever sets `seen_at`, so BACK is impossible and every finished session is swept to "left" overnight; the gate says who may move a visit and the screen says who does, so your own clinic's nurses simply have no Consult button and scenario 8 is unchanged.
+
+3. Whether the desk may cancel a pending visit (results out). Recommend no: cancel out of `pending` needs `mark:in_consult`, like `pending → done`. Two break-testers pulled opposite ways; pending means results are out, a desk cancel lands the returning patient in WAITING with an empty request list instead of BACK, and the one case for it (a duplicate registration found after the consult) is a doctor's one click, after which the merge proceeds.
+
+4. A return within 14 days joins the open visit, whatever the new complaint. Recommend yes, as a known limit. The alternative is letting the desk close a visit whose results are still out; the queue prints `arrived_at`, so the doctor sees the visit is ten days old and the culture and the knee sit in one visit, which is clinically right.
+
+5. Machine users at a reception (a self check-in kiosk, a waiting-room board): a one-sentence widening of spec 02's locked machine rule, bounded to the reception department, opening visits as routine with nothing else set, reading no record. Recommend yes, built with the first kiosk. Without it a wall board runs on a receptionist's shared login, and the widening costs one sentence now versus reopening a locked spec later.
+
+6. One contiguous record-number series per organization from a transactional counter row (`core.record_numbers`), instead of one identity sequence for the whole database. Recommend yes. The card number is the clinic's, so a practice sharing a database with a neighbour should not see gaps from the neighbour's registrations, an importer restarts one clinic's series without touching anyone else's, and a rolled-back registration leaves no missing card.
+
+7. Twelve hours and fourteen days as the sweep's constants, held in the function. Recommend yes. Twelve hours is longer than any shift, so nobody mid-consult is evicted under any clock and no time-zone column is needed; fourteen days matches the holds window so a held request cannot outlive its visit; changing either is a release, not a migration.
