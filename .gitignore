@@ -5,3 +5,4 @@ dist/
 supabase/.temp/
 supabase/.branches/
 .DS_Store
+*.tsbuildinfo

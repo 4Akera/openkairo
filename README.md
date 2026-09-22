@@ -13,11 +13,14 @@ colima start                    # once per boot
 supabase start                  # Postgres 17, Auth, Realtime, Storage, Studio
 npm run db:reset                # migrations → registry → dev seed
 npm run db:test                 # every SQL test on a fresh database
+npm install && npm run dev      # the client on http://localhost:3000 (copy .env.example to .env.local first)
 ```
 
 Studio: http://127.0.0.1:54323 · API: http://127.0.0.1:54321 · DB: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 
-Dev users (password `Demo123!`): admin@demo.com (owner), dr.ali@demo.com, nurse@demo.com, lab@demo.com, reception@demo.com.
+Dev users (password `Demo123!`): admin@demo.com (owner), dr.ali@demo.com, nurse@demo.com, lab@demo.com, reception@demo.com. With `VITE_DEMO_LOGINS=true` the login page has one-click buttons for them.
+
+Settings changes need a second factor (spec 02): the Settings page enrols an authenticator app the first time; local TOTP is enabled in `supabase/config.toml`.
 
 ## What is built (Phase 0)
 
@@ -38,8 +41,26 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0011 | registration, search, the Here button, visit moves, the visit queue, the sweep | 03 |
 | 0012 | organization functions: `save_…`, `retire_…`, `read_organization`, birth and invitations | 02 |
 | 0013 | the runner, cron, the RLS backstop, revocations, `erase_patient` | 01, 02, 06 |
+| 0014 | `my_organization`, realtime channel policy | 05 |
+| 0015 | `read_entry` names its patient | 05 |
+| 0016 | `auth_uid`/`auth_aal` read PostgREST's JSON claims | 02 |
+| 0017 | `core.fill_values`: results carry ranges and flags from the service fields | 01, 04 |
+| 0018 | `save_service` accepts fields without choices | 02 |
 
 Tables live in schema `core` and are reachable only through functions in `public`. Every public function is `security definer` with a pinned search path and starts with `require_access`.
+
+## What is built (Phase 1)
+
+The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server call is a function through `src/core/db/rpc.ts`; the department is a client-held choice passed on every call; drafts live in the client until Done writes them as one `write_set`.
+
+- `shell/` — sign-in (demo one-click), the department switcher, ⌘K patient search, the second-factor step-up
+- `screens/Reception.tsx` — search-first; Here opens or marks present; New patient is four fields with a duplicate warning
+- `screens/Department.tsx`, `Queue.tsx` — the patient queue in bands (Back · In consult · Waiting · Here-pending) and the request queue
+- `screens/Visit.tsx`, `Today.tsx` — banner, record panel (✓ review · ↻ repeat · ✕ stop/refute), Today's drafts, the timeline (one card per thread), Done → Next ⌘⏎
+- `screens/Request.tsx` — one request: the value grid from the service's fields, a report, preliminary, not done, steps, Release → next; technicians work from the queue row and never read the record
+- `screens/Settings.tsx` — organization, departments, services (fields and ranges), users and roles, presets, packs
+- `renderers/` — one card per entry from its display line; packs register richer renderers here
+- `packs/index.ts` — the only place packs are named; ESLint keeps core from importing packs
 
 ## Tests
 
@@ -58,8 +79,10 @@ supabase/migrations/  the database, in order
 supabase/seeds/       auth users and a dev clinic (local only)
 supabase/tests/       SQL tests
 scripts/db-test.sh    runs them
+src/core/             the client: db, auth, hooks, shell, screens, renderers
+src/packs/            packs (none yet)
 ```
 
 ## Next
 
-Phase 1: the client — the shell, reception, the queue, the visit screen, the request surface, settings (spec 05) — then the first packs: Laboratory, Pharmacy, Billing, Internal medicine (spec 06).
+Phase 2: the first packs — Laboratory, Pharmacy, Billing, Internal medicine (spec 06) — then the core-later items from the audit: `read_cohort`, the outbound door, server-side drafts, user invitations from Settings.
