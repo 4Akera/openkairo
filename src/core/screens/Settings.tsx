@@ -17,7 +17,7 @@ export function SettingsScreen() {
   if (!org) return <Centered><Spinner /></Centered>
   if (!can('manage:organization')) return <Centered><p className="text-sm text-neutral-500">Settings need the owner role.</p></Centered>
   return <div className="mx-auto grid max-w-5xl gap-6 p-4 md:grid-cols-[180px_1fr]">
-    <nav className="grid content-start gap-0.5">{PAGES.map(([k, l]) => <NavLink key={k} to={k} className={({ isActive }) => `rounded px-3 py-1.5 text-sm ${isActive ? 'bg-teal-50 font-medium text-teal-900' : 'text-neutral-600 hover:bg-neutral-100'}`}>{l}</NavLink>)}</nav>
+    <nav className="grid content-start gap-0.5">{PAGES.map(([k, l]) => <NavLink key={k} to={`/settings/${k}`} className={({ isActive }) => `rounded px-3 py-1.5 text-sm ${isActive ? 'bg-teal-50 font-medium text-teal-900' : 'text-neutral-600 hover:bg-neutral-100'}`}>{l}</NavLink>)}</nav>
     <div className="min-w-0 overflow-x-auto">{mfaNeeded && <Mfa onDone={() => useMfaNeeded.getState().set(false)} />}<Routes>
       <Route index element={<Navigate to="organization" replace />} />
       <Route path="organization" element={<OrganizationPage org={org} />} />
