@@ -29,3 +29,6 @@ select public.save_user('00000000-0000-0000-0000-000000000107', '00000000-0000-0
 update core.users set login_id = id, accepted_at = now() where organization_id = '00000000-0000-0000-0000-00000000a001' and kind = 'staff';
 select set_config('request.jwt.claim.sub', '', false);
 select 'dev seed: ' || (select count(*) from core.departments) || ' departments · ' || (select count(*) from core.services) || ' services · ' || (select count(*) from core.users) || ' users' as seeded;
+
+-- local development only: settings changes without a second factor (migration 0019)
+insert into core.server_settings (key, value) values ('require_mfa', 'off') on conflict (key) do update set value = 'off';

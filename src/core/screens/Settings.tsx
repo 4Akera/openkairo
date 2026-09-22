@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { create } from 'zustand'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { rpc, type FnName } from '../db/rpc'
+import { rpc, Refusal, type FnName } from '../db/rpc'
 import { useDepartment, useChoice } from '../hooks/organization'
 import { newId } from '../hooks/writes'
 import type { Organization, Service, ServiceField } from '../db/types'
@@ -12,11 +13,12 @@ const PAGES = [['organization', 'Organization'], ['departments', 'Departments'],
 /** Settings (spec 02/05): six pages, the practice builds its own clinic here. Owners only. */
 export function SettingsScreen() {
   const { org, can } = useDepartment()
+  const mfaNeeded = useMfaNeeded((s) => s.needed)
   if (!org) return <Centered><Spinner /></Centered>
   if (!can('manage:organization')) return <Centered><p className="text-sm text-neutral-500">Settings need the owner role.</p></Centered>
   return <div className="mx-auto grid max-w-5xl gap-6 p-4 md:grid-cols-[180px_1fr]">
     <nav className="grid content-start gap-0.5">{PAGES.map(([k, l]) => <NavLink key={k} to={k} className={({ isActive }) => `rounded px-3 py-1.5 text-sm ${isActive ? 'bg-teal-50 font-medium text-teal-900' : 'text-neutral-600 hover:bg-neutral-100'}`}>{l}</NavLink>)}</nav>
-    <div className="min-w-0 overflow-x-auto"><Mfa /><Routes>
+    <div className="min-w-0 overflow-x-auto">{mfaNeeded && <Mfa onDone={() => useMfaNeeded.getState().set(false)} />}<Routes>
       <Route index element={<Navigate to="organization" replace />} />
       <Route path="organization" element={<OrganizationPage org={org} />} />
       <Route path="departments" element={<DepartmentsPage org={org} />} />
@@ -27,9 +29,12 @@ export function SettingsScreen() {
     </Routes></div>
   </div>
 }
+const useMfaNeeded = create<{ needed: boolean; set: (v: boolean) => void }>((set) => ({ needed: false, set: (needed) => set({ needed }) }))
 function useSave(fn: FnName) {
   const qc = useQueryClient(); const orgId = useChoice((s) => s.organizationId)
-  return useMutation({ mutationFn: (a: Record<string, unknown>) => rpc(fn, { organization_id: orgId, ...a }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['settings_changes'] }) } })
+  return useMutation({ mutationFn: (a: Record<string, unknown>) => rpc(fn, { organization_id: orgId, ...a }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['settings_changes'] }) },
+    onError: (e) => { if (e instanceof Refusal && e.code === 'mfa_required') useMfaNeeded.getState().set(true) } })
 }
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="mb-3 text-base font-semibold tracking-tight">{children}</h2>
 const Err = ({ e }: { e: Error | null }) => e ? <p className="text-sm text-red-700">{e.message}</p> : null

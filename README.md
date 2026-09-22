@@ -20,7 +20,7 @@ Studio: http://127.0.0.1:54323 · API: http://127.0.0.1:54321 · DB: `postgresql
 
 Dev users (password `Demo123!`): admin@demo.com (owner), dr.ali@demo.com, nurse@demo.com, lab@demo.com, reception@demo.com. With `VITE_DEMO_LOGINS=true` the login page has one-click buttons for them.
 
-Settings changes need a second factor (spec 02): the Settings page enrols an authenticator app the first time; local TOTP is enabled in `supabase/config.toml`.
+Settings changes need a second factor (spec 02). The dev seed turns that off locally (`core.server_settings` row `require_mfa = off`, migration 0019); when it is on, the Settings page enrols an authenticator app the first time a save is refused.
 
 ## What is built (Phase 0)
 
@@ -46,6 +46,7 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0016 | `auth_uid`/`auth_aal` read PostgREST's JSON claims | 02 |
 | 0017 | `core.fill_values`: results carry ranges and flags from the service fields | 01, 04 |
 | 0018 | `save_service` accepts fields without choices | 02 |
+| 0019 | `core.server_settings`: the `require_mfa` switch on the gate (local development sets it off) | 02 |
 
 Tables live in schema `core` and are reachable only through functions in `public`. Every public function is `security definer` with a pinned search path and starts with `require_access`.
 

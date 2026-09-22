@@ -4,7 +4,7 @@ import { _db as db } from '../db/rpc'
 import { Button, Input } from '../ui'
 
 /** manage: actions need a second factor (spec 02). This turns one on (TOTP) or steps the session up to aal2. */
-export function Mfa() {
+export function Mfa({ onDone }: { onDone?: () => void }) {
   const qc = useQueryClient()
   const [level, setLevel] = useState<string | null>(null)
   const [factorId, setFactorId] = useState<string | null>(null)
@@ -26,7 +26,7 @@ export function Mfa() {
     const ch = await db.auth.mfa.challenge({ factorId }); if (ch.error) { setErr(ch.error.message); setBusy(false); return }
     const v = await db.auth.mfa.verify({ factorId, challengeId: ch.data.id, code: code.trim() })
     setBusy(false); if (v.error) { setErr(v.error.message); return }
-    setQr(null); setSecret(null); setCode(''); await refresh(); qc.invalidateQueries()
+    setQr(null); setSecret(null); setCode(''); await refresh(); qc.invalidateQueries(); onDone?.()
   }
   if (level === null || level === 'aal2') return null
   return <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
