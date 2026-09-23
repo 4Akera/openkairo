@@ -11,9 +11,9 @@ export interface Card {
     priority: Priority; due_at: string; reply_line: string | null; reply_flag: Flag | null; replied_at: string | null; review_needed_at: string | null }
 }
 export interface PatientBanner { id: string; record_number: number; given_name: string; middle_name: string | null; family_name: string; sex: string; born_on: string; age: number; died_on: string | null; merged_into_id: string | null; phone_text: string | null }
-export interface Medication { id: string; drug_code: string | null; drug_name: string; dose_number: number | null; dose_unit: string | null; route: string | null; frequency: string | null; prn: boolean; problem_id: string | null; status: string; started_on: string }
-export interface Problem { id: string; code: string | null; name: string; status: string; onset_on: string | null }
-export interface Allergy { id: string; substance_name: string; class_code: string | null; kind: string; reactions_text: string | null; severity: string | null; status: string }
+export interface Medication { id: string; drug_code: string | null; drug_name: string; dose_number: number | null; dose_unit: string | null; route: string | null; frequency: string | null; prn: boolean; problem_id: string | null; status: string; started_on: string; instructions_text?: string | null }
+export interface Problem { id: string; code: string | null; name: string; status: string; onset_on: string | null; note_text: string | null; certainty: 'confirmed' | 'suspected' }
+export interface Allergy { id: string; substance_name: string; class_code: string | null; kind: string; reactions_text: string | null; severity: string | null; status: string; certainty?: string | null }
 export interface ListReview { list: string; reviewed_at: string; reviewed_by_id: string }
 export interface Value { code: string; name: string; value_number?: number; value_text?: string; unit?: string; flag?: Flag | null; reference_low?: number; reference_high?: number }
 export interface RecordView { patient: PatientBanner; visit: VisitRow | null; allergies: Allergy[]; allergy_review: ListReview | null; problems: Problem[]; problem_review: ListReview | null

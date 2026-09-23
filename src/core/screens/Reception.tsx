@@ -3,7 +3,8 @@ import { usePatientSearch } from '../hooks/reads'
 import { useChoice, useDepartment } from '../hooks/organization'
 import { useVisitActions } from '../hooks/writes'
 import type { PatientHit } from '../db/types'
-import { Button, Input } from '../ui'
+import { Button, Card, Heading, Input } from '../ui'
+import { Search as SearchIcon } from 'lucide-react'
 import { NewPatient } from '../shell/NewPatient'
 import { rememberPatient } from '../hooks/recent'
 import { PatientLine } from '../renderers/PatientLine'
@@ -26,10 +27,10 @@ export function ReceptionScreen({ departmentId }: { departmentId: string }) {
     rememberPatient(p); visits.open.mutate({ patient_id: p.id, department_id: deptId, priority: urgent ? 'urgent' : 'routine' }, { onSuccess: () => { setLast(`${p.given_name} ${p.family_name} → ${clinics.find((c) => c.id === deptId)?.name}`); setQ('') } })
   }
   return (
-    <div className="mx-auto grid max-w-3xl gap-4 p-4">
-      {last && <p className="rounded-md bg-teal-50 px-3 py-2 text-sm text-teal-900" role="status">{last}</p>}
-      {!creating && <Input ref={box} autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, phone or record number…" className="h-11 text-base" />}
-      {!creating && d.trim().length >= 2 && <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">
+    <div className="mx-auto grid max-w-4xl gap-4 p-4">
+      {last && <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-900 ring-1 ring-teal-200" role="status">✓ {last}</p>}
+      {!creating && <Card className="p-3"><div className="relative"><SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><Input ref={box} autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, phone or record number…" className="h-12 pl-9 text-base" /></div></Card>}
+      {!creating && d.trim().length >= 2 && <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200/80 bg-white shadow-xs">
         {(hits.data ?? []).map((p) => <li key={p.id} className="grid gap-2 px-3 py-2">
           <PatientLine p={p} />
           {p.open_visits.map((v) => <div key={v.id} className="flex items-center justify-between rounded bg-teal-50/60 px-2 py-1 text-xs"><span>open visit · {v.department_name} · {v.status.replace('_', ' ')}{v.present ? ' · here' : ' · away'}</span>{!v.present && <Button size="sm" onClick={() => here(p, v.department_id)}>Here</Button>}</div>)}
@@ -39,7 +40,7 @@ export function ReceptionScreen({ departmentId }: { departmentId: string }) {
       </ul>}
       {creating && <NewPatient seed={q} orgId={orgId!} submitLabel={clinics[0] ? `Register & Here → ${clinics[0].name}` : 'Register'} onDone={(p) => { setCreating(false); setQ(''); if (clinics[0]) here(p, clinics[0].id) }} onCancel={() => setCreating(false)} />}
       {visits.open.error && <p className="text-sm text-red-700">{visits.open.error.message}</p>}
-      <section><h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Waiting in the clinics</h2>{clinics.map((c) => <div key={c.id} className="mb-3"><p className="mb-1 text-xs text-neutral-500">{c.name}</p><QueueList departmentId={c.id} compact /></div>)}</section>
+      <section className="grid gap-2"><Heading>In the clinics now</Heading>{clinics.map((c) => <div key={c.id}><p className="mb-1.5 text-sm font-medium text-neutral-700">{c.name}</p><QueueList departmentId={c.id} compact /></div>)}</section>
     </div>
   )
 }

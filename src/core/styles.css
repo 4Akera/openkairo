@@ -1,2 +1,15 @@
 @import "tailwindcss";
-html, body { background: #fafafa; color: #171717; }
+@import "@fontsource-variable/inter";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html, body { background: #f5f6f6; color: #1c1f1f; }
+body { font-feature-settings: "cv11", "ss01", "ss03"; -webkit-font-smoothing: antialiased; }
+/* numbers line up in queues, grids and value tables */
+.tnum, table, input[type="number"], .font-mono { font-variant-numeric: tabular-nums; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+::selection { background: #ccfbf1; }

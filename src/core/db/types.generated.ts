@@ -799,10 +799,12 @@ export type Database = {
       }
       patient_problems: {
         Row: {
+          certainty: string
           code: string | null
           id: string
           latest_entry_id: string
           name: string
+          note_text: string | null
           onset_on: string | null
           organization_id: string
           patient_id: string
@@ -810,10 +812,12 @@ export type Database = {
           status: string
         }
         Insert: {
+          certainty?: string
           code?: string | null
           id: string
           latest_entry_id: string
           name: string
+          note_text?: string | null
           onset_on?: string | null
           organization_id: string
           patient_id: string
@@ -821,10 +825,12 @@ export type Database = {
           status?: string
         }
         Update: {
+          certainty?: string
           code?: string | null
           id?: string
           latest_entry_id?: string
           name?: string
+          note_text?: string | null
           onset_on?: string | null
           organization_id?: string
           patient_id?: string
@@ -1157,6 +1163,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      server_settings: {
+        Row: {
+          key: string
+          value: string
+        }
+        Insert: {
+          key: string
+          value: string
+        }
+        Update: {
+          key?: string
+          value?: string
+        }
+        Relationships: []
       }
       service_field_ranges: {
         Row: {
@@ -1742,6 +1763,10 @@ export type Database = {
         Args: { e: Database["core"]["Tables"]["entries"]["Row"] }
         Returns: undefined
       }
+      fill_values: {
+        Args: { p_patient: string; p_service: string; vals: Json }
+        Returns: Json
+      }
       finish_pack_call: {
         Args: { p_entry_id: string; p_error: string; p_pack: string }
         Returns: undefined
@@ -1752,6 +1777,16 @@ export type Database = {
       }
       fold: { Args: { t: string }; Returns: string }
       holds: { Args: { p_visit_id: string }; Returns: number }
+      local_code: {
+        Args: {
+          p_code: string
+          p_kind: string
+          p_name: string
+          p_org: string
+          p_unit: string
+        }
+        Returns: string
+      }
       lock_record: { Args: { p_patient_id: string }; Returns: undefined }
       next_pack_call: {
         Args: never
@@ -2104,6 +2139,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      read_codes: {
+        Args: { limit?: number; organization_id: string; query?: string }
+        Returns: Json
+      }
       read_entries: {
         Args: {
           before_at?: string
@@ -2407,6 +2446,7 @@ export type Database = {
       write_problem: {
         Args: {
           action?: string
+          certainty?: string
           code?: string
           department_id?: string
           id: string

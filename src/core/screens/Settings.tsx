@@ -5,9 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { rpc, Refusal, type FnName } from '../db/rpc'
 import { useDepartment, useChoice } from '../hooks/organization'
 import { newId } from '../hooks/writes'
-import type { Organization, Service, ServiceField } from '../db/types'
+import type { Organization } from '../db/types'
 import { Button, Centered, Input, Select, Spinner, Field } from '../ui'
 import { Mfa } from '../shell/Mfa'
+import { ServicesPage } from './settings/Services'
 const PAGES = [['organization', 'Organization'], ['departments', 'Departments'], ['services', 'Services'], ['users', 'Users'], ['templates', 'Presets'], ['packs', 'Packs']]
 
 /** Settings (spec 02/05): six pages, the practice builds its own clinic here. Owners only. */
@@ -62,31 +63,6 @@ function DepartmentsPage({ org }: { org: Organization }) {
       <Field label="Type"><Select value={edit.type} onChange={(e) => setEdit({ ...edit, type: e.target.value })}>{['clinic', 'reception', 'ward', 'ancillary', 'outside'].map((t) => <option key={t}>{t}</option>)}</Select></Field>
       <Field label="Site (label)"><Input value={edit.site_name} onChange={(e) => setEdit({ ...edit, site_name: e.target.value })} placeholder="Main building" /></Field>
       {edit.type === 'reception' && <Field label="Serves (empty = every clinic)"><div className="flex flex-wrap gap-2 text-sm">{visited.map((v) => <label key={v.id} className="flex items-center gap-1"><input type="checkbox" checked={edit.serves.includes(v.id)} onChange={(e) => setEdit({ ...edit, serves: e.target.checked ? [...edit.serves, v.id] : edit.serves.filter((x) => x !== v.id) })} />{v.name}</label>)}</div></Field>}
-      <Err e={save.error} /><div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEdit(null)}>Cancel</Button><Button type="submit" disabled={save.isPending}>Save</Button></div>
-    </form>}
-  </div>
-}
-
-function ServicesPage({ org }: { org: Organization }) {
-  const save = useSave('save_service'); const retire = useSave('retire_service')
-  const [edit, setEdit] = useState<(Omit<Service, 'department_id'> & { department_id: string }) | null>(null)
-  const blank = (): ServiceField => ({ position: 0, code: '', name: '', kind: 'number', unit: null, choices: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null })
-  return <div><div className="mb-3 flex items-center justify-between"><H>Services</H><Button size="sm" onClick={() => setEdit({ id: newId(), department_id: org.departments[0]?.id ?? '', section_name: null, code: '', name: '', reply_type: 'result', fields: [] })}>+ Service</Button></div>
-    <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">{org.services.map((s) => <li key={s.id} className="flex items-center gap-3 px-3 py-2 text-sm"><span className="w-24 font-mono text-xs text-neutral-500">{s.code}</span><span className="w-48 font-medium">{s.name}</span><span className="w-36 text-xs text-neutral-500">{org.departments.find((d) => d.id === s.department_id)?.name}{s.section_name ? ` · ${s.section_name}` : ''}</span><span className="flex-1 text-xs text-neutral-400">{s.reply_type} · {s.fields.length} fields</span>
-      <Button size="sm" variant="ghost" onClick={() => setEdit({ ...s, department_id: s.department_id ?? '' })}>Edit</Button><Button size="sm" variant="ghost" className="text-red-700" onClick={() => confirm(`Retire ${s.name}?`) && retire.mutate({ id: s.id })}>Retire</Button></li>)}</ul>
-    <Err e={retire.error} />
-    {edit && <form onSubmit={(e) => { e.preventDefault(); save.mutate({ id: edit.id, department_id: edit.department_id, code: edit.code, name: edit.name, reply_type: edit.reply_type, section_name: edit.section_name || null, fields: edit.fields.map((f, i) => ({ ...f, position: i + 1, choices: f.kind === 'choice' ? f.choices : undefined })) }, { onSuccess: () => setEdit(null) }) }} className="mt-4 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="grid grid-cols-4 gap-3"><Field label="Code"><Input value={edit.code} onChange={(e) => setEdit({ ...edit, code: e.target.value })} required /></Field><Field label="Name"><Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required autoFocus /></Field>
-        <Field label="Department"><Select value={edit.department_id} onChange={(e) => setEdit({ ...edit, department_id: e.target.value })}>{org.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</Select></Field>
-        <Field label="Reply"><Select value={edit.reply_type} onChange={(e) => setEdit({ ...edit, reply_type: e.target.value })}><option value="result">result (values)</option><option value="note">note (report)</option><option value="none">none (just done)</option></Select></Field></div>
-      <Field label="Section (optional)"><Input value={edit.section_name ?? ''} onChange={(e) => setEdit({ ...edit, section_name: e.target.value })} placeholder="Hematology" /></Field>
-      <div><div className="mb-1 flex items-center justify-between text-sm text-neutral-600">Fields <Button type="button" size="sm" variant="outline" onClick={() => setEdit({ ...edit, fields: [...edit.fields, blank()] })}>+ Field</Button></div>
-        {edit.fields.map((f, i) => <div key={i} className="mb-1 grid grid-cols-[1fr_1.5fr_5rem_4rem_4rem_4rem_4rem_4rem_2rem] gap-1.5 text-xs">{(['code', 'name'] as const).map((k) => <Input key={k} value={f[k]} onChange={(e) => setEdit({ ...edit, fields: edit.fields.map((x, j) => j === i ? { ...x, [k]: e.target.value } : x) })} placeholder={k} className="h-8" />)}
-          <Select value={f.kind} onChange={(e) => setEdit({ ...edit, fields: edit.fields.map((x, j) => j === i ? { ...x, kind: e.target.value } : x) })} className="h-8">{['number', 'text', 'choice'].map((k) => <option key={k}>{k}</option>)}</Select>
-          {f.kind === 'choice' ? <Input value={(f.choices ?? []).join('|')} onChange={(e) => setEdit({ ...edit, fields: edit.fields.map((x, j) => j === i ? { ...x, choices: e.target.value.split('|') } : x) })} placeholder="a|b|c" className="col-span-5 h-8" /> : <>
-            <Input value={f.unit ?? ''} onChange={(e) => setEdit({ ...edit, fields: edit.fields.map((x, j) => j === i ? { ...x, unit: e.target.value || null } : x) })} placeholder="unit" className="h-8" />
-            {(['reference_low', 'reference_high', 'critical_low', 'critical_high'] as const).map((k) => <Input key={k} type="number" step="any" value={f[k] ?? ''} onChange={(e) => setEdit({ ...edit, fields: edit.fields.map((x, j) => j === i ? { ...x, [k]: e.target.value === '' ? null : Number(e.target.value) } : x) })} placeholder={k.replace('reference_', 'ref ').replace('critical_', 'crit ')} className="h-8" />)}</>}
-          <button type="button" onClick={() => setEdit({ ...edit, fields: edit.fields.filter((_, j) => j !== i) })} className="text-neutral-400 hover:text-red-700">✕</button></div>)}</div>
       <Err e={save.error} /><div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEdit(null)}>Cancel</Button><Button type="submit" disabled={save.isPending}>Save</Button></div>
     </form>}
   </div>

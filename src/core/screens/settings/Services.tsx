@@ -1,0 +1,128 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronRight, Copy, Plus, Search, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
+import { rpc } from '../../db/rpc'
+import { newId } from '../../hooks/writes'
+import type { Organization, Service, ServiceField } from '../../db/types'
+import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Select, cn, errorText } from '../../ui'
+
+interface Code { code: string; name: string; kind: string; unit: string | null; is_local: boolean }
+type Draft = { id: string; department_id: string; section_name: string; code: string; name: string; reply_type: string; fields: ServiceField[]; isNew: boolean }
+const blankField = (): ServiceField => ({ position: 0, code: '', name: '', kind: 'number', unit: null, choices: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null })
+const num = (s: string | undefined) => { const t = (s ?? '').trim().replace(',', '.'); return t === '' || Number.isNaN(Number(t)) ? null : Number(t) }
+const range = (s: string | undefined): [number | null, number | null] => { const t = (s ?? '').trim(); if (!t) return [null, null]; const m = t.match(/^(-?[\d.,]*)\s*[-–]\s*(-?[\d.,]*)$/); if (m) return [num(m[1]), num(m[2])]; if (t.startsWith('<')) return [null, num(t.slice(1))]; if (t.startsWith('>')) return [num(t.slice(1)), null]; return [null, null] }
+const fmtRange = (lo: number | null, hi: number | null) => lo == null && hi == null ? '' : `${lo ?? ''}-${hi ?? ''}`
+
+/** one field per line: name | unit | ref low-high | critical low-high | code — "|" or tab (a pasted spreadsheet) */
+export function parseFields(text: string, codes: Code[]): ServiceField[] {
+  return text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const c = l.split(/\t|\|/).map((x) => x.trim())
+    const [rl, rh] = range(c[2]); const [cl, ch] = range(c[3])
+    const known = codes.find((k) => (c[4] && k.code === c[4]) || k.name.toLowerCase() === c[0].toLowerCase())
+    const choice = c[1]?.startsWith('[') ? c[1].slice(1, -1).split('/').map((x) => x.trim()) : null
+    return { ...blankField(), name: c[0], unit: choice ? null : c[1] || known?.unit || null, kind: choice ? 'choice' : 'number', choices: choice, reference_low: rl, reference_high: rh, critical_low: cl, critical_high: ch, code: c[4] || known?.code || '' }
+  })
+}
+const toText = (fs: ServiceField[]) => fs.map((f) => [f.name, f.kind === 'choice' ? `[${(f.choices ?? []).join('/')}]` : f.unit ?? '', fmtRange(f.reference_low, f.reference_high), fmtRange(f.critical_low, f.critical_high), f.code].join(' | ').replace(/( \| )+$/, '')).join('\n')
+
+/** Services (spec 02): grouped by department and section, filtered as you type, edited in place. */
+export function ServicesPage({ org }: { org: Organization }) {
+  const qc = useQueryClient(); const orgId = org.organization.id
+  const codes = useQuery({ queryKey: ['codes', orgId], queryFn: () => rpc<Code[]>('read_codes', { organization_id: orgId, limit: 1000 }), staleTime: 300_000 })
+  const save = useMutation({ mutationFn: (a: Record<string, unknown>) => rpc('save_service', { organization_id: orgId, ...a }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['codes'] }) } })
+  const retire = useMutation({ mutationFn: (id: string) => rpc('retire_service', { id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['organization'] }) })
+  const [q, setQ] = useState(''); const [open, setOpen] = useState<Draft | null>(null); const [closed, setClosed] = useState<Set<string>>(new Set())
+  const box = useRef<HTMLInputElement>(null)
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)) { e.preventDefault(); box.current?.focus() } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
+  const f = q.trim().toLowerCase()
+  const shown = org.services.filter((s) => !f || s.name.toLowerCase().includes(f) || s.code.includes(f) || (s.section_name ?? '').toLowerCase().includes(f) || s.fields.some((x) => x.name.toLowerCase().includes(f)))
+  const depts = org.departments.filter((d) => shown.some((s) => s.department_id === d.id) || (!f && org.services.some((s) => s.department_id === d.id)))
+  const sections = useMemo(() => [...new Set(org.services.map((s) => s.section_name).filter(Boolean) as string[])].sort(), [org.services])
+  const start = (s: Service | null, dept?: string, section?: string, copy = false) => setOpen(s ? { id: copy ? newId() : s.id, department_id: s.department_id ?? '', section_name: s.section_name ?? '', code: copy ? `${s.code}_copy` : s.code, name: copy ? `${s.name} (copy)` : s.name, reply_type: s.reply_type, fields: s.fields.map((x) => ({ ...x })), isNew: copy }
+    : { id: newId(), department_id: dept ?? org.departments.find((d) => d.type === 'ancillary')?.id ?? org.departments[0]?.id ?? '', section_name: section ?? '', code: '', name: '', reply_type: 'result', fields: [blankField()], isNew: true })
+  const toggle = (k: string) => setClosed((c) => { const n = new Set(c); if (n.has(k)) n.delete(k); else n.add(k); return n })
+  const editor = (d: Draft) => <Editor key={d.id} draft={d} codes={codes.data ?? []} sections={sections} org={org} saving={save.isPending} error={save.error}
+    onSave={(x) => save.mutate({ id: x.id, department_id: x.department_id, code: x.code, name: x.name, reply_type: x.reply_type, section_name: x.section_name || null,
+      fields: x.reply_type === 'result' ? x.fields.filter((y) => y.name.trim()).map((y, i) => ({ ...y, position: i + 1, code: y.code || null, choices: y.kind === 'choice' ? y.choices : undefined })) : [] }, { onSuccess: () => setOpen(null) })}
+    onClose={() => { save.reset(); setOpen(null) }} />
+
+  return <div className="grid gap-4">
+    <div className="flex items-center gap-3"><Heading className="text-sm" count={org.services.length}>Services</Heading>
+      <div className="relative ml-auto w-72"><Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><Input ref={box} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter services, sections, fields…" className="h-8 pl-8" /><Kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">/</Kbd></div>
+      <Button size="sm" onClick={() => start(null)}><Plus className="h-3.5 w-3.5" />Service</Button></div>
+    {open?.isNew && !org.services.some((s) => s.id === open.id) && editor(open)}
+    {depts.map((d) => { const ds = shown.filter((s) => s.department_id === d.id); const secs = [...new Set(ds.map((s) => s.section_name ?? ''))].sort(); const k = d.id; return <Card key={d.id} className="overflow-hidden">
+      <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 border-b border-neutral-100 bg-neutral-50/60 px-4 py-2.5 text-left">{closed.has(k) ? <ChevronRight className="h-4 w-4 text-neutral-400" /> : <ChevronDown className="h-4 w-4 text-neutral-400" />}
+        <span className="text-sm font-semibold">{d.name}</span><span className="text-xs text-neutral-400">{ds.length} services</span>
+        <span className="ml-auto" onClick={(e) => { e.stopPropagation(); start(null, d.id) }}><Badge tone="brand" className="cursor-pointer">+ add here</Badge></span></button>
+      {!closed.has(k) && secs.map((sec) => <div key={sec}>
+        {(secs.length > 1 || sec) && <div className="flex items-center gap-2 px-4 pb-1 pt-3"><span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{sec || 'No section'}</span>
+          <button onClick={() => start(null, d.id, sec)} className="text-[11px] text-teal-700 hover:underline">+ add</button></div>}
+        <ul className="divide-y divide-neutral-100">{ds.filter((s) => (s.section_name ?? '') === sec).map((s) => <li key={s.id}>
+          {open?.id === s.id && !open.isNew ? editor(open) : <div className="group flex cursor-pointer items-center gap-3 px-4 py-2 hover:bg-neutral-50" onClick={() => start(s)} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') start(s) }}>
+            <span className="w-28 shrink-0 truncate font-mono text-xs text-neutral-500" title={s.code}>{s.code}</span>
+            <span className="w-52 shrink-0 text-[13.5px] font-medium">{s.name}</span>
+            <Badge tone={s.reply_type === 'result' ? 'blue' : s.reply_type === 'note' ? 'neutral' : 'amber'}>{s.reply_type}</Badge>
+            <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">{s.fields.map((x) => `${x.name}${x.unit ? ` (${x.unit})` : ''}`).join(' · ')}</span>
+            <span className="flex opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+              <IconButton title="Duplicate" onClick={() => start(s, undefined, undefined, true)}><Copy className="h-3.5 w-3.5" /></IconButton>
+              <IconButton title="Retire" className="hover:text-red-700" onClick={() => confirm(`Retire ${s.name}? Existing results keep it.`) && retire.mutate(s.id)}><Trash2 className="h-3.5 w-3.5" /></IconButton></span>
+          </div>}
+        </li>)}</ul>
+      </div>)}
+    </Card> })}
+    {retire.error && <p className="text-sm text-red-700">{errorText(retire.error)}</p>}
+  </div>
+}
+
+function Editor({ draft, codes, sections, org, saving, error, onSave, onClose }: { draft: Draft; codes: Code[]; sections: string[]; org: Organization; saving: boolean; error: Error | null; onSave: (d: Draft) => void; onClose: () => void }) {
+  const [d, setD] = useState(draft); const [bulk, setBulk] = useState(false); const [text, setText] = useState(() => toText(draft.fields))
+  const grid = useRef<HTMLDivElement>(null)
+  const setF = (i: number, p: Partial<ServiceField>) => setD((x) => ({ ...x, fields: x.fields.map((y, j) => j === i ? { ...y, ...p } : y) }))
+  const move = (i: number, by: number) => setD((x) => { const f = [...x.fields]; const [m] = f.splice(i, 1); f.splice(Math.max(0, Math.min(f.length, i + by)), 0, m); return { ...x, fields: f } })
+  const codeFor = (name: string) => codes.find((k) => k.name.toLowerCase() === name.trim().toLowerCase())
+  const fields = bulk ? parseFields(text, codes) : d.fields
+  const ok = d.name.trim() && d.code.trim() && d.department_id && (d.reply_type !== 'result' || fields.some((x) => x.name.trim()))
+  const submit = () => { if (!ok) return; onSave({ ...d, fields }) }
+  const cell = 'h-7 rounded-md px-2 text-xs'
+  return <div className="border-y border-teal-200 bg-teal-50/30 px-4 py-3" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'Enter')) { e.preventDefault(); submit() } else if (e.key === 'Escape') { e.preventDefault(); onClose() } }}>
+    <div className="grid grid-cols-[7rem_1fr_11rem_10rem] gap-2">
+      <label className="text-[11px] text-neutral-500">Code<Input value={d.code} onChange={(e) => setD({ ...d, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })} placeholder="cbc" className="mt-0.5 h-8 font-mono" autoFocus={!draft.name} /></label>
+      <label className="text-[11px] text-neutral-500">Name<Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value, code: draft.isNew && (!d.code || d.code === d.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '')) ? e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '') : d.code })} placeholder="Complete blood count" className="mt-0.5 h-8" autoFocus={!!draft.name || draft.isNew} /></label>
+      <label className="text-[11px] text-neutral-500">Department<Select value={d.department_id} onChange={(e) => setD({ ...d, department_id: e.target.value })} className="mt-0.5 h-8">{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></label>
+      <label className="text-[11px] text-neutral-500">Section<Input list="sections" value={d.section_name} onChange={(e) => setD({ ...d, section_name: e.target.value })} placeholder="Haematology" className="mt-0.5 h-8" /><datalist id="sections">{sections.map((s) => <option key={s} value={s} />)}</datalist></label>
+    </div>
+    <div className="mt-2.5 flex items-center gap-2 text-xs"><span className="text-neutral-500">Reply</span>
+      {([['result', 'values'], ['note', 'a report'], ['dispense', 'dispensing'], ['none', 'just done']] as const).map(([v, l]) => <button key={v} onClick={() => setD({ ...d, reply_type: v })} className={cn('rounded-md px-2 py-0.5 ring-1 ring-inset', d.reply_type === v ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200')}>{l}</button>)}
+      {d.reply_type === 'result' && <button onClick={() => { if (bulk) setD({ ...d, fields: parseFields(text, codes) }); else setText(toText(d.fields)); setBulk(!bulk) }} className="ml-auto text-teal-700 hover:underline">{bulk ? 'Edit as a grid' : 'Type or paste as text'}</button>}
+    </div>
+    {d.reply_type === 'result' && (bulk ? <div className="mt-2"><textarea value={text} onChange={(e) => setText(e.target.value)} rows={Math.max(5, text.split('\n').length + 1)} autoFocus spellCheck={false}
+        placeholder={'Haemoglobin | g/dL | 12-16 | 7-20\nWBC | 10^9/L | 4-11 | 1-30\nBlood group | [A/B/AB/O]'} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 font-mono text-xs focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20" />
+      <p className="mt-1 text-[11px] text-neutral-500">One field per line: <span className="font-mono">name | unit | normal low-high | critical low-high | code</span>. Tabs work too, so a range pasted from a spreadsheet drops straight in. <span className="font-mono">[a/b/c]</span> in the unit makes a choice list. Known names get their code; new ones get a local code.</p>
+      <p className="mt-1 text-[11px] text-teal-800">{parseFields(text, codes).length} fields · {parseFields(text, codes).filter((x) => x.code).length} matched to a code</p></div>
+    : <div ref={grid} className="mt-2 overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-[10.5px] uppercase tracking-wider text-neutral-400">
+        <th className="w-14" /><th className="px-1 font-medium">Field</th><th className="w-24 px-1 font-medium">Unit</th><th className="w-36 px-1 font-medium">Normal</th><th className="w-36 px-1 font-medium">Critical</th><th className="w-24 px-1 font-medium">Kind</th><th className="w-40 px-1 font-medium">Code</th><th className="w-8" /></tr></thead>
+      <tbody>{d.fields.map((x, i) => { const known = !x.code ? codeFor(x.name) : null; return <tr key={i}>
+        <td className="whitespace-nowrap"><IconButton title="Up" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp className="h-3 w-3" /></IconButton><IconButton title="Down" onClick={() => move(i, 1)} disabled={i === d.fields.length - 1}><ArrowDown className="h-3 w-3" /></IconButton></td>
+        <td className="p-0.5"><Input list="codenames" value={x.name} onChange={(e) => { const k = codeFor(e.target.value); setF(i, { name: e.target.value, ...(k && !x.code ? { code: k.code, unit: x.unit ?? k.unit } : {}) }) }} placeholder="Haemoglobin" className={cell} autoFocus={i === d.fields.length - 1 && i > 0 && !x.name} /></td>
+        <td className="p-0.5"><Input value={x.unit ?? ''} onChange={(e) => setF(i, { unit: e.target.value || null })} placeholder="g/dL" className={cell} disabled={x.kind === 'choice'} /></td>
+        <td className="p-0.5">{x.kind === 'choice' ? <Input value={(x.choices ?? []).join('/')} onChange={(e) => setF(i, { choices: e.target.value.split('/') })} placeholder="neg/trace/+/++" className={cell} /> : <RangeInput lo={x.reference_low} hi={x.reference_high} onChange={(lo, hi) => setF(i, { reference_low: lo, reference_high: hi })} className={cell} />}</td>
+        <td className="p-0.5">{x.kind !== 'choice' && <RangeInput lo={x.critical_low} hi={x.critical_high} onChange={(lo, hi) => setF(i, { critical_low: lo, critical_high: hi })} className={cell}
+          onEnter={() => { if (i === d.fields.length - 1) setD((y) => ({ ...y, fields: [...y.fields, blankField()] })) }} />}</td>
+        <td className="p-0.5"><Select value={x.kind} onChange={(e) => setF(i, { kind: e.target.value, choices: e.target.value === 'choice' ? x.choices ?? [] : null })} className={cn(cell, 'h-7')}>{['number', 'text', 'choice'].map((k) => <option key={k}>{k}</option>)}</Select></td>
+        <td className="p-0.5"><span className={cn('block truncate px-1 font-mono text-[10.5px]', x.code ? 'text-neutral-600' : known ? 'text-teal-700' : 'text-neutral-400')} title={x.code || (known ? `will use ${known.code}` : 'a local code is made on save')}>{x.code || (known ? known.code : 'new local code')}</span></td>
+        <td><IconButton title="Remove field" className="hover:text-red-700" onClick={() => setD({ ...d, fields: d.fields.filter((_, j) => j !== i) })}><Trash2 className="h-3 w-3" /></IconButton></td>
+      </tr> })}</tbody></table>
+      <datalist id="codenames">{codes.map((k) => <option key={k.code} value={k.name}>{k.unit ?? ''}</option>)}</datalist>
+      <button onClick={() => setD({ ...d, fields: [...d.fields, blankField()] })} className="mt-1 text-xs text-teal-700 hover:underline">+ field</button><span className="ml-2 text-[11px] text-neutral-400">↵ in the last critical cell adds the next field</span></div>)}
+    <div className="mt-3 flex items-center gap-2">{error && <span className="text-sm text-red-700">{errorText(error)}</span>}
+      <span className="ml-auto text-[11px] text-neutral-400"><Kbd>⌘S</Kbd> save · <Kbd>esc</Kbd> close</span>
+      <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button><Button size="sm" onClick={submit} disabled={!ok || saving}>{saving ? 'Saving…' : 'Save'}</Button></div>
+  </div>
+}
+
+/** "12-16", "<5", ">40" in one box */
+function RangeInput({ lo, hi, onChange, className, onEnter }: { lo: number | null; hi: number | null; onChange: (lo: number | null, hi: number | null) => void; className?: string; onEnter?: () => void }) {
+  const [t, setT] = useState(fmtRange(lo, hi))
+  return <Input value={t} onChange={(e) => { setT(e.target.value); const [a, b] = range(e.target.value); onChange(a, b) }} onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) { e.preventDefault(); onEnter() } }} placeholder="low-high" className={cn(className, 'tnum')} />
+}

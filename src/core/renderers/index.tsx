@@ -9,7 +9,7 @@ export const rendererFor = (type: string) => registry.get(type)
 
 const arrow = (f: string | null | undefined) => f === 'low' ? ' ↓' : f === 'high' ? ' ↑' : f === 'critical' ? ' ‼' : f === 'abnormal' ? ' *' : ''
 export function ValuesTable({ values }: { values: Value[] }) {
-  return <table className="font-mono text-[12px]"><tbody>{values.map((v, i) => <tr key={i} className={flagClass(v.flag)}>
+  return <table className="text-[12.5px]"><tbody>{values.map((v, i) => <tr key={i} className={flagClass(v.flag)}>
     <td className="pr-3 text-neutral-600">{v.name}</td><td className="pr-1 text-right">{v.value_number ?? v.value_text ?? ''}{arrow(v.flag)}</td><td className="pr-3 text-neutral-400">{v.unit ?? ''}</td>
     <td className="text-neutral-400">{v.reference_low != null || v.reference_high != null ? `${v.reference_low ?? ''}–${v.reference_high ?? ''}` : ''}</td></tr>)}</tbody></table>
 }
@@ -23,18 +23,20 @@ export function FallbackFull({ data }: { card: Card; data: Record<string, unknow
     {Object.keys(rest).length > 0 && <pre className="overflow-x-auto rounded bg-neutral-50 p-2 font-mono text-[11px] text-neutral-600">{JSON.stringify(rest, null, 1)}</pre>}
   </div>
 }
+const TYPE_TONE: Record<string, string> = { note: 'bg-neutral-100 text-neutral-700', vitals: 'bg-sky-50 text-sky-800', request: 'bg-amber-50 text-amber-800', result: 'bg-violet-50 text-violet-800',
+  prescription: 'bg-teal-50 text-teal-800', problem: 'bg-teal-50 text-teal-800', allergy: 'bg-red-50 text-red-700', list_review: 'bg-neutral-50 text-neutral-500', entered_in_error: 'bg-neutral-50 text-neutral-500' }
 export function CardLine({ card }: { card: Card }) {
   const R = rendererFor(card.type)?.Card
   if (R) return <R card={card} />
   const r = card.request
-  return <div className="flex items-start gap-3 text-sm">
-    <span className="w-14 shrink-0 font-mono text-[11px] text-neutral-400">{card.occurred_at.slice(11, 16)}</span>
-    <span className="w-24 shrink-0 font-mono text-[10px] uppercase tracking-wider text-neutral-500">{card.type.replace('_', ' ')}</span>
+  return <div className="flex items-start gap-3 text-[13.5px]">
+    <span className="w-10 shrink-0 pt-px text-xs text-neutral-400 tnum">{card.occurred_at.slice(11, 16)}</span>
+    <span className={`w-[5.5rem] shrink-0 rounded-md px-1.5 py-px text-center text-[10.5px] font-medium ${TYPE_TONE[card.type] ?? 'bg-neutral-100 text-neutral-700'}`}>{card.type.replace(/_/g, ' ')}</span>
     <span className="min-w-0 flex-1">
-      <span className={card.replaced_by_id ? 'text-neutral-400 line-through' : ''}>{card.display_line}</span>
-      {r && <span className="ml-2 text-xs text-neutral-500">→ {r.to_department_name ?? 'outside'} · <span className={r.status === 'open' ? 'text-amber-700' : ''}>{r.step}</span></span>}
-      {r?.reply_line && <span className={`mt-0.5 block text-xs ${flagClass(r.reply_flag)}`}>{r.reply_line}</span>}
-      {!card.is_final && <span className="ml-2 text-[10px] uppercase text-neutral-400">preliminary</span>}
+      <span className={card.replaced_by_id ? 'text-neutral-400 line-through' : 'text-neutral-900'}>{card.display_line}</span>
+      {!card.is_final && <span className="ml-2 text-[10.5px] font-medium uppercase text-amber-700">preliminary</span>}
+      {r && <span className="ml-2 text-xs text-neutral-500">→ {r.to_department_name ?? 'outside'} · <span className={r.status === 'open' ? 'font-medium text-amber-700' : r.status === 'cancelled' ? 'text-neutral-400' : 'text-teal-700'}>{r.step}</span></span>}
+      {r?.reply_line && <span className={`mt-0.5 block text-xs tnum ${r.reply_flag && r.reply_flag !== 'normal' ? flagClass(r.reply_flag) : 'text-neutral-600'}`}>↳ {r.reply_line}</span>}
     </span>
     <span className="shrink-0 text-[11px] text-neutral-400">{card.author_name}</span>
   </div>

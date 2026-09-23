@@ -6,9 +6,10 @@ import { Centered, Spinner } from '../ui'
 import { Shell } from './Shell'
 import { Login } from './Login'
 import { DepartmentScreen } from '../screens/Department'
-import { VisitScreen } from '../screens/Visit'
+import { VisitScreen } from '../screens/visit/VisitScreen'
 import { RequestScreen } from '../screens/Request'
 import { SettingsScreen } from '../screens/Settings'
+import { BenchPatient } from '../screens/bench/BenchPatient'
 
 function RequireAuth() {
   const status = useAuth((s) => s.status)
@@ -32,6 +33,7 @@ export function App() {
           <Route path="visit/:visitId" element={<VisitScreen />} />
           <Route path="patient/:patientId" element={<VisitScreen />} />
           <Route path="request/:requestId" element={<RequestScreen />} />
+          <Route path="bench/:patientId" element={<BenchPatient />} />
           <Route path="settings/*" element={<SettingsScreen />} />
         </Route>
       </Route>

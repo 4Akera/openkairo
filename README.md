@@ -13,6 +13,7 @@ colima start                    # once per boot
 supabase start                  # Postgres 17, Auth, Realtime, Storage, Studio
 npm run db:reset                # migrations → registry → dev seed
 npm run db:test                 # every SQL test on a fresh database
+npm run db:demo                 # optional: a clinic morning — 30 patients checked in, lab requests for a third
 npm install && npm run dev      # the client on http://localhost:3000 (copy .env.example to .env.local first)
 ```
 
@@ -47,6 +48,7 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0017 | `core.fill_values`: results carry ranges and flags from the service fields | 01, 04 |
 | 0018 | `save_service` accepts fields without choices | 02 |
 | 0019 | `core.server_settings`: the `require_mfa` switch on the gate (local development sets it off) | 02 |
+| 0020 | problems carry a note and a certainty; `core.local_code` + `read_codes`; `save_service` makes local codes | 02, 04 |
 
 Tables live in schema `core` and are reachable only through functions in `public`. Every public function is `security definer` with a pinned search path and starts with `require_access`.
 
@@ -57,9 +59,20 @@ The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server c
 - `shell/` — sign-in (demo one-click), the department switcher, ⌘K patient search, the second-factor step-up
 - `screens/Reception.tsx` — search-first; Here opens or marks present; New patient is four fields with a duplicate warning
 - `screens/Department.tsx`, `Queue.tsx` — the patient queue in bands (Back · In consult · Waiting · Here-pending) and the request queue
-- `screens/Visit.tsx`, `Today.tsx` — banner, record panel (✓ review · ↻ repeat · ✕ stop/refute), Today's drafts, the timeline (one card per thread), Done → Next ⌘⏎
+- `screens/visit/` — the visit, built for typing. A sticky banner holds Done → next (⌘↵). The side lists problems (certainty, onset and duration, note, the medicines given for them), then medications, then allergies, each with its own + form (Alt+P / Alt+M / Alt+A). The speed line (`/`) turns one typed line into a draft (`parse.ts`):
+
+  ```
+  bp 148/92 p 84 t 37 w 86              vitals
+  rx metformin 500 bd 30d for dm        prescription, linked to a problem (dm, htn, ckd… understood)
+  lab hba1c, lipid · lab urgent cbc     requests, or a preset by name; Tab completes a service
+  ref cardiology chest pain on effort   consult
+  dx hypertension since 3y ; note       problem ( ? or ddx = suspected )
+  al penicillin: rash severe            allergy
+  anything else                         joins today's note
+  ```
+- `screens/bench/` — any department that offers services and sees no patients of its own (laboratory, imaging, pharmacy) works a bench: open requests grouped one row per patient, a scan box for record number or name, section and step filters, Collect all, and one screen per patient where Enter walks every field and ⌘↵ releases every result in one atomic set, then opens the next patient. Values that are not numbers block release; values ten times outside the range ask for a second look.
 - `screens/Request.tsx` — one request: the value grid from the service's fields, a report, preliminary, not done, steps, Release → next; technicians work from the queue row and never read the record
-- `screens/Settings.tsx` — organization, departments, services (fields and ranges), users and roles, presets, packs
+- `screens/Settings.tsx`, `settings/Services.tsx` — organization, departments, users and roles, presets, packs; services grouped by department and section, filtered as you type, edited in place (⌘S), fields typed or pasted one per line (`name | unit | 12-16 | 7-20`, tabs from a spreadsheet work); a field without a registered code gets a local one
 - `renderers/` — one card per entry from its display line; packs register richer renderers here
 - `packs/index.ts` — the only place packs are named; ESLint keeps core from importing packs
 
