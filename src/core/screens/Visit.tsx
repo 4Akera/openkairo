@@ -53,7 +53,7 @@ export function VisitScreen() {
   if (rec.error || !rec.data) return <Centered><p className="text-sm text-red-700">{rec.error?.message ?? 'no record'}</p></Centered>
   const r = rec.data
   return <div className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[300px_1fr]">
-    <Banner r={r} visit={visit} mine={mine} onBack={() => navigate('/')} />
+    <Banner r={r} visit={visit} mine={mine} onBack={() => navigate('/')} onStart={dept.is_visited && can('write:visit') ? () => visits.open.mutate({ patient_id: patientId, department_id: dept.id }, { onSuccess: (v) => navigate(`/visit/${v.id}`) }) : undefined} />
     <RecordPanel r={r} patientId={patientId} departmentId={dept.id} can={can} />
     <div className="grid content-start gap-4">
       {can('write:note') || can('write:vitals') || can('write:request') ? <Today r={r} patientId={patientId} departmentId={dept.id} can={can} /> : null}
@@ -69,7 +69,7 @@ export function VisitScreen() {
   </div>
 }
 
-function Banner({ r, visit, mine, onBack }: { r: RecordView; visit: VisitRow | null; mine: boolean; onBack: () => void }) {
+function Banner({ r, visit, mine, onBack, onStart }: { r: RecordView; visit: VisitRow | null; mine: boolean; onBack: () => void; onStart?: () => void }) {
   const v = r.latest_vitals ?? []
   const pick = (c: string) => v.find((x) => x.code === c)
   return <div className="lg:col-span-2">
@@ -78,7 +78,7 @@ function Banner({ r, visit, mine, onBack }: { r: RecordView; visit: VisitRow | n
       <PatientLine p={r.patient} className="text-base" />
       {r.allergies.filter((a) => a.status === 'active').length > 0 ? <span className="rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">⚠ {r.allergies.filter((a) => a.status === 'active').map((a) => a.substance_name).join(', ')}</span> : <span className="text-xs text-neutral-400">no known allergies</span>}
       {visit && <span className={`text-xs ${mine ? 'text-teal-800' : 'text-neutral-500'}`}>{visit.status.replace('_', ' ')} · {visit.is_first ? 'new' : 'follow-up'}{visit.priority !== 'routine' && <b className="ml-1 text-red-700">{visit.priority}</b>}</span>}
-      {!visit && <span className="text-xs text-neutral-400">no open visit here</span>}
+      {!visit && <span className="flex items-center gap-2 text-xs text-neutral-400">no open visit here{onStart && <Button size="sm" variant="outline" onClick={onStart}>Start visit</Button>}</span>}
       {v.length > 0 && <span className="ml-auto font-mono text-[11px] text-neutral-500">{['8480-6', '8462-4'].every(pick) ? `BP ${pick('8480-6')!.value_number}/${pick('8462-4')!.value_number} ` : ''}{pick('8867-4') ? `HR ${pick('8867-4')!.value_number} ` : ''}{pick('29463-7') ? `Wt ${pick('29463-7')!.value_number}kg` : ''}</span>}
     </div>
   </div>

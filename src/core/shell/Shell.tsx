@@ -14,7 +14,9 @@ export function Shell() {
   const email = useAuth((s) => s.session?.user.email)
   const [searchOpen, setSearchOpen] = useState(false)
   useEffect(() => { if (!dept && departments.length === 1) setDepartment(departments[0].id) }, [dept, departments, setDepartment])
-  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
+  // reception's screen is the search, so the header has none there and ⌘K focuses that box instead
+  const onReception = dept?.type === 'reception' && !inSettings
+  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); if (onReception) window.dispatchEvent(new Event('opencare:search')); else setSearchOpen(true) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onReception])
   if (isLoading) return <Centered><Spinner /></Centered>
   if (error || !org) return <Centered><p className="text-sm text-red-700">{String(error ?? 'no organization')}</p></Centered>
   return (
@@ -25,7 +27,7 @@ export function Shell() {
           <Menu.Portal><Menu.Content align="start" sideOffset={6} className="z-50 min-w-56 rounded-md border border-neutral-200 bg-white p-1 shadow-lg">
             {departments.map((d) => <Menu.Item key={d.id} onSelect={() => { setDepartment(d.id); navigate('/') }} className="flex cursor-pointer items-center justify-between rounded px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-neutral-100"><span className={d.id === dept?.id ? 'font-medium' : ''}>{d.name}</span><span className="text-[11px] text-neutral-400">{d.type}</span></Menu.Item>)}
           </Menu.Content></Menu.Portal></Menu.Root>
-        <button onClick={() => setSearchOpen(true)} className="ml-2 hidden h-8 min-w-64 items-center rounded-md border border-neutral-200 bg-neutral-50 px-3 text-left text-sm text-neutral-400 sm:flex">Search a patient… <kbd className="ml-auto rounded bg-white px-1 text-[10px] text-neutral-500">⌘K</kbd></button>
+        {!onReception && <button onClick={() => setSearchOpen(true)} className="ml-2 hidden h-8 min-w-64 items-center rounded-md border border-neutral-200 bg-neutral-50 px-3 text-left text-sm text-neutral-400 sm:flex">Search or add a patient… <kbd className="ml-auto rounded bg-white px-1 text-[10px] text-neutral-500">⌘K</kbd></button>}
         <div className="flex-1" />
         <span className="text-xs text-neutral-500">{email}</span>
         {can('manage:organization') && <Button variant="ghost" size="sm" onClick={() => navigate('/settings')} aria-label="Settings"><Cog className="h-4 w-4" /></Button>}
