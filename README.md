@@ -51,6 +51,7 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0020 | problems carry a note and a certainty; `core.local_code` + `read_codes`; `save_service` makes local codes | 02, 04 |
 | 0022 | spec 07: private visits, the one read log, a correction stays put, department rules, reads for the record views | [07](spec/07-privacy-and-record.md) |
 | 0023 | what a pack needs to answer a request: pack writers in Done's write set, one reply-type check in the funnel, prescription requests carry their service and details; enabling a pack fixed | 06 |
+| 0024 | the private-visit leaks from the adversarial review closed (retry by id, consult replies, files, values, search, live channels, owner roles); a consult may name only a department | [07](spec/07-privacy-and-record.md) |
 | 0021 | the amendments of 2026-09-23: waiting for results, the review rule and reasons, ranges by sex/age, reply types from the registry, the day's released results | [amendments](spec/amendments-2026-09-23.md) |
 
 Tables live in schema `core` and are reachable only through functions in `public`. Every public function is `security definer` with a pinned search path and starts with `require_access`.

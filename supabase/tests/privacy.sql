@@ -104,3 +104,59 @@ select case when changes->>'is_private' = 'true' and actor_id = :'dr' then 'ok t
   from core.visit_steps where visit_id = :'iv' and changes ? 'is_private';
 select case when basis = 'visit' then 'ok the psychiatrist''s read had a reason: an open visit' else 'FAIL ' || coalesce(basis, '-') end from core.record_reads where user_id = :'ps' order by read_at limit 1;
 select case when basis = 'none' then 'ok the IM doctor''s first read had none' else 'FAIL ' || coalesce(basis, '-') end from core.record_reads where user_id = :'dr' order by read_at limit 1;
+
+-- ════ the leaks the adversarial review found (0024): each one closed ════
+\set d2  '00000000-0000-0000-0000-0000000000b2'
+\set jd2 '11111111-0000-0000-0000-0000000000b2'
+\set lt  '00000000-0000-0000-0000-0000000000b5'
+\set jlt '11111111-0000-0000-0000-0000000000b5'
+\set pv2 '00000000-0000-0000-0000-0000000000a3'
+insert into core.users (id, organization_id, kind, name, login_id) values (:'d2', :'org', 'staff', 'Dr Omar', :'jd2'), (:'lt', :'org', 'staff', 'Lab Tech', :'jlt');
+insert into core.user_roles (organization_id, user_id, role_id, department_id) values (:'org', :'d2', '00000000-0000-0000-0000-00000000c002', :'im'), (:'org', :'lt', '00000000-0000-0000-0000-00000000c005', :'labd');
+insert into core.entry_files (entry_id, position, path, mime, name) values ('00000000-0000-0000-0000-0000000000e1', 1, 'records/letter.pdf', 'application/pdf', 'letter');
+set role authenticated;
+
+\echo '── a second IM doctor replays the hidden note''s id through write_note and write_set: refused, nothing returned'
+select set_config('request.jwt.claim.sub', :'jd2', false);
+select case when jsonb_typeof(public.read_record(:'pt', :'im')) = 'object' then 'ok opened' end;
+select public.write_note('00000000-0000-0000-0000-0000000000e1', :'pt', null, :'im', text := 'x');
+select public.write_set(:'im', '[{"function":"write_note","params":{"id":"00000000-0000-0000-0000-0000000000e1","patient_id":"00000000-0000-0000-0000-0000000000f1","text":"x"}}]');
+\echo '── … the hidden note''s file: refused'
+select public.read_entry_file('00000000-0000-0000-0000-0000000000e1', 1::smallint);
+\echo '── … replaying the private visit''s id through open_visit: refused'
+select public.open_visit(:'pv', :'pt', :'im');
+
+\echo '── the owner (a role everywhere) cannot make the private visit not private'
+select set_config('request.jwt.claim.sub', :'jow', false);
+select public.mark_visit_private(:'pv', false);
+
+\echo '── IM asks Psychiatry a question; the psychiatrist answers inside a private visit, with a value in the note'
+select set_config('request.jwt.claim.sub', :'jdr', false);
+select display_line from public.write_request('00000000-0000-0000-0000-0000000000e6', :'pt', null, :'im', to_department_id := :'psy', question_text := 'Is lithium still needed?');
+select set_config('request.jwt.claim.sub', :'jrc', false);
+select case when is_private then 'ok the consult visit is private' else 'FAIL' end from public.open_visit(:'pv2', :'pt', :'psy', request_id := '00000000-0000-0000-0000-0000000000e6');
+select set_config('request.jwt.claim.sub', :'jps', false);
+select case when jsonb_typeof(public.read_record(:'pt', :'psy')) = 'object' then 'ok opened' end;
+select display_line from public.write_note('00000000-0000-0000-0000-0000000000e7', :'pt', :'pv2', :'psy', kind := 'consult_reply', text := 'Yes, continue lithium; level in 3 months',
+  reply_to_id := '00000000-0000-0000-0000-0000000000e6', fields := '{"values":[{"code":"loinc:718-7","name":"Hb","value_number":9.9,"unit":"g/dL"}]}');
+
+\echo '── the requesting department reads the answer; anyone else sees "Private reply"'
+select set_config('request.jwt.claim.sub', :'jd2', false);
+select case when c->'request'->>'reply_line' like '%continue lithium%' then 'ok IM (who asked) reads the reply' else 'FAIL ' || coalesce(c->'request'->>'reply_line', '-') end
+  from jsonb_array_elements(public.read_record(:'pt', :'im')->'entries') c where c->>'id' = '00000000-0000-0000-0000-0000000000e6';
+select set_config('request.jwt.claim.sub', :'jow', false);
+select case when c->'request'->>'reply_line' = 'Private reply' then 'ok the owner sees "Private reply" on the request' else 'FAIL ' || coalesce(c->'request'->>'reply_line', '-') end
+  from jsonb_array_elements(public.read_record(:'pt', :'im')->'entries') c where c->>'id' = '00000000-0000-0000-0000-0000000000e6';
+select case when (r->'reply'->>'is_hidden')::boolean and r->'reply'->'data' = '{}'::jsonb then 'ok the queue''s released list hides it too' else 'FAIL ' || coalesce((r->'reply')::text, '-') end
+  from jsonb_array_elements(public.read_queue(:'psy')->'recent') r where r->>'id' = '00000000-0000-0000-0000-0000000000e6';
+select case when jsonb_typeof(public.read_values(:'pt', array['loinc:718-7'])->'loinc:718-7') is distinct from 'array' then 'ok the note''s value is not in the owner''s trend' else 'FAIL' end;
+select case when not (public.read_results_table(:'pt')::text like '%9.9%') then 'ok nor in results over time' else 'FAIL' end;
+select set_config('request.jwt.claim.sub', :'jps', false);
+select case when jsonb_typeof(public.read_values(:'pt', array['loinc:718-7'])->'loinc:718-7') = 'array' and jsonb_array_length(public.read_values(:'pt', array['loinc:718-7'])->'loinc:718-7') = 1 then 'ok the psychiatrist sees the value' else 'FAIL' end;
+
+\echo '── search: the lab tech (a lab serving every department) sees "Private visit"; reception serving Psychiatry sees Psychiatry'
+select set_config('request.jwt.claim.sub', :'jlt', false);
+select case when h->'open_visits'->0->>'department_name' = 'Private visit' and h->'open_visits'->0->>'assignee_id' is null then 'ok the lab tech sees "Private visit"' else 'FAIL ' || (h->'open_visits')::text end
+  from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;
+select set_config('request.jwt.claim.sub', :'jrc', false);
+select case when h->'open_visits'->0->>'department_name' = 'Psychiatry' then 'ok reception sees Psychiatry' else 'FAIL' end from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;

@@ -20,6 +20,12 @@ without touching this).
   *Private note*). The facts from it show with their author, and "Private visit" in place of the department. This holds in the record,
   search, reception's lists and the bench.
 - **Open anyway:** a reason (Direct care · Emergency · Admin · Other with a few words) opens that visit for 12 hours. The read is logged.
+- **A reply is written for whoever asked.** A note that answers a request (a consult reply) is readable by the requester and by staff of the
+  requesting department, even when it was written in a private visit; to anyone else it shows as *Private reply* on the request. (Added
+  2026-09-24 after the leak review: otherwise a psychiatry consult could never reach the doctor who asked.)
+- **Everything answers the same way.** Queues, review lists, search, files, values and trends apply the same test as the record; a retry of a
+  write returns the stored entry only to its author; the live channels need the same access as the reads they hint at. Tested in
+  `supabase/tests/privacy.sql`.
 
 ## One read log
 

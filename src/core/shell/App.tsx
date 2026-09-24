@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, Outlet } from 'react-router-dom'
-import { useAuth } from '../auth'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAuth, useLoginId } from '../auth'
+import { useDrafts } from '../hooks/drafts'
 import { useChoice, discoverOrganization } from '../hooks/organization'
 import { Centered, Spinner } from '../ui'
 import { Shell } from './Shell'
@@ -21,10 +23,18 @@ function RequireAuth() {
   return <Outlet />
 }
 
+/** a different person signs in: nothing of the last one stays in this tab — cached reads (which may hold a private visit they opened), unsigned drafts */
+function ForgetOnUserChange() {
+  const qc = useQueryClient(); const login = useLoginId()
+  useEffect(() => { qc.clear(); useDrafts.setState({ byPatient: {} }) }, [login, qc])
+  return null
+}
+
 export function App() {
   const init = useAuth((s) => s.init)
   useEffect(() => init(), [init])
-  return (
+  return (<>
+    <ForgetOnUserChange />
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<RequireAuth />}>
@@ -40,5 +50,5 @@ export function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-  )
+  </>)
 }
