@@ -14,7 +14,7 @@ export function useWriteSet(departmentId: string | null, patientId: string | nul
 }
 export function useVisitActions() {
   const qc = useQueryClient()
-  const inv = () => { qc.invalidateQueries({ queryKey: ['visit_queue'] }); qc.invalidateQueries({ queryKey: ['patients'] }); qc.invalidateQueries({ queryKey: ['record'] }) }
+  const inv = () => { qc.invalidateQueries({ queryKey: ['visit_queue'] }); qc.invalidateQueries({ queryKey: ['private_visits'] }); qc.invalidateQueries({ queryKey: ['patients'] }); qc.invalidateQueries({ queryKey: ['record'] }) }
   return {
     open: useMutation({ mutationFn: (a: { patient_id: string; department_id: string; priority?: string; request_id?: string }) => rpc<VisitRow>('open_visit', { id: newId(), ...a }), onSuccess: inv }),
     present: useMutation({ mutationFn: (a: { visit_id: string; is_present: boolean }) => rpc<VisitRow>('mark_present', a), onSuccess: inv }),

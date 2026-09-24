@@ -1,57 +1,53 @@
 import { useMemo, useState } from 'react'
-import { create } from 'zustand'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Eye, FlaskConical, LayoutGrid, ListChecks, Plus, Puzzle, Trash2, Users, X } from 'lucide-react'
-import { rpc, Refusal, type FnName } from '../db/rpc'
-import { useDepartment, useChoice } from '../hooks/organization'
+import { useQuery } from '@tanstack/react-query'
+import { Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Plus, Puzzle, Trash2, Users, X } from 'lucide-react'
+import { rpc } from '../db/rpc'
+import { useDepartment } from '../hooks/organization'
 import { newId } from '../hooks/writes'
 import type { Department, Organization } from '../db/types'
 import { Badge, Button, Card, Centered, IconButton, Input, Select, Spinner, cn, dateTime, errorText } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
+import { PAGE_ACTION, useMfaNeeded, useSave } from './settings/save'
+import { RolesPage } from './settings/Roles'
 import { EditPanel, Empty, Filter, Group, Labeled, Line, PageHead, Pick, Row, Saved, Section, Segmented, Unsaved, useDraft } from './settings/parts'
 import { ReadsPage } from './settings/Reads'
-import { parse } from './visit/parse'
+import { readPresetLine } from './visit/expand'
+import { commandNamed } from './visit/commands'
+import { replyFormFor } from '../renderers'
 import { PROBLEMS } from './visit/catalog'
 
 const PAGES = [['organization', 'Organization', Building2], ['departments', 'Departments', LayoutGrid], ['services', 'Services', FlaskConical], ['users', 'Users', Users],
-  ['templates', 'Presets', ListChecks], ['packs', 'Packs', Puzzle], ['reads', 'Record reads', Eye]] as const
+  ['roles', 'Roles', KeyRound], ['templates', 'Presets', ListChecks], ['packs', 'Packs', Puzzle], ['reads', 'Record reads', Eye]] as const
 
 /** Settings (spec 02/05): the practice builds its own clinic here, a page per kind of thing, every list folds and every row edits in place. Owners only. */
 export function SettingsScreen() {
   const { org, can } = useDepartment()
   const mfaNeeded = useMfaNeeded((s) => s.needed)
   if (!org) return <Centered><Spinner /></Centered>
-  if (!can('manage:organization')) return <Centered><p className="text-sm text-neutral-500">Settings need the owner role.</p></Centered>
-  const counts: Record<string, number | string> = { departments: org.departments.length, services: org.services.length, users: org.users.filter((u) => !u.retired_at).length,
+  const pages = PAGES.filter(([k]) => can(PAGE_ACTION[k]))
+  if (!pages.length) return <Centered><p className="text-sm text-neutral-500">Settings need a role that manages something here.</p></Centered>
+  const counts: Record<string, number | string> = { departments: org.departments.length, services: org.services.length, users: org.users.filter((u) => !u.retired_at).length, roles: org.roles.length,
     templates: org.templates.length, packs: `${org.packs.filter((p) => p.enabled).length}/${org.packs.length}` }
   return <div className="mx-auto grid max-w-6xl gap-6 p-4 md:grid-cols-[200px_1fr]">
     <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:grid md:content-start md:gap-0.5 md:overflow-visible md:px-0 print:hidden">
       <p className="hidden px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500 md:block">Settings</p>
-      {PAGES.map(([k, l, Icon]) => <NavLink key={k} to={`/settings/${k}`} className={({ isActive }) => cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors', isActive ? 'bg-teal-50 font-medium text-teal-900' : 'text-neutral-600 hover:bg-neutral-100')}>
+      {pages.map(([k, l, Icon]) => <NavLink key={k} to={`/settings/${k}`} className={({ isActive }) => cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors', isActive ? 'bg-teal-50 font-medium text-teal-900' : 'text-neutral-600 hover:bg-neutral-100')}>
         <Icon className="h-4 w-4 shrink-0 opacity-70" />{l}{counts[k] !== undefined && <span className="ml-auto pl-2 text-[11px] text-neutral-400 tnum">{counts[k]}</span>}</NavLink>)}
     </nav>
     <div className="min-w-0">{mfaNeeded && <Mfa onDone={() => useMfaNeeded.getState().set(false)} />}<Routes>
-      <Route index element={<Navigate to="organization" replace />} />
-      <Route path="organization" element={<OrganizationPage org={org} />} />
-      <Route path="departments" element={<DepartmentsPage org={org} />} />
-      <Route path="services" element={<ServicesPage org={org} />} />
-      <Route path="users" element={<UsersPage org={org} />} />
-      <Route path="templates" element={<TemplatesPage org={org} />} />
-      <Route path="packs" element={<PacksPage org={org} />} />
-      <Route path="reads" element={<ReadsPage orgId={org.organization.id} />} />
+      <Route index element={<Navigate to={pages[0][0]} replace />} />
+      <Route path="organization" element={can(PAGE_ACTION.organization) ? <OrganizationPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="departments" element={can(PAGE_ACTION.departments) ? <DepartmentsPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="services" element={can(PAGE_ACTION.services) ? <ServicesPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="users" element={can(PAGE_ACTION.users) ? <UsersPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="roles" element={can(PAGE_ACTION.roles) ? <RolesPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="templates" element={can(PAGE_ACTION.templates) ? <TemplatesPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="packs" element={can(PAGE_ACTION.packs) ? <PacksPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="reads" element={can(PAGE_ACTION.reads) ? <ReadsPage orgId={org.organization.id} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
     </Routes></div>
   </div>
-}
-const useMfaNeeded = create<{ needed: boolean; set: (v: boolean) => void }>((set) => ({ needed: false, set: (needed) => set({ needed }) }))
-// functions keyed by the row's own id (retire_…) take no organization_id; the API refuses a call with a parameter the function lacks
-const BY_ID: FnName[] = ['retire_department', 'retire_service', 'retire_template']
-function useSave(fn: FnName) {
-  const qc = useQueryClient(); const orgId = useChoice((s) => s.organizationId)
-  return useMutation({ mutationFn: (a: Record<string, unknown>) => rpc(fn, BY_ID.includes(fn) ? a : { organization_id: orgId, ...a }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['settings_changes'] }) },
-    onError: (e) => { if (e instanceof Refusal && e.code === 'mfa_required') useMfaNeeded.getState().set(true) } })
 }
 const Err = ({ e }: { e: Error | null }) => e ? <p className="px-4 py-2 text-sm text-red-700">{errorText(e)}</p> : null
 /** a new thing's editor, above the lists until it is saved */
@@ -252,23 +248,23 @@ function TemplatesPage({ org }: { org: Organization }) {
     const flip = (id: string) => e.set({ items: d.items.includes(id) ? d.items.filter((x) => x !== id) : [...d.items, id] })
     const findable = org.services.filter((s) => !d.items.includes(s.id) && (!f || s.name.toLowerCase().includes(f) || s.code.includes(f)))
     const lines = d.lines.split('\n').map((l) => l.trim()).filter(Boolean); const sc = d.shortcut.trim().replace(/^\//, '').toLowerCase()
-    const scBad = !!sc && (!/^[a-z0-9_]{1,20}$/.test(sc) || ['note', 'soap', 'hx', 'letter', 'nka', 'vitals'].includes(sc) || org.templates.some((t) => t.id !== e.id && t.shortcut === sc))
+    const scBad = !!sc && (!/^[a-z0-9_]{1,20}$/.test(sc) || !!commandNamed(sc) || org.templates.some((t) => t.id !== e.id && t.shortcut === sc))   // a command's name or alias would win
     // each line as the visit's composer will read it; "for dm" links to the patient's own problem, so it is read against the problem list
-    const pctx = { services: org.services, templates: [], departments: org.departments, problems: PROBLEMS.map((p) => ({ id: p.icd10, name: p.name })), departmentId: d.department_id }
-    const checked = lines.map((l) => { const r = parse(l, pctx); return { l, r: r && 'error' in r ? r.error : null, what: r && 'ok' in r ? r.ok.map((p) => p.line).join(' · ') + (/\sfor\s/i.test(l) && l.trim().startsWith('rx') ? ' — linked when the patient has it' : '') : null } })
+    const pctx = { services: org.services.filter((x) => !replyFormFor(x.reply_type)?.automatic), templates: [], departments: org.departments, problems: PROBLEMS.map((p) => ({ id: p.icd10, name: p.name })), departmentId: d.department_id }
+    const checked = lines.map((l) => { const r = readPresetLine(l, pctx); return { l, r: r && 'error' in r ? r.error : null, what: r && 'ok' in r ? r.ok.map((p) => p.line).join(' · ') + (/\sfor\s/i.test(l) && /^\/?rx\s/.test(l.trim()) ? ' — linked when the patient has it' : '') : null } })
     return <EditPanel dirty={e.dirty} saving={save.isPending} error={save.error ?? retire.error} canSave={!!d.name.trim() && (d.items.length > 0 || lines.length > 0) && !scBad && !checked.some((c) => c.r) && (!lines.length || !!sc)} onCancel={e.cancel}
       onSave={() => save.mutate({ id: e.id, name: d.name, department_id: d.department_id || null, items: d.items.map((service_id) => ({ service_id })), shortcut: sc || null, lines }, { onSuccess: e.done })}
       aside={existing && <RetireButton what={existing.name} onRetire={() => retire.mutate({ id: existing.id }, { onSuccess: e.done })} />}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Labeled label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Antenatal booking" required autoFocus /></Labeled>
         <Labeled label="Offered to" changed={e.changed('department_id')} hint="Everyone, or only one department's staff."><Select value={d.department_id} onChange={(x) => e.set({ department_id: x.target.value })}><option value="">everyone</option>{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></Labeled>
-        <Labeled label="Shortcut" changed={e.changed('shortcut')} hint={scBad ? 'Letters, digits and _ only; not taken by another preset or a built-in (/note /soap /hx /letter /nka /vitals).' : lines.length && !sc ? 'Lines run only from a shortcut — give it one.' : 'Typed in the visit as /dm — runs the services and the lines below.'}>
+        <Labeled label="Shortcut" changed={e.changed('shortcut')} hint={scBad ? `Letters, digits and _ only, and not taken: ${commandNamed(sc) ? `/${sc} is the ${commandNamed(sc)!.label.toLowerCase()} command` : 'another preset has it'}.` : lines.length && !sc ? 'Lines run only from a shortcut — give it one.' : 'Typed in the visit as /dm — runs the services and the lines below.'}>
           <Input aria-label="Shortcut" value={d.shortcut} onChange={(x) => e.set({ shortcut: x.target.value })} placeholder="/dm" className={cn('font-mono', (scBad || (lines.length > 0 && !sc)) && 'border-red-400')} /></Labeled>
       </div>
       <Group title={`Lines · ${lines.length}`}>
-        <textarea aria-label="Lines" value={d.lines} onChange={(x) => e.set({ lines: x.target.value })} rows={Math.max(3, lines.length + 1)} spellCheck={false} placeholder={'rx metformin 500 bd 30d for dm\nplan: review HbA1c in 3 months'}
+        <textarea aria-label="Lines" value={d.lines} onChange={(x) => e.set({ lines: x.target.value })} rows={Math.max(3, lines.length + 1)} spellCheck={false} placeholder={'/rx metformin 500 bd 30d for dm\n/plan review HbA1c in 3 months'}
           className="-mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-[13px] focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20" />
-        <p className="-mt-1 text-xs text-neutral-500">One line each, as typed in the visit’s composer: prescriptions, problems, notes, vitals. They become drafts the clinician can change before Done.</p>
+        <p className="-mt-1 text-xs text-neutral-500">One line each, as typed in the visit’s composer: /rx, /dx, /al, /v, /plan … (the slash may be left out here). They become drafts the clinician can change before Done.</p>
         {checked.some((c) => c.r) && <p className="text-xs text-red-700">Fix the lines in red first — the visit could not read them.</p>}
         {checked.length > 0 && <ul className="grid gap-0.5 text-xs">{checked.map((c, i) => <li key={i} className={c.r ? 'text-red-700' : 'text-neutral-600'}><span className="font-mono text-neutral-400">{i + 1}</span> {c.r ?? c.what}</li>)}</ul>}
       </Group>
@@ -282,13 +278,13 @@ function TemplatesPage({ org }: { org: Organization }) {
     </EditPanel> }
 
   return <div className="grid gap-4">
-    <PageHead title="Presets" hint="What is often written together — services and speed lines — run by typing its /shortcut in the visit (services also by lab <name>)." right={<Button size="sm" onClick={() => open(newId(), { name: '', department_id: '', items: [], shortcut: '', lines: '' }, true)}><Plus className="h-3.5 w-3.5" />Preset</Button>} />
+    <PageHead title="Presets" hint="What is often written together — services and speed lines — run by typing its /shortcut in the visit (its services also by /order <name>)." right={<Button size="sm" onClick={() => open(newId(), { name: '', department_id: '', items: [], shortcut: '', lines: '' }, true)}><Plus className="h-3.5 w-3.5" />Preset</Button>} />
     {e.isNew && <NewCard title="New preset">{editor()}</NewCard>}
     {groups.map(([dep, label]) => { const ts = org.templates.filter((t) => (t.department_id ?? '') === dep); if (!ts.length) return null
       return <Section key={dep || 'all'} id={`preset.${dep || 'all'}`} title={label} count={ts.length} summary={ts.map((t) => t.name).join(', ')}>
         <ul className="divide-y divide-neutral-100">{ts.map((t) => <Row key={t.id} open={e.id === t.id && !e.isNew} editor={editor}
           onToggle={() => open(t.id, { name: t.name, department_id: t.department_id ?? '', items: t.items.map((i) => i.service_id), shortcut: t.shortcut ?? '', lines: (t.lines ?? []).join('\n') })}>
-          <span className="w-48 truncate font-medium">{t.name}{t.shortcut && <span className="ml-1.5 font-mono text-xs font-normal text-teal-800">/{t.shortcut}</span>}</span>
+          <span className="w-48 truncate font-medium">{t.name}{t.shortcut && <span className={cn('ml-1.5 font-mono text-xs font-normal', commandNamed(t.shortcut) ? 'text-red-700' : 'text-teal-800')} title={commandNamed(t.shortcut) ? `/${t.shortcut} is a command now — give this preset another shortcut` : undefined}>/{t.shortcut}{commandNamed(t.shortcut) && ' ⚠'}</span>}</span>
           {t.items.length > 0 && <Badge>{t.items.length} services</Badge>}{(t.lines ?? []).length > 0 && <Badge tone="brand">{t.lines.length} lines</Badge>}
           <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">{[...t.items.map((i) => svc(i.service_id)?.name ?? '?'), ...(t.lines ?? [])].join(' · ')}</span>
         </Row>)}</ul>

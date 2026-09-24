@@ -29,7 +29,8 @@ export function RecordViews({ r, patientId, departmentId, view }: { r: RecordVie
     {attention.length > 0 && <Card className="overflow-hidden ring-1 ring-amber-200"><Heading tone="muted" count={attention.length} className="border-b border-amber-100 bg-amber-50/60 px-3.5 py-2">Needs attention</Heading>
       <ul className="divide-y divide-neutral-100">{attention.map((c) => <li key={c.id}><Row card={c} onOpen={openEntry} /></li>)}</ul></Card>}
 
-    <Heading right={<button onClick={() => setResults(!results)} className={cn('rounded-md px-2.5 py-1 text-xs ring-1 ring-inset', results ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200 hover:ring-neutral-400')}>{results ? 'Back to the record' : 'Results over time'}</button>}>
+    {/* the full table opens from Key results beside the record; here only the way back */}
+    <Heading right={results && <button onClick={() => setResults(false)} className="rounded-md bg-teal-800 px-2.5 py-1 text-xs text-white ring-1 ring-inset ring-teal-800">Back to the record</button>}>
       {results ? 'Results over time' : 'Record'}</Heading>
 
     {results ? <ResultsOverTime patientId={patientId} onOpen={openEntry} />

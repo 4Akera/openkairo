@@ -70,9 +70,9 @@ export function VisitScreen() {
     const k = (e: KeyboardEvent) => {
       const typing = /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && visit?.status === 'in_consult' && mine) { e.preventDefault(); void done(dept?.after_done !== 'queue') }
-      else if (e.key === '/' && !typing) { e.preventDefault(); today.current?.focus() }
+      else if (e.key === '/' && !typing) { e.preventDefault(); today.current?.slash() }
       else if (e.altKey && !e.metaKey && !e.ctrlKey) {
-        const line = ({ KeyP: 'dx ', KeyM: 'rx ', KeyA: 'al ', p: 'dx ', m: 'rx ', a: 'al ' } as Record<string, string>)[e.code || e.key.toLowerCase()]
+        const line = ({ KeyP: '/dx ', KeyM: '/rx ', KeyA: '/al ', p: '/dx ', m: '/rx ', a: '/al ' } as Record<string, string>)[e.code || e.key.toLowerCase()]
         if (line) { e.preventDefault(); compose({ text: line }) }
       }
     }
@@ -118,7 +118,7 @@ export function VisitScreen() {
 
 const SEX: Record<string, string> = { male: 'M', female: 'F', other: 'X' }
 function Banner({ r, visit, mine, onBack, actions }: { r: RecordView; visit: VisitRow | null; mine: boolean; onBack: () => void; actions: React.ReactNode }) {
-  const v = r.latest_vitals ?? []; const pick = (c: string) => v.find((x) => x.code === c)
+  const v = r.latest_vitals ?? []; const pick = (c: string) => v.find((x) => x.code === c || x.code === `loinc:${c}`)   // values carry 'loinc:' codes
   const allergies = r.allergies.filter((a) => a.status === 'active')
   const vit = [pick('8480-6') && pick('8462-4') ? ['BP', `${pick('8480-6')!.value_number}/${pick('8462-4')!.value_number}`, pick('8480-6')!.flag] : null, pick('8867-4') ? ['P', pick('8867-4')!.value_number, pick('8867-4')!.flag] : null,
     pick('8310-5') ? ['T', pick('8310-5')!.value_number, pick('8310-5')!.flag] : null, pick('29463-7') ? ['Wt', pick('29463-7')!.value_number, null] : null, pick('59408-5') ? ['SpO₂', pick('59408-5')!.value_number, pick('59408-5')!.flag] : null].filter(Boolean) as [string, number | string, string | null][]

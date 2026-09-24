@@ -7,6 +7,11 @@ export function useVisitQueue(departmentId: string | null) {
   useLive(departmentId ? `queue:${departmentId}` : null, [['visit_queue', departmentId], ['request_queue', departmentId]])
   return useQuery({ queryKey: ['visit_queue', departmentId], queryFn: () => rpc<VisitQueue>('read_visit_queue', { department_id: departmentId }), enabled: !!departmentId, refetchInterval: 15_000 })
 }
+/** reception's private visits (spec 07): who is waiting in a private visit, never where */
+export type PrivateVisit = { id: string; patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; age: number }; status: string; priority: string; arrived_at: string; present_at: string | null }
+export function usePrivateVisits(receptionId: string | null) {
+  return useQuery({ queryKey: ['private_visits', receptionId], queryFn: () => rpc<PrivateVisit[]>('read_private_visits', { department_id: receptionId }), enabled: !!receptionId, refetchInterval: 15_000 })
+}
 export function useRequestQueue(departmentId: string | null) {
   return useQuery({ queryKey: ['request_queue', departmentId], queryFn: () => rpc<RequestQueue>('read_queue', { department_id: departmentId }), enabled: !!departmentId, refetchInterval: 15_000 })
 }

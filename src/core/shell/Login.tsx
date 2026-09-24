@@ -4,7 +4,7 @@ import { signIn, useAuth } from '../auth'
 import { useChoice } from '../hooks/organization'
 import { Button, Input, Field } from '../ui'
 const DEMO = import.meta.env.VITE_DEMO_LOGINS === 'true'
-const USERS = [['admin@demo.com', 'Admin', 'owner'], ['reception@demo.com', 'Receptionist', 'Front desk'], ['nurse@demo.com', 'Nurse', 'Internal Medicine'], ['dr.ali@demo.com', 'Dr. Ali', 'Internal Medicine'], ['lab@demo.com', 'Lab tech', 'Laboratory'], ['psych@demo.com', 'Dr. Salma', 'Psychiatry'], ['pharm@demo.com', 'Pharmacist', 'Pharmacy']]
+const USERS = [['admin@demo.com', 'Admin', 'owner'], ['reception@demo.com', 'Receptionist', 'Front desk'], ['nurse@demo.com', 'Nurse', 'General Practice'], ['dr.ali@demo.com', 'Dr. Ali', 'General Practice'], ['lab@demo.com', 'Lab tech', 'Laboratory'], ['psych@demo.com', 'Dr. Salma', 'Psychiatry'], ['pharm@demo.com', 'Pharmacist', 'Pharmacy']]
 export function Login() {
   const status = useAuth((s) => s.status)
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false)

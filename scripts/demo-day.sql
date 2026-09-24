@@ -1,5 +1,5 @@
 -- A realistic clinic morning for the Demo Clinic, written through the public functions as real users (never into tables):
--- reception registers and checks in :n patients to Internal Medicine; the doctor sends lab requests for every third one.
+-- reception registers and checks in :n patients to General Practice; the doctor sends lab requests for every third one.
 -- Run:  npm run db:demo      (after npm run db:reset)
 \set n 30
 select set_config('opencare.demo_n', :'n', false);

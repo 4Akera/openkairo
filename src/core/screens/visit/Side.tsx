@@ -44,7 +44,7 @@ export function Side({ r, patientId, can }: { r: RecordView; patientId: string; 
   const nka = drafts.find((d) => d.function === 'write_list_review' && d.params.list === 'allergies' && d.params.outcome === 'none_known')
 
   return <aside className="grid content-start gap-3">
-    <Section title="Problems" count={r.problems.length + newProblems.length} right={<>{review('problems', r.problem_review)}{plus('dx ', 'P', 'write:problem')}</>}>
+    <Section title="Problems" count={r.problems.length + newProblems.length} right={<>{review('problems', r.problem_review)}{plus('/dx ', 'P', 'write:problem')}</>}>
       {r.problems.length + newProblems.length === 0 && <Empty>No problems recorded</Empty>}
       <ul className="divide-y divide-neutral-100">
         {r.problems.map((p) => { const res = pending('write_problem', 'problem_id', p.id); const meds = medsFor(p.id); return <li key={p.id} className={cn('group py-2', res?.params.action === 'resolve' && 'opacity-50')}>
@@ -65,7 +65,7 @@ export function Side({ r, patientId, can }: { r: RecordView; patientId: string; 
       </ul>
     </Section>
 
-    <Section title="Medications" count={r.medications.length + drafted('write_prescription', 'start').length} right={<>{review('medications', r.medication_review)}{plus('rx ', 'M', 'write:prescription')}</>}>
+    <Section title="Medications" count={r.medications.length + drafted('write_prescription', 'start').length} right={<>{review('medications', r.medication_review)}{plus('/rx ', 'M', 'write:prescription')}</>}>
       {r.medications.length + drafted('write_prescription', 'start').length === 0 && <Empty>No active medications</Empty>}
       <ul className="divide-y divide-neutral-100">
         {r.medications.map((m) => { const p = pending('write_prescription', 'medication_id', m.id); const forP = r.problems.find((x) => x.id === m.problem_id); return <li key={m.id} className="group flex items-start gap-2 py-2">
@@ -82,7 +82,7 @@ export function Side({ r, patientId, can }: { r: RecordView; patientId: string; 
       </ul>
     </Section>
 
-    <Section title="Allergies" count={activeAllergies.length + drafted('write_allergy', 'add').length} right={<>{review('allergies', r.allergy_review)}{plus('al ', 'A', 'write:allergy')}</>}>
+    <Section title="Allergies" count={activeAllergies.length + drafted('write_allergy', 'add').length} right={<>{review('allergies', r.allergy_review)}{plus('/al ', 'A', 'write:allergy')}</>}>
       {activeAllergies.length + drafted('write_allergy', 'add').length === 0 && (r.allergy_review && !nka
         ? <Empty>No known allergies · checked {ymd(r.allergy_review.reviewed_at)}</Empty>
         : <div className="flex items-center gap-2 py-1.5 text-xs"><span className={nka ? 'font-medium text-teal-800' : 'text-amber-700'}>{nka ? 'No known allergies — signed on Done' : 'Not asked yet'}</span>

@@ -2334,6 +2334,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      read_actions: { Args: { organization_id: string }; Returns: Json }
       read_codes: {
         Args: { limit?: number; organization_id: string; query?: string }
         Returns: Json
@@ -2371,6 +2372,7 @@ export type Database = {
         }
         Returns: Json
       }
+      read_private_visits: { Args: { department_id: string }; Returns: Json }
       read_queue: { Args: { department_id: string }; Returns: Json }
       read_ranges: { Args: { organization_id: string }; Returns: Json }
       read_record: {
@@ -2440,6 +2442,7 @@ export type Database = {
         Args: { organization_id: string; pack: string }
         Returns: undefined
       }
+      retire_role: { Args: { id: string }; Returns: Json }
       retire_service: { Args: { id: string }; Returns: undefined }
       retire_template: { Args: { id: string }; Returns: undefined }
       retry_pack_calls: {
@@ -2482,6 +2485,16 @@ export type Database = {
       save_organization_pack: {
         Args: { organization_id: string; pack: string }
         Returns: undefined
+      }
+      save_role: {
+        Args: {
+          actions?: string[]
+          id: string
+          name: string
+          organization_id: string
+          seen_change_id?: string
+        }
+        Returns: Json
       }
       save_service: {
         Args: {

@@ -90,10 +90,16 @@ the queue. Three regions, no tabs:
                                                         [ Back to queue ]  [ Done → Next ⌘⏎ ]
 ```
 
-- **One composer** (amended 2026-09-24). Everything is typed in one line — `148/92 84 37 86`
-  (vitals by position), `rx metformin 500 bd 30d for dm`, `rx paracetamol 1g qds prn pain`,
-  `dx …`, `al …: rash severe`, `lab …`, `ref …`, `hx/ex/plan …`, anything else joins today's
-  note. The card appended under the line shows the fields of what the line says and edits any
+- **One composer** (amended 2026-09-24). Everything is typed in one line, by one rule: **a line
+  that starts with `/` is a command; anything else is today's progress note** — a note is never
+  read as an order. `/v 148/92 84 37 86` (vitals by position), `/rx metformin 500 bd 30d for dm`,
+  `/rx paracetamol 1g qds prn pain`, `/dx …` (`/ddx` suspected), `/al …: rash severe`, `/nka`,
+  `/order hba1c, cxr` (any service another department offers; one a pack creates by itself, like
+  dispensing, is not offered), `/ref cardiology …`, `/hx /ex /plan /proc /nurse /letter …`,
+  `/soap`. Typing `/` lists the commands this role may use here, and this organization's presets.
+  A command alone opens its empty card (`/rx`, `/v`, `/dx`) or its note beside the record (`/hx`,
+  `/note`, `/soap`). A command word typed without its slash stays note text, and the card offers
+  "/rx …" one Tab away. The card appended under the line shows the fields of what the line says and edits any
   of them: Tab moves into it, Enter adds (Enter on a chip adds too), Esc clears. While a name is
   being typed the card offers suggestion cards (Tab takes the first, ↓ chooses), with the
   warnings of what Enter would add as typed. No dropdown, no modal, no second form. ⌘↵ adds what
@@ -101,16 +107,20 @@ the queue. Three regions, no tabs:
   waits and the card says why. A card never lets through what the server would refuse at Done:
   a drug needs how often, a unit for its dose and a route; `/nka` is refused while allergies are
   recorded.
-- The lists open the same card: + starts `dx `/`rx `/`al ` (Alt+P/M/A); ✎ on a medication is a
+- The lists open the same card: + starts `/dx `/`/rx `/`/al ` (Alt+P/M/A); ✎ on a medication is a
   `prescription change`, ✕ a stop with reason chips, ↻ a repeat; ✎ on a problem is a
   `problem update`, ✓ a resolve. A draft clicked in "This visit" reopens in the card and is
   saved in place. ✓ in a list's heading marks it for the `list_review` Done will send; an empty
   allergy list says **Not asked yet** until **No known allergies** (`list_review none_known`).
   Nothing is written until Done.
-- **Shortcuts.** `/dm` runs a preset: its services as requests and its speed lines as drafts
-  (a preset's `shortcut` and `lines`, set in Settings, 0029). Built in: `/note` `/soap` `/hx`
-  `/letter` open a long note in a drawer beside the record (the lists stay in view), `/nka`,
-  `/vitals` (the vitals fields one by one).
+- **Commands are registered, not built in.** Core registers its commands through
+  `registerCommand` (`src/core/screens/visit/commands.ts`) exactly as a pack registers its own:
+  a name, a label, an example, the action a role needs, and a parser from the typed text to
+  drafts (and an empty card or note for the command alone). A pack's command writes the pack's
+  own type through its own write function and shows only while the pack is on (spec 06).
+- **Presets as commands.** `/dm` runs a preset: its services as requests and its lines as drafts
+  (a preset's `shortcut` and `lines`, set in Settings, 0029). A preset line is a command with
+  or without its slash; a line this patient's record cannot take is left out, the rest goes in.
 - **Suggestion lists, not a code system.** The client carries lists of common drugs (ATC,
   strengths, usual frequency, allergy class), problems (ICD-10) and allergens (class, reactions):
   a known name is written with its code (`atc:…`, `icd10:…`, `substance.class_code`); anything

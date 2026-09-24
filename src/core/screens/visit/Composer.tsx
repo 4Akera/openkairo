@@ -10,18 +10,14 @@ import { expand, suggest, type Expanded, type Suggestion } from './expand'
 import { CardItem } from './Card'
 import { KIND_TONE, NOTE_KINDS } from './kinds'
 import { lineOf, type Ctx, type Parsed } from './parse'
+import { commandsFor } from './commands'
+import { replyFormFor } from '../../renderers'
 
-const HELP: [string, string][] = [
-  ['148/92 84 37 86', 'vitals by position: BP, pulse, temp, weight, SpO₂ — or bp 148/92 p 84 …'], ['rx metformin 500 bd 30d for dm', 'prescription · Tab picks the drug'],
-  ['rx paracetamol 1g qds prn pain', 'as needed: say what for'], ['lab hba1c, lipid · lab urgent cbc', 'requests'], ['ref cardiology chest pain on effort', 'consult'],
-  ['dx hypertension since 3y ; on amlodipine', 'problem ( ? = suspected )'], ['al penicillin: rash severe', 'allergy'], ['hx … · ex … · plan …', 'a note of that kind'],
-  ['/dm · /soap · /note · /nka · /vitals', 'shortcuts — presets from Settings, a long note, no known allergies'], ['anything else', 'added to today’s note'],
-]
 const FN_ACTION: Record<string, string> = { write_vitals: 'write:vitals', write_prescription: 'write:prescription', write_request: 'write:request', write_problem: 'write:problem', write_allergy: 'write:allergy', write_note: 'write:note', write_list_review: 'write:list_review' }
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 
 /** focus the line; flush adds what is in it before Done (false: it could not — the card says why) */
-export interface ComposerHandle { focus: () => void; flush: () => boolean }
+export interface ComposerHandle { focus: () => void; flush: () => boolean; slash: () => void }
 
 /** One composer (spec 05): type first; the card under the line shows what it will write and lets you change any field.
  *  The side lists, the drafts and the shortcuts open the same card. Nothing is written until Done. */
@@ -37,9 +33,11 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
 
   const presets = useMemo(() => (org?.templates ?? []).filter((t) => !t.department_id || t.department_id === departmentId), [org, departmentId])
   const ctx: Ctx = useMemo(() => ({
-    services: org?.services ?? [], templates: presets, departments: org?.departments ?? [], departmentId,
+    // a service another write creates (a pack's dispensing, from a prescription) is not ordered by hand
+    services: (org?.services ?? []).filter((x) => !replyFormFor(x.reply_type)?.automatic), templates: presets, departments: org?.departments ?? [], departmentId,
+    can, packs: (org?.packs ?? []).filter((p) => p.enabled).map((p) => p.key),
     problems: [...r.problems.map((p) => ({ id: p.id, name: p.name })), ...drafts.filter((d) => d.function === 'write_problem' && d.params.action === 'add').map((d) => ({ id: d.id, name: String(d.params.name) }))],
-  }), [org, presets, departmentId, r.problems, drafts])
+  }), [org, presets, departmentId, r.problems, drafts, can])
 
   // what the lists hold once this visit's drafts are signed: warnings check against these
   const allergies: Allergy[] = useMemo(() => [...r.allergies.filter((a) => a.status === 'active' && !drafts.some((d) => d.function === 'write_allergy' && d.params.action === 'refute' && d.params.allergy_id === a.id)),
@@ -104,6 +102,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   /** add what the card holds; true when it was added (or there was nothing to add) */
   function commit(): boolean {
     if (!open) return true
+    if (/^\/\s*$/.test(text) && !seed) { clear(); return true }                        // a stray "/" holds up nothing
     if (refused) return false
     if (base?.drawer && !items.length) { setDrawer({ ...base.drawer }); clear(); return false }
     if (!base || base.errors.length || !items.length || incomplete) return false
@@ -117,7 +116,8 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     if (text.trim()) setHistory((h) => [text, ...h.filter((x) => x !== text)].slice(0, 30))
     clear(); input.current?.focus(); return true
   }
-  useImperativeHandle(ref, () => ({ focus: () => input.current?.focus(), flush: () => { const ok = commit(); if (!ok) input.current?.focus(); return ok } }))
+  useImperativeHandle(ref, () => ({ focus: () => input.current?.focus(), flush: () => { const ok = commit(); if (!ok) input.current?.focus(); return ok },
+    slash: () => { if (!open) setText('/'); input.current?.focus() } }))   // "/" from anywhere: the command list, unless a line is under way
   function keyInput(e: React.KeyboardEvent<HTMLInputElement>) {
     const list = sugg?.items ?? []
     if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (pick >= 0 && list[pick]) accept(list[pick]); else commit() }
@@ -172,7 +172,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       <div className="relative">
         {seed && <span className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-md bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-900 ring-1 ring-teal-200">{seed.label}</span>}
         <Input ref={input} value={seed ? '' : text} onChange={(e) => { setSeed(null); setEdited(null); setText(e.target.value); setHi(-1); setPick(-1) }} onKeyDown={keyInput} autoFocus spellCheck={false} aria-label="Composer"
-          placeholder={seed ? '' : 'Type to write — 148/92 84 · rx … · lab … · dx … · al … · /shortcut · or the note itself'} className={cn('h-11 pr-24 font-mono text-[14px] placeholder:font-sans', seed && 'pl-40')} />
+          placeholder={seed ? '' : 'Type the note — or / for a command: /v 148/92 84 · /rx … · /dx … · /al … · /order …'} className={cn('h-11 pr-24 font-mono text-[14px] placeholder:font-sans', seed && 'pl-40')} />
         <span className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 text-neutral-400"><button onClick={() => setHelp(!help)} className={cn('rounded px-1.5 text-xs hover:text-neutral-700', help && 'text-teal-800')} aria-label="Help">?</button><Kbd>/</Kbd></span>
       </div>
       {open && <div ref={card} onKeyDown={keyCard} className="mt-2 overflow-hidden rounded-xl bg-white ring-1 ring-neutral-200">
@@ -197,13 +197,15 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
             {dup && <Button size="sm" variant="outline" onClick={() => changeDup(dup)}>Change its dose instead</Button>}
             {dupProblem && <Button size="sm" variant="outline" onClick={() => updateDup(dupProblem)}>Update {dupProblem.name}</Button>}
           </div> : undefined} />)}</div>}
+        {!sugg && !items.length && !base?.drawer && !base?.errors.length && <p className="px-3 py-2 text-xs text-amber-700">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
         {!sugg && (items.length > 0 || base?.drawer) && <div className="flex items-center gap-3 border-t border-neutral-100 px-3 py-2 text-[11px] text-neutral-500">
           {footer ?? <span className="inline-flex items-center gap-1"><CornerDownLeft className="h-3 w-3" />{seed?.draftId ? 'save' : base?.drawer && !items.length ? 'open' : `add${items.length > 1 ? ` ${items.length}` : ''}`}</span>}
           <span><Kbd>tab</Kbd> edit fields</span><span><Kbd>esc</Kbd> {seed ? 'cancel' : 'clear'}</span>
           <span className="ml-auto">⌘↵ adds it and signs</span></div>}
       </div>}
-      {help && !open && <table className="mt-3 w-full text-xs"><tbody>{HELP.map(([a, b]) => <tr key={a}><td className="py-0.5 pr-4 font-mono text-neutral-800">{a}</td><td className="text-neutral-500">{b}</td></tr>)}
-        <tr><td colSpan={2} className="pt-1.5 text-neutral-400">Tab moves into the card · ↑ recalls earlier lines · Alt+P / Alt+M / Alt+A start a problem, medication, allergy · ⌘↵ Done</td></tr></tbody></table>}
+      {help && !open && <table className="mt-3 w-full text-xs"><tbody>{commandsFor(ctx).map((c) => <tr key={c.name}><td className="py-0.5 pr-4 font-mono text-neutral-800">{c.example}</td><td className="text-neutral-500">{c.label}</td></tr>)}
+        <tr><td className="py-0.5 pr-4 font-mono text-neutral-800">anything without /</td><td className="text-neutral-500">today’s progress note</td></tr>
+        <tr><td colSpan={2} className="pt-1.5 text-neutral-400">A command alone (/rx, /v, /hx) opens its card or note · presets from Settings run as /their-shortcut · Tab takes a suggestion or moves into the card · ↑ recalls earlier lines · Alt+P / M / A · ⌘↵ adds and signs</td></tr></tbody></table>}
     </div>
 
     {drafts.length > 0 && <div className="px-3 py-2">

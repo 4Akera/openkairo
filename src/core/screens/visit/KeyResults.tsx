@@ -21,9 +21,10 @@ export function KeyResults({ patientId }: { patientId: string }) {
   const dia = of(DIA)
   const shown = [...KEY_TESTS.filter((c) => c !== DIA).map(of), ...rows.filter((t) => !KEY_TESTS.includes(t.code) && bad(t.points[0].flag)).slice(0, 3)]
     .filter((t): t is (typeof rows)[number] => !!t).slice(0, 8)
-  if (q.isLoading || !shown.length) return null
+  if (q.isLoading || !(q.data ?? []).length) return null                        // no results at all: nothing to show or open
   return <Card className="px-3.5 py-3">
     <Heading className="mb-1" right={<button onClick={() => go('view', 'results')} className="text-[10.5px] text-teal-800 hover:underline">All results</button>}>Key results</Heading>
+    {!shown.length && <p className="py-1 text-xs text-neutral-400">None of the key tests yet, and nothing flagged — the other results are in All results.</p>}
     <ul className="divide-y divide-neutral-100">{shown.map((t) => {
       const [now, before] = t.points
       // BP is one row: systolic/diastolic measured together

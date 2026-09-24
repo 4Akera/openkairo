@@ -1,13 +1,13 @@
-// The speed line (spec 05, Today as drafts): one typed line → one draft. Pure, so it can be tested without a screen.
-//   bp 148/92 p 84 t 37.2 w 86        vitals (any vital first; "v" optional)
-//   148/92 84 37 86                    vitals by position: BP, pulse, temperature, weight, SpO₂
-//   rx metformin 500mg bd 30d for dm   prescription (dose, route, frequency, days, "for <problem>", "; instructions")
-//   rx paracetamol 1g qds prn pain      "prn <what for>": the words after prn are its reason
-//   lab hba1c, lipid  · lab urgent cbc  requests by service code or name, or a preset
-//   ref cardiology chest pain on effort consult: a department, then the question
-//   dx type 2 diabetes since 2019 ; poorly controlled   problem ("?" or "susp" = suspected; since 2019 · 2019-03 · 3y · 6m)
-//   al penicillin: rash severe          allergy ("intol" = intolerance)
-//   hx … · ex … · plan … · proc …      a note of that kind;  anything else is added to today's progress note
+// The composer's line (spec 05): a line that starts with "/" is a command, anything else is today's progress note.
+// Pure, so it can be tested without a screen. Core's commands are registered at the bottom, as a pack registers its own.
+//   /v 148/92 84 37 86                   vitals by position (BP, pulse, temperature, weight, SpO₂) or by name (p 84 t 37.2)
+//   /rx metformin 500mg bd 30d for dm    prescription (dose, route, frequency, days, "for <problem>", "; instructions")
+//   /rx paracetamol 1g qds prn pain      "prn <what for>": the words after prn are its reason
+//   /order hba1c, lipid · /order urgent cbc   requests by service code or name, or a preset's services
+//   /ref cardiology chest pain on effort consult: a department, then the question
+//   /dx type 2 diabetes since 2019 ; poorly controlled   problem (/ddx or "?" = suspected; since 2019 · 2019-03 · 3y · 6m)
+//   /al penicillin: rash severe          allergy ("intol" = intolerance) · /nka no known allergies
+//   /hx … · /ex … · /plan … · /proc …    a note of that kind; the command alone opens the note beside the record
 
 export interface Ctx {
   services: { id: string; code: string; name: string; department_id: string | null; section_name?: string | null }[]
@@ -16,8 +16,11 @@ export interface Ctx {
   problems: { id: string; name: string }[]          // on the list and drafted this visit
   departmentId: string                                // this department: its own services are not requested from here
   now?: Date
+  can?: (action: string) => boolean                   // the reader's role here: commands it lacks are not offered
+  packs?: string[]                                    // the packs on in this organization
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
+import { allowed, commandNamed, registerCommand } from './commands'
 
 /** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
 export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string }
@@ -35,7 +38,6 @@ const FREQ: Record<string, string> = {
 const FREQ_NOTE: Record<string, string> = { nocte: 'at night', hs: 'at night', mane: 'in the morning' }
 const ROUTE: Record<string, string> = { po: 'oral', oral: 'oral', sc: 'sc', sq: 'sc', im: 'im', iv: 'iv', top: 'topical', topical: 'topical', inh: 'inhaled', inhaled: 'inhaled', pr: 'pr', pv: 'pv', sl: 'sl', nasal: 'nasal' }
 const UNITS = ['mg', 'g', 'mcg', 'ug', 'ml', 'iu', 'u', 'units', 'tab', 'tabs', 'cap', 'caps', 'puff', 'puffs', 'drop', 'drops', 'sachet']
-const NOTE_KINDS: Record<string, [string, string]> = { hx: ['history_physical', 'History'], ex: ['history_physical', 'Examination'], exam: ['history_physical', 'Examination'], plan: ['plan', 'Plan'], pl: ['plan', 'Plan'], proc: ['procedure', 'Procedure'], nurse: ['nurse', 'Nurse'], letter: ['letter', 'Letter'] }
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').trim()
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -98,7 +100,7 @@ function prescription(rest: string, ctx: Ctx): Result {
   const [main, ...instr] = rest.split(';'); let instructions = instr.join(';').trim() || null
   const words = main.trim().split(/\s+/).filter(Boolean)
   if (!words.length) return null
-  if (words[0].toLowerCase() === 'for') return { error: 'Type the drug name after rx' }
+  if (words[0].toLowerCase() === 'for') return { error: 'Type the drug name after /rx' }
   const drug: string[] = []; let dose: number | null = null; let unit: string | null = null; let route: string | null = null; let freq: string | null = null
   let duration: number | null = null; let prn = false; let prnFor: string[] | null = null; let forProblem: { id: string; name: string } | null = null
   const typed = new Set<string>()
@@ -113,13 +115,13 @@ function prescription(rest: string, ctx: Ctx): Result {
     }
     if (drug.length && dose !== null && d && !d[2] && DUR_UNIT.test(next)) { duration = days(+d[1], next); i++; continue }   // 500 tds 7 days
     if (prnFor && !FREQ[w] && !ROUTE[w] && !(d && dose === null) && !(w === 'for' && prnFor.length)) { if (w !== 'for') prnFor.push(words[i]); continue }   // prn pain · prn for pain · … for dm
-    if (w === 'for' && drug.length && i + 1 < words.length) { forProblem = findNamed(ctx.problems, words.slice(i + 1).join(' ')); if (!forProblem) return { error: `No problem “${words.slice(i + 1).join(' ')}” on the list — add it with dx first` }; break }
+    if (w === 'for' && drug.length && i + 1 < words.length) { forProblem = findNamed(ctx.problems, words.slice(i + 1).join(' ')); if (!forProblem) return { error: `No problem “${words.slice(i + 1).join(' ')}” on the list — add it with /dx first` }; break }
     if (d && drug.length && dose === null && (!d[2] || UNITS.includes(d[2]))) { dose = +d[1]; typed.add('dose_number'); if (d[2]) unit = d[2]; else if (UNITS.includes(next)) { unit = next; i++ } if (unit) typed.add('dose_unit'); continue }
     if (FREQ[w] && drug.length) { if (w === 'prn') { prn = true; prnFor = []; typed.add('prn') } if (!freq || w !== 'prn') { freq = FREQ[w]; typed.add('frequency') } if (FREQ_NOTE[w]) instructions = [FREQ_NOTE[w], instructions].filter(Boolean).join('; '); continue }
     if (ROUTE[w] && drug.length) { route = ROUTE[w]; typed.add('route'); continue }
     if (dose === null && !freq) drug.push(words[i]); else instructions = [instructions, words[i]].filter(Boolean).join(' ')
   }
-  if (!drug.length) return { error: 'Type the drug name after rx' }
+  if (!drug.length) return { error: 'Type the drug name after /rx' }
   const known = findDrug(drug.join(' '))
   const name = known?.name ?? drug.map(cap).join(' ')
   if (dose !== null && !unit && known) unit = known.unit                                                // a bare number takes the drug's own unit; the card checks it against its strengths
@@ -155,7 +157,7 @@ function consult(rest: string, ctx: Ctx): Result {
     if (d) { const q = words.slice(n).join(' ').trim(); if (!q) return { error: `Type the question for ${d.name}` }
       return { ok: [{ function: 'write_request', kind: 'consult', params: { to_department_id: d.id, question_text: q, priority: 'routine' }, line: `Consult ${d.name}: ${q}` }] } }
   }
-  return { error: 'Start with the department: ref cardiology …' }
+  return { error: 'Start with the department: /ref cardiology …' }
 }
 
 function problem(rest: string, now: Date): Result {
@@ -163,7 +165,7 @@ function problem(rest: string, now: Date): Result {
   let certainty = 'confirmed'; const typed: string[] = []
   main = main.replace(/(^|\s)(\?|susp(ected)?|r\/o|query)(\s|$)/gi, () => { certainty = 'suspected'; return ' ' }).replace(/\?/g, () => { certainty = 'suspected'; return '' })
   const m = main.match(/^(.*?)(?:\s+(?:since|from|x)\s+(\S+))?\s*$/i)
-  const name = (m?.[1] ?? '').trim(); if (!name) return { error: 'Type the problem after dx' }
+  const name = (m?.[1] ?? '').trim(); if (!name) return { error: 'Type the problem after /dx' }
   let onset: string | null = null
   if (m?.[2]) { onset = partialDate(m[2], now); if (!onset) return { error: `“${m[2]}”: since takes 2019 · 2019-03 · 3y · 6m` }; typed.push('onset_on') }
   if (certainty === 'suspected') typed.push('certainty'); if (text) typed.push('text')
@@ -187,28 +189,24 @@ function allergy(rest: string): Result {
     typed = ws.slice(0, k).join(' '); react = ws.slice(k).join(' ')
   }
   const reactions = [react.replace(/\s+/g, ' ').trim(), ...extra].filter(Boolean).join(', ') || null
-  if (!typed) return { error: 'Type the substance after al' }
+  if (!typed) return { error: 'Type the substance after /al' }
   const known = findAllergen(typed); const kd = findDrug(typed)
   const substance = known?.name ?? kd?.name ?? cap(typed); const cls = known?.allergy_class ?? kd?.allergy_class ?? null
   return { ok: [{ function: 'write_allergy', kind: 'allergy', params: { action: 'add', substance: cls ? { name: substance, class_code: cls } : { name: substance }, kind, reactions_text: reactions, severity }, line: `${kind === 'intolerance' ? 'Intolerance' : 'Allergy'}: ${substance}${reactions ? ` — ${reactions}` : ''}${severity ? ` (${severity})` : ''}` }] }
 }
 
+const progress = (text: string): Parsed => ({ function: 'write_note', kind: 'note', tag: 'note:progress', append: true, params: { kind: 'progress', text }, line: text })
+/** "/rx metformin 500" → ['rx', 'metformin 500'] */
+export const splitCommand = (s: string): [string, string] => { const m = s.trim().replace(/^\/\s*/, '').match(/^(\S*)\s*([\s\S]*)$/); return [m?.[1] ?? '', (m?.[2] ?? '').trim()] }
+
 export function parse(input: string, ctx: Ctx): Result {
   const s = input.trim(); if (!s) return null
-  const [head, ...tail] = s.split(/\s+/); const h = head.toLowerCase(); const rest = tail.join(' ')
-  if (h === 'v' || h === 'vitals' || h === 'bp' || VITALS[h] || /^\d{2,3}\/\d{2,3}$/.test(h) || /^(p|hr|t|w|wt|rr|spo2|sat)\d/.test(h)) {
-    const r = vitals(s.split(/\s+/)); if (r && 'ok' in r) return r
-    if (h === 'v' || h === 'vitals' || h === 'bp' || /^\d{2,3}\/\d{2,3}$/.test(h)) return r
-  }
-  if (['rx', 'med', 'drug', 'start'].includes(h)) return prescription(rest, ctx)
-  if (['lab', 'labs', 'req', 'order', 'inv', 'img', 'xr', 'test'].includes(h)) return requests(rest, ctx)
-  if (['ref', 'consult', 'cons', 'refer'].includes(h)) return consult(rest, ctx)
-  if (['dx', 'pb', 'prob', 'problem', 'ddx'].includes(h)) return problem(h === 'ddx' ? `? ${rest}` : rest, ctx.now ?? new Date())
-  if (['al', 'alg', 'allergy', 'allergic'].includes(h)) return allergy(rest)
-  const nk = NOTE_KINDS[h.replace(/:$/, '')]
-  if (nk) return rest ? { ok: [{ function: 'write_note', kind: 'note', tag: `note:${nk[0]}`, append: true, params: { kind: nk[0], text: `${nk[1]}: ${rest}` }, line: `${nk[1]}: ${rest}` }] } : null
-  const text = s.replace(/^(note|n):\s*/i, '')
-  return { ok: [{ function: 'write_note', kind: 'note', tag: 'note:progress', append: true, params: { kind: 'progress', text }, line: text }] }
+  if (!s.startsWith('/')) return { ok: [progress(s)] }                                  // no slash: note text, never an order
+  const [word, rest] = splitCommand(s)
+  const cmd = commandNamed(word)
+  if (!cmd) return { error: `No command /${word} — type / to see them` }
+  if (!allowed(cmd, ctx)) return { error: `/${cmd.name} is not open to your role here` }
+  return cmd.parse(rest, ctx)
 }
 
 /** the one-line summary of a draft, from its fields (the card edits the fields; the line follows) */
@@ -233,3 +231,39 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'>): 
     default: return p.line
   }
 }
+
+// ── core's commands: what every organization has; a pack registers its own the same way ──
+const noteCommand = (name: string, kind: string, label: string, said: string | null, aliases: string[] = [], template = ''): void => registerCommand({
+  name, aliases, label, example: `/${name} ${said ? '…' : 'the note'}`, action: 'write:note',
+  parse: (rest) => rest ? { ok: [{ function: 'write_note', kind: 'note', tag: `note:${kind}`, append: true, params: { kind, text: said ? `${said}: ${rest}` : rest }, line: said ? `${said}: ${rest}` : rest }] } : null,
+  empty: () => ({ drawer: { kind, text: template } }),
+})
+registerCommand({ name: 'v', aliases: ['vitals', 'bp'], label: 'Vitals', example: '/v 148/92 84 37 86', action: 'write:vitals',
+  parse: (rest) => rest ? vitals(rest.split(/\s+/)) : null, empty: () => [{ function: 'write_vitals', kind: 'vitals', params: {}, line: '' }] })
+registerCommand({ name: 'rx', aliases: ['med'], label: 'Prescription', example: '/rx metformin 500 bd 30d for dm', action: 'write:prescription',
+  parse: (rest, ctx) => prescription(rest, ctx),
+  empty: () => [{ function: 'write_prescription', kind: 'prescription', line: '', params: { action: 'start', drug: { name: '' }, dose_number: null, dose_unit: null, route: null, frequency: null, prn: false, prn_reason_text: null, duration_days: null, instructions_text: null, problems: [] } }] })
+registerCommand({ name: 'dx', label: 'Problem', example: '/dx hypertension since 3y ; on amlodipine', action: 'write:problem',
+  parse: (rest, ctx) => rest ? problem(rest, ctx.now ?? new Date()) : null,
+  empty: () => [{ function: 'write_problem', kind: 'problem', line: '', params: { action: 'add', name: '', code: null, status: 'active', certainty: 'confirmed', onset_on: null, text: null } }] })
+registerCommand({ name: 'ddx', label: 'Suspected problem', example: '/ddx pneumonia', action: 'write:problem',
+  parse: (rest, ctx) => rest ? problem(`? ${rest}`, ctx.now ?? new Date()) : null,
+  empty: () => [{ function: 'write_problem', kind: 'problem', line: '', params: { action: 'add', name: '', code: null, status: 'active', certainty: 'suspected', onset_on: null, text: null } }] })
+registerCommand({ name: 'al', aliases: ['allergy'], label: 'Allergy', example: '/al penicillin: rash severe', action: 'write:allergy',
+  parse: (rest) => rest ? allergy(rest) : null,
+  empty: () => [{ function: 'write_allergy', kind: 'allergy', line: '', params: { action: 'add', substance: { name: '' }, kind: 'allergy', reactions_text: null, severity: null } }] })
+const nka = (): Parsed[] => [{ function: 'write_list_review', kind: 'review', params: { list: 'allergies', outcome: 'none_known' }, line: 'No known allergies' }]
+registerCommand({ name: 'nka', label: 'No known allergies', example: '/nka', action: 'write:list_review', parse: () => ({ ok: nka() }), empty: nka })
+registerCommand({ name: 'order', label: 'Request a service', example: '/order hba1c, lipid · /order urgent cbc', action: 'write:request', parse: (rest, ctx) => rest ? requests(rest, ctx) : null })
+registerCommand({ name: 'ref', aliases: ['consult'], label: 'Consult', example: '/ref cardiology chest pain on effort', action: 'write:request',
+  parse: (rest, ctx) => rest ? consult(rest, ctx) : null,
+  empty: () => [{ function: 'write_request', kind: 'consult', line: '', params: { to_department_id: '', question_text: '', priority: 'routine' } }] })
+noteCommand('note', 'progress', 'Progress note', null)
+noteCommand('hx', 'history_physical', 'History', 'History', [], 'History: ')
+noteCommand('ex', 'history_physical', 'Examination', 'Examination', ['exam'], 'Examination: ')
+noteCommand('plan', 'plan', 'Plan', 'Plan')
+noteCommand('proc', 'procedure', 'Procedure note', 'Procedure')
+noteCommand('nurse', 'nurse', 'Nurse note', 'Nurse')
+noteCommand('letter', 'letter', 'Letter', null)
+registerCommand({ name: 'soap', label: 'SOAP note beside the record', example: '/soap', action: 'write:note', parse: () => null, empty: () => ({ drawer: { kind: 'progress', text: 'S: \nO: \nA: \nP: ' } }) })
+

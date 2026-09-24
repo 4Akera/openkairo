@@ -160,3 +160,31 @@ select case when h->'open_visits'->0->>'department_name' = 'Private visit' and h
   from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;
 select set_config('request.jwt.claim.sub', :'jrc', false);
 select case when h->'open_visits'->0->>'department_name' = 'Psychiatry' then 'ok reception sees Psychiatry' else 'FAIL' end from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;
+
+\echo '── 0034: reception lists a private visit apart, as "Private visit" — never under its department'
+select set_config('request.jwt.claim.sub', :'jrc', false);
+select given_name from public.register_patient('00000000-0000-0000-0000-0000000000f9', :'org', 'Hala', 'Nour', 'female', '1990');
+select case when is_private then 'ok the new Psychiatry visit is private' else 'FAIL not private' end from public.open_visit('00000000-0000-0000-0000-0000000000a9', '00000000-0000-0000-0000-0000000000f9', :'psy');
+select case when not exists (select 1 from jsonb_array_elements(public.read_visit_queue(:'psy')->'rows') r where r->>'id' = '00000000-0000-0000-0000-0000000000a9')
+  then 'ok reception does not see it under Psychiatry' else 'FAIL listed under Psychiatry at reception' end;
+select case when exists (select 1 from jsonb_array_elements(public.read_private_visits(:'rec')) r where r->>'id' = '00000000-0000-0000-0000-0000000000a9' and not (r ? 'department_id') and not (r ? 'department_name'))
+  then 'ok reception''s private list has it, without its department' else 'FAIL private list' end;
+select set_config('request.jwt.claim.sub', :'jps', false);
+select case when exists (select 1 from jsonb_array_elements(public.read_visit_queue(:'psy')->'rows') r where r->>'id' = '00000000-0000-0000-0000-0000000000a9')
+  then 'ok Psychiatry sees its own patient' else 'FAIL Psychiatry lost its patient' end;
+
+\echo '── 0035: a department''s review list is for those who review there — not for a desk or a bench that serves it'
+select set_config('request.jwt.claim.sub', :'jrc', false);
+do $$ begin perform public.read_to_review('00000000-0000-0000-0000-0000000000d3'); raise notice 'FAIL reception read Psychiatry''s review list';
+  exception when others then raise notice '%', case when sqlerrm = 'not_allowed' then 'ok refused: reception reading Psychiatry''s review list' else 'FAIL refused with ' || sqlerrm end; end $$;
+
+\echo '── 0035: Psychiatry''s own desk (a role there without read:record) still sees its queue'
+reset role;
+insert into core.users (id, organization_id, kind, name, login_id) values ('00000000-0000-0000-0000-0000000000b6', :'org', 'staff', 'Psych desk', '11111111-0000-0000-0000-0000000000b6');
+insert into core.roles (id, organization_id, key, name) values ('00000000-0000-0000-0000-00000000e006', :'org', 'psych_desk', 'Psych desk');
+insert into core.role_actions (role_id, action) values ('00000000-0000-0000-0000-00000000e006', 'read:queue'), ('00000000-0000-0000-0000-00000000e006', 'read:organization');
+insert into core.user_roles (organization_id, user_id, role_id, department_id) values (:'org', '00000000-0000-0000-0000-0000000000b6', '00000000-0000-0000-0000-00000000e006', :'psy');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-0000-0000-0000-0000000000b6', false);
+select case when exists (select 1 from jsonb_array_elements(public.read_visit_queue(:'psy')->'rows') r where r->>'id' = '00000000-0000-0000-0000-0000000000a9')
+  then 'ok Psychiatry''s desk sees its own queue' else 'FAIL Psychiatry''s desk sees an empty queue' end;

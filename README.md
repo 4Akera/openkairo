@@ -51,6 +51,9 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0020 | problems carry a note and a certainty; `core.local_code` + `read_codes`; `save_service` makes local codes | 02, 04 |
 | 0022 | spec 07: private visits, the one read log, a correction stays put, department rules, reads for the record views | [07](spec/07-privacy-and-record.md) |
 | 0023 | what a pack needs to answer a request: pack writers in Done's write set, one reply-type check in the funnel, prescription requests carry their service and details; enabling a pack fixed | 06 |
+| 0035 | review fixes: nobody can take the last administrator's rights (counted per person), roles of another organization or retired ones cannot be given, a private department's own staff see their queue, a department's review list is read only by its reviewers, live signals carry nothing | [02](spec/02-organization.md), [07](spec/07-privacy-and-record.md) |
+| 0034 | reception's lists keep private visits private: a department's queue leaves out what the reader may not see; reception lists them apart as "Private visit" (`read_private_visits`) | [07](spec/07-privacy-and-record.md) |
+| 0033 | a clinic's own roles: `save_role` (copy a built-in role, choose its actions), `retire_role`, `read_actions` | [02](spec/02-organization.md) |
 | 0032 | the review list shows each result beside the patient's previous value (a private visit's value the reader cannot see is left out) | [05](spec/05-screens.md) |
 | 0031 | a change can turn PRN off and clear instructions; a problem update can clear its note and onset (the updaters take a key that is present) | [05](spec/05-screens.md) |
 | 0030 | Settings reads each department's After Done (the editor showed 'Next patient' whatever the rule, and saving put it back) | 07 |
@@ -71,20 +74,23 @@ The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server c
 - `shell/` — sign-in (demo one-click), the department switcher, ⌘K patient search, the second-factor step-up
 - `screens/Reception.tsx` — search-first; Here opens or marks present; New patient is four fields with a duplicate warning
 - `screens/Department.tsx`, `Queue.tsx` — the patient queue in bands (Back · In consult · Waiting · Here-pending) and the request queue
-- `screens/visit/` — the visit, built for typing. A sticky banner holds Done → next (⌘↵). The side lists problems (certainty, onset and duration, note, the medicines given for them), then medications, then allergies, each with its own + form (Alt+P / Alt+M / Alt+A). The speed line (`/`) turns one typed line into a draft (`parse.ts`):
+- `screens/visit/` — the visit, built for typing. A sticky banner holds Done → next (⌘↵, which adds what is in the line first). The side lists problems, medications and allergies, then Key results; their + and ✎ open the composer (Alt+P / Alt+M / Alt+A). One composer line: **a line that starts with `/` is a command, anything else is today's note** (`parse.ts`, commands registered in `commands.ts` the way a pack registers its own); the card under the line shows and edits what it will write:
 
   ```
-  bp 148/92 p 84 t 37 w 86              vitals
-  rx metformin 500 bd 30d for dm        prescription, linked to a problem (dm, htn, ckd… understood)
-  lab hba1c, lipid · lab urgent cbc     requests, or a preset by name; Tab completes a service
-  ref cardiology chest pain on effort   consult
-  dx hypertension since 3y ; note       problem ( ? or ddx = suspected )
-  al penicillin: rash severe            allergy
-  anything else                         joins today's note
+  /v 148/92 84 37 86                     vitals (by position, or p 84 t 37)
+  /rx metformin 500 bd 30d for dm        prescription, linked to a problem (dm, htn, ckd… understood)
+  /rx paracetamol 1g qds prn pain        a PRN says what it is for
+  /order hba1c, lipid · /order urgent cbc  requests (or a preset's services by name); Tab completes
+  /ref cardiology chest pain on effort   consult
+  /dx hypertension since 3y ; note       problem (/ddx = suspected)
+  /al penicillin: rash severe · /nka     allergy · no known allergies
+  /hx · /ex · /plan · /soap · /note …    notes; a command alone opens its card or its note beside the record
+  /dm                                    a preset's shortcut (Settings → Presets)
+  anything else                          joins today's note
   ```
 - `screens/bench/` — any department that offers services and sees no patients of its own (laboratory, imaging, pharmacy) works a bench: open requests grouped one row per patient, a scan box for record number or name, section and step filters, Collect all, and one screen per patient where Enter walks every field and ⌘↵ releases every result in one atomic set, then opens the next patient. Values that are not numbers block release; values ten times outside the range ask for a second look; flags use the range that fits the patient's sex and age. Core shows no working steps: packs register them (`registerBenchSteps`). *Released today* lists the last day's results, and Correct replaces one.
 - `screens/Request.tsx` — one request: the value grid from the service's fields, a report, preliminary, not done, steps, Release → next; technicians work from the queue row and never read the record
-- `screens/Settings.tsx`, `settings/Services.tsx` — organization, departments, users and roles, presets, packs; services grouped by department and section, filtered as you type, edited in place (⌘S), fields typed or pasted one per line (`name | unit | 12-16 | 7-20`, tabs from a spreadsheet work); a field without a registered code gets a local one
+- `screens/Settings.tsx`, `settings/Services.tsx`, `settings/Roles.tsx` — organization, departments, users, roles (a clinic's own: copy a built-in one and tick its rights; each page opens to whoever holds its own manage right), presets, packs; services grouped by department and section, filtered as you type, edited in place (⌘S), fields typed or pasted one per line (`name | unit | 12-16 | 7-20`, tabs from a spreadsheet work); a field without a registered code gets a local one
 - `renderers/` — one card per entry from its display line; packs register richer renderers here
 - `packs/index.ts` — the only place packs are named; ESLint keeps core from importing packs
 

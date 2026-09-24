@@ -91,6 +91,11 @@ A pack reacts to **entries only, never to steps**. It sees `replaces_id` and typ
   screens use. It never calls a pack's public function that is not its own.
 - Renderers: `{ Card, Full, Editor }` per type; missing → core's fallback draws `display_line`,
   `values[]`, `text`, files.
+- Composer commands (amended 2026-09-24): `registerCommand({ name, label, example, action, pack,
+  parse, empty })` adds `/name` to the visit's composer for the pack's own type; it is listed
+  only to a role holding `action` and only while the pack is on. Reply forms may say `automatic`
+  (its requests are created by another write, like dispensing from a prescription): `/order`
+  does not offer those services.
 - `servicesColumns`: one slot on the Services settings page; the pack's column saves through its
   own `<key>_save_…` after core's `save_service` returns.
 - Preset fragment: rows for `save_…` (departments of its types, a starter service catalogue with

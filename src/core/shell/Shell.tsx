@@ -1,3 +1,4 @@
+import { PAGE_ACTION } from '../screens/settings/save'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import * as Menu from '@radix-ui/react-dropdown-menu'
@@ -30,7 +31,7 @@ export function Shell() {
         {!onReception && <button onClick={() => setSearchOpen(true)} className="ml-2 hidden h-9 w-80 items-center rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-left text-sm text-neutral-400 transition-colors hover:border-neutral-300 hover:bg-white sm:flex">Search or add a patient… <kbd className="ml-auto rounded bg-white px-1 text-[10px] text-neutral-500">⌘K</kbd></button>}
         <div className="flex-1" />
         <span className="text-xs text-neutral-500">{email}</span>
-        {can('manage:organization') && <Button variant="ghost" size="sm" onClick={() => navigate('/settings')} aria-label="Settings"><Cog className="h-4 w-4" /></Button>}
+        {Object.values(PAGE_ACTION).some((x) => can(x)) && <Button variant="ghost" size="sm" onClick={() => navigate('/settings')} aria-label="Settings"><Cog className="h-4 w-4" /></Button>}
         <Button variant="ghost" size="sm" onClick={() => { setDepartment(null); void signOut() }} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
       </header>
       <main className="flex-1">

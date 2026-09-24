@@ -38,6 +38,7 @@ function DispenseEditor({ request, value, onChange }: { request: RequestQueueRow
 
 registerReplyForm<Dispense>('pharmacy_dispense', {
   action: 'write:pharmacy_dispense',
+  automatic: true,                      // a prescription sends it; nobody orders dispensing by hand
   Editor: DispenseEditor,
   toWrite: (r, value) => {
     const v = value ?? fromPrescription(r)

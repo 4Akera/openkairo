@@ -9,10 +9,12 @@ const WORDS: Record<string, string> = {
   record_not_open: 'Open the record first', visit_moved: 'Someone moved this visit first — the queue has been refreshed', request_moved: 'Someone moved this request first',
   illegal_move: 'That step is not allowed from here', reason_missing: 'A reason is required', changed_since_read: 'Saved by someone else since you opened it — reload',
   not_found: 'Not found', request_not_found: 'Request not found', already_replaced: 'This entry was already corrected', duplicate: 'Already exists', stale_time: 'The time is in the future',
-  author_mismatch: 'The author does not match the signed-in user', wrong_organization: 'Not in this organization', last_administrator: 'The last owner cannot be retired',
+  author_mismatch: 'The author does not match the signed-in user', wrong_organization: 'Not in this organization', last_administrator: 'Someone must keep the right to manage users and roles in every department',
+  self_change: 'You cannot change your own roles or a role you hold', cannot_grant: 'You cannot give a right you do not hold everywhere', builtin_role: 'Built-in roles are read-only — copy one to change it',
+  unknown_action: 'Unknown action', pack_off: 'That pack is off in this organization', retired: 'Already retired', name_missing: 'A name is needed',
 }
 export class Refusal extends Error {
-  constructor(public code: string, public detail?: string) { super(WORDS[code] ?? code.replace(/_/g, ' ')) }
+  constructor(public code: string, public detail?: string) { super(`${WORDS[code] ?? code.replace(/_/g, ' ')}${detail && /^(cannot_grant|pack_off|unknown_action)$/.test(code) ? `: ${detail}` : ''}`) }
 }
 export async function rpc<T = unknown>(fn: FnName, args?: Record<string, unknown>): Promise<T> {
   const { data, error } = await db.rpc(fn as never, (args ?? {}) as never)

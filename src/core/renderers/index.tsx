@@ -20,6 +20,7 @@ export interface ReplyForm<V = unknown> {
   action: string                                                       // the action the writer needs, e.g. write:pharmacy_dispense
   Editor: ComponentType<{ request: RequestQueueRow; value: V | undefined; onChange: (v: V) => void }>
   toWrite: (request: RequestQueueRow, value: V | undefined) => { function: string; params: Record<string, unknown> } | null
+  automatic?: boolean                                                  // its requests come from another write (dispensing, from a prescription): not ordered by hand
 }
 const replyForms = new Map<string, ReplyForm<never>>()
 export const registerReplyForm = <V,>(replyType: string, form: ReplyForm<V>) => { replyForms.set(replyType, form as unknown as ReplyForm<never>) }

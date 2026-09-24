@@ -5,7 +5,7 @@ select public.create_organization('00000000-0000-0000-0000-00000000a001', 'Demo 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000101', false);
 select public.save_organization('00000000-0000-0000-0000-00000000a001', time_zone := 'Africa/Cairo');
 select public.save_department('00000000-0000-0000-0000-00000000d001', '00000000-0000-0000-0000-00000000a001', 'reception', 'Front desk', serves := '{}');
-select public.save_department('00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a001', 'clinic',    'Internal Medicine');
+select public.save_department('00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a001', 'clinic',    'General Practice');
 select public.save_department('00000000-0000-0000-0000-00000000d003', '00000000-0000-0000-0000-00000000a001', 'ancillary', 'Laboratory');
 -- the pharmacy pack: enabled for this clinic; its department type makes Pharmacy a dispensing bench
 select public.save_organization_pack('00000000-0000-0000-0000-00000000a001', 'pharmacy');
@@ -25,7 +25,7 @@ select public.save_service('00000000-0000-0000-0000-00000000c003', '00000000-000
 select public.save_service('00000000-0000-0000-0000-00000000c004', '00000000-0000-0000-0000-00000000a001', '00000000-0000-0000-0000-00000000d003', 'lipids', 'Lipid panel', 'result', 'Chemistry',
   '[{"code":"loinc:2093-3","name":"Total cholesterol","unit":"mg/dL","reference_high":200},{"code":"loinc:2089-1","name":"LDL","unit":"mg/dL","reference_high":100},{"code":"loinc:2085-9","name":"HDL","unit":"mg/dL","reference_low":40},{"code":"loinc:2571-8","name":"Triglycerides","unit":"mg/dL","reference_high":150}]');
 select public.save_service('00000000-0000-0000-0000-00000000c007', '00000000-0000-0000-0000-00000000a001', '00000000-0000-0000-0000-00000000d004', 'dispense', 'Dispensing', 'pharmacy_dispense');
-select public.save_template('00000000-0000-0000-0000-00000000e001', '00000000-0000-0000-0000-00000000a001', 'DM follow-up', '[{"service_id":"00000000-0000-0000-0000-00000000c002"},{"service_id":"00000000-0000-0000-0000-00000000c003"},{"service_id":"00000000-0000-0000-0000-00000000c004"}]', '00000000-0000-0000-0000-00000000d002', shortcut := 'dm', lines := array['rx metformin 500 bd 30d for dm', 'plan: review HbA1c and kidney function in 3 months; diet and exercise advice']);
+select public.save_template('00000000-0000-0000-0000-00000000e001', '00000000-0000-0000-0000-00000000a001', 'DM follow-up', '[{"service_id":"00000000-0000-0000-0000-00000000c002"},{"service_id":"00000000-0000-0000-0000-00000000c003"},{"service_id":"00000000-0000-0000-0000-00000000c004"}]', '00000000-0000-0000-0000-00000000d002', shortcut := 'dm', lines := array['/rx metformin 500 bd 30d for dm', '/plan review HbA1c and kidney function in 3 months; diet and exercise advice']);
 -- staff (login ids = auth users of the same id; created in seeds/auth.sql)
 select public.save_user('00000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-00000000a001', 'staff', 'Dr. Ali Hassan', 'Dr', '[{"role_id":"00000000-0000-0000-0000-00000000c002","department_id":"00000000-0000-0000-0000-00000000d002"}]');
 select public.save_user('00000000-0000-0000-0000-000000000104', '00000000-0000-0000-0000-00000000a001', 'staff', 'Sarah Nurse',   null, '[{"role_id":"00000000-0000-0000-0000-00000000c003","department_id":"00000000-0000-0000-0000-00000000d002"}]');
