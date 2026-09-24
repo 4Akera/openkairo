@@ -57,8 +57,8 @@ entries**; *Results over time* is one button away. (Amended 2026-09-24 by the ow
 - **All entries:** newest first, 100 at a time, *Earlier* for more.
 - **Results over time:** tests as rows, dates as columns, abnormal in colour, corrections marked; a row opens its graph.
 - **Opening an entry:** click or Enter opens it in full beside the record: text, values, replies, steps, earlier versions.
-- Times show in the clinic's local time.
-- The left column (problems, medications, allergies) stays in view while the record scrolls, and folds away with one key.
+- Times show in the clinic's time zone (Settings → Organization); "today" on the server is the clinic's day.
+- The left column (problems, medications, allergies) stays in view while the record scrolls.
 
 ## Decisions (2026-09-24)
 

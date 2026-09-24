@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { rpc } from '../db/rpc'
 import type { Organization } from '../db/types'
+import { setClinicTimeZone } from '../ui'
 import { useLoginId } from '../auth'
 
 // which organization: the first the login belongs to (one per login in v1); remembered per browser
@@ -25,7 +26,7 @@ export async function discoverOrganization(): Promise<string | null> {
 export function useOrganization() {
   const loginId = useLoginId()
   const orgId = useChoice((s) => s.organizationId)
-  return useQuery({ queryKey: ['organization', orgId, loginId], queryFn: () => rpc<Organization>('read_organization', { organization_id: orgId }), enabled: !!loginId && !!orgId, staleTime: 60_000 })
+  return useQuery({ queryKey: ['organization', orgId, loginId], queryFn: async () => { const o = await rpc<Organization>('read_organization', { organization_id: orgId }); setClinicTimeZone(o.organization.time_zone); return o }, enabled: !!loginId && !!orgId, staleTime: 60_000 })
 }
 
 export function useDepartment() {

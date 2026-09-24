@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -46,6 +46,7 @@ function OrganizationPage({ org }: { org: Organization }) {
   const orgId = org.organization.id
   const ch = useQuery({ queryKey: ['settings_changes', orgId], queryFn: () => rpc<{ id: string; recorded_at: string; table_name: string; changes: Record<string, unknown>; user_name?: string }[]>('read_settings_changes', { organization_id: orgId, limit: 30 }) })
   return <div><H>{org.organization.name}</H>
+    <ClinicZone org={org} />
     <p className="mb-4 text-sm text-neutral-600">{org.departments.length} departments · {org.services.length} services · {org.users.filter((u) => !u.retired_at).length} users · {org.packs.filter((p) => p.enabled).length} packs enabled{org.parked_pack_calls > 0 && <span className="ml-2 text-red-700">· {org.parked_pack_calls} parked pack calls</span>}</p>
     <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Recent changes</h3>
     {ch.isLoading ? <Spinner /> : <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white text-xs">{(ch.data ?? []).map((c) => <li key={c.id} className="flex gap-3 px-3 py-1.5"><span className="w-28 font-mono text-neutral-400">{dateTime(c.recorded_at)}</span><span className="w-24 text-neutral-500">{c.table_name}</span><span className="flex-1 truncate">{JSON.stringify(c.changes)}</span></li>)}{(ch.data ?? []).length === 0 && <li className="px-3 py-2 text-neutral-400">nothing yet</li>}</ul>}
@@ -156,4 +157,19 @@ function ReadsPage({ orgId }: { orgId: string }) {
       </div>}
     </div>
   </div>
+}
+
+/** the clinic's time zone: every time on screen, and every "today" on the server, is the clinic's */
+function ClinicZone({ org }: { org: Organization }) {
+  const save = useSave('save_organization'); const [tz, setTz] = useState(org.organization.time_zone)
+  const zones = useMemo(() => { try { return (Intl as unknown as { supportedValuesOf: (k: string) => string[] }).supportedValuesOf('timeZone') } catch { return [org.organization.time_zone] } }, [org.organization.time_zone])
+  const now = new Date().toLocaleString(undefined, { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit' })
+  return <Card className="mb-5 flex flex-wrap items-center gap-3 p-4">
+    <span className="text-sm font-medium">Time zone</span>
+    <Select value={tz} onChange={(e) => setTz(e.target.value)} className="w-64">{[...new Set(['UTC', ...zones])].map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>)}</Select>
+    <span className="text-xs text-neutral-500">now {now} there</span>
+    {tz !== org.organization.time_zone && <Button size="sm" onClick={() => save.mutate({ time_zone: tz })} disabled={save.isPending}>Save</Button>}
+    {save.error && <span className="text-sm text-red-700">{save.error.message}</span>}
+    <p className="basis-full text-xs text-neutral-500">Times on every screen, and "today" in queues and counts, follow this clock.</p>
+  </Card>
 }

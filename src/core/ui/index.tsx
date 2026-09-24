@@ -51,11 +51,16 @@ export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButt
 }
 export const errorText = (e: unknown) => e instanceof Error ? e.message : String(e)
 
-// times are stored in UTC; people read them in the clinic's local time — never cut an ISO string
-const pad = (n: number) => String(n).padStart(2, '0')
+// times are stored in UTC; people read them in the clinic's time zone (set once the organization loads) — never cut an ISO string
+let zone: string | undefined
+export const setClinicTimeZone = (tz: string | undefined) => { zone = tz || undefined }
+const parts = (iso: string) => Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  .formatToParts(new Date(iso)).map((p) => [p.type, p.value]))
 /** 14:05 */
-export const hm = (iso: string) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
-/** 2026-09-24 (local): for grouping by day and for dates */
-export const ymd = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+export const hm = (iso: string) => { const p = parts(iso); return `${p.hour}:${p.minute}` }
+/** 2026-09-24, the clinic's date: for grouping by day and for dates */
+export const ymd = (iso: string) => { const p = parts(iso); return `${p.year}-${p.month}-${p.day}` }
 /** 2026-09-24 14:05 */
 export const dateTime = (iso: string) => `${ymd(iso)} ${hm(iso)}`
+/** 24 Sep 2026 */
+export const longDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { timeZone: zone, day: 'numeric', month: 'short', year: 'numeric' })

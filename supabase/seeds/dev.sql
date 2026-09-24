@@ -3,6 +3,7 @@
 select public.create_organization('00000000-0000-0000-0000-00000000a001', 'Demo Clinic', '00000000-0000-0000-0000-000000000101', 'Admin', '00000000-0000-0000-0000-000000000101');
 -- act as the owner for the rest (what the client would do after first login; MFA is not checked off the API)
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000101', false);
+select public.save_organization('00000000-0000-0000-0000-00000000a001', time_zone := 'Africa/Cairo');
 select public.save_department('00000000-0000-0000-0000-00000000d001', '00000000-0000-0000-0000-00000000a001', 'reception', 'Front desk', serves := '{}');
 select public.save_department('00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a001', 'clinic',    'Internal Medicine');
 select public.save_department('00000000-0000-0000-0000-00000000d003', '00000000-0000-0000-0000-00000000a001', 'ancillary', 'Laboratory');

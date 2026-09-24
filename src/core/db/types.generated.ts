@@ -538,16 +538,19 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          time_zone: string
         }
         Insert: {
           created_at?: string
           id: string
           name: string
+          time_zone?: string
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          time_zone?: string
         }
         Relationships: []
       }
@@ -1835,6 +1838,7 @@ export type Database = {
         Returns: number
       }
       current_user_id: { Args: { p_organization_id: string }; Returns: string }
+      day_start: { Args: { p_org: string }; Returns: string }
       entry_card:
         | {
             Args: { e: Database["core"]["Tables"]["entries"]["Row"] }
@@ -1892,6 +1896,7 @@ export type Database = {
         }
         Returns: string
       }
+      local_date: { Args: { p_at: string; p_org: string }; Returns: string }
       lock_record: { Args: { p_patient_id: string }; Returns: undefined }
       next_pack_call: {
         Args: never
@@ -2043,6 +2048,7 @@ export type Database = {
       signal: { Args: { p_payload: Json; p_topic: string }; Returns: undefined }
       survivor: { Args: { p_patient_id: string }; Returns: string }
       sweep_visits: { Args: never; Returns: number }
+      today: { Args: { p_org: string }; Returns: string }
       update_allergies: {
         Args: { e: Database["core"]["Tables"]["entries"]["Row"] }
         Returns: undefined
@@ -2454,6 +2460,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      save_organization: {
+        Args: { name?: string; organization_id: string; time_zone?: string }
+        Returns: Json
       }
       save_organization_pack: {
         Args: { organization_id: string; pack: string }

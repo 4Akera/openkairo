@@ -5,11 +5,11 @@ import { ChevronDown, ChevronRight, Lock, X } from 'lucide-react'
 import { rpc } from '../../db/rpc'
 import { useEntries, useEntry, useResultsTable, useVisits } from '../../hooks/reads'
 import type { Card as EntryCard, RecordView, ResultRow, Value, VisitCardRow } from '../../db/types'
-import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Spinner, cn, errorText, flagClass, hm, ymd, dateTime } from '../../ui'
+import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Spinner, cn, errorText, flagClass, hm, ymd, dateTime, longDate } from '../../ui'
 import { CardLine, FallbackFull } from '../../renderers'
 
 const KEY_TESTS = ['loinc:4548-4', 'loinc:2160-0', 'loinc:718-7', 'loinc:2089-1', 'loinc:8480-6', 'loinc:8462-4', 'loinc:29463-7']
-const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+const day = (iso: string) => longDate(iso.length === 10 ? iso + 'T12:00:00Z' : iso)
 const COUNT_WORD: Record<string, string> = { note: 'note', request: 'request', prescription: 'prescription', vitals: 'vitals', problem: 'problem', allergy: 'allergy', list_review: 'review' }
 /** when a visit last changed: the time today, else the date */
 const when = (iso: string) => ymd(iso) === ymd(new Date().toISOString()) ? hm(iso) : day(iso)
@@ -110,7 +110,7 @@ function ResultsOverTime({ patientId, onOpen }: { patientId: string; onOpen: (id
   if (!rows.length) return <Card className="p-6 text-center text-sm text-neutral-400">No results or vitals recorded yet.</Card>
   const dates = [...new Set(rows.flatMap((t) => t.points.map((p) => ymd(p.at))))].sort().reverse().slice(0, 8)
   return <Card className="overflow-x-auto"><table className="w-full min-w-[640px] text-[13px]">
-    <thead><tr className="border-b border-neutral-100 text-left text-[11px] text-neutral-500"><th className="sticky left-0 bg-white px-3.5 py-2 font-medium">Test</th>{dates.map((d) => <th key={d} className="px-2 py-2 text-right font-medium tnum">{day(d + 'T00:00')}</th>)}</tr></thead>
+    <thead><tr className="border-b border-neutral-100 text-left text-[11px] text-neutral-500"><th className="sticky left-0 bg-white px-3.5 py-2 font-medium">Test</th>{dates.map((d) => <th key={d} className="px-2 py-2 text-right font-medium tnum">{day(d)}</th>)}</tr></thead>
     <tbody>{rows.map((t) => <ResultRowView key={t.code} t={t} dates={dates} open={graph === t.code} onToggle={() => setGraph(graph === t.code ? null : t.code)} onOpen={onOpen} />)}</tbody>
   </table></Card>
 }

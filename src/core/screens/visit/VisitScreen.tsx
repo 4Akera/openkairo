@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, Lock, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Lock } from 'lucide-react'
 import * as Menu from '@radix-ui/react-dropdown-menu'
 import { useDepartment } from '../../hooks/organization'
 import { useRecord, useVisitQueue } from '../../hooks/reads'
@@ -27,8 +27,6 @@ export function VisitScreen() {
   const drafts = useDraftsFor(patientId)
   const [err, setErr] = useState<string | null>(null)
   const [form, setForm] = useState<SideForm>(null)
-  const [folded, setFolded] = useState(() => { try { return localStorage.getItem('opencare.side_folded') === '1' } catch { return false } })
-  const fold = (f: boolean) => { setFolded(f); try { localStorage.setItem('opencare.side_folded', f ? '1' : '0') } catch { /* no storage */ } }
   const today = useRef<TodayHandle>(null)
   const visit = rec.data?.visit ?? null
   const mine = !!visit && visit.department_id === dept?.id
@@ -57,7 +55,6 @@ export function VisitScreen() {
       const typing = /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && visit?.status === 'in_consult' && mine) { e.preventDefault(); void done(true) }
       else if (e.key === '/' && !typing) { e.preventDefault(); today.current?.focus() }
-      else if (e.key === '[' && !typing) { e.preventDefault(); fold(!folded) }
       else if (e.altKey && !e.metaKey && !e.ctrlKey) {
         const f = ({ KeyP: 'problem', KeyM: 'medication', KeyA: 'allergy', p: 'problem', m: 'medication', a: 'allergy' } as Record<string, SideForm>)[e.code || e.key.toLowerCase()] ?? null
         if (f) { e.preventDefault(); setForm(f) }
@@ -89,12 +86,10 @@ export function VisitScreen() {
         : !visit && dept.is_visited && can('write:visit') ? <Button variant="outline" onClick={() => visits.open.mutate({ patient_id: patientId, department_id: dept.id }, { onSuccess: (v) => navigate(`/visit/${v.id}`) })}>Start visit</Button>
         : !mine && drafts.length > 0 ? <Button onClick={sign} disabled={busy}>Sign {drafts.length}</Button> : null} />
     {err && <p className="mx-auto mt-3 max-w-7xl rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200" role="alert">{err}</p>}
-    <div className={cn('mx-auto mt-4 grid max-w-7xl gap-4 px-4', folded ? 'lg:grid-cols-[2.25rem_minmax(0,1fr)]' : 'lg:grid-cols-[340px_minmax(0,1fr)]')}>
-      {/* the lists stay in view while the record scrolls, and fold away with [ */}
+    <div className="mx-auto mt-4 grid max-w-7xl gap-4 px-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+      {/* the lists stay in view while the record scrolls */}
       <div className="lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)] lg:self-start lg:overflow-y-auto">
-        {folded ? <button title="Show problems, medications, allergies  [" onClick={() => fold(false)} className="hidden h-9 w-9 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 hover:bg-white lg:grid"><PanelLeftOpen className="h-4 w-4" /></button>
-          : <><button title="Fold away  [" onClick={() => fold(true)} className="mb-2 hidden items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-700 lg:flex"><PanelLeftClose className="h-3.5 w-3.5" />fold <Kbd>[</Kbd></button>
-            <Side r={r} patientId={patientId} can={can} form={form} setForm={setForm} /></>}
+        <Side r={r} patientId={patientId} can={can} form={form} setForm={setForm} />
       </div>
       <div className="grid content-start gap-4">
         {canWrite && <Today ref={today} r={r} patientId={patientId} departmentId={dept.id} can={can} />}
