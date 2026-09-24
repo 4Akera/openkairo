@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Lock, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import * as Menu from '@radix-ui/react-dropdown-menu'
 import { useDepartment } from '../../hooks/organization'
 import { useRecord, useVisitQueue } from '../../hooks/reads'
 import { useVisitActions, useWriteSet } from '../../hooks/writes'
 import { useDrafts, useDraftsFor } from '../../hooks/drafts'
 import { rememberPatient } from '../../hooks/recent'
-import type { RecordView, VisitRow, Card as EntryCard } from '../../db/types'
-import { Badge, Button, Card, Centered, Heading, Kbd, Spinner, cn, errorText, flagClass, minutesSince } from '../../ui'
-import { CardLine } from '../../renderers'
+import type { RecordView, VisitRow } from '../../db/types'
+import { Badge, Button, Centered, Kbd, Spinner, cn, errorText, flagClass, minutesSince } from '../../ui'
+import { RecordViews } from './Record'
 import { Side, type SideForm } from './Side'
 import { Today, type TodayHandle } from './Today'
 
@@ -27,6 +27,8 @@ export function VisitScreen() {
   const drafts = useDraftsFor(patientId)
   const [err, setErr] = useState<string | null>(null)
   const [form, setForm] = useState<SideForm>(null)
+  const [folded, setFolded] = useState(() => { try { return localStorage.getItem('opencare.side_folded') === '1' } catch { return false } })
+  const fold = (f: boolean) => { setFolded(f); try { localStorage.setItem('opencare.side_folded', f ? '1' : '0') } catch { /* no storage */ } }
   const today = useRef<TodayHandle>(null)
   const visit = rec.data?.visit ?? null
   const mine = !!visit && visit.department_id === dept?.id
@@ -40,7 +42,7 @@ export function VisitScreen() {
     if (!patientId || !drafts.length) return; setErr(null)
     try { await ws.mutateAsync(items(false)); useDrafts.getState().clear(patientId) } catch (e) { setErr(errorText(e)) }
   }
-  async function done(andNext: boolean, wait = true) {
+  async function done(andNext: boolean, wait?: boolean) {
     if (!patientId || !visit) return; setErr(null)
     try {
       if (drafts.length) await ws.mutateAsync(items(true))
@@ -55,6 +57,7 @@ export function VisitScreen() {
       const typing = /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && visit?.status === 'in_consult' && mine) { e.preventDefault(); void done(true) }
       else if (e.key === '/' && !typing) { e.preventDefault(); today.current?.focus() }
+      else if (e.key === '[' && !typing) { e.preventDefault(); fold(!folded) }
       else if (e.altKey && !e.metaKey && !e.ctrlKey) {
         const f = ({ KeyP: 'problem', KeyM: 'medication', KeyA: 'allergy', p: 'problem', m: 'medication', a: 'allergy' } as Record<string, SideForm>)[e.code || e.key.toLowerCase()] ?? null
         if (f) { e.preventDefault(); setForm(f) }
@@ -75,19 +78,27 @@ export function VisitScreen() {
       actions={mine && visit?.status === 'in_consult' ? <>
         <Button onClick={() => done(true)} disabled={busy}>{drafts.length ? `Sign ${drafts.length} · ` : ''}Done{next ? ` → ${next.patient.given_name}` : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
         <Menu.Root><Menu.Trigger asChild><Button variant="outline" size="md" aria-label="More"><ChevronDown className="h-4 w-4" /></Button></Menu.Trigger>
-          <Menu.Portal><Menu.Content align="end" sideOffset={6} className="z-50 min-w-52 rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg">
-            <Menu.Item onSelect={() => done(false)} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">Done, back to the queue</Menu.Item>
-            <Menu.Item onSelect={() => done(true, false)} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">Done — patient not waiting for results<span className="block text-[11px] text-neutral-500">The visit closes now; results go to your review list</span></Menu.Item>
-            <Menu.Item onSelect={() => visits.move.mutate({ visit_id: visit.id, from_status: 'in_consult', status: 'waiting' }, { onSuccess: () => navigate('/') })} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">Return to waiting</Menu.Item>
+          <Menu.Portal><Menu.Content align="end" sideOffset={6} className="z-50 min-w-60 rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg">
+            {dept.patients_wait
+              ? <MenuItem onSelect={() => done(true, false)} hint="The visit closes now; results go to your review list">Done — patient goes home</MenuItem>
+              : <MenuItem onSelect={() => done(true, true)} hint="The patient comes back when the results are in">Done — patient waits for results</MenuItem>}
+            <MenuItem onSelect={() => visits.move.mutate({ visit_id: visit.id, from_status: 'in_consult', status: 'waiting' }, { onSuccess: () => navigate('/') })}>Return to waiting</MenuItem>
+            <Menu.Separator className="my-1 h-px bg-neutral-100" />
+            <MenuItem onSelect={() => visits.private.mutate({ visit_id: visit.id, is_private: !visit.is_private })} hint={visit.is_private ? 'Its notes become readable to every clinician' : 'Its notes show as "Private note" outside this department'}>{visit.is_private ? 'Make this visit not private' : 'Make this visit private'}</MenuItem>
           </Menu.Content></Menu.Portal></Menu.Root></>
         : !visit && dept.is_visited && can('write:visit') ? <Button variant="outline" onClick={() => visits.open.mutate({ patient_id: patientId, department_id: dept.id }, { onSuccess: (v) => navigate(`/visit/${v.id}`) })}>Start visit</Button>
         : !mine && drafts.length > 0 ? <Button onClick={sign} disabled={busy}>Sign {drafts.length}</Button> : null} />
     {err && <p className="mx-auto mt-3 max-w-7xl rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200" role="alert">{err}</p>}
-    <div className="mx-auto mt-4 grid max-w-7xl gap-4 px-4 lg:grid-cols-[340px_minmax(0,1fr)]">
-      <Side r={r} patientId={patientId} can={can} form={form} setForm={setForm} />
+    <div className={cn('mx-auto mt-4 grid max-w-7xl gap-4 px-4', folded ? 'lg:grid-cols-[2.25rem_minmax(0,1fr)]' : 'lg:grid-cols-[340px_minmax(0,1fr)]')}>
+      {/* the lists stay in view while the record scrolls, and fold away with [ */}
+      <div className="lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)] lg:self-start lg:overflow-y-auto">
+        {folded ? <button title="Show problems, medications, allergies  [" onClick={() => fold(false)} className="hidden h-9 w-9 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 hover:bg-white lg:grid"><PanelLeftOpen className="h-4 w-4" /></button>
+          : <><button title="Fold away  [" onClick={() => fold(true)} className="mb-2 hidden items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-700 lg:flex"><PanelLeftClose className="h-3.5 w-3.5" />fold <Kbd>[</Kbd></button>
+            <Side r={r} patientId={patientId} can={can} form={form} setForm={setForm} /></>}
+      </div>
       <div className="grid content-start gap-4">
         {canWrite && <Today ref={today} r={r} patientId={patientId} departmentId={dept.id} can={can} />}
-        <Timeline entries={r.entries} />
+        <RecordViews r={r} patientId={patientId} departmentId={dept.id} />
       </div>
     </div>
   </div>
@@ -104,7 +115,7 @@ function Banner({ r, visit, mine, onBack, actions }: { r: RecordView; visit: Vis
       <button onClick={onBack} className="-ml-1 rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800" title="Back to the queue"><ArrowLeft className="h-4 w-4" /></button>
       <div className="min-w-0">
         <p className="flex items-baseline gap-2"><span className="text-lg font-semibold tracking-tight text-neutral-900">{r.patient.given_name} {r.patient.family_name}</span><span className="text-sm text-neutral-600 tnum">{r.patient.age} y · {SEX[r.patient.sex] ?? ''}</span>{r.patient.died_on && <Badge tone="neutral">deceased</Badge>}</p>
-        <p className="text-xs text-neutral-500 tnum">#{r.patient.record_number}{r.patient.phone_text && ` · ${r.patient.phone_text}`}{visit && <> · <span className={mine ? 'text-teal-800' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>}{visit?.priority && visit.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{visit.priority}</Badge>}</p>
+        <p className="text-xs text-neutral-500 tnum">#{r.patient.record_number}{r.patient.phone_text && ` · ${r.patient.phone_text}`}{visit && <> · <span className={mine ? 'text-teal-800' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>}{visit?.priority && visit.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{visit.priority}</Badge>}{visit?.is_private && <Badge className="ml-1.5"><Lock className="mr-1 h-3 w-3" />private visit</Badge>}</p>
       </div>
       <div className="flex flex-wrap items-center gap-1">{allergies.length ? allergies.map((a) => <Badge key={a.id} tone="red">⚠ {a.substance_name}</Badge>) : <span className="text-xs text-neutral-400">No known allergies</span>}</div>
       {vit.length > 0 && <div className="flex items-baseline gap-3 text-xs text-neutral-500 tnum">{vit.map(([l, n, f]) => <span key={l}>{l} <b className={cn('font-semibold text-neutral-800', f && f !== 'normal' && flagClass(f))}>{n}</b></span>)}</div>}
@@ -113,13 +124,6 @@ function Banner({ r, visit, mine, onBack, actions }: { r: RecordView; visit: Vis
   </div>
 }
 
-function Timeline({ entries }: { entries: EntryCard[] }) {
-  const days = new Map<string, EntryCard[]>()
-  for (const c of entries) { const d = c.occurred_at.slice(0, 10); days.set(d, [...(days.get(d) ?? []), c]) }
-  if (!entries.length) return <Card className="p-6 text-center text-sm text-neutral-400">The record is empty — this is the first visit.</Card>
-  const fmt = (d: string) => new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-  return <section className="grid gap-3"><Heading>Record</Heading>{[...days.entries()].map(([d, cs]) => <div key={d}>
-    <p className="mb-1.5 text-xs font-medium text-neutral-500">{fmt(d)}</p>
-    <Card><ul className="divide-y divide-neutral-100">{cs.map((c) => <li key={c.id} className="px-3.5 py-2.5"><CardLine card={c} /></li>)}</ul></Card>
-  </div>)}</section>
+function MenuItem({ children, hint, onSelect }: { children: React.ReactNode; hint?: string; onSelect: () => void }) {
+  return <Menu.Item onSelect={onSelect} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">{children}{hint && <span className="block text-[11px] text-neutral-500">{hint}</span>}</Menu.Item>
 }

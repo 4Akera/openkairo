@@ -1,5 +1,5 @@
 // Every screen renders every type (spec 05): a card per entry from display_line, values and text; packs may register richer ones.
-import type { ComponentType } from 'react'
+import { Fragment, type ComponentType } from 'react'
 import type { Card, Value } from '../db/types'
 import { flagClass } from '../ui'
 export interface Renderer { Card?: ComponentType<{ card: Card }>; Full?: ComponentType<{ card: Card; data: Record<string, unknown> }> }
@@ -20,14 +20,23 @@ export function ValuesTable({ values }: { values: Value[] }) {
     <td className="pr-3 text-neutral-600">{v.name}</td><td className="pr-1 text-right">{v.value_number ?? v.value_text ?? ''}{arrow(v.flag)}</td><td className="pr-3 text-neutral-400">{v.unit ?? ''}</td>
     <td className="text-neutral-400">{v.reference_low != null || v.reference_high != null ? `${v.reference_low ?? ''}–${v.reference_high ?? ''}` : ''}</td></tr>)}</tbody></table>
 }
+const empty = (v: unknown) => v == null || v === '' || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0)
+/** any stored value as words: names of named things, lists joined, objects as "key value" */
+function show(v: unknown): string {
+  if (Array.isArray(v)) return v.map(show).join(', ')
+  if (v && typeof v === 'object') { const o = v as Record<string, unknown>; return String(o.name ?? o.display ?? Object.entries(o).filter(([, x]) => !empty(x)).map(([k, x]) => `${k.replace(/_/g, ' ')} ${show(x)}`).join(' · ')) }
+  if (typeof v === 'boolean') return v ? 'yes' : 'no'
+  return String(v)
+}
 export function FallbackFull({ data }: { card: Card; data: Record<string, unknown> }) {
   const values = (data.values as Value[] | undefined) ?? []
   const text = data.text as string | undefined
-  const rest = Object.fromEntries(Object.entries(data).filter(([k]) => !['values', 'text', 'author_name', 'department_name', 'service', 'to_department_name'].includes(k)))
+  const rest = Object.fromEntries(Object.entries(data).filter(([k, v]) => !['values', 'text', 'author_name', 'department_name', 'service', 'to_department_name', 'responsible_name', 'written_with_id'].includes(k) && !empty(v)))
   return <div className="grid gap-2">
     {text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>}
     {values.length > 0 && <ValuesTable values={values} />}
-    {Object.keys(rest).length > 0 && <pre className="overflow-x-auto rounded bg-neutral-50 p-2 font-mono text-[11px] text-neutral-600">{JSON.stringify(rest, null, 1)}</pre>}
+    {Object.keys(rest).length > 0 && <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-[13px]">{Object.entries(rest).map(([k, v]) => <Fragment key={k}>
+      <dt className="text-neutral-500">{k.replace(/_text$|_on$|_id$/, '').replace(/_/g, ' ')}</dt><dd className="text-neutral-800">{show(v)}</dd></Fragment>)}</dl>}
   </div>
 }
 const TYPE_TONE: Record<string, string> = { note: 'bg-neutral-100 text-neutral-700', vitals: 'bg-sky-50 text-sky-800', request: 'bg-amber-50 text-amber-800', result: 'bg-violet-50 text-violet-800',

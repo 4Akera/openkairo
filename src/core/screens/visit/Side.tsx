@@ -89,9 +89,7 @@ export function Side({ r, patientId, can, form, setForm }: { r: RecordView; pati
       </ul>
     </Section>
 
-    {r.open_requests.length > 0 && <Section title="Open requests" count={r.open_requests.length}>
-      <ul className="divide-y divide-neutral-100">{r.open_requests.map((c) => <li key={c.id} className="flex items-baseline justify-between gap-2 py-1.5 text-[13px]"><span className="truncate">{c.display_line}</span><Badge tone="amber">{c.request?.step}</Badge></li>)}</ul>
-    </Section>}
+    {/* open requests live in the record's Needs attention, not here */}
   </aside>
 }
 

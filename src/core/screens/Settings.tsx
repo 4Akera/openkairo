@@ -3,13 +3,14 @@ import { create } from 'zustand'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { rpc, Refusal, type FnName } from '../db/rpc'
+import { usePatientSearch } from '../hooks/reads'
 import { useDepartment, useChoice } from '../hooks/organization'
 import { newId } from '../hooks/writes'
-import type { Organization } from '../db/types'
-import { Button, Card, Centered, Heading, Input, Select, Spinner, Field, cn } from '../ui'
+import type { OpenedAnyway, Organization, RecordRead } from '../db/types'
+import { Badge, Button, Card, Centered, Input, Select, Spinner, Field, cn } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
-const PAGES = [['organization', 'Organization'], ['clinic', 'Clinic rules'], ['departments', 'Departments'], ['services', 'Services'], ['users', 'Users'], ['templates', 'Presets'], ['packs', 'Packs']]
+const PAGES = [['organization', 'Organization'], ['departments', 'Departments'], ['services', 'Services'], ['users', 'Users'], ['templates', 'Presets'], ['packs', 'Packs'], ['reads', 'Record reads']]
 
 /** Settings (spec 02/05): six pages, the practice builds its own clinic here. Owners only. */
 export function SettingsScreen() {
@@ -22,12 +23,12 @@ export function SettingsScreen() {
     <div className="min-w-0 overflow-x-auto">{mfaNeeded && <Mfa onDone={() => useMfaNeeded.getState().set(false)} />}<Routes>
       <Route index element={<Navigate to="organization" replace />} />
       <Route path="organization" element={<OrganizationPage org={org} />} />
-      <Route path="clinic" element={<div><H>Clinic rules</H><p className="-mt-2 mb-4 text-sm text-neutral-500">How {org.organization.name} works day to day. Each rule applies to every department.</p><ReviewSetting orgId={org.organization.id} /></div>} />
       <Route path="departments" element={<DepartmentsPage org={org} />} />
       <Route path="services" element={<ServicesPage org={org} />} />
       <Route path="users" element={<UsersPage org={org} />} />
       <Route path="templates" element={<TemplatesPage org={org} />} />
       <Route path="packs" element={<PacksPage org={org} />} />
+      <Route path="reads" element={<ReadsPage orgId={org.organization.id} />} />
     </Routes></div>
   </div>
 }
@@ -41,18 +42,6 @@ function useSave(fn: FnName) {
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="mb-3 text-base font-semibold tracking-tight">{children}</h2>
 const Err = ({ e }: { e: Error | null }) => e ? <p className="text-sm text-red-700">{e.message}</p> : null
 
-function ReviewSetting({ orgId }: { orgId: string }) {
-  const qc = useQueryClient()
-  const cur = useQuery({ queryKey: ['org_settings', orgId], queryFn: () => rpc<{ review_results: string }>('read_organization_settings', { organization_id: orgId }) })
-  const save = useMutation({ mutationFn: (v: string) => rpc('save_organization_settings', { organization_id: orgId, review_results: v }), onSuccess: () => qc.invalidateQueries({ queryKey: ['org_settings'] }) })
-  const opts: [string, string, string][] = [['critical', 'Only critical results', 'Quietest. Abnormal and normal results file into the record.'], ['abnormal', 'Critical and abnormal', 'Anything outside its range.'], ['all', 'Every final result', 'The doctor who asked acknowledges each one.']]
-  return <Card className="mb-5 p-4"><Heading className="mb-1">Results to review</Heading>
-    <p className="mb-3 text-xs text-neutral-500">Which results land on the requesting doctor’s review list. Whatever the setting, results for a patient who left before being seen again, and corrected results, always go to the list.</p>
-    <div className="grid gap-1.5">{opts.map(([v, l, d]) => <label key={v} className={cn('flex cursor-pointer items-start gap-2.5 rounded-lg p-2 ring-1 ring-inset', cur.data?.review_results === v ? 'bg-teal-50 ring-teal-300' : 'ring-neutral-200 hover:bg-neutral-50')}>
-      <input type="radio" name="review" className="mt-1" checked={cur.data?.review_results === v} onChange={() => save.mutate(v)} /><span><span className="block text-sm font-medium">{l}{v === 'critical' && <span className="ml-1.5 text-xs font-normal text-neutral-500">default</span>}</span><span className="text-xs text-neutral-500">{d}</span></span></label>)}</div>
-    {save.error && <p className="mt-2 text-sm text-red-700">{save.error.message}</p>}</Card>
-}
-
 function OrganizationPage({ org }: { org: Organization }) {
   const orgId = org.organization.id
   const ch = useQuery({ queryKey: ['settings_changes', orgId], queryFn: () => rpc<{ id: string; recorded_at: string; table_name: string; changes: Record<string, unknown>; user_name?: string }[]>('read_settings_changes', { organization_id: orgId, limit: 30 }) })
@@ -65,17 +54,25 @@ function OrganizationPage({ org }: { org: Organization }) {
 
 function DepartmentsPage({ org }: { org: Organization }) {
   const save = useSave('save_department'); const retire = useSave('retire_department')
-  const [edit, setEdit] = useState<{ id: string; name: string; type: string; site_name: string; serves: string[] } | null>(null)
+  type Rules = { patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; private_visits: boolean }
+  const [edit, setEdit] = useState<({ id: string; name: string; type: string; site_name: string; serves: string[] } & Rules) | null>(null)
   const visited = org.departments.filter((d) => d.is_visited)
-  return <div><div className="mb-3 flex items-center justify-between"><H>Departments</H><Button size="sm" onClick={() => setEdit({ id: newId(), name: '', type: 'clinic', site_name: '', serves: [] })}>+ Department</Button></div>
-    <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">{org.departments.map((d) => <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm"><span className="w-48 font-medium">{d.name}</span><span className="w-24 text-xs text-neutral-500">{d.type}</span><span className="w-32 text-xs text-neutral-400">{d.site_name}</span><span className="flex-1 text-xs text-neutral-400">{(d.serves ?? []).length ? `serves ${(d.serves ?? []).map((s) => s === null ? 'all' : org.departments.find((x) => x.id === s)?.name).join(', ')}` : ''}</span>
-      <Button size="sm" variant="ghost" onClick={() => setEdit({ id: d.id, name: d.name, type: d.type, site_name: d.site_name ?? '', serves: (d.serves ?? []).filter((s): s is string => !!s) })}>Edit</Button><Button size="sm" variant="ghost" className="text-red-700" onClick={() => confirm(`Retire ${d.name}?`) && retire.mutate({ id: d.id })}>Retire</Button></li>)}</ul>
+  return <div><div className="mb-3 flex items-center justify-between"><H>Departments</H><Button size="sm" onClick={() => setEdit({ id: newId(), name: '', type: 'clinic', site_name: '', serves: [], patients_wait: true, review_results: 'critical', private_visits: false })}>+ Department</Button></div>
+    <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">{org.departments.map((d) => <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm"><span className="w-48 font-medium">{d.name}</span><span className="w-24 text-xs text-neutral-500">{d.type}</span><span className="w-32 text-xs text-neutral-400">{d.site_name}</span><span className="w-44 text-[11px] text-neutral-500">{d.is_visited ? `${d.patients_wait ? 'waits' : 'goes home'} · review ${d.review_results}${d.private_visits ? ' · private' : ''}` : ''}</span><span className="flex-1 text-xs text-neutral-400">{(d.serves ?? []).length ? `serves ${(d.serves ?? []).map((s) => s === null ? 'all' : org.departments.find((x) => x.id === s)?.name).join(', ')}` : ''}</span>
+      <Button size="sm" variant="ghost" onClick={() => setEdit({ id: d.id, name: d.name, type: d.type, site_name: d.site_name ?? '', serves: (d.serves ?? []).filter((s): s is string => !!s), patients_wait: d.patients_wait, review_results: d.review_results, private_visits: d.private_visits })}>Edit</Button><Button size="sm" variant="ghost" className="text-red-700" onClick={() => confirm(`Retire ${d.name}?`) && retire.mutate({ id: d.id })}>Retire</Button></li>)}</ul>
     <Err e={retire.error} />
-    {edit && <form onSubmit={(e) => { e.preventDefault(); save.mutate({ id: edit.id, name: edit.name, type: edit.type, site_name: edit.site_name || null, serves: edit.type === 'reception' ? edit.serves : null }, { onSuccess: () => setEdit(null) }) }} className="mt-4 grid max-w-lg gap-3 rounded-lg border border-neutral-200 bg-white p-4">
+    {edit && <form onSubmit={(e) => { e.preventDefault(); save.mutate({ id: edit.id, name: edit.name, type: edit.type, site_name: edit.site_name || null, serves: edit.type === 'reception' ? edit.serves : null, patients_wait: edit.patients_wait, review_results: edit.review_results, private_visits: edit.private_visits }, { onSuccess: () => setEdit(null) }) }} className="mt-4 grid max-w-lg gap-3 rounded-lg border border-neutral-200 bg-white p-4">
       <Field label="Name"><Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required autoFocus /></Field>
       <Field label="Type"><Select value={edit.type} onChange={(e) => setEdit({ ...edit, type: e.target.value })}>{['clinic', 'reception', 'ward', 'ancillary', 'outside'].map((t) => <option key={t}>{t}</option>)}</Select></Field>
       <Field label="Site (label)"><Input value={edit.site_name} onChange={(e) => setEdit({ ...edit, site_name: e.target.value })} placeholder="Main building" /></Field>
       {edit.type === 'reception' && <Field label="Serves (empty = every clinic)"><div className="flex flex-wrap gap-2 text-sm">{visited.map((v) => <label key={v.id} className="flex items-center gap-1"><input type="checkbox" checked={edit.serves.includes(v.id)} onChange={(e) => setEdit({ ...edit, serves: e.target.checked ? [...edit.serves, v.id] : edit.serves.filter((x) => x !== v.id) })} />{v.name}</label>)}</div></Field>}
+      {['clinic', 'ward'].includes(edit.type) && <div className="grid gap-2 rounded-lg bg-neutral-50 p-3 ring-1 ring-neutral-200">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Rules</p>
+        <Rule label="When results are still out at Done" value={edit.patients_wait ? 'wait' : 'home'} onChange={(v) => setEdit({ ...edit, patients_wait: v === 'wait' })} options={[['wait', 'Patient waits'], ['home', 'Patient goes home']]} />
+        <Rule label="Results to review" value={edit.review_results} onChange={(v) => setEdit({ ...edit, review_results: v as Rules['review_results'] })} options={[['critical', 'Critical only'], ['abnormal', 'Critical and abnormal'], ['all', 'Every result']]} />
+        <Rule label="Visits" value={edit.private_visits ? 'private' : 'shared'} onChange={(v) => setEdit({ ...edit, private_visits: v === 'private' })} options={[['shared', 'Shared'], ['private', 'Private from the start']]} />
+        <p className="text-[11px] text-neutral-500">Results for a patient who left before being seen again, and corrected results, always go to review. A private visit's notes show as "Private note" outside this department; its prescriptions, results and requests stay visible to everyone.</p>
+      </div>}
       <Err e={save.error} /><div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEdit(null)}>Cancel</Button><Button type="submit" disabled={save.isPending}>Save</Button></div>
     </form>}
   </div>
@@ -122,5 +119,39 @@ function PacksPage({ org }: { org: Organization }) {
     {org.packs.length === 0 ? <p className="text-sm text-neutral-400">No packs installed on this server yet.</p> : <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">{org.packs.map((p) => <li key={p.key} className="flex items-center gap-3 px-3 py-2 text-sm"><span className="flex-1 font-medium">{p.name} <span className="font-mono text-xs text-neutral-400">{p.key}</span></span>
       {p.enabled ? <Button size="sm" variant="outline" onClick={() => off.mutate({ pack: p.key })}>Disable</Button> : <Button size="sm" onClick={() => on.mutate({ pack: p.key })}>Enable</Button>}</li>)}</ul>}
     <Err e={on.error ?? off.error} />
+  </div>
+}
+
+function Rule({ label, value, options, onChange }: { label: string; value: string; options: [string, string][]; onChange: (v: string) => void }) {
+  return <div className="flex flex-wrap items-center gap-2 text-sm"><span className="w-56 text-neutral-600">{label}</span>
+    <span className="inline-flex rounded-lg bg-white p-0.5 ring-1 ring-neutral-200">{options.map(([v, l]) => <button type="button" key={v} onClick={() => onChange(v)} className={cn('rounded-md px-2 py-0.5 text-xs', value === v ? 'bg-teal-800 text-white' : 'text-neutral-600 hover:text-neutral-900')}>{l}</button>)}</span></div>
+}
+
+/** the one read log (spec 07): every open-anyway of the last days, and who opened a given record — printable for the patient */
+function ReadsPage({ orgId }: { orgId: string }) {
+  const anyway = useQuery({ queryKey: ['opened_anyway', orgId], queryFn: () => rpc<OpenedAnyway[]>('read_opened_anyway', { organization_id: orgId }) })
+  const [q, setQ] = useState(''); const [pid, setPid] = useState<string | null>(null)
+  const hits = usePatientSearch(orgId, q)
+  const reads = useQuery({ queryKey: ['record_reads', pid], queryFn: () => rpc<RecordRead[]>('read_record_reads', { patient_id: pid }), enabled: !!pid })
+  const who = hits.data?.find((p) => p.id === pid)
+  const BASIS: Record<string, string> = { visit: 'open visit', request: 'open request', none: 'no visit or request', pack: 'a pack', anyway: 'opened anyway' }
+  return <div className="grid gap-6">
+    <div><H>Opened anyway · last 7 days</H>
+      {anyway.isLoading ? <Spinner /> : (anyway.data ?? []).length === 0 ? <p className="text-sm text-neutral-400">No private visit was opened anyway.</p>
+      : <Card><ul className="divide-y divide-neutral-100 text-sm">{anyway.data!.map((r, i) => <li key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3.5 py-2">
+          <span className="w-32 text-xs text-neutral-500 tnum">{r.read_at.slice(0, 16).replace('T', ' ')}</span><span className="w-36 font-medium">{r.user_name}</span>
+          <span className="w-44">#{r.patient.record_number} {r.patient.given_name} {r.patient.family_name}</span>
+          <span className="text-xs text-neutral-500">{r.visit_department} visit of {r.visit_at?.slice(0, 10)}</span><Badge tone={r.reason_text === 'Emergency' ? 'red' : 'neutral'} className="ml-auto">{r.reason_text}</Badge></li>)}</ul></Card>}
+    </div>
+    <div><H>Who opened this record</H>
+      <div className="flex gap-2 print:hidden"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Patient name, phone or record number" className="max-w-sm" /></div>
+      {q.trim().length >= 2 && !pid && <ul className="mt-2 max-w-sm divide-y divide-neutral-100 rounded-lg bg-white ring-1 ring-neutral-200">{(hits.data ?? []).map((p) => <li key={p.id}><button onClick={() => setPid(p.id)} className="w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-50">#{p.record_number} {p.given_name} {p.family_name}</button></li>)}</ul>}
+      {pid && <div className="mt-3"><div className="mb-2 flex items-center gap-2"><span className="text-sm font-medium">{who ? `#${who.record_number} ${who.given_name} ${who.family_name}` : ''}</span>
+          <Button size="sm" variant="outline" className="ml-auto print:hidden" onClick={() => window.print()}>Print</Button><Button size="sm" variant="ghost" className="print:hidden" onClick={() => { setPid(null); setQ('') }}>Clear</Button></div>
+        {reads.isLoading ? <Spinner /> : <Card><table className="w-full text-sm"><thead><tr className="border-b border-neutral-100 text-left text-[11px] text-neutral-500"><th className="px-3 py-1.5 font-medium">When</th><th className="font-medium">Who</th><th className="font-medium">From</th><th className="font-medium">Why</th></tr></thead>
+          <tbody>{(reads.data ?? []).map((r, i) => <tr key={i} className="border-b border-neutral-100 last:border-0"><td className="px-3 py-1.5 text-xs tnum">{r.read_at.slice(0, 16).replace('T', ' ')}</td><td>{r.user_name}</td><td className="text-xs text-neutral-500">{r.department_name}</td>
+            <td className="text-xs">{BASIS[r.basis ?? ''] ?? '—'}{r.reason_text ? ` · ${r.reason_text}` : ''}{r.opened_visit_department ? ` · ${r.opened_visit_department} visit` : ''}</td></tr>)}</tbody></table></Card>}
+      </div>}
+    </div>
   </div>
 }

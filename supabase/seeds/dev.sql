@@ -7,6 +7,8 @@ select public.save_department('00000000-0000-0000-0000-00000000d001', '00000000-
 select public.save_department('00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a001', 'clinic',    'Internal Medicine');
 select public.save_department('00000000-0000-0000-0000-00000000d003', '00000000-0000-0000-0000-00000000a001', 'ancillary', 'Laboratory');
 select public.save_department('00000000-0000-0000-0000-00000000d004', '00000000-0000-0000-0000-00000000a001', 'ancillary', 'Pharmacy');
+-- a department whose visits are private from the start (spec 07)
+select public.save_department('00000000-0000-0000-0000-00000000d005', '00000000-0000-0000-0000-00000000a001', 'clinic', 'Psychiatry', private_visits := true);
 insert into core.served_departments (department_id, served_department_id) values ('00000000-0000-0000-0000-00000000d001', null), ('00000000-0000-0000-0000-00000000d003', null), ('00000000-0000-0000-0000-00000000d004', null);
 insert into core.codes (code, name, kind, unit) values
   ('loinc:718-7', 'Haemoglobin', 'number', 'g/dL'), ('loinc:6690-2', 'White cell count', 'number', '10^9/L'), ('loinc:777-3', 'Platelets', 'number', '10^9/L'),
@@ -24,6 +26,7 @@ select public.save_template('00000000-0000-0000-0000-00000000e001', '00000000-00
 select public.save_user('00000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-00000000a001', 'staff', 'Dr. Ali Hassan', 'Dr', '[{"role_id":"00000000-0000-0000-0000-00000000c002","department_id":"00000000-0000-0000-0000-00000000d002"}]');
 select public.save_user('00000000-0000-0000-0000-000000000104', '00000000-0000-0000-0000-00000000a001', 'staff', 'Sarah Nurse',   null, '[{"role_id":"00000000-0000-0000-0000-00000000c003","department_id":"00000000-0000-0000-0000-00000000d002"}]');
 select public.save_user('00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-00000000a001', 'staff', 'Lab Tech',      null, '[{"role_id":"00000000-0000-0000-0000-00000000c005","department_id":"00000000-0000-0000-0000-00000000d003"}]');
+select public.save_user('00000000-0000-0000-0000-000000000108', '00000000-0000-0000-0000-00000000a001', 'staff', 'Dr. Salma Adel', 'Dr', '[{"role_id":"00000000-0000-0000-0000-00000000c002","department_id":"00000000-0000-0000-0000-00000000d005"}]');
 select public.save_user('00000000-0000-0000-0000-000000000107', '00000000-0000-0000-0000-00000000a001', 'staff', 'Receptionist',  null, '[{"role_id":"00000000-0000-0000-0000-00000000c004","department_id":"00000000-0000-0000-0000-00000000d001"}]');
 update core.users set login_id = id, accepted_at = now() where organization_id = '00000000-0000-0000-0000-00000000a001' and kind = 'staff';
 select set_config('request.jwt.claim.sub', '', false);
