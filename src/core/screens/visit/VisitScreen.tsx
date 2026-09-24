@@ -40,12 +40,12 @@ export function VisitScreen() {
     if (!patientId || !drafts.length) return; setErr(null)
     try { await ws.mutateAsync(items(false)); useDrafts.getState().clear(patientId) } catch (e) { setErr(errorText(e)) }
   }
-  async function done(andNext: boolean) {
+  async function done(andNext: boolean, wait = true) {
     if (!patientId || !visit) return; setErr(null)
     try {
       if (drafts.length) await ws.mutateAsync(items(true))
       useDrafts.getState().clear(patientId)
-      await visits.move.mutateAsync({ visit_id: visit.id, from_status: visit.status, status: 'done' })
+      await visits.move.mutateAsync({ visit_id: visit.id, from_status: visit.status, status: 'done', wait })
       navigate(andNext && next ? `/visit/${next.id}` : '/', { replace: andNext && !!next })
     } catch (e) { setErr(errorText(e)) }
   }
@@ -77,6 +77,7 @@ export function VisitScreen() {
         <Menu.Root><Menu.Trigger asChild><Button variant="outline" size="md" aria-label="More"><ChevronDown className="h-4 w-4" /></Button></Menu.Trigger>
           <Menu.Portal><Menu.Content align="end" sideOffset={6} className="z-50 min-w-52 rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg">
             <Menu.Item onSelect={() => done(false)} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">Done, back to the queue</Menu.Item>
+            <Menu.Item onSelect={() => done(true, false)} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">Done — patient not waiting for results<span className="block text-[11px] text-neutral-500">The visit closes now; results go to your review list</span></Menu.Item>
             <Menu.Item onSelect={() => visits.move.mutate({ visit_id: visit.id, from_status: 'in_consult', status: 'waiting' }, { onSuccess: () => navigate('/') })} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">Return to waiting</Menu.Item>
           </Menu.Content></Menu.Portal></Menu.Root></>
         : !visit && dept.is_visited && can('write:visit') ? <Button variant="outline" onClick={() => visits.open.mutate({ patient_id: patientId, department_id: dept.id }, { onSuccess: (v) => navigate(`/visit/${v.id}`) })}>Start visit</Button>

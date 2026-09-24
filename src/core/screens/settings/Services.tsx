@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Copy, Plus, Search, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
 import { rpc } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
-import type { Organization, Service, ServiceField } from '../../db/types'
+import type { FieldRange, Organization, Service, ServiceField } from '../../db/types'
+import { useRanges } from '../../hooks/ranges'
 import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Select, cn, errorText } from '../../ui'
 
 interface Code { code: string; name: string; kind: string; unit: string | null; is_local: boolean }
-type Draft = { id: string; department_id: string; section_name: string; code: string; name: string; reply_type: string; fields: ServiceField[]; isNew: boolean }
+interface ReplyType { key: string; name: string; pack: string | null }
+type Band = Omit<FieldRange, 'service_id' | 'position'>
+type EField = ServiceField & { bands?: Band[] }
+type Draft = { id: string; department_id: string; section_name: string; code: string; name: string; reply_type: string; fields: EField[]; isNew: boolean }
 const blankField = (): ServiceField => ({ position: 0, code: '', name: '', kind: 'number', unit: null, choices: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null })
 const num = (s: string | undefined) => { const t = (s ?? '').trim().replace(',', '.'); return t === '' || Number.isNaN(Number(t)) ? null : Number(t) }
 const range = (s: string | undefined): [number | null, number | null] => { const t = (s ?? '').trim(); if (!t) return [null, null]; const m = t.match(/^(-?[\d.,]*)\s*[-–]\s*(-?[\d.,]*)$/); if (m) return [num(m[1]), num(m[2])]; if (t.startsWith('<')) return [null, num(t.slice(1))]; if (t.startsWith('>')) return [num(t.slice(1)), null]; return [null, null] }
@@ -29,7 +33,9 @@ const toText = (fs: ServiceField[]) => fs.map((f) => [f.name, f.kind === 'choice
 export function ServicesPage({ org }: { org: Organization }) {
   const qc = useQueryClient(); const orgId = org.organization.id
   const codes = useQuery({ queryKey: ['codes', orgId], queryFn: () => rpc<Code[]>('read_codes', { organization_id: orgId, limit: 1000 }), staleTime: 300_000 })
-  const save = useMutation({ mutationFn: (a: Record<string, unknown>) => rpc('save_service', { organization_id: orgId, ...a }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['codes'] }) } })
+  const replyTypes = useQuery({ queryKey: ['reply_types', orgId], queryFn: () => rpc<ReplyType[]>('read_reply_types', { organization_id: orgId }), staleTime: 300_000 })
+  const ranges = useRanges(orgId)
+  const save = useMutation({ mutationFn: (a: Record<string, unknown>) => rpc('save_service', { organization_id: orgId, ...a }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['codes'] }); qc.invalidateQueries({ queryKey: ['ranges'] }) } })
   const retire = useMutation({ mutationFn: (id: string) => rpc('retire_service', { id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['organization'] }) })
   const [q, setQ] = useState(''); const [open, setOpen] = useState<Draft | null>(null); const [closed, setClosed] = useState<Set<string>>(new Set())
   const box = useRef<HTMLInputElement>(null)
@@ -38,12 +44,13 @@ export function ServicesPage({ org }: { org: Organization }) {
   const shown = org.services.filter((s) => !f || s.name.toLowerCase().includes(f) || s.code.includes(f) || (s.section_name ?? '').toLowerCase().includes(f) || s.fields.some((x) => x.name.toLowerCase().includes(f)))
   const depts = org.departments.filter((d) => shown.some((s) => s.department_id === d.id) || (!f && org.services.some((s) => s.department_id === d.id)))
   const sections = useMemo(() => [...new Set(org.services.map((s) => s.section_name).filter(Boolean) as string[])].sort(), [org.services])
-  const start = (s: Service | null, dept?: string, section?: string, copy = false) => setOpen(s ? { id: copy ? newId() : s.id, department_id: s.department_id ?? '', section_name: s.section_name ?? '', code: copy ? `${s.code}_copy` : s.code, name: copy ? `${s.name} (copy)` : s.name, reply_type: s.reply_type, fields: s.fields.map((x) => ({ ...x })), isNew: copy }
+  const start = (s: Service | null, dept?: string, section?: string, copy = false) => setOpen(s ? { id: copy ? newId() : s.id, department_id: s.department_id ?? '', section_name: s.section_name ?? '', code: copy ? `${s.code}_copy` : s.code, name: copy ? `${s.name} (copy)` : s.name, reply_type: s.reply_type, fields: s.fields.map((x) => ({ ...x, bands: (ranges.data ?? []).filter((r) => r.service_id === s.id && r.position === x.position).map((r) => ({ sex: r.sex, age_low: r.age_low, age_high: r.age_high, reference_low: r.reference_low, reference_high: r.reference_high, critical_low: r.critical_low, critical_high: r.critical_high })) })), isNew: copy }
     : { id: newId(), department_id: dept ?? org.departments.find((d) => d.type === 'ancillary')?.id ?? org.departments[0]?.id ?? '', section_name: section ?? '', code: '', name: '', reply_type: 'result', fields: [blankField()], isNew: true })
   const toggle = (k: string) => setClosed((c) => { const n = new Set(c); if (n.has(k)) n.delete(k); else n.add(k); return n })
-  const editor = (d: Draft) => <Editor key={d.id} draft={d} codes={codes.data ?? []} sections={sections} org={org} saving={save.isPending} error={save.error}
+  const editor = (d: Draft) => <Editor key={d.id} draft={d} codes={codes.data ?? []} replyTypes={replyTypes.data ?? []} sections={sections} org={org} saving={save.isPending} error={save.error}
     onSave={(x) => save.mutate({ id: x.id, department_id: x.department_id, code: x.code, name: x.name, reply_type: x.reply_type, section_name: x.section_name || null,
-      fields: x.reply_type === 'result' ? x.fields.filter((y) => y.name.trim()).map((y, i) => ({ ...y, position: i + 1, code: y.code || null, choices: y.kind === 'choice' ? y.choices : undefined })) : [] }, { onSuccess: () => setOpen(null) })}
+      fields: x.reply_type === 'result' ? x.fields.filter((y) => y.name.trim()).map((y, i) => ({ ...y, bands: undefined, position: i + 1, code: y.code || null, choices: y.kind === 'choice' ? y.choices : undefined })) : [],
+      ranges: x.reply_type === 'result' ? x.fields.filter((y) => y.name.trim()).flatMap((y, i) => (y.bands ?? []).map((b) => ({ ...b, position: i + 1 }))) : [] }, { onSuccess: () => setOpen(null) })}
     onClose={() => { save.reset(); setOpen(null) }} />
 
   return <div className="grid gap-4">
@@ -75,34 +82,37 @@ export function ServicesPage({ org }: { org: Organization }) {
   </div>
 }
 
-function Editor({ draft, codes, sections, org, saving, error, onSave, onClose }: { draft: Draft; codes: Code[]; sections: string[]; org: Organization; saving: boolean; error: Error | null; onSave: (d: Draft) => void; onClose: () => void }) {
+function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave, onClose }: { draft: Draft; codes: Code[]; replyTypes: ReplyType[]; sections: string[]; org: Organization; saving: boolean; error: Error | null; onSave: (d: Draft) => void; onClose: () => void }) {
+  const [openBands, setOpenBands] = useState<number | null>(null)
   const [d, setD] = useState(draft); const [bulk, setBulk] = useState(false); const [text, setText] = useState(() => toText(draft.fields))
   const grid = useRef<HTMLDivElement>(null)
-  const setF = (i: number, p: Partial<ServiceField>) => setD((x) => ({ ...x, fields: x.fields.map((y, j) => j === i ? { ...y, ...p } : y) }))
+  const setF = (i: number, p: Partial<EField>) => setD((x) => ({ ...x, fields: x.fields.map((y, j) => j === i ? { ...y, ...p } : y) }))
   const move = (i: number, by: number) => setD((x) => { const f = [...x.fields]; const [m] = f.splice(i, 1); f.splice(Math.max(0, Math.min(f.length, i + by)), 0, m); return { ...x, fields: f } })
   const codeFor = (name: string) => codes.find((k) => k.name.toLowerCase() === name.trim().toLowerCase())
-  const fields = bulk ? parseFields(text, codes) : d.fields
+  // text mode has no ranges by sex/age: a field keeps its bands by name
+  const fields: EField[] = bulk ? parseFields(text, codes).map((x) => ({ ...x, bands: d.fields.find((y) => y.name.trim().toLowerCase() === x.name.trim().toLowerCase())?.bands })) : d.fields
   const ok = d.name.trim() && d.code.trim() && d.department_id && (d.reply_type !== 'result' || fields.some((x) => x.name.trim()))
   const submit = () => { if (!ok) return; onSave({ ...d, fields }) }
   const cell = 'h-7 rounded-md px-2 text-xs'
   return <div className="border-y border-teal-200 bg-teal-50/30 px-4 py-3" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'Enter')) { e.preventDefault(); submit() } else if (e.key === 'Escape') { e.preventDefault(); onClose() } }}>
-    <div className="grid grid-cols-[7rem_1fr_11rem_10rem] gap-2">
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-[7rem_1fr_11rem_10rem]">
       <label className="text-[11px] text-neutral-500">Code<Input value={d.code} onChange={(e) => setD({ ...d, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })} placeholder="cbc" className="mt-0.5 h-8 font-mono" autoFocus={!draft.name} /></label>
       <label className="text-[11px] text-neutral-500">Name<Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value, code: draft.isNew && (!d.code || d.code === d.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '')) ? e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '') : d.code })} placeholder="Complete blood count" className="mt-0.5 h-8" autoFocus={!!draft.name || draft.isNew} /></label>
       <label className="text-[11px] text-neutral-500">Department<Select value={d.department_id} onChange={(e) => setD({ ...d, department_id: e.target.value })} className="mt-0.5 h-8">{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></label>
       <label className="text-[11px] text-neutral-500">Section<Input list="sections" value={d.section_name} onChange={(e) => setD({ ...d, section_name: e.target.value })} placeholder="Haematology" className="mt-0.5 h-8" /><datalist id="sections">{sections.map((s) => <option key={s} value={s} />)}</datalist></label>
     </div>
     <div className="mt-2.5 flex items-center gap-2 text-xs"><span className="text-neutral-500">Reply</span>
-      {([['result', 'values'], ['note', 'a report'], ['dispense', 'dispensing'], ['none', 'just done']] as const).map(([v, l]) => <button key={v} onClick={() => setD({ ...d, reply_type: v })} className={cn('rounded-md px-2 py-0.5 ring-1 ring-inset', d.reply_type === v ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200')}>{l}</button>)}
+      {replyTypes.map((t) => <button key={t.key} title={t.pack ? `from the ${t.pack} pack` : 'core'} onClick={() => setD({ ...d, reply_type: t.key })} className={cn('rounded-md px-2 py-0.5 ring-1 ring-inset', d.reply_type === t.key ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200')}>{({ result: 'values', note: 'a report', none: 'just done' } as Record<string, string>)[t.key] ?? t.name}{t.pack && <span className="ml-1 opacity-60">· {t.pack}</span>}</button>)}
+      {!replyTypes.some((t) => t.key === d.reply_type) && <Badge tone="red">{d.reply_type}: no enabled pack answers this</Badge>}
       {d.reply_type === 'result' && <button onClick={() => { if (bulk) setD({ ...d, fields: parseFields(text, codes) }); else setText(toText(d.fields)); setBulk(!bulk) }} className="ml-auto text-teal-700 hover:underline">{bulk ? 'Edit as a grid' : 'Type or paste as text'}</button>}
     </div>
     {d.reply_type === 'result' && (bulk ? <div className="mt-2"><textarea value={text} onChange={(e) => setText(e.target.value)} rows={Math.max(5, text.split('\n').length + 1)} autoFocus spellCheck={false}
         placeholder={'Haemoglobin | g/dL | 12-16 | 7-20\nWBC | 10^9/L | 4-11 | 1-30\nBlood group | [A/B/AB/O]'} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 font-mono text-xs focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20" />
       <p className="mt-1 text-[11px] text-neutral-500">One field per line: <span className="font-mono">name | unit | normal low-high | critical low-high | code</span>. Tabs work too, so a range pasted from a spreadsheet drops straight in. <span className="font-mono">[a/b/c]</span> in the unit makes a choice list. Known names get their code; new ones get a local code.</p>
       <p className="mt-1 text-[11px] text-teal-800">{parseFields(text, codes).length} fields · {parseFields(text, codes).filter((x) => x.code).length} matched to a code</p></div>
-    : <div ref={grid} className="mt-2 overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-[10.5px] uppercase tracking-wider text-neutral-400">
+    : <div ref={grid} className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-xs"><thead><tr className="text-left text-[10.5px] uppercase tracking-wider text-neutral-400">
         <th className="w-14" /><th className="px-1 font-medium">Field</th><th className="w-24 px-1 font-medium">Unit</th><th className="w-36 px-1 font-medium">Normal</th><th className="w-36 px-1 font-medium">Critical</th><th className="w-24 px-1 font-medium">Kind</th><th className="w-40 px-1 font-medium">Code</th><th className="w-8" /></tr></thead>
-      <tbody>{d.fields.map((x, i) => { const known = !x.code ? codeFor(x.name) : null; return <tr key={i}>
+      <tbody>{d.fields.map((x, i) => { const known = !x.code ? codeFor(x.name) : null; return <Fragment key={i}><tr>
         <td className="whitespace-nowrap"><IconButton title="Up" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp className="h-3 w-3" /></IconButton><IconButton title="Down" onClick={() => move(i, 1)} disabled={i === d.fields.length - 1}><ArrowDown className="h-3 w-3" /></IconButton></td>
         <td className="p-0.5"><Input list="codenames" value={x.name} onChange={(e) => { const k = codeFor(e.target.value); setF(i, { name: e.target.value, ...(k && !x.code ? { code: k.code, unit: x.unit ?? k.unit } : {}) }) }} placeholder="Haemoglobin" className={cell} autoFocus={i === d.fields.length - 1 && i > 0 && !x.name} /></td>
         <td className="p-0.5"><Input value={x.unit ?? ''} onChange={(e) => setF(i, { unit: e.target.value || null })} placeholder="g/dL" className={cell} disabled={x.kind === 'choice'} /></td>
@@ -111,8 +121,10 @@ function Editor({ draft, codes, sections, org, saving, error, onSave, onClose }:
           onEnter={() => { if (i === d.fields.length - 1) setD((y) => ({ ...y, fields: [...y.fields, blankField()] })) }} />}</td>
         <td className="p-0.5"><Select value={x.kind} onChange={(e) => setF(i, { kind: e.target.value, choices: e.target.value === 'choice' ? x.choices ?? [] : null })} className={cn(cell, 'h-7')}>{['number', 'text', 'choice'].map((k) => <option key={k}>{k}</option>)}</Select></td>
         <td className="p-0.5"><span className={cn('block truncate px-1 font-mono text-[10.5px]', x.code ? 'text-neutral-600' : known ? 'text-teal-700' : 'text-neutral-400')} title={x.code || (known ? `will use ${known.code}` : 'a local code is made on save')}>{x.code || (known ? known.code : 'new local code')}</span></td>
-        <td><IconButton title="Remove field" className="hover:text-red-700" onClick={() => setD({ ...d, fields: d.fields.filter((_, j) => j !== i) })}><Trash2 className="h-3 w-3" /></IconButton></td>
-      </tr> })}</tbody></table>
+        <td className="whitespace-nowrap">{x.kind === 'number' && <button title="Ranges by sex and age" onClick={() => setOpenBands(openBands === i ? null : i)} className={cn('mr-1 rounded px-1 text-[10.5px]', (x.bands?.length ?? 0) > 0 ? 'bg-teal-50 font-medium text-teal-800' : 'text-neutral-400 hover:text-neutral-700')}>♀♂{x.bands?.length ? ` ${x.bands.length}` : ''}</button>}
+          <IconButton title="Remove field" className="hover:text-red-700" onClick={() => setD({ ...d, fields: d.fields.filter((_, j) => j !== i) })}><Trash2 className="h-3 w-3" /></IconButton></td>
+      </tr>
+      {openBands === i && <tr><td /><td colSpan={7} className="pb-2"><Bands bands={x.bands ?? []} onChange={(bands) => setF(i, { bands })} /></td></tr>}</Fragment> })}</tbody></table>
       <datalist id="codenames">{codes.map((k) => <option key={k.code} value={k.name}>{k.unit ?? ''}</option>)}</datalist>
       <button onClick={() => setD({ ...d, fields: [...d.fields, blankField()] })} className="mt-1 text-xs text-teal-700 hover:underline">+ field</button><span className="ml-2 text-[11px] text-neutral-400">↵ in the last critical cell adds the next field</span></div>)}
     <div className="mt-3 flex items-center gap-2">{error && <span className="text-sm text-red-700">{errorText(error)}</span>}
@@ -125,4 +137,22 @@ function Editor({ draft, codes, sections, org, saving, error, onSave, onClose }:
 function RangeInput({ lo, hi, onChange, className, onEnter }: { lo: number | null; hi: number | null; onChange: (lo: number | null, hi: number | null) => void; className?: string; onEnter?: () => void }) {
   const [t, setT] = useState(fmtRange(lo, hi))
   return <Input value={t} onChange={(e) => { setT(e.target.value); const [a, b] = range(e.target.value); onChange(a, b) }} onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) { e.preventDefault(); onEnter() } }} placeholder="low-high" className={cn(className, 'tnum')} />
+}
+
+/** ranges that replace the field's own for some patients: by sex, by age (from, up to but not including), or both */
+function Bands({ bands, onChange }: { bands: Band[]; onChange: (b: Band[]) => void }) {
+  const set = (i: number, p: Partial<Band>) => onChange(bands.map((b, j) => j === i ? { ...b, ...p } : b))
+  const cell = 'h-7 rounded-md px-2 text-xs'
+  return <div className="rounded-lg bg-white p-2 ring-1 ring-teal-200">
+    <p className="mb-1 text-[11px] text-neutral-500">For some patients the range differs. The most specific row that fits wins (sex and age, then sex, then the field’s own range).</p>
+    {bands.map((b, i) => <div key={i} className="mb-1 grid grid-cols-[6.5rem_4rem_4rem_8rem_8rem_1.5rem] items-center gap-1.5">
+      <Select value={b.sex ?? ''} onChange={(e) => set(i, { sex: (e.target.value || null) as Band['sex'] })} className={cell}><option value="">any sex</option><option value="female">female</option><option value="male">male</option></Select>
+      <Input value={b.age_low ?? ''} onChange={(e) => set(i, { age_low: e.target.value === '' ? null : Number(e.target.value) })} placeholder="age ≥" className={cell} />
+      <Input value={b.age_high ?? ''} onChange={(e) => set(i, { age_high: e.target.value === '' ? null : Number(e.target.value) })} placeholder="age <" className={cell} />
+      <RangeInput lo={b.reference_low} hi={b.reference_high} onChange={(lo, hi) => set(i, { reference_low: lo, reference_high: hi })} className={cell} />
+      <RangeInput lo={b.critical_low} hi={b.critical_high} onChange={(lo, hi) => set(i, { critical_low: lo, critical_high: hi })} className={cell} />
+      <IconButton title="Remove" onClick={() => onChange(bands.filter((_, j) => j !== i))}><Trash2 className="h-3 w-3" /></IconButton></div>)}
+    <button onClick={() => onChange([...bands, { sex: null, age_low: null, age_high: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null }])} className="text-xs text-teal-700 hover:underline">+ range</button>
+    <span className="ml-3 text-[10.5px] text-neutral-400">normal · critical as low-high, &lt;x or &gt;x</span>
+  </div>
 }

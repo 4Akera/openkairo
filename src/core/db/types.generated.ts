@@ -523,16 +523,19 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          review_results: string
         }
         Insert: {
           created_at?: string
           id: string
           name: string
+          review_results?: string
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          review_results?: string
         }
         Relationships: []
       }
@@ -1007,6 +1010,7 @@ export type Database = {
           reply_line: string | null
           requester_id: string
           review_needed_at: string | null
+          review_reason: string | null
           status: Database["core"]["Enums"]["request_status"] | null
           status_reason: string | null
           step: Database["core"]["Enums"]["request_step"]
@@ -1025,6 +1029,7 @@ export type Database = {
           reply_line?: string | null
           requester_id: string
           review_needed_at?: string | null
+          review_reason?: string | null
           status?: Database["core"]["Enums"]["request_status"] | null
           status_reason?: string | null
           step?: Database["core"]["Enums"]["request_step"]
@@ -1043,6 +1048,7 @@ export type Database = {
           reply_line?: string | null
           requester_id?: string
           review_needed_at?: string | null
+          review_reason?: string | null
           status?: Database["core"]["Enums"]["request_status"] | null
           status_reason?: string | null
           step?: Database["core"]["Enums"]["request_step"]
@@ -1712,6 +1718,7 @@ export type Database = {
           reply_line: string | null
           requester_id: string
           review_needed_at: string | null
+          review_reason: string | null
           status: Database["core"]["Enums"]["request_status"] | null
           status_reason: string | null
           step: Database["core"]["Enums"]["request_step"]
@@ -1754,6 +1761,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      clear_seen: {
+        Args: { p_actor: string; p_visit_id: string }
+        Returns: number
+      }
       current_user_id: { Args: { p_organization_id: string }; Returns: string }
       entry_card: {
         Args: { e: Database["core"]["Tables"]["entries"]["Row"] }
@@ -1775,6 +1786,7 @@ export type Database = {
         Args: { v: Json }
         Returns: Database["core"]["Enums"]["value_flag"]
       }
+      flag_unseen: { Args: { p_visit_id: string }; Returns: number }
       fold: { Args: { t: string }; Returns: string }
       holds: { Args: { p_visit_id: string }; Returns: number }
       local_code: {
@@ -1859,6 +1871,14 @@ export type Database = {
         Args: { p_organization_id: string; p_pack: string }
         Returns: undefined
       }
+      review_reason: {
+        Args: {
+          last: Database["core"]["Tables"]["entries"]["Row"]
+          r: Database["core"]["Tables"]["requests"]["Row"]
+          worst: Database["core"]["Enums"]["value_flag"]
+        }
+        Returns: string
+      }
       root_of: { Args: { p_entry_id: string }; Returns: string }
       route_request: {
         Args: {
@@ -1883,6 +1903,7 @@ export type Database = {
           reply_line: string | null
           requester_id: string
           review_needed_at: string | null
+          review_reason: string | null
           status: Database["core"]["Enums"]["request_status"] | null
           status_reason: string | null
           step: Database["core"]["Enums"]["request_step"]
@@ -2097,6 +2118,7 @@ export type Database = {
           reason?: string
           status: Database["core"]["Enums"]["visit_status"]
           visit_id: string
+          wait?: boolean
         }
         Returns: Database["core"]["Tables"]["visits"]["Row"]
         SetofOptions: {
@@ -2159,6 +2181,10 @@ export type Database = {
         Returns: string
       }
       read_organization: { Args: { organization_id: string }; Returns: Json }
+      read_organization_settings: {
+        Args: { organization_id: string }
+        Returns: Json
+      }
       read_patient: { Args: { patient_id: string }; Returns: Json }
       read_patients: {
         Args: {
@@ -2170,10 +2196,12 @@ export type Database = {
         Returns: Json
       }
       read_queue: { Args: { department_id: string }; Returns: Json }
+      read_ranges: { Args: { organization_id: string }; Returns: Json }
       read_record: {
         Args: { department_id: string; patient_id: string }
         Returns: Json
       }
+      read_reply_types: { Args: { organization_id: string }; Returns: Json }
       read_sent_outside: {
         Args: { department_id?: string; organization_id: string }
         Returns: Json
@@ -2252,6 +2280,10 @@ export type Database = {
         Args: { organization_id: string; pack: string }
         Returns: undefined
       }
+      save_organization_settings: {
+        Args: { organization_id: string; review_results: string }
+        Returns: Json
+      }
       save_service: {
         Args: {
           code: string
@@ -2260,6 +2292,7 @@ export type Database = {
           id: string
           name: string
           organization_id: string
+          ranges?: Json
           reply_type?: string
           section_name?: string
           seen_change_id?: string

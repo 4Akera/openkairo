@@ -8,7 +8,7 @@ export interface Card {
   display_line: string; flag: Flag | null; is_final: boolean; source: string; reply_to_id: string | null; replaces_id: string | null
   replaced_by_id: string | null; visit_id: string | null; service_id: string | null
   request?: { step: RequestStep; status: 'open' | 'done' | 'cancelled'; status_reason: string | null; to_department_id: string; to_department_name: string | null
-    priority: Priority; due_at: string; reply_line: string | null; reply_flag: Flag | null; replied_at: string | null; review_needed_at: string | null }
+    priority: Priority; due_at: string; reply_line: string | null; reply_flag: Flag | null; replied_at: string | null; review_needed_at: string | null; review_reason?: 'critical' | 'abnormal' | 'result' | 'not seen' | 'corrected' | null }
 }
 export interface PatientBanner { id: string; record_number: number; given_name: string; middle_name: string | null; family_name: string; sex: string; born_on: string; age: number; died_on: string | null; merged_into_id: string | null; phone_text: string | null }
 export interface Medication { id: string; drug_code: string | null; drug_name: string; dose_number: number | null; dose_unit: string | null; route: string | null; frequency: string | null; prn: boolean; problem_id: string | null; status: string; started_on: string; instructions_text?: string | null }
@@ -25,7 +25,10 @@ export interface QueueRow { id: string; patient: { id: string; record_number: nu
   requests: { request_id: string; service_name: string | null; to_department_name: string | null; step: RequestStep; is_holding: boolean }[] }
 export interface VisitQueue { rows: QueueRow[]; done_today: number; away: number }
 export interface RequestQueueRow extends Card { patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; born_on: string }; from_department_name: string | null; requester_name: string | null; question_text: string | null; section_name: string | null; service_name: string | null; reply_type: string | null; assignee_id: string | null }
-export interface RequestQueue { requests: RequestQueueRow[]; done_today: number }
+export interface RecentRow extends Card { patient: RequestQueueRow['patient']; from_department_name: string | null; requester_name: string | null; section_name: string | null; service_name: string | null
+  reply: { id: string; data: Record<string, unknown>; author_name: string | null; recorded_at: string; is_final: boolean } | null }
+export interface RequestQueue { requests: RequestQueueRow[]; recent: RecentRow[]; done_today: number }
+export interface FieldRange { service_id: string; position: number; sex: 'female' | 'male' | 'other' | null; age_low: number | null; age_high: number | null; reference_low: number | null; reference_high: number | null; critical_low: number | null; critical_high: number | null }
 export interface PatientHit extends PatientBanner { identifiers: { system: string; value: string }[]; latest_change_id: string | null
   open_visits: { id: string; department_id: string; department_name: string; status: VisitStatus; present: boolean; arrived_at: string; assignee_id: string | null }[]
   open_consults: { request_id: string; to_department_id: string; question_text: string | null }[] }

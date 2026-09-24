@@ -49,6 +49,7 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0018 | `save_service` accepts fields without choices | 02 |
 | 0019 | `core.server_settings`: the `require_mfa` switch on the gate (local development sets it off) | 02 |
 | 0020 | problems carry a note and a certainty; `core.local_code` + `read_codes`; `save_service` makes local codes | 02, 04 |
+| 0021 | the amendments of 2026-09-23: waiting for results, the review rule and reasons, ranges by sex/age, reply types from the registry, the day's released results | [amendments](spec/amendments-2026-09-23.md) |
 
 Tables live in schema `core` and are reachable only through functions in `public`. Every public function is `security definer` with a pinned search path and starts with `require_access`.
 
@@ -70,7 +71,7 @@ The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server c
   al penicillin: rash severe            allergy
   anything else                         joins today's note
   ```
-- `screens/bench/` — any department that offers services and sees no patients of its own (laboratory, imaging, pharmacy) works a bench: open requests grouped one row per patient, a scan box for record number or name, section and step filters, Collect all, and one screen per patient where Enter walks every field and ⌘↵ releases every result in one atomic set, then opens the next patient. Values that are not numbers block release; values ten times outside the range ask for a second look.
+- `screens/bench/` — any department that offers services and sees no patients of its own (laboratory, imaging, pharmacy) works a bench: open requests grouped one row per patient, a scan box for record number or name, section and step filters, Collect all, and one screen per patient where Enter walks every field and ⌘↵ releases every result in one atomic set, then opens the next patient. Values that are not numbers block release; values ten times outside the range ask for a second look; flags use the range that fits the patient's sex and age. Core shows no working steps: packs register them (`registerBenchSteps`). *Released today* lists the last day's results, and Correct replaces one.
 - `screens/Request.tsx` — one request: the value grid from the service's fields, a report, preliminary, not done, steps, Release → next; technicians work from the queue row and never read the record
 - `screens/Settings.tsx`, `settings/Services.tsx` — organization, departments, users and roles, presets, packs; services grouped by department and section, filtered as you type, edited in place (⌘S), fields typed or pasted one per line (`name | unit | 12-16 | 7-20`, tabs from a spreadsheet work); a field without a registered code gets a local one
 - `renderers/` — one card per entry from its display line; packs register richer renderers here
@@ -83,6 +84,7 @@ The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server c
 - `smoke_spine.sql` — the record itself: routing, idempotency, steps, flags, values, the fold, permanence, correction, refusals
 - `smoke_api.sql` — a clinic day through the public functions as three users: the gate, one atomic Done, both lists, two routed requests, the lab, a critical result to review, the chart
 - `smoke_visits.sql` — reception → queue → consult → results → BACK → done → follow-up
+- `amendments.sql` — waiting for results, not-seen results, the review rule, ranges by sex, reply types, correction
 - `boundary.sql` — the pack boundary against a hostile fixture pack: grants, ownership, a sleeping pack, a raising pack, a pack writing core, the gate on a pack caller, the record lock
 
 ## Layout

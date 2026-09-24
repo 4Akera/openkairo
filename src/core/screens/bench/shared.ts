@@ -16,4 +16,4 @@ export function groupByPatient(rows: RequestQueueRow[]): PatientGroup[] {
 }
 export const ageOf = (born: string) => { const [y, m = 1, d = 1] = born.split('-').map(Number); const n = new Date(); return n.getFullYear() - y - (n.getMonth() + 1 < m || (n.getMonth() + 1 === m && n.getDate() < d) ? 1 : 0) }
 export const STEP_TONE: Record<string, 'amber' | 'blue' | 'neutral' | 'brand'> = { sent: 'amber', started: 'blue', held: 'neutral', replied: 'brand', reopened: 'amber' }
-export const STEP_LABEL: Record<string, string> = { sent: 'to collect', started: 'in progress', held: 'held', replied: 'preliminary', reopened: 'reopened' }
+export const STEP_LABEL: Record<string, string> = { sent: 'new', started: 'in progress', held: 'held', replied: 'preliminary', reopened: 'reopened' }

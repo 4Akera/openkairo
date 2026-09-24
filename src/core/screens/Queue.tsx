@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { useRequestQueue, useVisitQueue } from '../hooks/reads'
+import { useVisitActions } from '../hooks/writes'
+import { useDepartment } from '../hooks/organization'
 import type { QueueRow } from '../db/types'
 import { Badge, Card, Heading, Kbd, Spinner, cn, minutesSince } from '../ui'
 const BANDS: [QueueRow['band'], string, 'brand' | 'muted'][] = [['back', 'Back — results in', 'brand'], ['waiting', 'Waiting', 'muted'], ['consult', 'In consult', 'muted'], ['pending', 'Here · waiting for results', 'muted']]
@@ -11,6 +13,7 @@ const wait = (m: number) => m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m
 /** The patient queue in bands (spec 05). Keyboard: ↑↓ move · ↵ open · N opens the next patient. */
 export function QueueList({ departmentId, compact = false, keys = false }: { departmentId: string; compact?: boolean; keys?: boolean }) {
   const q = useVisitQueue(departmentId); const navigate = useNavigate(); const [cursor, setCursor] = useState(0)
+  const { can } = useDepartment(); const visits = useVisitActions()
   const rows = BANDS.flatMap(([b]) => (q.data?.rows ?? []).filter((r) => r.band === b))
   const c = Math.min(cursor, Math.max(0, rows.length - 1))
   useEffect(() => {
@@ -32,8 +35,8 @@ export function QueueList({ departmentId, compact = false, keys = false }: { dep
     <Heading tone={tone === 'brand' ? 'brand' : 'muted'} count={rs.length} className={cn('border-b border-neutral-100 px-4 py-2', b === 'back' && 'bg-teal-50/60')}>{label}</Heading>
     <ul className="divide-y divide-neutral-100">{rs.map((r) => { i++; const idx = i; const m = minutesSince(b === 'waiting' ? r.arrived_at : r.present_at); return <li key={r.id}>
       <button onClick={() => navigate(`/visit/${r.id}`)} onMouseEnter={() => setCursor(idx)} className={cn('flex w-full items-center gap-4 px-4 text-left transition-colors hover:bg-neutral-50', compact ? 'py-1.5' : 'py-2.5', keys && idx === c && 'bg-teal-50/70', b === 'pending' && 'text-neutral-500')}>
-        <span className="w-12 shrink-0 font-mono text-xs text-neutral-400">#{r.patient.record_number}</span>
-        <span className="w-56 shrink-0 truncate text-[14px] font-medium">{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ml-1.5 inline h-3.5 w-3.5 text-red-600" aria-label="allergies" />}</span>
+        <span className="hidden w-12 shrink-0 font-mono text-xs text-neutral-400 sm:inline">#{r.patient.record_number}</span>
+        <span className="w-40 shrink-0 truncate text-[14px] font-medium sm:w-56">{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ml-1.5 inline h-3.5 w-3.5 text-red-600" aria-label="allergies" />}</span>
         <span className="w-14 shrink-0 text-xs text-neutral-500 tnum">{r.patient.age} y {SEX[r.patient.sex] ?? ''}</span>
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs">
           <Badge tone={r.is_first ? 'blue' : 'neutral'}>{r.is_first ? 'new' : 'follow-up'}</Badge>
@@ -43,6 +46,8 @@ export function QueueList({ departmentId, compact = false, keys = false }: { dep
           {r.request_id && r.request_open && <Badge tone="amber">consult to answer</Badge>}
         </span>
         {r.assignee_name && <span className="text-[11px] text-neutral-400">{r.assignee_name}</span>}
+        {b === 'pending' && can('write:visit') && <span role="button" tabIndex={0} title="The patient left: results go to the doctor's review list" onClick={(e) => { e.stopPropagation(); visits.present.mutate({ visit_id: r.id, is_present: false }) }}
+          className="rounded-md px-2 py-0.5 text-[11px] text-neutral-500 ring-1 ring-neutral-200 hover:bg-white hover:text-red-700 hover:ring-red-300">Gone</span>}
         <span className={cn('w-12 text-right text-xs font-medium tnum', m >= 60 ? 'text-red-700' : m >= 30 ? 'text-amber-700' : 'text-neutral-400')}>{wait(m)}</span>
       </button></li> })}</ul></Card> })}
     {!compact && <p className="text-xs text-neutral-500 tnum">Done today <b className="text-neutral-800">{q.data?.done_today}</b> · away <b className="text-neutral-800">{q.data?.away}</b>{keys && <span className="ml-3 text-neutral-400"><Kbd>N</Kbd> next patient · <Kbd>↑</Kbd><Kbd>↓</Kbd> move · <Kbd>↵</Kbd> open</span>}</p>}

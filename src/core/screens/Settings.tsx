@@ -6,10 +6,10 @@ import { rpc, Refusal, type FnName } from '../db/rpc'
 import { useDepartment, useChoice } from '../hooks/organization'
 import { newId } from '../hooks/writes'
 import type { Organization } from '../db/types'
-import { Button, Centered, Input, Select, Spinner, Field } from '../ui'
+import { Button, Card, Centered, Heading, Input, Select, Spinner, Field, cn } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
-const PAGES = [['organization', 'Organization'], ['departments', 'Departments'], ['services', 'Services'], ['users', 'Users'], ['templates', 'Presets'], ['packs', 'Packs']]
+const PAGES = [['organization', 'Organization'], ['clinic', 'Clinic rules'], ['departments', 'Departments'], ['services', 'Services'], ['users', 'Users'], ['templates', 'Presets'], ['packs', 'Packs']]
 
 /** Settings (spec 02/05): six pages, the practice builds its own clinic here. Owners only. */
 export function SettingsScreen() {
@@ -22,6 +22,7 @@ export function SettingsScreen() {
     <div className="min-w-0 overflow-x-auto">{mfaNeeded && <Mfa onDone={() => useMfaNeeded.getState().set(false)} />}<Routes>
       <Route index element={<Navigate to="organization" replace />} />
       <Route path="organization" element={<OrganizationPage org={org} />} />
+      <Route path="clinic" element={<div><H>Clinic rules</H><p className="-mt-2 mb-4 text-sm text-neutral-500">How {org.organization.name} works day to day. Each rule applies to every department.</p><ReviewSetting orgId={org.organization.id} /></div>} />
       <Route path="departments" element={<DepartmentsPage org={org} />} />
       <Route path="services" element={<ServicesPage org={org} />} />
       <Route path="users" element={<UsersPage org={org} />} />
@@ -39,6 +40,18 @@ function useSave(fn: FnName) {
 }
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="mb-3 text-base font-semibold tracking-tight">{children}</h2>
 const Err = ({ e }: { e: Error | null }) => e ? <p className="text-sm text-red-700">{e.message}</p> : null
+
+function ReviewSetting({ orgId }: { orgId: string }) {
+  const qc = useQueryClient()
+  const cur = useQuery({ queryKey: ['org_settings', orgId], queryFn: () => rpc<{ review_results: string }>('read_organization_settings', { organization_id: orgId }) })
+  const save = useMutation({ mutationFn: (v: string) => rpc('save_organization_settings', { organization_id: orgId, review_results: v }), onSuccess: () => qc.invalidateQueries({ queryKey: ['org_settings'] }) })
+  const opts: [string, string, string][] = [['critical', 'Only critical results', 'Quietest. Abnormal and normal results file into the record.'], ['abnormal', 'Critical and abnormal', 'Anything outside its range.'], ['all', 'Every final result', 'The doctor who asked acknowledges each one.']]
+  return <Card className="mb-5 p-4"><Heading className="mb-1">Results to review</Heading>
+    <p className="mb-3 text-xs text-neutral-500">Which results land on the requesting doctor’s review list. Whatever the setting, results for a patient who left before being seen again, and corrected results, always go to the list.</p>
+    <div className="grid gap-1.5">{opts.map(([v, l, d]) => <label key={v} className={cn('flex cursor-pointer items-start gap-2.5 rounded-lg p-2 ring-1 ring-inset', cur.data?.review_results === v ? 'bg-teal-50 ring-teal-300' : 'ring-neutral-200 hover:bg-neutral-50')}>
+      <input type="radio" name="review" className="mt-1" checked={cur.data?.review_results === v} onChange={() => save.mutate(v)} /><span><span className="block text-sm font-medium">{l}{v === 'critical' && <span className="ml-1.5 text-xs font-normal text-neutral-500">default</span>}</span><span className="text-xs text-neutral-500">{d}</span></span></label>)}</div>
+    {save.error && <p className="mt-2 text-sm text-red-700">{save.error.message}</p>}</Card>
+}
 
 function OrganizationPage({ org }: { org: Organization }) {
   const orgId = org.organization.id

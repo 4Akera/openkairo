@@ -7,6 +7,13 @@ const registry = new Map<string, Renderer>()
 export const registerRenderer = (type: string, r: Renderer) => registry.set(type, r)
 export const rendererFor = (type: string) => registry.get(type)
 
+/** Request steps belong to packs (spec 06, amendments 2026-09-23 · 4): a pack registers the step buttons its departments show on the bench.
+ *  Core registers none — a request goes from new to released. A step never closes a request; only a reply or a cancel does. */
+export interface BenchStep { step: string; label: string; from: string[] }
+const benchSteps = new Map<string, BenchStep[]>()
+export const registerBenchSteps = (departmentType: string, steps: BenchStep[]) => benchSteps.set(departmentType, steps)
+export const benchStepsFor = (departmentType: string) => benchSteps.get(departmentType) ?? []
+
 const arrow = (f: string | null | undefined) => f === 'low' ? ' ↓' : f === 'high' ? ' ↑' : f === 'critical' ? ' ‼' : f === 'abnormal' ? ' *' : ''
 export function ValuesTable({ values }: { values: Value[] }) {
   return <table className="text-[12.5px]"><tbody>{values.map((v, i) => <tr key={i} className={flagClass(v.flag)}>

@@ -14,3 +14,5 @@
 The core is 01–06. Packs (Laboratory, Pharmacy, Billing, Internal medicine, …) are specced one file each under the same rules.
 
 Each spec has an `.appendix.md` (invariants, CI tests, reasoning, what the break-tests changed) and a `.findings.json` (every scenario run). Locked means later specs build on it and do not reopen it; a change is an amendment with a date in the status line.
+
+**Amendments** · [2026-09-23](amendments-2026-09-23.md) — the patient waits for results; which results need review is the clinic's rule (default critical); ranges by sex and age; request steps belong to packs; reply types from the registry; correcting a released result.

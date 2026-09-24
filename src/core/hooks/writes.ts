@@ -18,7 +18,7 @@ export function useVisitActions() {
   return {
     open: useMutation({ mutationFn: (a: { patient_id: string; department_id: string; priority?: string; request_id?: string }) => rpc<VisitRow>('open_visit', { id: newId(), ...a }), onSuccess: inv }),
     present: useMutation({ mutationFn: (a: { visit_id: string; is_present: boolean }) => rpc<VisitRow>('mark_present', a), onSuccess: inv }),
-    move: useMutation({ mutationFn: (a: { visit_id: string; from_status: VisitStatus; status: VisitStatus; reason?: string }) => rpc<VisitRow>('mark_visit', a), onSuccess: inv }),
+    move: useMutation({ mutationFn: (a: { visit_id: string; from_status: VisitStatus; status: VisitStatus; reason?: string; wait?: boolean }) => rpc<VisitRow>('mark_visit', a), onSuccess: inv }),
   }
 }
 export function useRequestActions() {
