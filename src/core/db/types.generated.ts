@@ -102,7 +102,6 @@ export type Database = {
           organization_id: string
           patients_wait: boolean
           private_visits: boolean
-          record_view: string
           retired_at: string | null
           review_results: string
           site_name: string | null
@@ -116,7 +115,6 @@ export type Database = {
           organization_id: string
           patients_wait?: boolean
           private_visits?: boolean
-          record_view?: string
           retired_at?: string | null
           review_results?: string
           site_name?: string | null
@@ -130,7 +128,6 @@ export type Database = {
           organization_id?: string
           patients_wait?: boolean
           private_visits?: boolean
-          record_view?: string
           retired_at?: string | null
           review_results?: string
           site_name?: string | null
@@ -538,18 +535,21 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          record_view: string
           time_zone: string
         }
         Insert: {
           created_at?: string
           id: string
           name: string
+          record_view?: string
           time_zone?: string
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          record_view?: string
           time_zone?: string
         }
         Relationships: []
@@ -2446,7 +2446,6 @@ export type Database = {
           organization_id: string
           patients_wait?: boolean
           private_visits?: boolean
-          record_view?: string
           review_results?: string
           seen_change_id?: string
           serves?: string[]
@@ -2462,7 +2461,12 @@ export type Database = {
         }
       }
       save_organization: {
-        Args: { name?: string; organization_id: string; time_zone?: string }
+        Args: {
+          name?: string
+          organization_id: string
+          record_view?: string
+          time_zone?: string
+        }
         Returns: Json
       }
       save_organization_pack: {

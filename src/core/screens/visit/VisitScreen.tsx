@@ -16,7 +16,7 @@ import { Today, type TodayHandle } from './Today'
 /** The visit (spec 05), built for typing: banner with Done always in reach, the lists on the left, the speed line on the right. */
 export function VisitScreen() {
   const { visitId, patientId: paramPatient } = useParams()
-  const { dept, can } = useDepartment()
+  const { dept, can, org } = useDepartment()
   const navigate = useNavigate()
   const queue = useVisitQueue(dept?.id ?? null)
   const fromQueue = queue.data?.rows.find((r) => r.id === visitId)
@@ -93,7 +93,7 @@ export function VisitScreen() {
       </div>
       <div className="grid content-start gap-4">
         {canWrite && <Today ref={today} r={r} patientId={patientId} departmentId={dept.id} can={can} />}
-        <RecordViews r={r} patientId={patientId} departmentId={dept.id} view={dept.record_view ?? 'visits'} />
+        <RecordViews r={r} patientId={patientId} departmentId={dept.id} view={org?.organization.record_view ?? 'visits'} />
       </div>
     </div>
   </div>

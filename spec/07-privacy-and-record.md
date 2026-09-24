@@ -47,8 +47,9 @@ visit menu offers the opposite once, and *Return to waiting*.
 
 ## The record views (05)
 
-One record, no filters, no view switch. Each department's rule decides how its staff see it: **by visit** (the default) or **all
-entries**; *Results over time* is one button away. (Amended 2026-09-24 by the owner: filters and the switch removed.)
+One record, no filters, no view switch. One organization setting (Settings → Organization) decides how everyone sees it: **by visit**
+(the default) or **all entries**; *Results over time* is one button away. (Amended 2026-09-24 by the owner: filters and the switch
+removed; the choice is the organization's, not each department's.)
 
 - **Always on top:** open requests, and results waiting for review.
 - **By visit:** one card per visit — date, department (or Private visit), clinician, status, counts, and when it last changed. Cards come
