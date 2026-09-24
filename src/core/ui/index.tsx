@@ -50,3 +50,12 @@ export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButt
   return <button className={cn('inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-800 focus-visible:outline-2 focus-visible:outline-teal-700', className)} {...rest} />
 }
 export const errorText = (e: unknown) => e instanceof Error ? e.message : String(e)
+
+// times are stored in UTC; people read them in the clinic's local time — never cut an ISO string
+const pad = (n: number) => String(n).padStart(2, '0')
+/** 14:05 */
+export const hm = (iso: string) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
+/** 2026-09-24 (local): for grouping by day and for dates */
+export const ymd = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+/** 2026-09-24 14:05 */
+export const dateTime = (iso: string) => `${ymd(iso)} ${hm(iso)}`

@@ -47,15 +47,17 @@ visit menu offers the opposite once, and *Return to waiting*.
 
 ## The record views (05)
 
-One record, three views, one switch: **By visit** (default) · **Results over time** · **All entries**. No tabs inside tabs.
+One record, no filters, no view switch. Each department's rule decides how its staff see it: **by visit** (the default) or **all
+entries**; *Results over time* is one button away. (Amended 2026-09-24 by the owner: filters and the switch removed.)
 
 - **Always on top:** open requests, and results waiting for review.
-- **By visit:** one card per visit — date, department (or Private visit), clinician, status, counts. Today's visit and this department's
+- **By visit:** one card per visit — date, department (or Private visit), clinician, status, counts, and when it last changed. Cards come
+  newest activity first: when two visits run the same day, the one written in last is on top, live. Today's visit and this department's
   last visit start open; the others are one line and load their entries when opened. Entries without a visit sit under *Between visits*.
-- **Results over time:** tests as rows, dates as columns, abnormal in colour, corrections marked; a row opens its graph.
 - **All entries:** newest first, 100 at a time, *Earlier* for more.
-- **Filters:** My department · Notes · Results · Prescriptions · Requests.
+- **Results over time:** tests as rows, dates as columns, abnormal in colour, corrections marked; a row opens its graph.
 - **Opening an entry:** click or Enter opens it in full beside the record: text, values, replies, steps, earlier versions.
+- Times show in the clinic's local time.
 - The left column (problems, medications, allergies) stays in view while the record scrolls, and folds away with one key.
 
 ## Decisions (2026-09-24)

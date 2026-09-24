@@ -4,7 +4,7 @@ import { useDepartment } from '../hooks/organization'
 import { useEntry, useRequestQueue } from '../hooks/reads'
 import { useRequestActions } from '../hooks/writes'
 import type { Entry, ServiceField, Value } from '../db/types'
-import { Button, Centered, Input, Spinner, Select, flagClass } from '../ui'
+import { Button, Centered, Input, Spinner, Select, flagClass, dateTime } from '../ui'
 import { FallbackFull } from '../renderers'
 
 /** The request surface (spec 05): one request, its value grid from the service's fields, a report, not-done, steps; release → next. */
@@ -46,12 +46,12 @@ function RequestBody({ requestId }: { requestId?: string }) {
       <button onClick={() => navigate('/')} className="text-xs text-neutral-500 hover:text-neutral-800">← queue</button>
       <span className="font-medium">{patient?.given_name} {patient?.family_name}</span>
       <span className="text-sm">{e.data.display_line}</span>
-      <span className="text-xs text-neutral-500">from {e.data.department_name} · {e.data.author_name} · {e.data.occurred_at.slice(0, 16).replace('T', ' ')}</span>
+      <span className="text-xs text-neutral-500">from {e.data.department_name} · {e.data.author_name} · {dateTime(e.data.occurred_at)}</span>
       {req && <span className={`ml-auto text-xs ${open ? 'text-amber-700' : 'text-neutral-500'}`}>{req.step}{req.priority !== 'routine' && <b className="ml-1.5 text-red-700">{req.priority.toUpperCase()}</b>}</span>}
     </div>
     {typeof d.question_text === 'string' && d.question_text && <p className="rounded-md bg-neutral-100 px-3 py-2 text-sm">“{d.question_text}”</p>}
     {Array.isArray(d.problems) && (d.problems as { name: string }[]).length > 0 && <p className="text-xs text-neutral-500">for: {(d.problems as { name: string }[]).map((p) => p.name).join(', ')}</p>}
-    {replies.length > 0 && <section className="grid gap-2">{replies.map((r) => <div key={r.id} className="rounded-lg border border-neutral-200 bg-white p-3"><p className="mb-1 text-xs text-neutral-500">{r.author_name} · {r.occurred_at.slice(0, 16).replace('T', ' ')} {!r.is_final && <b className="text-amber-700">preliminary</b>} <span className={flagClass(r.flag)}>{r.flag !== 'normal' && r.flag}</span></p><FallbackFull card={r} data={r.data} /></div>)}</section>}
+    {replies.length > 0 && <section className="grid gap-2">{replies.map((r) => <div key={r.id} className="rounded-lg border border-neutral-200 bg-white p-3"><p className="mb-1 text-xs text-neutral-500">{r.author_name} · {dateTime(r.occurred_at)} {!r.is_final && <b className="text-amber-700">preliminary</b>} <span className={flagClass(r.flag)}>{r.flag !== 'normal' && r.flag}</span></p><FallbackFull card={r} data={r.data} /></div>)}</section>}
     {canReply && <section className="grid gap-3 rounded-lg border border-teal-200 bg-white p-4">
       {fields.length > 0 && <ValueGrid fields={fields} vals={vals} setVals={setVals} />}
       <textarea value={text} onChange={(ev) => setText(ev.target.value)} rows={fields.length ? 2 : 6} placeholder={service?.reply_type === 'note' || fields.length === 0 ? 'Report / answer…' : 'Comment (optional)'} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-teal-700 focus:outline-none" />
@@ -73,7 +73,7 @@ function RequestBody({ requestId }: { requestId?: string }) {
       {acts.step.error && <span className="text-red-700">{acts.step.error.message}</span>}
     </div>}
     {req?.review_needed_at && can('mark:reviewed') && <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm"><span className="flex-1">Needs your review{req.reply_flag && req.reply_flag !== 'normal' && <b className={`ml-2 ${flagClass(req.reply_flag)}`}>{req.reply_flag}</b>}</span><Button onClick={() => acts.reviewed.mutate([e.data!.id], { onSuccess: () => navigate('/') })} disabled={acts.reviewed.isPending}>Mark reviewed</Button></div>}
-    {e.data.steps.length > 0 && <ol className="text-[11px] text-neutral-400">{e.data.steps.map((s, i) => <li key={i}>{s.recorded_at.slice(0, 16).replace('T', ' ')} · {s.step}{s.reason ? ` · ${s.reason}` : ''}</li>)}</ol>}
+    {e.data.steps.length > 0 && <ol className="text-[11px] text-neutral-400">{e.data.steps.map((s, i) => <li key={i}>{dateTime(s.recorded_at)} · {s.step}{s.reason ? ` · ${s.reason}` : ''}</li>)}</ol>}
     {!mine && <p className="text-xs text-neutral-400">Addressed to {req?.to_department_name}. You are viewing only.</p>}
   </div>
 }

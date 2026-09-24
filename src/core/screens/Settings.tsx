@@ -7,7 +7,7 @@ import { usePatientSearch } from '../hooks/reads'
 import { useDepartment, useChoice } from '../hooks/organization'
 import { newId } from '../hooks/writes'
 import type { OpenedAnyway, Organization, RecordRead } from '../db/types'
-import { Badge, Button, Card, Centered, Input, Select, Spinner, Field, cn } from '../ui'
+import { Badge, Button, Card, Centered, Input, Select, Spinner, Field, cn, ymd, dateTime } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
 const PAGES = [['organization', 'Organization'], ['departments', 'Departments'], ['services', 'Services'], ['users', 'Users'], ['templates', 'Presets'], ['packs', 'Packs'], ['reads', 'Record reads']]
@@ -48,29 +48,31 @@ function OrganizationPage({ org }: { org: Organization }) {
   return <div><H>{org.organization.name}</H>
     <p className="mb-4 text-sm text-neutral-600">{org.departments.length} departments · {org.services.length} services · {org.users.filter((u) => !u.retired_at).length} users · {org.packs.filter((p) => p.enabled).length} packs enabled{org.parked_pack_calls > 0 && <span className="ml-2 text-red-700">· {org.parked_pack_calls} parked pack calls</span>}</p>
     <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Recent changes</h3>
-    {ch.isLoading ? <Spinner /> : <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white text-xs">{(ch.data ?? []).map((c) => <li key={c.id} className="flex gap-3 px-3 py-1.5"><span className="w-28 font-mono text-neutral-400">{c.recorded_at.slice(0, 16).replace('T', ' ')}</span><span className="w-24 text-neutral-500">{c.table_name}</span><span className="flex-1 truncate">{JSON.stringify(c.changes)}</span></li>)}{(ch.data ?? []).length === 0 && <li className="px-3 py-2 text-neutral-400">nothing yet</li>}</ul>}
+    {ch.isLoading ? <Spinner /> : <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white text-xs">{(ch.data ?? []).map((c) => <li key={c.id} className="flex gap-3 px-3 py-1.5"><span className="w-28 font-mono text-neutral-400">{dateTime(c.recorded_at)}</span><span className="w-24 text-neutral-500">{c.table_name}</span><span className="flex-1 truncate">{JSON.stringify(c.changes)}</span></li>)}{(ch.data ?? []).length === 0 && <li className="px-3 py-2 text-neutral-400">nothing yet</li>}</ul>}
   </div>
 }
 
 function DepartmentsPage({ org }: { org: Organization }) {
   const save = useSave('save_department'); const retire = useSave('retire_department')
-  type Rules = { patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; private_visits: boolean }
+  type Rules = { patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; private_visits: boolean; record_view: 'visits' | 'entries' }
   const [edit, setEdit] = useState<({ id: string; name: string; type: string; site_name: string; serves: string[] } & Rules) | null>(null)
   const visited = org.departments.filter((d) => d.is_visited)
-  return <div><div className="mb-3 flex items-center justify-between"><H>Departments</H><Button size="sm" onClick={() => setEdit({ id: newId(), name: '', type: 'clinic', site_name: '', serves: [], patients_wait: true, review_results: 'critical', private_visits: false })}>+ Department</Button></div>
-    <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">{org.departments.map((d) => <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm"><span className="w-48 font-medium">{d.name}</span><span className="w-24 text-xs text-neutral-500">{d.type}</span><span className="w-32 text-xs text-neutral-400">{d.site_name}</span><span className="w-44 text-[11px] text-neutral-500">{d.is_visited ? `${d.patients_wait ? 'waits' : 'goes home'} · review ${d.review_results}${d.private_visits ? ' · private' : ''}` : ''}</span><span className="flex-1 text-xs text-neutral-400">{(d.serves ?? []).length ? `serves ${(d.serves ?? []).map((s) => s === null ? 'all' : org.departments.find((x) => x.id === s)?.name).join(', ')}` : ''}</span>
-      <Button size="sm" variant="ghost" onClick={() => setEdit({ id: d.id, name: d.name, type: d.type, site_name: d.site_name ?? '', serves: (d.serves ?? []).filter((s): s is string => !!s), patients_wait: d.patients_wait, review_results: d.review_results, private_visits: d.private_visits })}>Edit</Button><Button size="sm" variant="ghost" className="text-red-700" onClick={() => confirm(`Retire ${d.name}?`) && retire.mutate({ id: d.id })}>Retire</Button></li>)}</ul>
+  return <div><div className="mb-3 flex items-center justify-between"><H>Departments</H><Button size="sm" onClick={() => setEdit({ id: newId(), name: '', type: 'clinic', site_name: '', serves: [], patients_wait: true, review_results: 'critical', private_visits: false, record_view: 'visits' })}>+ Department</Button></div>
+    <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">{org.departments.map((d) => <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm"><span className="w-48 font-medium">{d.name}</span><span className="w-24 text-xs text-neutral-500">{d.type}</span><span className="w-32 text-xs text-neutral-400">{d.site_name}</span><span className="w-44 text-[11px] text-neutral-500">{d.is_visited ? `${d.patients_wait ? 'waits' : 'goes home'} · review ${d.review_results}${d.private_visits ? ' · private' : ''} · ${d.record_view === 'entries' ? 'all entries' : 'by visit'}` : ''}</span><span className="flex-1 text-xs text-neutral-400">{(d.serves ?? []).length ? `serves ${(d.serves ?? []).map((s) => s === null ? 'all' : org.departments.find((x) => x.id === s)?.name).join(', ')}` : ''}</span>
+      <Button size="sm" variant="ghost" onClick={() => setEdit({ id: d.id, name: d.name, type: d.type, site_name: d.site_name ?? '', serves: (d.serves ?? []).filter((s): s is string => !!s), patients_wait: d.patients_wait, review_results: d.review_results, private_visits: d.private_visits, record_view: d.record_view ?? 'visits' })}>Edit</Button><Button size="sm" variant="ghost" className="text-red-700" onClick={() => confirm(`Retire ${d.name}?`) && retire.mutate({ id: d.id })}>Retire</Button></li>)}</ul>
     <Err e={retire.error} />
-    {edit && <form onSubmit={(e) => { e.preventDefault(); save.mutate({ id: edit.id, name: edit.name, type: edit.type, site_name: edit.site_name || null, serves: edit.type === 'reception' ? edit.serves : null, patients_wait: edit.patients_wait, review_results: edit.review_results, private_visits: edit.private_visits }, { onSuccess: () => setEdit(null) }) }} className="mt-4 grid max-w-lg gap-3 rounded-lg border border-neutral-200 bg-white p-4">
+    {edit && <form onSubmit={(e) => { e.preventDefault(); save.mutate({ id: edit.id, name: edit.name, type: edit.type, site_name: edit.site_name || null, serves: edit.type === 'reception' ? edit.serves : null, patients_wait: edit.patients_wait, review_results: edit.review_results, private_visits: edit.private_visits, record_view: edit.record_view }, { onSuccess: () => setEdit(null) }) }} className="mt-4 grid max-w-lg gap-3 rounded-lg border border-neutral-200 bg-white p-4">
       <Field label="Name"><Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required autoFocus /></Field>
       <Field label="Type"><Select value={edit.type} onChange={(e) => setEdit({ ...edit, type: e.target.value })}>{['clinic', 'reception', 'ward', 'ancillary', 'outside'].map((t) => <option key={t}>{t}</option>)}</Select></Field>
       <Field label="Site (label)"><Input value={edit.site_name} onChange={(e) => setEdit({ ...edit, site_name: e.target.value })} placeholder="Main building" /></Field>
       {edit.type === 'reception' && <Field label="Serves (empty = every clinic)"><div className="flex flex-wrap gap-2 text-sm">{visited.map((v) => <label key={v.id} className="flex items-center gap-1"><input type="checkbox" checked={edit.serves.includes(v.id)} onChange={(e) => setEdit({ ...edit, serves: e.target.checked ? [...edit.serves, v.id] : edit.serves.filter((x) => x !== v.id) })} />{v.name}</label>)}</div></Field>}
-      {['clinic', 'ward'].includes(edit.type) && <div className="grid gap-2 rounded-lg bg-neutral-50 p-3 ring-1 ring-neutral-200">
+      {!['outside', 'reception'].includes(edit.type) && <div className="grid gap-2 rounded-lg bg-neutral-50 p-3 ring-1 ring-neutral-200">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Rules</p>
+        <Rule label="The record shows" value={edit.record_view} onChange={(v) => setEdit({ ...edit, record_view: v as Rules['record_view'] })} options={[['visits', 'By visit'], ['entries', 'All entries']]} />
+        {['clinic', 'ward'].includes(edit.type) && <>
         <Rule label="When results are still out at Done" value={edit.patients_wait ? 'wait' : 'home'} onChange={(v) => setEdit({ ...edit, patients_wait: v === 'wait' })} options={[['wait', 'Patient waits'], ['home', 'Patient goes home']]} />
         <Rule label="Results to review" value={edit.review_results} onChange={(v) => setEdit({ ...edit, review_results: v as Rules['review_results'] })} options={[['critical', 'Critical only'], ['abnormal', 'Critical and abnormal'], ['all', 'Every result']]} />
-        <Rule label="Visits" value={edit.private_visits ? 'private' : 'shared'} onChange={(v) => setEdit({ ...edit, private_visits: v === 'private' })} options={[['shared', 'Shared'], ['private', 'Private from the start']]} />
+        <Rule label="Visits" value={edit.private_visits ? 'private' : 'shared'} onChange={(v) => setEdit({ ...edit, private_visits: v === 'private' })} options={[['shared', 'Shared'], ['private', 'Private from the start']]} /></>}
         <p className="text-[11px] text-neutral-500">Results for a patient who left before being seen again, and corrected results, always go to review. A private visit's notes show as "Private note" outside this department; its prescriptions, results and requests stay visible to everyone.</p>
       </div>}
       <Err e={save.error} /><div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEdit(null)}>Cancel</Button><Button type="submit" disabled={save.isPending}>Save</Button></div>
@@ -139,9 +141,9 @@ function ReadsPage({ orgId }: { orgId: string }) {
     <div><H>Opened anyway · last 7 days</H>
       {anyway.isLoading ? <Spinner /> : (anyway.data ?? []).length === 0 ? <p className="text-sm text-neutral-400">No private visit was opened anyway.</p>
       : <Card><ul className="divide-y divide-neutral-100 text-sm">{anyway.data!.map((r, i) => <li key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3.5 py-2">
-          <span className="w-32 text-xs text-neutral-500 tnum">{r.read_at.slice(0, 16).replace('T', ' ')}</span><span className="w-36 font-medium">{r.user_name}</span>
+          <span className="w-32 text-xs text-neutral-500 tnum">{dateTime(r.read_at)}</span><span className="w-36 font-medium">{r.user_name}</span>
           <span className="w-44">#{r.patient.record_number} {r.patient.given_name} {r.patient.family_name}</span>
-          <span className="text-xs text-neutral-500">{r.visit_department} visit of {r.visit_at?.slice(0, 10)}</span><Badge tone={r.reason_text === 'Emergency' ? 'red' : 'neutral'} className="ml-auto">{r.reason_text}</Badge></li>)}</ul></Card>}
+          <span className="text-xs text-neutral-500">{r.visit_department} visit of {(r.visit_at ? ymd(r.visit_at) : '')}</span><Badge tone={r.reason_text === 'Emergency' ? 'red' : 'neutral'} className="ml-auto">{r.reason_text}</Badge></li>)}</ul></Card>}
     </div>
     <div><H>Who opened this record</H>
       <div className="flex gap-2 print:hidden"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Patient name, phone or record number" className="max-w-sm" /></div>
@@ -149,7 +151,7 @@ function ReadsPage({ orgId }: { orgId: string }) {
       {pid && <div className="mt-3"><div className="mb-2 flex items-center gap-2"><span className="text-sm font-medium">{who ? `#${who.record_number} ${who.given_name} ${who.family_name}` : ''}</span>
           <Button size="sm" variant="outline" className="ml-auto print:hidden" onClick={() => window.print()}>Print</Button><Button size="sm" variant="ghost" className="print:hidden" onClick={() => { setPid(null); setQ('') }}>Clear</Button></div>
         {reads.isLoading ? <Spinner /> : <Card><table className="w-full text-sm"><thead><tr className="border-b border-neutral-100 text-left text-[11px] text-neutral-500"><th className="px-3 py-1.5 font-medium">When</th><th className="font-medium">Who</th><th className="font-medium">From</th><th className="font-medium">Why</th></tr></thead>
-          <tbody>{(reads.data ?? []).map((r, i) => <tr key={i} className="border-b border-neutral-100 last:border-0"><td className="px-3 py-1.5 text-xs tnum">{r.read_at.slice(0, 16).replace('T', ' ')}</td><td>{r.user_name}</td><td className="text-xs text-neutral-500">{r.department_name}</td>
+          <tbody>{(reads.data ?? []).map((r, i) => <tr key={i} className="border-b border-neutral-100 last:border-0"><td className="px-3 py-1.5 text-xs tnum">{dateTime(r.read_at)}</td><td>{r.user_name}</td><td className="text-xs text-neutral-500">{r.department_name}</td>
             <td className="text-xs">{BASIS[r.basis ?? ''] ?? '—'}{r.reason_text ? ` · ${r.reason_text}` : ''}{r.opened_visit_department ? ` · ${r.opened_visit_department} visit` : ''}</td></tr>)}</tbody></table></Card>}
       </div>}
     </div>

@@ -9,7 +9,7 @@ import { newId, useRequestActions } from '../../hooks/writes'
 import { fitField, useRanges } from '../../hooks/ranges'
 import { benchStepsFor, replyFormFor } from '../../renderers'
 import type { RequestQueueRow, ServiceField, Value } from '../../db/types'
-import { Badge, Button, Card, Centered, Heading, Input, Kbd, Select, Spinner, cn, errorText, flagClass } from '../../ui'
+import { Badge, Button, Card, Centered, Heading, Input, Kbd, Select, Spinner, cn, errorText, flagClass, hm } from '../../ui'
 import { ageOf, groupByPatient, STEP_LABEL, STEP_TONE } from './shared'
 
 interface Entry { vals: Record<string, string>; text: string; notDone: boolean; reason: string }
@@ -95,7 +95,7 @@ export function BenchPatient() {
             <span className="text-[15px] font-semibold">{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}</span>
             <Badge tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'}>{STEP_LABEL[r.request?.step ?? 'sent'] ?? r.request?.step}</Badge>
             {r.request?.priority !== 'routine' && <Badge tone="red">{r.request?.priority}</Badge>}
-            <span className="text-xs text-neutral-500">{r.requester_name} · {r.from_department_name} · {r.occurred_at.slice(11, 16)}</span>
+            <span className="text-xs text-neutral-500">{r.requester_name} · {r.from_department_name} · {hm(r.occurred_at)}</span>
             {!formOf(r) && <label className="ml-auto flex items-center gap-1.5 text-xs text-neutral-600"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>}
           </div>
           {r.question_text && <p className="mb-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">“{r.question_text}”</p>}
@@ -153,7 +153,7 @@ export function BenchCorrect() {
   if (!row) return <Centered><div className="text-center text-sm text-neutral-500"><p>This result is no longer in the last day’s list.</p><Button className="mt-3" variant="outline" onClick={() => navigate('/')}>Back to the bench</Button></div></Centered>
   return <div className="mx-auto grid max-w-3xl gap-4 p-4" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void save() } }}>
     <div className="flex items-center gap-3"><button onClick={() => navigate('/')} className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800"><ArrowLeft className="h-4 w-4" /></button>
-      <div><p className="text-lg font-semibold tracking-tight">Correct: {row.service_name}</p><p className="text-xs text-neutral-500 tnum">#{row.patient.record_number} · {row.patient.given_name} {row.patient.family_name} · released {row.reply?.recorded_at.slice(11, 16)} by {row.reply?.author_name}</p></div></div>
+      <div><p className="text-lg font-semibold tracking-tight">Correct: {row.service_name}</p><p className="text-xs text-neutral-500 tnum">#{row.patient.record_number} · {row.patient.given_name} {row.patient.family_name} · released {(row.reply ? hm(row.reply.recorded_at) : '')} by {row.reply?.author_name}</p></div></div>
     <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">The corrected result replaces the released one. The record keeps both, and the requesting doctor gets it on their review list.</p>
     <Card className="p-4">
       {fields.length > 0 && <table className="w-full text-sm"><thead><tr className="text-left text-[10.5px] uppercase tracking-wider text-neutral-400"><th className="font-medium">Field</th><th className="font-medium">Released</th><th className="font-medium">Corrected</th><th /><th /></tr></thead><tbody>{fields.map((f) => { const raw = v[f.code] ?? ''; const fl = flagOf(f, raw); const was = old.find((x) => x.code === f.code); return <tr key={f.code} className="border-b border-neutral-100 last:border-0">

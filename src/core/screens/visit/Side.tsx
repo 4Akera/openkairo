@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Plus, Check, X, RotateCw } from 'lucide-react'
 import { useDrafts, useDraftsFor, type NewDraft } from '../../hooks/drafts'
 import type { RecordView, ListReview } from '../../db/types'
-import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Select, cn } from '../../ui'
+import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Select, cn, ymd } from '../../ui'
 import { partialDate } from './parse'
 
 export type SideForm = 'problem' | 'medication' | 'allergy' | null
@@ -32,7 +32,7 @@ export function Side({ r, patientId, can, form, setForm }: { r: RecordView; pati
     const d = drafts.find((x) => x.function === 'write_list_review' && x.params.list === list)
     return <button title="Mark this list reviewed today" onClick={() => d ? remove(d.id) : add({ function: 'write_list_review', params: { list, outcome: 'reviewed' }, line: `${list} reviewed`, kind: 'review' })}
       className={cn('text-[10.5px]', d ? 'font-medium text-teal-700' : at ? 'text-neutral-400 hover:text-neutral-700' : 'text-amber-700 hover:text-amber-900')}>
-      {d ? '✓ reviewed now' : at ? `✓ ${at.reviewed_at.slice(0, 10)}` : 'not reviewed'}</button>
+      {d ? '✓ reviewed now' : at ? `✓ ${ymd(at.reviewed_at)}` : 'not reviewed'}</button>
   }
   const plus = (f: SideForm, key: string, action: string) => can(action) && <IconButton title={`Add (Alt+${key})`} onClick={() => setForm(form === f ? null : f)} className={form === f ? 'bg-teal-50 text-teal-800' : ''}><Plus className="h-3.5 w-3.5" /></IconButton>
 

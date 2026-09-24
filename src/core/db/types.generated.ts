@@ -102,6 +102,7 @@ export type Database = {
           organization_id: string
           patients_wait: boolean
           private_visits: boolean
+          record_view: string
           retired_at: string | null
           review_results: string
           site_name: string | null
@@ -115,6 +116,7 @@ export type Database = {
           organization_id: string
           patients_wait?: boolean
           private_visits?: boolean
+          record_view?: string
           retired_at?: string | null
           review_results?: string
           site_name?: string | null
@@ -128,6 +130,7 @@ export type Database = {
           organization_id?: string
           patients_wait?: boolean
           private_visits?: boolean
+          record_view?: string
           retired_at?: string | null
           review_results?: string
           site_name?: string | null
@@ -1869,11 +1872,16 @@ export type Database = {
       }
       flag_unseen: { Args: { p_visit_id: string }; Returns: number }
       fold: { Args: { t: string }; Returns: string }
+      hidden_for: {
+        Args: { p_patient: string; p_user: string }
+        Returns: string[]
+      }
       hidden_visits: {
         Args: { p_patient_ids: string[]; p_user: string }
         Returns: string[]
       }
       holds: { Args: { p_visit_id: string }; Returns: number }
+      is_note: { Args: { p_type: string }; Returns: boolean }
       local_code: {
         Args: {
           p_code: string
@@ -1895,6 +1903,13 @@ export type Database = {
         }[]
       }
       next_step_position: { Args: { p_request_id: string }; Returns: number }
+      note_hidden: {
+        Args: {
+          e: Database["core"]["Tables"]["entries"]["Row"]
+          p_hidden: string[]
+        }
+        Returns: boolean
+      }
       open_record: {
         Args: {
           p_department: string
@@ -1937,6 +1952,10 @@ export type Database = {
           p_patient_id: string
         }
         Returns: number
+      }
+      reply_for_me: {
+        Args: { e: Database["core"]["Tables"]["entries"]["Row"] }
+        Returns: boolean
       }
       require_access: {
         Args: {
@@ -2015,6 +2034,10 @@ export type Database = {
           p_pack: string
         }
         Returns: string
+      }
+      sees_department: {
+        Args: { p_department: string; p_org: string; p_user: string }
+        Returns: boolean
       }
       short: { Args: { n?: number; t: string }; Returns: string }
       signal: { Args: { p_payload: Json; p_topic: string }; Returns: undefined }
@@ -2116,6 +2139,7 @@ export type Database = {
         | "done"
         | "cancelled"
         | "reopened"
+        | "prepared"
       sex: "female" | "male" | "other"
       user_kind: "staff" | "machine" | "pack" | "patient" | "proxy" | "importer"
       value_flag: "normal" | "low" | "high" | "abnormal" | "critical"
@@ -2267,6 +2291,34 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      pharmacy_write_dispense: {
+        Args: {
+          department_id?: string
+          id: string
+          items?: Json
+          not_done?: boolean
+          not_done_reason_text?: string
+          occurred_at?: string
+          patient_id: string
+          replaces_id?: string
+          request_id?: string
+          responsible_id?: string
+          source?: Database["core"]["Enums"]["entry_source"]
+          source_key?: string
+          stated_author_name?: string
+          stated_recorded_at?: string
+          text?: string
+          visit_id?: string
+          written_with_id?: string
+        }
+        Returns: Database["core"]["Tables"]["entries"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       read_codes: {
         Args: { limit?: number; organization_id: string; query?: string }
         Returns: Json
@@ -2388,6 +2440,7 @@ export type Database = {
           organization_id: string
           patients_wait?: boolean
           private_visits?: boolean
+          record_view?: string
           review_results?: string
           seen_change_id?: string
           serves?: string[]
@@ -2873,6 +2926,7 @@ export const Constants = {
         "done",
         "cancelled",
         "reopened",
+        "prepared",
       ],
       sex: ["female", "male", "other"],
       user_kind: ["staff", "machine", "pack", "patient", "proxy", "importer"],

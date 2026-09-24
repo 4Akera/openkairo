@@ -98,7 +98,7 @@ export function VisitScreen() {
       </div>
       <div className="grid content-start gap-4">
         {canWrite && <Today ref={today} r={r} patientId={patientId} departmentId={dept.id} can={can} />}
-        <RecordViews r={r} patientId={patientId} departmentId={dept.id} />
+        <RecordViews r={r} patientId={patientId} departmentId={dept.id} view={dept.record_view ?? 'visits'} />
       </div>
     </div>
   </div>

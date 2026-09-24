@@ -1,7 +1,7 @@
 // Every screen renders every type (spec 05): a card per entry from display_line, values and text; packs may register richer ones.
 import { Fragment, type ComponentType } from 'react'
 import type { Card, RequestQueueRow, Value } from '../db/types'
-import { flagClass } from '../ui'
+import { flagClass, hm } from '../ui'
 export interface Renderer { Card?: ComponentType<{ card: Card }>; Full?: ComponentType<{ card: Card; data: Record<string, unknown> }> }
 const registry = new Map<string, Renderer>()
 export const registerRenderer = (type: string, r: Renderer) => registry.set(type, r)
@@ -57,7 +57,7 @@ export function CardLine({ card }: { card: Card }) {
   if (R) return <R card={card} />
   const r = card.request
   return <div className="flex items-start gap-3 text-[13.5px]">
-    <span className="w-10 shrink-0 pt-px text-xs text-neutral-400 tnum">{card.occurred_at.slice(11, 16)}</span>
+    <span className="w-10 shrink-0 pt-px text-xs text-neutral-400 tnum">{hm(card.occurred_at)}</span>
     <span className={`w-[5.5rem] shrink-0 rounded-md px-1.5 py-px text-center text-[10.5px] font-medium ${TYPE_TONE[card.type] ?? 'bg-neutral-100 text-neutral-700'}`}>{card.type.replace(/_/g, ' ')}</span>
     <span className="min-w-0 flex-1">
       <span className={card.replaced_by_id ? 'text-neutral-400 line-through' : 'text-neutral-900'}>{card.display_line}</span>

@@ -5,7 +5,7 @@ import { ClipboardList, ScanLine } from 'lucide-react'
 import { useRequestQueue } from '../../hooks/reads'
 import { useRequestActions } from '../../hooks/writes'
 import { benchStepsFor } from '../../renderers'
-import { Badge, Button, Card, Heading, Input, Kbd, Spinner, cn, minutesSince } from '../../ui'
+import { Badge, Button, Card, Heading, Input, Kbd, Spinner, cn, minutesSince, hm } from '../../ui'
 import { ageOf, groupByPatient, STEP_LABEL, STEP_TONE } from './shared'
 
 /** The bench: a department's open requests, one row per patient; scan, filter, collect, enter. */
@@ -76,7 +76,7 @@ function Released({ rows, onCorrect }: { rows: RecentRow[]; onCorrect: (requestI
     <span className="w-40 shrink-0 truncate text-[14px] font-medium sm:w-48">{r.patient.given_name} {r.patient.family_name}</span>
     <span className="min-w-0 flex-1 basis-48 truncate text-[13px]"><span className={r.request?.reply_flag && r.request.reply_flag !== 'normal' ? 'text-amber-800' : 'text-neutral-700'}>{r.request?.reply_line ?? r.service_name}</span></span>
     {r.request?.status === 'cancelled' && <Badge>not done</Badge>}
-    <span className="text-right text-xs text-neutral-500 tnum">{r.reply?.author_name} · {r.reply?.recorded_at.slice(11, 16)}</span>
+    <span className="text-right text-xs text-neutral-500 tnum">{r.reply?.author_name} · {(r.reply ? hm(r.reply.recorded_at) : '')}</span>
     <Button size="sm" variant="outline" onClick={() => onCorrect(r.id)} disabled={!r.reply}>Correct</Button>
   </li>)}</ul></Card>
 }
