@@ -95,6 +95,7 @@ export type Database = {
       }
       departments: {
         Row: {
+          after_done: string
           contact_text: string | null
           id: string
           is_outside: boolean
@@ -108,6 +109,7 @@ export type Database = {
           type: string
         }
         Insert: {
+          after_done?: string
           contact_text?: string | null
           id: string
           is_outside?: boolean
@@ -121,6 +123,7 @@ export type Database = {
           type: string
         }
         Update: {
+          after_done?: string
           contact_text?: string | null
           id?: string
           is_outside?: boolean
@@ -2439,6 +2442,7 @@ export type Database = {
       }
       save_department: {
         Args: {
+          after_done?: string
           contact_text?: string
           id: string
           is_outside?: boolean

@@ -60,7 +60,7 @@ export function BenchPatient() {
       await rpc('write_set', { department_id: dept.id, items })
       qc.invalidateQueries({ queryKey: ['request_queue'] })
       setEntries({}); setPackVals({}); setChecked(false)
-      if (ready.length === g.rows.length) navigate(next ? `/bench/${next.patient.id}` : '/', { replace: true })
+      if (ready.length === g.rows.length) navigate(next && dept.after_done !== 'queue' ? `/bench/${next.patient.id}` : '/', { replace: true })
     } catch (x) { setErr(errorText(x)) } finally { setBusy(false) }
   }
   // Enter in a field moves to the next field of the whole screen; ⌘↵ releases
@@ -121,7 +121,7 @@ export function BenchPatient() {
       {g.rows.some((r) => !formOf(r)) && <label className="flex items-center gap-1.5 text-xs text-neutral-600"><input type="checkbox" checked={prelim} onChange={(ev) => setPrelim(ev.target.checked)} />preliminary</label>}
       {err && <span className="text-sm text-red-700">{err}</span>}
       <span className="ml-auto text-[11px] text-neutral-400"><Kbd>↵</Kbd> next field</span>
-      <Button onClick={release} disabled={busy || !ready.length || invalid || !ready.every((r) => can(formOf(r)?.action ?? 'write:result'))}>Release {ready.length || ''}{ready.length === g.rows.length && next ? ' → next patient' : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
+      <Button onClick={release} disabled={busy || !ready.length || invalid || !ready.every((r) => can(formOf(r)?.action ?? 'write:result'))}>Release {ready.length || ''}{ready.length === g.rows.length && next && dept.after_done !== 'queue' ? ' → next patient' : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
     </div></div>
   </div>
 }

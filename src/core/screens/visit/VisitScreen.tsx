@@ -53,7 +53,7 @@ export function VisitScreen() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const typing = /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && visit?.status === 'in_consult' && mine) { e.preventDefault(); void done(true) }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && visit?.status === 'in_consult' && mine) { e.preventDefault(); void done(dept?.after_done !== 'queue') }
       else if (e.key === '/' && !typing) { e.preventDefault(); today.current?.focus() }
       else if (e.altKey && !e.metaKey && !e.ctrlKey) {
         const f = ({ KeyP: 'problem', KeyM: 'medication', KeyA: 'allergy', p: 'problem', m: 'medication', a: 'allergy' } as Record<string, SideForm>)[e.code || e.key.toLowerCase()] ?? null
@@ -73,12 +73,13 @@ export function VisitScreen() {
   return <div className="pb-10">
     <Banner r={r} visit={visit} mine={mine} onBack={() => navigate('/')}
       actions={mine && visit?.status === 'in_consult' ? <>
-        <Button onClick={() => done(true)} disabled={busy}>{drafts.length ? `Sign ${drafts.length} · ` : ''}Done{next ? ` → ${next.patient.given_name}` : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
+        <Button onClick={() => done(dept.after_done !== 'queue')} disabled={busy}>{drafts.length ? `Sign ${drafts.length} · ` : ''}Done{dept.after_done !== 'queue' && next ? ` → ${next.patient.given_name}` : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
         <Menu.Root><Menu.Trigger asChild><Button variant="outline" size="md" aria-label="More"><ChevronDown className="h-4 w-4" /></Button></Menu.Trigger>
           <Menu.Portal><Menu.Content align="end" sideOffset={6} className="z-50 min-w-60 rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg">
             {dept.patients_wait
-              ? <MenuItem onSelect={() => done(true, false)} hint="The visit closes now; results go to your review list">Done — patient goes home</MenuItem>
-              : <MenuItem onSelect={() => done(true, true)} hint="The patient comes back when the results are in">Done — patient waits for results</MenuItem>}
+              ? <MenuItem onSelect={() => done(dept.after_done !== 'queue', false)} hint="The visit closes now; results go to your review list">Done — patient goes home</MenuItem>
+              : <MenuItem onSelect={() => done(dept.after_done !== 'queue', true)} hint="The patient comes back when the results are in">Done — patient waits for results</MenuItem>}
+            {dept.after_done === 'queue' ? next && <MenuItem onSelect={() => done(true)}>Done → next patient ({next.patient.given_name})</MenuItem> : <MenuItem onSelect={() => done(false)}>Done, back to the queue</MenuItem>}
             <MenuItem onSelect={() => visits.move.mutate({ visit_id: visit.id, from_status: 'in_consult', status: 'waiting' }, { onSuccess: () => navigate('/') })}>Return to waiting</MenuItem>
             <Menu.Separator className="my-1 h-px bg-neutral-100" />
             <MenuItem onSelect={() => visits.private.mutate({ visit_id: visit.id, is_private: !visit.is_private })} hint={visit.is_private ? 'Its notes become readable to every clinician' : 'Its notes show as "Private note" outside this department'}>{visit.is_private ? 'Make this visit not private' : 'Make this visit private'}</MenuItem>

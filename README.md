@@ -51,6 +51,7 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0020 | problems carry a note and a certainty; `core.local_code` + `read_codes`; `save_service` makes local codes | 02, 04 |
 | 0022 | spec 07: private visits, the one read log, a correction stays put, department rules, reads for the record views | [07](spec/07-privacy-and-record.md) |
 | 0023 | what a pack needs to answer a request: pack writers in Done's write set, one reply-type check in the funnel, prescription requests carry their service and details; enabling a pack fixed | 06 |
+| 0028 | department rule: after Done, the next patient or back to the queue | 07 |
 | 0027 | the record view (by visit · all entries) is the organization's setting, not each department's | [07](spec/07-privacy-and-record.md) |
 | 0026 | the clinic's time zone: "today" (counts, ages, a medication's start) is the clinic's day; `save_organization` | 02 |
 | 0025 | the record's view is a department rule (by visit · all entries); visits come newest activity first | [07](spec/07-privacy-and-record.md) |
