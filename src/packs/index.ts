@@ -1,2 +1,3 @@
-// The one place packs are named (spec 06). Each pack exports { key, departmentScreens, renderers, servicesColumns, presetFragment }.
-export const packs: Record<string, unknown> = {}
+// The one place packs are named (spec 06). Importing a pack registers its bench steps, reply forms and renderers.
+import * as pharmacy from './pharmacy'
+export const packs = { pharmacy }

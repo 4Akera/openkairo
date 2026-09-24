@@ -8,7 +8,8 @@ begin
     ('00000000-0000-0000-0000-000000000104'::uuid, 'nurse@demo.com'),
     ('00000000-0000-0000-0000-000000000105'::uuid, 'lab@demo.com'),
     ('00000000-0000-0000-0000-000000000107'::uuid, 'reception@demo.com'),
-    ('00000000-0000-0000-0000-000000000108'::uuid, 'psych@demo.com')
+    ('00000000-0000-0000-0000-000000000108'::uuid, 'psych@demo.com'),
+    ('00000000-0000-0000-0000-000000000109'::uuid, 'pharm@demo.com')
   ) as t(id, email) loop
     insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
                             confirmation_token, recovery_token, email_change, email_change_token_new)

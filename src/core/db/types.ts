@@ -29,7 +29,7 @@ export interface QueueRow { id: string; patient: { id: string; record_number: nu
   arrived_at: string; present_at: string | null; seen_at: string | null; request_id: string | null; request_open: boolean
   requests: { request_id: string; service_name: string | null; to_department_name: string | null; step: RequestStep; is_holding: boolean }[] }
 export interface VisitQueue { rows: QueueRow[]; done_today: number; away: number }
-export interface RequestQueueRow extends Card { patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; born_on: string }; from_department_name: string | null; requester_name: string | null; question_text: string | null; section_name: string | null; service_name: string | null; reply_type: string | null; assignee_id: string | null }
+export interface RequestQueueRow extends Card { patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; born_on: string }; from_department_name: string | null; requester_name: string | null; question_text: string | null; section_name: string | null; service_name: string | null; reply_type: string | null; assignee_id: string | null; details?: Record<string, unknown> | null }
 export interface RecentRow extends Card { patient: RequestQueueRow['patient']; from_department_name: string | null; requester_name: string | null; section_name: string | null; service_name: string | null
   reply: { id: string; data: Record<string, unknown>; author_name: string | null; recorded_at: string; is_final: boolean } | null }
 export interface RequestQueue { requests: RequestQueueRow[]; recent: RecentRow[]; done_today: number }

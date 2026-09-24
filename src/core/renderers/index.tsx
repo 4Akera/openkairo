@@ -1,6 +1,6 @@
 // Every screen renders every type (spec 05): a card per entry from display_line, values and text; packs may register richer ones.
 import { Fragment, type ComponentType } from 'react'
-import type { Card, Value } from '../db/types'
+import type { Card, RequestQueueRow, Value } from '../db/types'
 import { flagClass } from '../ui'
 export interface Renderer { Card?: ComponentType<{ card: Card }>; Full?: ComponentType<{ card: Card; data: Record<string, unknown> }> }
 const registry = new Map<string, Renderer>()
@@ -13,6 +13,17 @@ export interface BenchStep { step: string; label: string; from: string[] }
 const benchSteps = new Map<string, BenchStep[]>()
 export const registerBenchSteps = (departmentType: string, steps: BenchStep[]) => benchSteps.set(departmentType, steps)
 export const benchStepsFor = (departmentType: string) => benchSteps.get(departmentType) ?? []
+
+/** A pack's reply form for its reply type (spec 06): the bench shows it in place of core's value grid and releases what toWrite returns
+ *  in the same atomic set as every other result. Core fills id, patient_id and department_id. */
+export interface ReplyForm<V = unknown> {
+  action: string                                                       // the action the writer needs, e.g. write:pharmacy_dispense
+  Editor: ComponentType<{ request: RequestQueueRow; value: V | undefined; onChange: (v: V) => void }>
+  toWrite: (request: RequestQueueRow, value: V | undefined) => { function: string; params: Record<string, unknown> } | null
+}
+const replyForms = new Map<string, ReplyForm<never>>()
+export const registerReplyForm = <V,>(replyType: string, form: ReplyForm<V>) => { replyForms.set(replyType, form as unknown as ReplyForm<never>) }
+export const replyFormFor = (replyType: string | null | undefined): ReplyForm<unknown> | undefined => (replyType ? replyForms.get(replyType) as unknown as ReplyForm<unknown> : undefined)
 
 const arrow = (f: string | null | undefined) => f === 'low' ? ' ↓' : f === 'high' ? ' ↑' : f === 'critical' ? ' ‼' : f === 'abnormal' ? ' *' : ''
 export function ValuesTable({ values }: { values: Value[] }) {

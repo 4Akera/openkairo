@@ -7,7 +7,7 @@ import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue } from '../../hooks/reads'
 import { newId, useRequestActions } from '../../hooks/writes'
 import { fitField, useRanges } from '../../hooks/ranges'
-import { benchStepsFor } from '../../renderers'
+import { benchStepsFor, replyFormFor } from '../../renderers'
 import type { RequestQueueRow, ServiceField, Value } from '../../db/types'
 import { Badge, Button, Card, Centered, Heading, Input, Kbd, Select, Spinner, cn, errorText, flagClass } from '../../ui'
 import { ageOf, groupByPatient, STEP_LABEL, STEP_TONE } from './shared'
@@ -39,13 +39,14 @@ export function BenchPatient() {
   const groups = useMemo(() => groupByPatient(q.data?.requests ?? []), [q.data])
   const g = groups.find((x) => x.patient.id === patientId)
   const next = groups.find((x) => x.patient.id !== patientId)
-  const [entries, setEntries] = useState<Record<string, Entry>>({}); const [checked, setChecked] = useState(false); const [prelim, setPrelim] = useState(false); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
+  const [entries, setEntries] = useState<Record<string, Entry>>({}); const [packVals, setPackVals] = useState<Record<string, unknown>>({}); const [checked, setChecked] = useState(false); const [prelim, setPrelim] = useState(false); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const e = (id: string) => entries[id] ?? blank()
   const set = (id: string, patch: Partial<Entry>) => setEntries((s) => ({ ...s, [id]: { ...(s[id] ?? blank()), ...patch } }))
   // each field carries the range that fits this patient, as the server will flag it
   const fieldsOf = (r: RequestQueueRow) => (org?.services.find((s) => s.id === r.service_id)?.fields ?? []).map((f) => fitField(f, r.service_id!, ranges.data ?? [], r.patient.sex, ageOf(r.patient.born_on)))
-  const ready = (g?.rows ?? []).filter((r) => { const x = e(r.id); return x.notDone ? !!x.reason.trim() : Object.values(x.vals).some((v) => v !== '') || !!x.text.trim() })
+  const formOf = (r: RequestQueueRow) => replyFormFor(r.reply_type)
+  const ready = (g?.rows ?? []).filter((r) => { const pf = formOf(r); if (pf) return !!pf.toWrite(r, packVals[r.id]); const x = e(r.id); return x.notDone ? !!x.reason.trim() : Object.values(x.vals).some((v) => v !== '') || !!x.text.trim() })
   const problems = ready.flatMap((r) => fieldsOf(r).map((f) => problemOf(f, e(r.id).vals[f.code] ?? '')).filter(Boolean))
   const invalid = problems.includes('not a number'); const toCheck = problems.filter((p) => p === 'check value').length
   const flagged = ready.flatMap((r) => fieldsOf(r).map((f) => flagOf(f, e(r.id).vals[f.code] ?? ''))).filter((f) => f && f !== 'normal')
@@ -54,11 +55,11 @@ export function BenchPatient() {
     if (toCheck && !checked) { setChecked(true); setErr(`${toCheck} value${toCheck > 1 ? 's look' : ' looks'} implausible — check, then release again`); return }
     setErr(null); setBusy(true)
     try {
-      const items = ready.map((r) => { const x = e(r.id); const values: Value[] = fieldsOf(r).flatMap((f) => { const raw = x.vals[f.code]; if (raw === undefined || raw === '') return []; return [f.kind === 'number' ? { code: f.code, name: f.name, value_number: Number(raw) } : { code: f.code, name: f.name, value_text: raw }] })
+      const items = ready.map((r) => { const pf = formOf(r); if (pf) { const w = pf.toWrite(r, packVals[r.id])!; return { function: w.function, params: { ...w.params, id: newId(), patient_id: g.patient.id, request_id: r.id } } } const x = e(r.id); const values: Value[] = fieldsOf(r).flatMap((f) => { const raw = x.vals[f.code]; if (raw === undefined || raw === '') return []; return [f.kind === 'number' ? { code: f.code, name: f.name, value_number: Number(raw) } : { code: f.code, name: f.name, value_text: raw }] })
         return { function: 'write_result', params: { id: newId(), patient_id: g.patient.id, request_id: r.id, values, text: x.text.trim() || null, is_final: !prelim, not_done: x.notDone, not_done_reason_text: x.notDone ? x.reason.trim() : null } } })
       await rpc('write_set', { department_id: dept.id, items })
       qc.invalidateQueries({ queryKey: ['request_queue'] })
-      setEntries({}); setChecked(false)
+      setEntries({}); setPackVals({}); setChecked(false)
       if (ready.length === g.rows.length) navigate(next ? `/bench/${next.patient.id}` : '/', { replace: true })
     } catch (x) { setErr(errorText(x)) } finally { setBusy(false) }
   }
@@ -79,7 +80,7 @@ export function BenchPatient() {
     <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
       <button onClick={() => navigate('/')} className="-ml-1 rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800" title="Back to the bench"><ArrowLeft className="h-4 w-4" /></button>
       <div><p className="flex items-baseline gap-2"><span className="text-lg font-semibold tracking-tight">{g.patient.given_name} {g.patient.family_name}</span><span className="text-sm text-neutral-600 tnum">{ageOf(g.patient.born_on)} y · {g.patient.sex[0].toUpperCase()}</span></p>
-        <p className="text-xs text-neutral-500 tnum">#{g.patient.record_number} · {g.rows.length} tests · from {g.from.join(', ')}</p></div>
+        <p className="text-xs text-neutral-500 tnum">#{g.patient.record_number} · {g.rows.length} open · from {g.from.join(', ')}</p></div>
       {g.priority !== 'routine' && <Badge tone="red">{g.priority.toUpperCase()}</Badge>}
       <div className="ml-auto flex items-center gap-2">
         {packSteps.map((ps) => { const rs = g.rows.filter((r) => ps.from.includes(r.request?.step ?? 'sent')); return rs.length > 0 && <Button key={ps.step} variant="outline" onClick={() => rs.forEach((r) => acts.step.mutate({ request_id: r.id, from_step: r.request!.step, step: ps.step }))}>{ps.label} {rs.length}</Button> })}
@@ -91,14 +92,15 @@ export function BenchPatient() {
       {bySection.map((sec) => <section key={sec}><Heading className="mb-1.5">{sec}</Heading><div className="grid gap-3">
         {g.rows.filter((r) => (r.section_name ?? 'Other') === sec).map((r) => { const x = e(r.id); const fields = fieldsOf(r); return <Card key={r.id} className={cn('p-4', x.notDone && 'bg-neutral-50')}>
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
-            <span className="text-[15px] font-semibold">{r.service_name ?? r.display_line}</span>
+            <span className="text-[15px] font-semibold">{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}</span>
             <Badge tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'}>{STEP_LABEL[r.request?.step ?? 'sent'] ?? r.request?.step}</Badge>
             {r.request?.priority !== 'routine' && <Badge tone="red">{r.request?.priority}</Badge>}
             <span className="text-xs text-neutral-500">{r.requester_name} · {r.from_department_name} · {r.occurred_at.slice(11, 16)}</span>
-            <label className="ml-auto flex items-center gap-1.5 text-xs text-neutral-600"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>
+            {!formOf(r) && <label className="ml-auto flex items-center gap-1.5 text-xs text-neutral-600"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>}
           </div>
           {r.question_text && <p className="mb-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">“{r.question_text}”</p>}
-          {x.notDone ? <Input data-v value={x.reason} onChange={(ev) => set(r.id, { reason: ev.target.value })} placeholder="Why not — haemolysed, insufficient sample, patient left…" /> : <>
+          {formOf(r) ? (() => { const F = formOf(r)!.Editor; return <F request={r} value={packVals[r.id]} onChange={(v) => setPackVals((p) => ({ ...p, [r.id]: v }))} /> })()
+          : x.notDone ? <Input data-v value={x.reason} onChange={(ev) => set(r.id, { reason: ev.target.value })} placeholder="Why not — haemolysed, insufficient sample, patient left…" /> : <>
             {fields.length > 0 && <table className="w-full text-sm"><tbody>{fields.map((f) => { const raw = x.vals[f.code] ?? ''; const fl = flagOf(f, raw); return <tr key={f.code} className="border-b border-neutral-100 last:border-0">
               <td className="w-56 py-1 pr-3 text-neutral-700">{f.name}</td>
               <td className="w-36 py-1">{f.kind === 'choice' && f.choices ? <Select data-v="" value={raw} onChange={(ev) => set(r.id, { vals: { ...x.vals, [f.code]: ev.target.value } })} className="h-8">{['', ...f.choices].map((o) => <option key={o} value={o}>{o || '—'}</option>)}</Select>
@@ -116,10 +118,10 @@ export function BenchPatient() {
 
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-neutral-200 bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
       <span className="text-sm text-neutral-600 tnum">{ready.length} of {g.rows.length} ready{flagged.length > 0 && <span className="ml-2 font-medium text-amber-700">· {flagged.length} abnormal{flagged.includes('critical') && <b className="ml-1 text-red-700">· critical</b>}</span>}</span>
-      <label className="flex items-center gap-1.5 text-xs text-neutral-600"><input type="checkbox" checked={prelim} onChange={(ev) => setPrelim(ev.target.checked)} />preliminary</label>
+      {g.rows.some((r) => !formOf(r)) && <label className="flex items-center gap-1.5 text-xs text-neutral-600"><input type="checkbox" checked={prelim} onChange={(ev) => setPrelim(ev.target.checked)} />preliminary</label>}
       {err && <span className="text-sm text-red-700">{err}</span>}
       <span className="ml-auto text-[11px] text-neutral-400"><Kbd>↵</Kbd> next field</span>
-      <Button onClick={release} disabled={busy || !ready.length || invalid || !can('write:result')}>Release {ready.length || ''}{ready.length === g.rows.length && next ? ' → next patient' : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
+      <Button onClick={release} disabled={busy || !ready.length || invalid || !ready.every((r) => can(formOf(r)?.action ?? 'write:result'))}>Release {ready.length || ''}{ready.length === g.rows.length && next ? ' → next patient' : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
     </div></div>
   </div>
 }

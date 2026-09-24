@@ -49,6 +49,8 @@ The database half of the core, from specs 01–04, in `supabase/migrations/`:
 | 0018 | `save_service` accepts fields without choices | 02 |
 | 0019 | `core.server_settings`: the `require_mfa` switch on the gate (local development sets it off) | 02 |
 | 0020 | problems carry a note and a certainty; `core.local_code` + `read_codes`; `save_service` makes local codes | 02, 04 |
+| 0022 | spec 07: private visits, the one read log, a correction stays put, department rules, reads for the record views | [07](spec/07-privacy-and-record.md) |
+| 0023 | what a pack needs to answer a request: pack writers in Done's write set, one reply-type check in the funnel, prescription requests carry their service and details; enabling a pack fixed | 06 |
 | 0021 | the amendments of 2026-09-23: waiting for results, the review rule and reasons, ranges by sex/age, reply types from the registry, the day's released results | [amendments](spec/amendments-2026-09-23.md) |
 
 Tables live in schema `core` and are reachable only through functions in `public`. Every public function is `security definer` with a pinned search path and starts with `require_access`.
@@ -77,6 +79,10 @@ The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server c
 - `renderers/` — one card per entry from its display line; packs register richer renderers here
 - `packs/index.ts` — the only place packs are named; ESLint keeps core from importing packs
 
+## The first pack: Pharmacy
+
+`supabase/migrations/20260924000001_pharmacy_step.sql`, `…0002_pharmacy_pack.sql`, `src/packs/pharmacy`. Kinds only: a `pharmacy` department type, the `pharmacy_dispense` reply type, the `prepared` step, the `pharmacy_pharmacist` role. Its code runs as its own role in its own schema (`pharmacy.write_dispense`), behind a thin public door (`pharmacy_write_dispense`). On the bench it adds a Prepare button and a dispense form filled from the prescription (quantity from dose frequency × days, substitution, not dispensed). A prescription becomes a request only while the pack is on and a Dispensing service exists.
+
 ## Tests
 
 `supabase/tests/` — each runs on a fresh database:
@@ -84,6 +90,8 @@ The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server c
 - `smoke_spine.sql` — the record itself: routing, idempotency, steps, flags, values, the fold, permanence, correction, refusals
 - `smoke_api.sql` — a clinic day through the public functions as three users: the gate, one atomic Done, both lists, two routed requests, the lab, a critical result to review, the chart
 - `smoke_visits.sql` — reception → queue → consult → results → BACK → done → follow-up
+- `privacy.sql` — private visits: hidden notes, visible facts, open anyway, the read log, corrections stay put, department rules
+- `pharmacy.sql` — the first pack: boundary, a prescription becomes a request, prepared, dispensed in a write set, pack off
 - `amendments.sql` — waiting for results, not-seen results, the review rule, ranges by sex, reply types, correction
 - `boundary.sql` — the pack boundary against a hostile fixture pack: grants, ownership, a sleeping pack, a raising pack, a pack writing core, the gate on a pack caller, the record lock
 
@@ -96,7 +104,7 @@ supabase/seeds/       auth users and a dev clinic (local only)
 supabase/tests/       SQL tests
 scripts/db-test.sh    runs them
 src/core/             the client: db, auth, hooks, shell, screens, renderers
-src/packs/            packs (none yet)
+src/packs/            packs: pharmacy (the first)
 ```
 
 ## Next

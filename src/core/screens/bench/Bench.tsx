@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RecentRow } from '../../db/types'
 import { useNavigate } from 'react-router-dom'
-import { FlaskConical, ScanLine } from 'lucide-react'
+import { ClipboardList, ScanLine } from 'lucide-react'
 import { useRequestQueue } from '../../hooks/reads'
 import { useRequestActions } from '../../hooks/writes'
 import { benchStepsFor } from '../../renderers'
@@ -28,9 +28,9 @@ export function Bench({ departmentId, name, type }: { departmentId: string; name
   const recent = q.data?.recent ?? []
   return <div className="mx-auto grid max-w-6xl gap-4 p-4">
     <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-      <div><h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight"><FlaskConical className="h-5 w-5 text-teal-700" />{name}</h1><p className="text-sm text-neutral-500">Requests for us, one row per patient</p></div>
+      <div><h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight"><ClipboardList className="h-5 w-5 text-teal-700" />{name}</h1><p className="text-sm text-neutral-500">Requests for us, one row per patient</p></div>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm tnum sm:ml-auto">
-        {([['Open tests', rows.length, ''], ['Patients', groupByPatient(rows).length, ''], ['Urgent', stat, stat ? 'text-red-700' : ''], ['Released 24 h', recent.length, 'text-teal-700']] as const).map(([l, n, cls]) =>
+        {([['Open', rows.length, ''], ['Patients', groupByPatient(rows).length, ''], ['Urgent', stat, stat ? 'text-red-700' : ''], ['Released 24 h', recent.length, 'text-teal-700']] as const).map(([l, n, cls]) =>
           <div key={l} className="text-right"><p className={cn('text-xl font-semibold leading-none', cls)}>{n}</p><p className="mt-1 text-[11px] text-neutral-500">{l}</p></div>)}
       </div>
     </div>
@@ -56,7 +56,7 @@ export function Bench({ departmentId, name, type }: { departmentId: string; name
           <button onClick={() => open(g.patient.id)} className="flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-x-4 gap-y-1 text-left">
             <span className="w-14 shrink-0 font-mono text-xs text-neutral-500">#{g.patient.record_number}</span>
             <span className="w-40 shrink-0 sm:w-52"><span className="block truncate text-[14px] font-medium">{g.patient.given_name} {g.patient.family_name}</span><span className="text-xs text-neutral-500 tnum">{ageOf(g.patient.born_on)} y · {g.patient.sex[0].toUpperCase()} · {g.from.join(', ')}</span></span>
-            <span className="flex min-w-0 flex-1 flex-wrap gap-1">{g.rows.map((r) => <Badge key={r.id} tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'} className={r.request?.priority !== 'routine' ? 'ring-red-300' : ''}>{r.service_name ?? r.display_line}{r.request?.priority !== 'routine' && <b className="ml-1 text-red-700">{r.request?.priority}</b>}</Badge>)}</span>
+            <span className="flex min-w-0 flex-1 flex-wrap gap-1">{g.rows.map((r) => <Badge key={r.id} tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'} className={r.request?.priority !== 'routine' ? 'ring-red-300' : ''}>{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}{r.request?.priority !== 'routine' && <b className="ml-1 text-red-700">{r.request?.priority}</b>}</Badge>)}</span>
           </button>
           {g.priority !== 'routine' && <Badge tone="red">{g.priority.toUpperCase()}</Badge>}
           <span className={cn('w-12 text-right text-xs tnum', m >= 120 ? 'font-semibold text-red-700' : m >= 60 ? 'text-amber-700' : 'text-neutral-400')}>{m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`}</span>
