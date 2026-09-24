@@ -5,7 +5,8 @@ import { rpc } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
 import type { FieldRange, Organization, Service, ServiceField } from '../../db/types'
 import { useRanges } from '../../hooks/ranges'
-import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Select, cn, errorText } from '../../ui'
+import { Badge, Button, Card, IconButton, Input, Kbd, Select, cn, errorText } from '../../ui'
+import { PageHead } from './parts'
 
 interface Code { code: string; name: string; kind: string; unit: string | null; is_local: boolean }
 interface ReplyType { key: string; name: string; pack: string | null }
@@ -54,9 +55,9 @@ export function ServicesPage({ org }: { org: Organization }) {
     onClose={() => { save.reset(); setOpen(null) }} />
 
   return <div className="grid gap-4">
-    <div className="flex items-center gap-3"><Heading className="text-sm" count={org.services.length}>Services</Heading>
-      <div className="relative ml-auto w-72"><Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><Input ref={box} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter services, sections, fields…" className="h-8 pl-8" /><Kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">/</Kbd></div>
-      <Button size="sm" onClick={() => start(null)}><Plus className="h-3.5 w-3.5" />Service</Button></div>
+    <PageHead title="Services" hint="What each department does when asked: its fields, ranges and how it replies. Grouped by department and section; open one to edit it in place."
+      right={<><div className="relative w-72"><Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><Input ref={box} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter services, sections, fields…" className="h-8 pl-8" /><Kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">/</Kbd></div>
+      <Button size="sm" onClick={() => start(null)}><Plus className="h-3.5 w-3.5" />Service</Button></>} />
     {open?.isNew && !org.services.some((s) => s.id === open.id) && editor(open)}
     {depts.map((d) => { const ds = shown.filter((s) => s.department_id === d.id); const secs = [...new Set(ds.map((s) => s.section_name ?? ''))].sort(); const k = d.id; return <Card key={d.id} className="overflow-hidden">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 border-b border-neutral-100 bg-neutral-50/60 px-4 py-2.5 text-left">{closed.has(k) ? <ChevronRight className="h-4 w-4 text-neutral-400" /> : <ChevronDown className="h-4 w-4 text-neutral-400" />}

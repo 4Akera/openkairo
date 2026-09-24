@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "opencare-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 }
+    { "name": "opencare-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 },
+    { "name": "opencare-dev-3001", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "--port", "3001", "--strictPort"], "port": 3001 }
   ]
 }
