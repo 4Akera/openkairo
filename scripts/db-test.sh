@@ -3,7 +3,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 DB=$(docker ps --format '{{.Names}}' | grep -E '^supabase_db_' | head -1)
-EXPECTED='wrong_reply_type|bad_reply_type|not_allowed|author_mismatch|entries are permanent|requests are changed|already_replaced|request_has_replies|problem_not_found|record_not_open|permission denied|hostile raise|canceling statement|pg_advisory'
+EXPECTED='reason_missing|wrong_reply_type|bad_reply_type|not_allowed|author_mismatch|entries are permanent|requests are changed|already_replaced|request_has_replies|problem_not_found|record_not_open|permission denied|hostile raise|canceling statement|pg_advisory'
 fail=0
 for t in supabase/tests/*.sql; do
   supabase db reset > /dev/null 2>&1 || { echo "db reset failed"; exit 1; }

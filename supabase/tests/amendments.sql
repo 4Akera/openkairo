@@ -32,7 +32,10 @@ select name from public.save_service(:'cbc', :'org', :'labd', 'cbc', 'CBC', 'res
 select name from public.save_service(:'xr', :'org', :'labd', 'cxr', 'Chest X-ray', 'note');
 select public.save_service('00000000-0000-0000-0000-0000000000c3', :'org', :'labd', 'disp', 'Dispensing', 'pharmacy_dispense');
 select case when jsonb_array_length(public.read_ranges(:'org')) = 2 then 'ok ranges saved' else 'FAIL ranges' end;
-select case when public.read_organization_settings(:'org')->>'review_results' = 'critical' then 'ok default: critical only' else 'FAIL default setting' end;
+reset role;
+select case when review_results = 'critical' and patients_wait then 'ok default: critical only, patients wait' else 'FAIL default rules' end from core.departments where id = :'im';
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'jow', false);
 
 \echo '── her: waits for a CBC; Hb 15.5 is high for a woman; she is here, so it does not need review'
 select set_config('request.jwt.claim.sub', :'jrc', false);
@@ -104,9 +107,9 @@ select public.write_result('00000000-0000-0000-0000-0000000000ea', :'him', null,
 select set_config('request.jwt.claim.sub', :'jow', false);
 select case when display_line like '%Clear lungs%' then 'ok a note answers the X-ray' else 'FAIL ' || display_line end from public.write_note('00000000-0000-0000-0000-0000000000eb', :'him', null, :'labd', kind := 'consult_reply', text := 'Clear lungs', reply_to_id := '00000000-0000-0000-0000-0000000000e8');
 
-\echo '── the clinic switches to "abnormal"; she comes back within 14 days (Here reuses her open visit); a high result needs review'
+\echo '── Internal Medicine switches to "abnormal"; she comes back within 14 days (Here reuses her open visit); a high result needs review'
 select set_config('request.jwt.claim.sub', :'jow', false);
-select public.save_organization_settings(:'org', 'abnormal') ->> 'review_results' as setting;
+select review_results as setting from public.save_department(:'im', :'org', 'clinic', 'Internal Medicine', review_results := 'abnormal');
 select set_config('request.jwt.claim.sub', :'jrc', false);
 select case when id = '00000000-0000-0000-0000-0000000000a1' then 'ok Here reopens the same visit' else 'FAIL new visit' end from public.open_visit('00000000-0000-0000-0000-0000000000a4', :'her', :'im');
 select set_config('request.jwt.claim.sub', :'jdr', false);

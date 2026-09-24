@@ -100,7 +100,10 @@ export type Database = {
           is_outside: boolean
           name: string
           organization_id: string
+          patients_wait: boolean
+          private_visits: boolean
           retired_at: string | null
+          review_results: string
           site_name: string | null
           type: string
         }
@@ -110,7 +113,10 @@ export type Database = {
           is_outside?: boolean
           name: string
           organization_id: string
+          patients_wait?: boolean
+          private_visits?: boolean
           retired_at?: string | null
+          review_results?: string
           site_name?: string | null
           type: string
         }
@@ -120,7 +126,10 @@ export type Database = {
           is_outside?: boolean
           name?: string
           organization_id?: string
+          patients_wait?: boolean
+          private_visits?: boolean
           retired_at?: string | null
+          review_results?: string
           site_name?: string | null
           type?: string
         }
@@ -381,6 +390,7 @@ export type Database = {
       }
       entry_types: {
         Row: {
+          is_note: boolean
           key: string
           list: Database["core"]["Enums"]["list_kind"] | null
           name: string
@@ -389,6 +399,7 @@ export type Database = {
           retired_at: string | null
         }
         Insert: {
+          is_note?: boolean
           key: string
           list?: Database["core"]["Enums"]["list_kind"] | null
           name: string
@@ -397,6 +408,7 @@ export type Database = {
           retired_at?: string | null
         }
         Update: {
+          is_note?: boolean
           key?: string
           list?: Database["core"]["Enums"]["list_kind"] | null
           name?: string
@@ -523,19 +535,16 @@ export type Database = {
           created_at: string
           id: string
           name: string
-          review_results: string
         }
         Insert: {
           created_at?: string
           id: string
           name: string
-          review_results?: string
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
-          review_results?: string
         }
         Relationships: []
       }
@@ -933,21 +942,33 @@ export type Database = {
       }
       record_reads: {
         Row: {
+          basis: string | null
+          department_id: string | null
+          opened_visit_id: string | null
           organization_id: string
           patient_id: string
           read_at: string
+          reason_text: string | null
           user_id: string
         }
         Insert: {
+          basis?: string | null
+          department_id?: string | null
+          opened_visit_id?: string | null
           organization_id: string
           patient_id: string
           read_at?: string
+          reason_text?: string | null
           user_id: string
         }
         Update: {
+          basis?: string | null
+          department_id?: string | null
+          opened_visit_id?: string | null
           organization_id?: string
           patient_id?: string
           read_at?: string
+          reason_text?: string | null
           user_id?: string
         }
         Relationships: []
@@ -1570,6 +1591,7 @@ export type Database = {
           ended_at: string | null
           id: string
           is_first: boolean
+          is_private: boolean
           organization_id: string
           patient_id: string
           present_at: string | null
@@ -1585,6 +1607,7 @@ export type Database = {
           ended_at?: string | null
           id: string
           is_first: boolean
+          is_private?: boolean
           organization_id: string
           patient_id: string
           present_at?: string | null
@@ -1600,6 +1623,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           is_first?: boolean
+          is_private?: boolean
           organization_id?: string
           patient_id?: string
           present_at?: string | null
@@ -1695,6 +1719,47 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      can: {
+        Args: {
+          p_action: string
+          p_department: string
+          p_org: string
+          p_user: string
+        }
+        Returns: boolean
+      }
+      chain_of: {
+        Args: { p_entry: string }
+        Returns: {
+          author_id: string
+          data: Json
+          department_id: string | null
+          display_line: string
+          flag: Database["core"]["Enums"]["value_flag"] | null
+          id: string
+          is_final: boolean
+          occurred_at: string
+          organization_id: string
+          patient_id: string
+          recorded_at: string
+          replaced_by_id: string | null
+          replaces_id: string | null
+          reply_to_id: string | null
+          responsible_id: string | null
+          service_id: string | null
+          source: Database["core"]["Enums"]["entry_source"]
+          source_key: string | null
+          type: string
+          visit_id: string | null
+          written_with_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "entries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       change_request: {
         Args: {
           p_actor: string
@@ -1746,6 +1811,7 @@ export type Database = {
           ended_at: string | null
           id: string
           is_first: boolean
+          is_private: boolean
           organization_id: string
           patient_id: string
           present_at: string | null
@@ -1766,8 +1832,23 @@ export type Database = {
         Returns: number
       }
       current_user_id: { Args: { p_organization_id: string }; Returns: string }
-      entry_card: {
-        Args: { e: Database["core"]["Tables"]["entries"]["Row"] }
+      entry_card:
+        | {
+            Args: { e: Database["core"]["Tables"]["entries"]["Row"] }
+            Returns: Json
+          }
+        | {
+            Args: {
+              e: Database["core"]["Tables"]["entries"]["Row"]
+              p_hidden: string[]
+            }
+            Returns: Json
+          }
+      entry_data: {
+        Args: {
+          e: Database["core"]["Tables"]["entries"]["Row"]
+          p_hidden: string[]
+        }
         Returns: Json
       }
       extract_values: {
@@ -1788,6 +1869,10 @@ export type Database = {
       }
       flag_unseen: { Args: { p_visit_id: string }; Returns: number }
       fold: { Args: { t: string }; Returns: string }
+      hidden_visits: {
+        Args: { p_patient_ids: string[]; p_user: string }
+        Returns: string[]
+      }
       holds: { Args: { p_visit_id: string }; Returns: number }
       local_code: {
         Args: {
@@ -1811,7 +1896,14 @@ export type Database = {
       }
       next_step_position: { Args: { p_request_id: string }; Returns: number }
       open_record: {
-        Args: { p_org: string; p_patient: string; p_user: string }
+        Args: {
+          p_department: string
+          p_org: string
+          p_patient: string
+          p_reason: string
+          p_user: string
+          p_visit: string
+        }
         Returns: undefined
       }
       org_of_department: { Args: { d: string }; Returns: string }
@@ -1945,6 +2037,10 @@ export type Database = {
         Returns: undefined
       }
       values_line: { Args: { vals: Json }; Returns: string }
+      visit_hidden: {
+        Args: { p_user: string; p_visit: string }
+        Returns: boolean
+      }
       vital: {
         Args: { c: string; n: string; u: string; v: number; vals: Json }
         Returns: Json
@@ -2128,6 +2224,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      mark_visit_private: {
+        Args: { is_private: boolean; reason?: string; visit_id: string }
+        Returns: Database["core"]["Tables"]["visits"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       mark_visit_routing: {
         Args: {
           assignee_id?: string
@@ -2169,9 +2275,12 @@ export type Database = {
         Args: {
           before_at?: string
           before_id?: string
+          between_visits?: boolean
+          department_ids?: string[]
           limit?: number
           patient_id: string
           types?: string[]
+          visit_ids?: string[]
         }
         Returns: Json
       }
@@ -2180,11 +2289,11 @@ export type Database = {
         Args: { entry_id: string; file_position: number }
         Returns: string
       }
-      read_organization: { Args: { organization_id: string }; Returns: Json }
-      read_organization_settings: {
-        Args: { organization_id: string }
+      read_opened_anyway: {
+        Args: { organization_id: string; since?: string }
         Returns: Json
       }
+      read_organization: { Args: { organization_id: string }; Returns: Json }
       read_patient: { Args: { patient_id: string }; Returns: Json }
       read_patients: {
         Args: {
@@ -2198,10 +2307,23 @@ export type Database = {
       read_queue: { Args: { department_id: string }; Returns: Json }
       read_ranges: { Args: { organization_id: string }; Returns: Json }
       read_record: {
-        Args: { department_id: string; patient_id: string }
+        Args: {
+          department_id: string
+          open_visit_id?: string
+          patient_id: string
+          reason?: string
+        }
+        Returns: Json
+      }
+      read_record_reads: {
+        Args: { limit?: number; patient_id: string }
         Returns: Json
       }
       read_reply_types: { Args: { organization_id: string }; Returns: Json }
+      read_results_table: {
+        Args: { limit?: number; patient_id: string }
+        Returns: Json
+      }
       read_sent_outside: {
         Args: { department_id?: string; organization_id: string }
         Returns: Json
@@ -2221,6 +2343,7 @@ export type Database = {
         Returns: Json
       }
       read_visit_queue: { Args: { department_id: string }; Returns: Json }
+      read_visits: { Args: { patient_id: string }; Returns: Json }
       register_patient: {
         Args: {
           born_on: string
@@ -2263,6 +2386,9 @@ export type Database = {
           is_outside?: boolean
           name: string
           organization_id: string
+          patients_wait?: boolean
+          private_visits?: boolean
+          review_results?: string
           seen_change_id?: string
           serves?: string[]
           site_name?: string
@@ -2279,10 +2405,6 @@ export type Database = {
       save_organization_pack: {
         Args: { organization_id: string; pack: string }
         Returns: undefined
-      }
-      save_organization_settings: {
-        Args: { organization_id: string; review_results: string }
-        Returns: Json
       }
       save_service: {
         Args: {
