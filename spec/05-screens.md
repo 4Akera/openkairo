@@ -65,7 +65,7 @@ One list, two halves, two calls (`read_visit_queue`, `read_queue`; any queue sig
   step for a service department (awaiting · received · to verify · abnormal · rejected are the
   Laboratory pack's; core shows open · done).
 Click a patient → the visit. Click a request → the request surface. `mine / all` toggle.
-Footer: done today · away (open, not present) · **my results** (`read_to_review`, count in red
+Footer: done today · away (open, not present) · **my results** (`read_to_review`, each result beside the patient's previous value — 0032, count in red
 when a critical is waiting).
 
 ### 3 · The visit (department type `clinic`, `ancillary`, `ward`)
@@ -77,9 +77,10 @@ the queue. Three regions, no tabs:
 ```
 ┌ banner: name · age/sex · record number · ⚠ allergies (always) · died · open requests ┐
 ├─ RECORD ────────────────┬─ TODAY ──────────────────────────────────────────────────────┤
-│ problems  (✓ ✎ ✕ + add) │ vitals · note (dictate or type) · requests · prescriptions   │
-│ medications (✓ ✎ ✕ +)   │ as you add them — this is the set Done will send             │
-│ allergies (+ · refute)  │                                                              │
+│ problems  (✓ ✎ ✕ + add) │ the composer: one line, the card under it (amended 09-24)    │
+│ medications (✓ ↻ ✎ ✕ +) │ this visit's drafts — the set Done will send                 │
+│ allergies (+ · refute · │                                                              │
+│   no known allergies)   │                                                              │
 │ reviewed 12 Mar / not   │                                                              │
 │ asked                   │                                                              │
 ├─ TIMELINE ──────────────┴──────────────────────────────────────────────────────────────┤
@@ -89,12 +90,49 @@ the queue. Three regions, no tabs:
                                                         [ Back to queue ]  [ Done → Next ⌘⏎ ]
 ```
 
-- ✓ on a list row marks it for the `list_review` Done will send; ✎ opens an inline change
-  (a `prescription change` or `problem update` draft); ✕ an inline stop/resolve with a reason.
+- **One composer** (amended 2026-09-24). Everything is typed in one line — `148/92 84 37 86`
+  (vitals by position), `rx metformin 500 bd 30d for dm`, `rx paracetamol 1g qds prn pain`,
+  `dx …`, `al …: rash severe`, `lab …`, `ref …`, `hx/ex/plan …`, anything else joins today's
+  note. The card appended under the line shows the fields of what the line says and edits any
+  of them: Tab moves into it, Enter adds (Enter on a chip adds too), Esc clears. While a name is
+  being typed the card offers suggestion cards (Tab takes the first, ↓ chooses), with the
+  warnings of what Enter would add as typed. No dropdown, no modal, no second form. ⌘↵ adds what
+  is in the line and signs; if it cannot be added (a field missing, a warning to confirm) Done
+  waits and the card says why. A card never lets through what the server would refuse at Done:
+  a drug needs how often, a unit for its dose and a route; `/nka` is refused while allergies are
+  recorded.
+- The lists open the same card: + starts `dx `/`rx `/`al ` (Alt+P/M/A); ✎ on a medication is a
+  `prescription change`, ✕ a stop with reason chips, ↻ a repeat; ✎ on a problem is a
+  `problem update`, ✓ a resolve. A draft clicked in "This visit" reopens in the card and is
+  saved in place. ✓ in a list's heading marks it for the `list_review` Done will send; an empty
+  allergy list says **Not asked yet** until **No known allergies** (`list_review none_known`).
   Nothing is written until Done.
-- An allergy class match on a drug being added is a red underline on the row, never a modal.
+- **Shortcuts.** `/dm` runs a preset: its services as requests and its speed lines as drafts
+  (a preset's `shortcut` and `lines`, set in Settings, 0029). Built in: `/note` `/soap` `/hx`
+  `/letter` open a long note in a drawer beside the record (the lists stay in view), `/nka`,
+  `/vitals` (the vitals fields one by one).
+- **Suggestion lists, not a code system.** The client carries lists of common drugs (ATC,
+  strengths, usual frequency, allergy class), problems (ICD-10) and allergens (class, reactions):
+  a known name is written with its code (`atc:…`, `icd10:…`, `substance.class_code`); anything
+  else stays free text, and a drug the lists do not know says it was not checked against the
+  allergies (unless a word of it is known: "amoxicillin susp" is checked as amoxicillin).
+- **Warnings in the card, never a modal.** An allergy to the drug or its class, or a
+  cross-reacting class the lists mark *warn*, is red and needs Enter twice; a low cross-reaction,
+  an allergy recorded against a drug being taken, the same drug already active or already drafted,
+  or a problem already on the list is amber — with **Repeat as it is**, **Change its dose
+  instead** or **Update it** one click away. A PRN prescription says what it is for. A dose 10×
+  away from the drug's usual strengths is red ("125 mg digoxin — did you mean 125 mcg?").
+  Recording an allergy checks the medicines taken and drafted by the same rules, and a drafted
+  prescription that a later allergy clashes with is marked in "This visit".
+- **Key results** (amended 2026-09-24), under the allergies: HbA1c, creatinine, Hb, LDL, BP and
+  weight when the patient has them, then up to three other tests now flagged, each with its arrow
+  and where it was before ("HbA1c 7.4 ↓ · was 8.1 · 12 Jun"). A value opens its entry; **All
+  results** opens the full table in place of the record. The timeline stays as it is: a result
+  still lands under the visit that ordered it.
+- A change restates the order: it can turn PRN off and clear instructions; a problem update can
+  clear its note and onset (0031). A key left out keeps what the list holds.
 - **Done** sends one `write_set`, then `mark_visit(done)`; the server decides done or pending.
-  The next patient opens: back first, then waiting. **Back to queue** keeps the drafts.
+  The next patient opens: back first, then waiting. **Return to waiting** (the patient steps out) signs what is written so far and keeps the visit open (amended 2026-09-24: drafts live in one browser, so they are not left behind).
 - A nurse (no `mark:in_consult`) sees the same visit with TODAY only (vitals, a nurse note) and
   **Save & back**, which is the same `write_set`; the visit stays waiting.
 - A ward visit is the same screen with the timeline first and no Done: the stay ends with a

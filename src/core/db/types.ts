@@ -11,7 +11,7 @@ export interface Card {
     priority: Priority; due_at: string; reply_line: string | null; reply_flag: Flag | null; replied_at: string | null; review_needed_at: string | null; review_reason?: 'critical' | 'abnormal' | 'result' | 'not seen' | 'corrected' | null }
 }
 export interface PatientBanner { id: string; record_number: number; given_name: string; middle_name: string | null; family_name: string; sex: string; born_on: string; age: number; died_on: string | null; merged_into_id: string | null; phone_text: string | null }
-export interface Medication { id: string; drug_code: string | null; drug_name: string; dose_number: number | null; dose_unit: string | null; route: string | null; frequency: string | null; prn: boolean; problem_id: string | null; status: string; started_on: string; instructions_text?: string | null }
+export interface Medication { id: string; drug_code: string | null; drug_name: string; dose_number: number | null; dose_unit: string | null; route: string | null; frequency: string | null; prn: boolean; prn_reason_text?: string | null; problem_id: string | null; status: string; started_on: string; instructions_text?: string | null }
 export interface Problem { id: string; code: string | null; name: string; status: string; onset_on: string | null; note_text: string | null; certainty: 'confirmed' | 'suspected' }
 export interface Allergy { id: string; substance_name: string; class_code: string | null; kind: string; reactions_text: string | null; severity: string | null; status: string; certainty?: string | null }
 export interface ListReview { list: string; reviewed_at: string; reviewed_by_id: string }
@@ -40,7 +40,7 @@ export interface PatientHit extends PatientBanner { identifiers: { system: strin
 export interface Department { id: string; name: string; type: string; is_visited: boolean; is_outside?: boolean; site_name: string | null; serves?: (string | null)[]; patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; private_visits: boolean; after_done: 'next' | 'queue' }
 export interface Service { id: string; department_id: string | null; section_name: string | null; code: string; name: string; reply_type: string; fields: ServiceField[] }
 export interface ServiceField { position: number; code: string; name: string; kind: string; unit: string | null; choices: string[] | null; reference_low: number | null; reference_high: number | null; critical_low: number | null; critical_high: number | null }
-export interface Template { id: string; department_id: string | null; name: string; items: { service_id: string }[] }
+export interface Template { id: string; department_id: string | null; name: string; items: { service_id: string }[]; shortcut: string | null; lines: string[] }
 export interface Organization { organization: { id: string; name: string; time_zone: string; record_view: 'visits' | 'entries' }; me: { id: string; name: string; kind: string; departments: Department[]; actions: string[] }
   departments: Department[]; services: Service[]; templates: Template[]; packs: { key: string; name: string; enabled: boolean }[]
   users: { id: string; name: string; kind: string; title: string | null; retired_at: string | null; accepted_at: string | null; roles: { role_id: string; role_key: string; department_id: string | null }[] }[]

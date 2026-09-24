@@ -64,3 +64,5 @@ export const ymd = (iso: string) => { const p = parts(iso); return `${p.year}-${
 export const dateTime = (iso: string) => `${ymd(iso)} ${hm(iso)}`
 /** 24 Sep 2026 */
 export const longDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { timeZone: zone, day: 'numeric', month: 'short', year: 'numeric' })
+/** 12 Jun (this year) · Jun 2024 (earlier) */
+export const shortDate = (iso: string) => { const d = new Date(iso); return d.toLocaleDateString(undefined, ymd(iso).slice(0, 4) === ymd(new Date().toISOString()).slice(0, 4) ? { timeZone: zone, day: 'numeric', month: 'short' } : { timeZone: zone, month: 'short', year: 'numeric' }) }

@@ -7,8 +7,8 @@ import { useEntries, useEntry, useResultsTable, useVisits } from '../../hooks/re
 import type { Card as EntryCard, RecordView, ResultRow, Value, VisitCardRow } from '../../db/types'
 import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Spinner, cn, errorText, flagClass, hm, ymd, dateTime, longDate } from '../../ui'
 import { CardLine, FallbackFull } from '../../renderers'
+import { KEY_TESTS } from './kinds'
 
-const KEY_TESTS = ['loinc:4548-4', 'loinc:2160-0', 'loinc:718-7', 'loinc:2089-1', 'loinc:8480-6', 'loinc:8462-4', 'loinc:29463-7']
 const day = (iso: string) => longDate(iso.length === 10 ? iso + 'T12:00:00Z' : iso)
 const COUNT_WORD: Record<string, string> = { note: 'note', request: 'request', prescription: 'prescription', vitals: 'vitals', problem: 'problem', allergy: 'allergy', list_review: 'review' }
 /** when a visit last changed: the time today, else the date */
@@ -17,8 +17,10 @@ const when = (iso: string) => ymd(iso) === ymd(new Date().toISOString()) ? hm(is
 /** The record (spec 07): what needs attention on top, then the record the way this department shows it — by visit (newest activity first)
  *  or every entry — with no filters; results over time one tap away; any entry opens in full. */
 export function RecordViews({ r, patientId, departmentId, view }: { r: RecordView; patientId: string; departmentId: string; view: 'visits' | 'entries' }) {
-  const [results, setResults] = useState(false)
   const [params, setParams] = useSearchParams()
+  // the full results table is ?view=results, so the Key results box beside the record can open it
+  const results = params.get('view') === 'results'
+  const setResults = (on: boolean) => { const p = new URLSearchParams(params); if (on) p.set('view', 'results'); else p.delete('view'); setParams(p, { replace: true }) }
   const openId = params.get('entry')
   const openEntry = (id: string | null) => { const p = new URLSearchParams(params); if (id) p.set('entry', id); else p.delete('entry'); setParams(p, { replace: true }) }
   const [anyway, setAnyway] = useState<VisitCardRow | null>(null)

@@ -2,7 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { Stethoscope } from 'lucide-react'
 import { useDepartment } from '../hooks/organization'
 import { useToReview, useVisitQueue } from '../hooks/reads'
-import { Badge, Card, Centered, Heading, Spinner, cn, flagClass } from '../ui'
+import { Badge, Card, Centered, Heading, Spinner, cn, flagClass, shortDate } from '../ui'
+import type { Card as EntryCard, Flag } from '../db/types'
 const REASON: Record<string, ['red' | 'amber' | 'blue' | 'neutral', string]> = { critical: ['red', 'critical'], abnormal: ['amber', 'abnormal'], 'not seen': ['blue', 'patient not seen'], corrected: ['amber', 'corrected'], result: ['neutral', 'result'] }
 import { ReceptionScreen } from './Reception'
 import { QueueList, RequestList } from './Queue'
@@ -31,9 +32,19 @@ export function DepartmentScreen() {
       <ul className="divide-y divide-neutral-100">{(review.data ?? []).map((c) => <li key={c.id}><button onClick={() => navigate(`/request/${c.id}`)} className="flex w-full items-center gap-3 px-4 py-2 text-left text-[13.5px] hover:bg-neutral-50">
         <span className="w-48 truncate font-medium">{(c as unknown as { patient?: { given_name: string; family_name: string } }).patient?.given_name} {(c as unknown as { patient?: { family_name: string } }).patient?.family_name}</span>
         {c.request?.review_reason && <Badge tone={REASON[c.request.review_reason]?.[0] ?? 'neutral'} className="w-28 justify-center">{REASON[c.request.review_reason]?.[1] ?? c.request.review_reason}</Badge>}
-        <span className="min-w-0 flex-1 truncate">{c.display_line}</span><span className={cn('text-xs tnum', flagClass(c.request?.reply_flag))}>{c.request?.reply_line}</span></button></li>)}</ul></Card>}
+        <span className="min-w-0 flex-1 truncate">{c.display_line}</span><Compared c={c} /></button></li>)}</ul></Card>}
     {dept.is_visited && <QueueList departmentId={dept.id} keys />}
     {!dept.is_visited && <section><Heading className="mb-2">Requests for us</Heading><RequestList departmentId={dept.id} /></section>}
     {dept.is_visited && offers && <section><Heading className="mb-2">Requests for us</Heading><RequestList departmentId={dept.id} /></section>}
   </div>
+}
+
+type Compare = { name: string; value: number; unit: string | null; flag: Flag | null; previous: number | null; previous_at: string | null }
+/** a result beside the patient's value before it — "Creatinine 1.9 ↑ · was 1.1 Jun" — so it can be judged here (0032) */
+function Compared({ c }: { c: EntryCard }) {
+  const list = (c as unknown as { compare?: Compare[] }).compare ?? []
+  if (!list.length) return <span className={cn('text-xs tnum', flagClass(c.request?.reply_flag))}>{c.request?.reply_line}</span>
+  return <span className="flex shrink-0 flex-wrap justify-end gap-x-3 text-xs tnum">{list.map((v) => <span key={v.name}>
+    <span className="text-neutral-500">{v.name} </span><b className={cn('font-semibold', v.flag && v.flag !== 'normal' ? flagClass(v.flag) : 'text-neutral-800')}>{v.value}{v.flag === 'high' ? '↑' : v.flag === 'low' ? '↓' : v.flag === 'critical' ? '‼' : ''}</b>
+    {v.previous != null && <span className="text-neutral-400"> · was {v.previous}{v.previous_at ? ` ${shortDate(v.previous_at)}` : ''}</span>}</span>)}</span>
 }

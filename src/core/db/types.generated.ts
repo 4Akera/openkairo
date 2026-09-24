@@ -1417,27 +1417,33 @@ export type Database = {
           department_id: string | null
           id: string
           items: Json
+          lines: string[]
           name: string
           organization_id: string
           retired_at: string | null
+          shortcut: string | null
           user_id: string | null
         }
         Insert: {
           department_id?: string | null
           id: string
           items?: Json
+          lines?: string[]
           name: string
           organization_id: string
           retired_at?: string | null
+          shortcut?: string | null
           user_id?: string | null
         }
         Update: {
           department_id?: string | null
           id?: string
           items?: Json
+          lines?: string[]
           name?: string
           organization_id?: string
           retired_at?: string | null
+          shortcut?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -2502,10 +2508,12 @@ export type Database = {
         Args: {
           department_id?: string
           id: string
-          items: Json
+          items?: Json
+          lines?: string[]
           name: string
           organization_id: string
           seen_change_id?: string
+          shortcut?: string
         }
         Returns: Database["core"]["Tables"]["templates"]["Row"]
         SetofOptions: {

@@ -1,6 +1,8 @@
 // The speed line (spec 05, Today as drafts): one typed line → one draft. Pure, so it can be tested without a screen.
 //   bp 148/92 p 84 t 37.2 w 86        vitals (any vital first; "v" optional)
-//   rx metformin 500mg bd 30d for dm   prescription (dose, route, frequency, days, prn, "for <problem>", "; instructions")
+//   148/92 84 37 86                    vitals by position: BP, pulse, temperature, weight, SpO₂
+//   rx metformin 500mg bd 30d for dm   prescription (dose, route, frequency, days, "for <problem>", "; instructions")
+//   rx paracetamol 1g qds prn pain      "prn <what for>": the words after prn are its reason
 //   lab hba1c, lipid  · lab urgent cbc  requests by service code or name, or a preset
 //   ref cardiology chest pain on effort consult: a department, then the question
 //   dx type 2 diabetes since 2019 ; poorly controlled   problem ("?" or "susp" = suspected; since 2019 · 2019-03 · 3y · 6m)
@@ -15,7 +17,10 @@ export interface Ctx {
   departmentId: string                                // this department: its own services are not requested from here
   now?: Date
 }
-export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean }
+import { findAllergen, findDrug, findProblem } from './catalog'
+
+/** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
+export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string }
 export type Result = { ok: Parsed[] } | { error: string } | null
 
 const VITALS: Record<string, [string, string]> = {
@@ -28,7 +33,7 @@ const FREQ: Record<string, string> = {
   weekly: 'weekly', monthly: 'monthly', prn: 'PRN', once: 'once', stat: 'stat', nocte: 'OD', mane: 'OD', hs: 'OD',
 }
 const FREQ_NOTE: Record<string, string> = { nocte: 'at night', hs: 'at night', mane: 'in the morning' }
-const ROUTE: Record<string, string> = { po: 'oral', oral: 'oral', sc: 'sc', sq: 'sc', im: 'im', iv: 'iv', top: 'topical', topical: 'topical', inh: 'inhaled', inhaled: 'inhaled', pr: 'pr', pv: 'pv', sl: 'sl' }
+const ROUTE: Record<string, string> = { po: 'oral', oral: 'oral', sc: 'sc', sq: 'sc', im: 'im', iv: 'iv', top: 'topical', topical: 'topical', inh: 'inhaled', inhaled: 'inhaled', pr: 'pr', pv: 'pv', sl: 'sl', nasal: 'nasal' }
 const UNITS = ['mg', 'g', 'mcg', 'ug', 'ml', 'iu', 'u', 'units', 'tab', 'tabs', 'cap', 'caps', 'puff', 'puffs', 'drop', 'drops', 'sachet']
 const NOTE_KINDS: Record<string, [string, string]> = { hx: ['history_physical', 'History'], ex: ['history_physical', 'Examination'], exam: ['history_physical', 'Examination'], plan: ['plan', 'Plan'], pl: ['plan', 'Plan'], proc: ['procedure', 'Procedure'], nurse: ['nurse', 'Nurse'], letter: ['letter', 'Letter'] }
 
@@ -60,13 +65,22 @@ export function findNamed<T extends { name: string; code?: string }>(items: T[],
     ?? (s.length >= 2 && !s.includes(' ') ? items.find((x) => norm(x.name).split(/[\s/,()-]+/).map((w) => w[0]).join('').includes(s)) : undefined) ?? null   // "dm" → diabetes mellitus
 }
 
+const POSITIONAL: [string, string, number, number][] = [['pulse', 'P', 20, 250], ['temperature', 'T', 30, 45], ['weight', 'Wt', 1, 400], ['spo2', 'SpO₂', 50, 100]]
 function vitals(words: string[]): Result {
-  const params: Record<string, number> = {}; const parts: string[] = []
+  const params: Record<string, number> = {}; const parts: string[] = []; let pos = -1
   for (let i = 0; i < words.length; i++) {
     const w = words[i].toLowerCase()
     if (w === 'v' || w === 'vitals') continue
+    if (pos >= 0 && /^\d+(\.\d+)?$/.test(w)) {           // 148/92 84 37 86: after a BP, bare numbers go in order
+      const n = Number(w)
+      while (pos < POSITIONAL.length && params[POSITIONAL[pos][0]] !== undefined) pos++
+      if (pos >= POSITIONAL.length) return { error: `Too many numbers after the BP: ${w}` }
+      const [k, l, lo, hi] = POSITIONAL[pos]
+      if (n < lo || n > hi) return { error: `${l} ${n} is not plausible — type it with its name (e.g. ${l.toLowerCase().replace('₂', '2')} ${n})` }
+      params[k] = n; parts.push(`${l} ${n}`); pos++; continue
+    }
     const bp = (w === 'bp' ? words[++i] ?? '' : w).match(/^(\d{2,3})\/(\d{2,3})$/)
-    if (bp) { params.systolic = +bp[1]; params.diastolic = +bp[2]; parts.push(`BP ${bp[1]}/${bp[2]}`); continue }
+    if (bp) { params.systolic = +bp[1]; params.diastolic = +bp[2]; parts.push(`BP ${bp[1]}/${bp[2]}`); pos = 0; continue }
     const glued = w.match(/^([a-z]+[a-z0-9]*?)(\d+(?:\.\d+)?)$/)          // p84 · t37.2 · spo2 is a key, so check key first
     const key = VITALS[w] ? w : glued && VITALS[glued[1]] ? glued[1] : null
     if (!key) return { error: `Not a vital: “${words[i]}”. Try bp 140/90 p 80 t 37 w 70 h 170 spo2 98 rr 16` }
@@ -78,28 +92,43 @@ function vitals(words: string[]): Result {
   return { ok: [{ function: 'write_vitals', params, line: parts.join(' · '), kind: 'vitals' }] }
 }
 
+const DUR_UNIT = /^(d|days?|w|wk|wks|weeks?|m|mo|months?)$/
+const days = (n: number, u = 'd') => u.startsWith('w') ? n * 7 : u.startsWith('m') ? n * 30 : n
 function prescription(rest: string, ctx: Ctx): Result {
   const [main, ...instr] = rest.split(';'); let instructions = instr.join(';').trim() || null
   const words = main.trim().split(/\s+/).filter(Boolean)
   if (!words.length) return null
   if (words[0].toLowerCase() === 'for') return { error: 'Type the drug name after rx' }
-  const drug: string[] = []; let dose: number | null = null; let unit: string | null = null; let route = 'oral'; let freq: string | null = null
-  let days: number | null = null; let prn = false; let forProblem: { id: string; name: string } | null = null
+  const drug: string[] = []; let dose: number | null = null; let unit: string | null = null; let route: string | null = null; let freq: string | null = null
+  let duration: number | null = null; let prn = false; let prnFor: string[] | null = null; let forProblem: { id: string; name: string } | null = null
+  const typed = new Set<string>()
   for (let i = 0; i < words.length; i++) {
-    const w = words[i].toLowerCase()
+    const w = words[i].toLowerCase(); const next = words[i + 1]?.toLowerCase() ?? ''
     const d = w.match(/^(\d+(?:\.\d+)?)([a-z]+)?$/)
-    const dur = w.match(/^x?(\d+)\s*(d|days?|w|wk|weeks?|m|mo|months?)$/) ?? (w === 'x' || w === 'for' ? null : w.match(/^x(\d+)$/))
-    if (w === 'for' && drug.length && i + 1 < words.length && !/^\d/.test(words[i + 1])) { forProblem = findNamed(ctx.problems, words.slice(i + 1).join(' ')); if (!forProblem) return { error: `No problem “${words.slice(i + 1).join(' ')}” on the list — add it with dx first` }; break }
-    if (dur && drug.length) { const n = +dur[1]; const u = dur[2] ?? 'd'; days = u.startsWith('w') ? n * 7 : u.startsWith('m') ? n * 30 : n; continue }
-    if (d && drug.length && dose === null && (!d[2] || UNITS.includes(d[2]))) { dose = +d[1]; unit = d[2] ?? (UNITS.includes(words[i + 1]?.toLowerCase()) ? words[++i].toLowerCase() : 'mg'); continue }
-    if (FREQ[w] && drug.length) { if (w === 'prn') prn = true; if (!freq || w !== 'prn') freq = FREQ[w]; if (FREQ_NOTE[w]) instructions = [FREQ_NOTE[w], instructions].filter(Boolean).join('; '); continue }
-    if (ROUTE[w] && drug.length) { route = ROUTE[w]; continue }
+    const glued = w.match(/^x?(\d+)(d|days?|w|wk|wks|weeks?|m|mo|months?)$/) ?? (w === 'x' || w === 'for' ? null : w.match(/^x(\d+)$/))
+    if (drug.length && glued) { duration = days(+glued[1], glued[2]); continue }                       // 7d · x7 · 2w
+    if (drug.length && (w === 'for' || w === 'x') && /^\d+[a-z]*$/.test(next)) {                        // for 7 days · for 7d · x 2 weeks
+      const m = next.match(/^(\d+)([a-z]+)?$/)!
+      if (!m[2] || DUR_UNIT.test(m[2])) { const u = m[2] ?? (DUR_UNIT.test(words[i + 2]?.toLowerCase() ?? '') ? words[i + 2].toLowerCase() : 'd'); duration = days(+m[1], u); i += m[2] || !DUR_UNIT.test(words[i + 2]?.toLowerCase() ?? '') ? 1 : 2; continue }
+    }
+    if (drug.length && dose !== null && d && !d[2] && DUR_UNIT.test(next)) { duration = days(+d[1], next); i++; continue }   // 500 tds 7 days
+    if (prnFor && !FREQ[w] && !ROUTE[w] && !(d && dose === null) && !(w === 'for' && prnFor.length)) { if (w !== 'for') prnFor.push(words[i]); continue }   // prn pain · prn for pain · … for dm
+    if (w === 'for' && drug.length && i + 1 < words.length) { forProblem = findNamed(ctx.problems, words.slice(i + 1).join(' ')); if (!forProblem) return { error: `No problem “${words.slice(i + 1).join(' ')}” on the list — add it with dx first` }; break }
+    if (d && drug.length && dose === null && (!d[2] || UNITS.includes(d[2]))) { dose = +d[1]; typed.add('dose_number'); if (d[2]) unit = d[2]; else if (UNITS.includes(next)) { unit = next; i++ } if (unit) typed.add('dose_unit'); continue }
+    if (FREQ[w] && drug.length) { if (w === 'prn') { prn = true; prnFor = []; typed.add('prn') } if (!freq || w !== 'prn') { freq = FREQ[w]; typed.add('frequency') } if (FREQ_NOTE[w]) instructions = [FREQ_NOTE[w], instructions].filter(Boolean).join('; '); continue }
+    if (ROUTE[w] && drug.length) { route = ROUTE[w]; typed.add('route'); continue }
     if (dose === null && !freq) drug.push(words[i]); else instructions = [instructions, words[i]].filter(Boolean).join(' ')
   }
   if (!drug.length) return { error: 'Type the drug name after rx' }
-  const name = drug.map(cap).join(' ')
-  const line = [name, dose !== null ? `${dose} ${unit}` : null, route !== 'oral' ? route : null, freq, prn && freq !== 'PRN' ? 'PRN' : null, days ? `× ${days}d` : null, forProblem ? `for ${forProblem.name}` : null].filter(Boolean).join(' ')
-  return { ok: [{ function: 'write_prescription', kind: 'prescription', line, params: { action: 'start', drug: { name }, dose_number: dose, dose_unit: dose !== null ? unit : null, route, frequency: freq, prn, duration_days: days, instructions_text: instructions, problems: forProblem ? [{ id: forProblem.id, name: forProblem.name }] : [] } }] }
+  const known = findDrug(drug.join(' '))
+  const name = known?.name ?? drug.map(cap).join(' ')
+  if (dose !== null && !unit && known) unit = known.unit                                                // a bare number takes the drug's own unit; the card checks it against its strengths
+  if (!route && known) route = known.route
+  const prnReason = prnFor?.join(' ').trim() || null
+  if (prn && !prnReason) return { error: 'Say what PRN is for: … prn pain · prn fever · prn wheeze' }
+  if (instructions) typed.add('instructions_text'); if (duration) typed.add('duration_days')
+  const line = [name, dose !== null ? `${dose}${unit ? ` ${unit}` : ''}` : null, route && route !== 'oral' ? route : null, freq, prn ? `${freq !== 'PRN' ? 'PRN ' : ''}for ${prnReason}` : null, duration ? `× ${duration}d` : null, forProblem ? `for ${forProblem.name}` : null].filter(Boolean).join(' ')
+  return { ok: [{ function: 'write_prescription', kind: 'prescription', line, typed: [...typed], params: { action: 'start', drug: known ? { name, code: `atc:${known.atc}` } : { name }, dose_number: dose, dose_unit: dose !== null ? unit : null, route, frequency: freq, prn, prn_reason_text: prnReason, duration_days: duration, instructions_text: instructions, problems: forProblem ? [{ id: forProblem.id, name: forProblem.name }] : [] } }] }
 }
 
 function requests(rest: string, ctx: Ctx): Result {
@@ -131,23 +160,37 @@ function consult(rest: string, ctx: Ctx): Result {
 
 function problem(rest: string, now: Date): Result {
   const [first, ...note] = rest.split(';'); let main = first; const text = note.join(';').trim() || null
-  let certainty = 'confirmed'
+  let certainty = 'confirmed'; const typed: string[] = []
   main = main.replace(/(^|\s)(\?|susp(ected)?|r\/o|query)(\s|$)/gi, () => { certainty = 'suspected'; return ' ' }).replace(/\?/g, () => { certainty = 'suspected'; return '' })
   const m = main.match(/^(.*?)(?:\s+(?:since|from|x)\s+(\S+))?\s*$/i)
   const name = (m?.[1] ?? '').trim(); if (!name) return { error: 'Type the problem after dx' }
   let onset: string | null = null
-  if (m?.[2]) { onset = partialDate(m[2], now); if (!onset) return { error: `“${m[2]}”: since takes 2019 · 2019-03 · 3y · 6m` } }
-  const n = cap(name)
-  return { ok: [{ function: 'write_problem', kind: 'problem', params: { action: 'add', name: n, status: 'active', certainty, onset_on: onset, text }, line: `${n}${certainty === 'suspected' ? ' (suspected)' : ''}${onset ? ` · since ${onset}` : ''}${text ? ` — ${text}` : ''}` }] }
+  if (m?.[2]) { onset = partialDate(m[2], now); if (!onset) return { error: `“${m[2]}”: since takes 2019 · 2019-03 · 3y · 6m` }; typed.push('onset_on') }
+  if (certainty === 'suspected') typed.push('certainty'); if (text) typed.push('text')
+  const known = findProblem(name)
+  const n = known?.name ?? cap(name)
+  return { ok: [{ function: 'write_problem', kind: 'problem', typed, params: { action: 'add', name: n, code: known ? `icd10:${known.icd10}` : null, status: 'active', certainty, onset_on: onset, text }, line: `${n}${certainty === 'suspected' ? ' (suspected)' : ''}${onset ? ` · since ${onset}` : ''}${text ? ` — ${text}` : ''}` }] }
 }
 
 function allergy(rest: string): Result {
-  let kind = 'allergy'; let severity: string | null = null
-  let t = rest.replace(/\b(mild|moderate|severe|anaphylaxis)\b/gi, (m) => { severity = m.toLowerCase() === 'anaphylaxis' ? 'severe' : m.toLowerCase(); return m.toLowerCase() === 'anaphylaxis' ? 'anaphylaxis' : '' })
-  t = t.replace(/\bintol(erance)?\b/gi, () => { kind = 'intolerance'; return '' })
-  const [sub, ...react] = t.split(/[:\-–]/); const substance = cap(sub.trim()); const reactions = react.join(' ').trim() || null
-  if (!substance) return { error: 'Type the substance after al' }
-  return { ok: [{ function: 'write_allergy', kind: 'allergy', params: { action: 'add', substance: { name: substance }, kind, reactions_text: reactions, severity }, line: `${kind === 'intolerance' ? 'Intolerance' : 'Allergy'}: ${substance}${reactions ? ` — ${reactions}` : ''}${severity ? ` (${severity})` : ''}` }] }
+  let kind = 'allergy'; let severity: string | null = null; const extra: string[] = []
+  let t = rest.replace(/\b(mild|moderate|severe)\b/gi, (m) => { severity = m.toLowerCase(); return ' ' })
+  t = t.replace(/\banaphyla(xis|ctic)\b/gi, () => { severity = 'severe'; extra.push('anaphylaxis'); return ' ' })
+  t = t.replace(/\bintol(erance)?\b/gi, () => { kind = 'intolerance'; return ' ' })
+  let typed: string; let react: string
+  const m = t.match(/^(.*?)(?::|\s[-–]\s)(.*)$/)                        // "co-amoxiclav: rash" · "penicillin - rash"; a hyphen inside a name stays
+  if (m) { typed = m[1].trim(); react = m[2] }
+  else {                                                                // "penicillin rash": the longest leading run the lists know is the substance
+    const ws = t.trim().split(/\s+/).filter(Boolean); let k = ws.length
+    while (k >= 1 && !findAllergen(ws.slice(0, k).join(' ')) && !findDrug(ws.slice(0, k).join(' '))) k--
+    if (k < 1) k = ws.length
+    typed = ws.slice(0, k).join(' '); react = ws.slice(k).join(' ')
+  }
+  const reactions = [react.replace(/\s+/g, ' ').trim(), ...extra].filter(Boolean).join(', ') || null
+  if (!typed) return { error: 'Type the substance after al' }
+  const known = findAllergen(typed); const kd = findDrug(typed)
+  const substance = known?.name ?? kd?.name ?? cap(typed); const cls = known?.allergy_class ?? kd?.allergy_class ?? null
+  return { ok: [{ function: 'write_allergy', kind: 'allergy', params: { action: 'add', substance: cls ? { name: substance, class_code: cls } : { name: substance }, kind, reactions_text: reactions, severity }, line: `${kind === 'intolerance' ? 'Intolerance' : 'Allergy'}: ${substance}${reactions ? ` — ${reactions}` : ''}${severity ? ` (${severity})` : ''}` }] }
 }
 
 export function parse(input: string, ctx: Ctx): Result {
@@ -166,4 +209,27 @@ export function parse(input: string, ctx: Ctx): Result {
   if (nk) return rest ? { ok: [{ function: 'write_note', kind: 'note', tag: `note:${nk[0]}`, append: true, params: { kind: nk[0], text: `${nk[1]}: ${rest}` }, line: `${nk[1]}: ${rest}` }] } : null
   const text = s.replace(/^(note|n):\s*/i, '')
   return { ok: [{ function: 'write_note', kind: 'note', tag: 'note:progress', append: true, params: { kind: 'progress', text }, line: text }] }
+}
+
+/** the one-line summary of a draft, from its fields (the card edits the fields; the line follows) */
+export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'>): string {
+  const q = p.params as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+  switch (p.function) {
+    case 'write_vitals': return ([['systolic', 'BP'], ['pulse', 'P'], ['temperature', 'T'], ['weight', 'Wt'], ['height', 'Ht'], ['spo2', 'SpO₂'], ['respiratory_rate', 'RR']] as const)
+      .flatMap(([k, l]) => k === 'systolic' ? (q.systolic != null ? [`BP ${q.systolic}/${q.diastolic ?? '?'}`] : []) : q[k] != null ? [`${l} ${q[k]}`] : []).join(' · ')
+    case 'write_prescription': return q.action === 'stop' ? `Stop ${q.drug?.name}${q.stop_reason_text ? ` — ${q.stop_reason_text}` : ''}`
+      : [q.action === 'change' ? 'Change:' : q.action === 'repeat' ? 'Repeat' : null, q.drug?.name, q.dose_number != null ? `${q.dose_number} ${q.dose_unit ?? ''}`.trim() : null,
+         q.route && q.route !== 'oral' ? q.route : null, q.frequency, q.prn ? `${q.frequency !== 'PRN' ? 'PRN ' : ''}${q.prn_reason_text ? `for ${q.prn_reason_text}` : ''}`.trim() || null : null, q.duration_days ? `× ${q.duration_days}d` : null,
+         q.problems?.[0]?.name ? `for ${q.problems[0].name}` : null].filter(Boolean).join(' ')
+    case 'write_problem': return `${q.action === 'resolve' ? 'Resolved: ' : q.action === 'update' ? 'Update: ' : ''}${q.name}${q.certainty === 'suspected' ? ' (suspected)' : ''}${q.onset_on ? ` · since ${q.onset_on}` : ''}${q.text ? ` — ${q.text}` : ''}`
+    case 'write_allergy': return q.action === 'refute' ? `Refuted: ${q.substance?.name}` : `${q.kind === 'intolerance' ? 'Intolerance' : 'Allergy'}: ${q.substance?.name}${q.reactions_text ? ` — ${q.reactions_text}` : ''}${q.severity ? ` (${q.severity})` : ''}`
+    case 'write_request': {
+      const dname = (id: string | null | undefined) => ctx?.departments.find((d) => d.id === id)?.name ?? '?'
+      if (!q.service_id) return `Consult ${dname(q.to_department_id)}: ${q.question_text ?? ''}`
+      const svc = ctx?.services.find((x) => x.id === q.service_id)
+      return `${svc?.name ?? 'Request'}${q.priority && q.priority !== 'routine' ? ` (${q.priority})` : ''} → ${dname(svc?.department_id)}`
+    }
+    case 'write_note': return String(q.text ?? '')
+    default: return p.line
+  }
 }
