@@ -1,83 +1,53 @@
--- the pack boundary (spec 06 tests 1–9), with a hostile fixture pack. Run as postgres after db reset.
-\set org '00000000-0000-0000-0000-0000000000a1'
-\set dr  '00000000-0000-0000-0000-0000000000b1'
-\set im  '00000000-0000-0000-0000-0000000000d1'
-\set pt  '00000000-0000-0000-0000-0000000000f1'
-insert into core.organizations (id, name) values (:'org', 'Demo');
-insert into core.users (id, organization_id, kind, name) values (:'dr', :'org', 'staff', 'Dr Ali');
-insert into core.departments (id, organization_id, type, name) values (:'im', :'org', 'clinic', 'IM');
-insert into core.record_numbers values (:'org', 0);
-insert into core.patients (id, organization_id, record_number, given_name, family_name, sex, born_on) values (:'pt', :'org', 1, 'Ahmed', 'Hassan', 'male', '1968');
+-- permanent test 2 · the boundary scan (spec §8): only the writer (and what it calls), the reader (and what it calls), refreshes and the
+-- eraser name entries or a derived table; nothing is reachable from the API but the doors; only owners write derived tables
+\echo '── who names core.entries: the writer and its checks, the reader and its rules and mappings, refreshes, the eraser, a few doors'
+with registered as (
+  select unnest(checks)::oid f from core.types union select line from core.types union select to_fhir from core.types where to_fhir is not null
+  union select claims from core.types where claims is not null union select refresh from core.derived union select hidden from core.rules union select refresh from core.listeners),
+allowed(name) as (values
+  -- the writer, the reader, the eraser and the guard
+  ('core.writer'), ('core.hidden'), ('core.read_record'), ('core.read_item'), ('core.read_file'), ('core.read_fhir'), ('core.rows_out'), ('core.may_read_file'),
+  ('core.erase'), ('core.redact'), ('core.rebuild_check'), ('core.refresh_patients'),
+  -- the doors that ask "was it ever used" or catch a pack up, and a pack's reading door
+  ('core.save_place_row'), ('public.remove'), ('public.write_setting'), ('core.pack_entries'),
+  -- helpers of the base's checks and refreshes
+  ('base.entry'), ('base.latest'), ('base.orders_of'), ('base.answers_of'), ('base.same_kind'))
+select t.report('boundary', n.nspname || '.' || p.proname || ' names core.entries')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname not in ('t', 'pg_catalog', 'information_schema') and p.prosrc ~ 'core\.entries\M'
+   and p.oid not in (select f from registered) and n.nspname || '.' || p.proname not in (select name from allowed);
+select t.ok(true, 'every function naming core.entries is the writer''s, the reader''s, a refresh, a check, a rule, the eraser''s or a listed door');
 
--- ── the hostile pack: its own schema and role, exactly the grants spec 06 allows ──
-do $$ begin if not exists (select 1 from pg_roles where rolname = 'pack_hostile') then create role pack_hostile nologin; end if; end $$;
-grant pack_hostile to postgres;   -- the migration runner is not a superuser; it must be allowed to SET ROLE
-create schema hostile authorization pack_hostile;
-grant usage on schema core to pack_hostile;
-grant execute on function core.write_entry(uuid,uuid,uuid,uuid,uuid,uuid,uuid,core.entry_source,text,timestamptz,text,uuid,jsonb,text,uuid,boolean,uuid,uuid,jsonb,boolean) to pack_hostile;
-grant execute on function core.change_request(uuid,core.request_step,core.request_step,uuid,text,jsonb,timestamptz), core.require_access(uuid,text,uuid,uuid), core.require_pack(uuid,text) to pack_hostile;
-insert into core.packs (key, name, is_called_after_write) values ('hostile', 'Hostile fixture', true);
-insert into core.roles (id, organization_id, key, name) values ('00000000-0000-0000-0000-00000000c0ff', null, 'pack:hostile', 'Hostile pack');
-insert into core.organization_packs (organization_id, pack) values (:'org', 'hostile');
-insert into core.users (id, organization_id, kind, name) values ('00000000-0000-0000-0000-0000000000ff', :'org', 'pack', 'hostile');
-insert into core.user_roles (organization_id, user_id, role_id) values (:'org', '00000000-0000-0000-0000-0000000000ff', '00000000-0000-0000-0000-00000000c0ff');
-set role pack_hostile;
-create table hostile.mode (m text);  insert into hostile.mode values ('ok');
-create table hostile.log (entry_id uuid, at timestamptz default clock_timestamp());
-create function hostile.after_write(e core.entries) returns void language plpgsql security definer set search_path = '' as $$
-declare m text; begin
-  select mode.m into m from hostile.mode limit 1;
-  if m = 'sleep' then perform pg_catalog.pg_sleep(6);
-  elsif m = 'raise' then raise exception 'hostile raise';
-  elsif m = 'write_core' then insert into core.entries select * from core.entries limit 0; insert into core.record_reads (organization_id, user_id, patient_id) values (e.organization_id, e.author_id, e.patient_id);
-  else insert into hostile.log (entry_id) values (e.id); end if;
-end $$;
-reset role;
+\echo '── who names a derived table: refreshes, checks and mappings (reads); the reader reaches them only through the registry'
+with registered as (
+  select unnest(checks)::oid f from core.types union select to_fhir from core.types where to_fhir is not null union select refresh from core.derived union select refresh from core.listeners)
+select t.report('boundary', n.nspname || '.' || p.proname || ' names a derived table')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace, core.derived d
+ where n.nspname not in ('t', 'pg_catalog', 'information_schema') and p.prosrc ~ (replace(d.key, '.', '\.') || '\M') and p.oid not in (select f from registered);
+select t.ok(true, 'every function naming a derived table is registered');
 
-\echo '── B4 grants: the pack role holds nothing on any core table'
-select bool_and(not has_table_privilege('pack_hostile', 'core.' || tablename, 'SELECT,INSERT,UPDATE,DELETE')) as no_core_privileges from pg_tables where schemaname = 'core';
-\echo '── B3 ownership and definer: every hostile function is definer and owned by its role'
-select bool_and(p.prosecdef and r.rolname = 'pack_hostile') as ok from pg_proc p join pg_namespace n on n.oid = p.pronamespace join pg_roles r on r.oid = p.proowner where n.nspname = 'hostile';
-\echo '── B1 a sleeping pack delays no write: write_entry under 300 ms while the pack would sleep 6 s'
-update hostile.mode set m = 'sleep';
-do $$ declare t0 timestamptz := clock_timestamp(); ms numeric; begin
-  perform core.write_entry('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000f1', null, '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000b1', null, 'staff', null, null, 'note', null, '{"kind":"progress","text":"x"}', 'Progress · x', null, true, null, null, null);
-  ms := extract(epoch from clock_timestamp() - t0) * 1000;
-  raise notice 'write_entry took % ms (%)', round(ms), case when ms < 300 then 'PASS' else 'FAIL' end;
-end $$;
-select pack, tries, error_text from core.pack_calls;
-\echo '── B2 the runner survives the sleeper (it finishes in its own time; the write was never delayed) and clears the row'
-call core.run_pack_calls();
-select count(*) as pending from core.pack_calls;
-\echo '── B5 a raising pack: its error is recorded, retried, parked after five tries'
-update hostile.mode set m = 'raise';
-select (core.write_entry('00000000-0000-0000-0000-0000000000e5', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000f1', null, '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000b1', null, 'staff', null, null, 'note', null, '{"kind":"progress","text":"y"}', 'Progress · y', null, true, null, null, null)).id is not null as written;
-call core.run_pack_calls();
-select tries, left(error_text, 30) as error from core.pack_calls;
-update core.pack_calls set tries = 4, tried_at = null;
-call core.run_pack_calls();
-select tries, tries >= 5 as parked, left(error_text, 30) as error from core.pack_calls;
-delete from core.pack_calls;
-\echo '── B6 a pack writing a core table is refused by Postgres, not by review'
-update hostile.mode set m = 'write_core';
-select (core.write_entry('00000000-0000-0000-0000-0000000000e6', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000f1', null, '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000b1', null, 'staff', null, null, 'note', null, '{"kind":"progress","text":"z"}', 'Progress · z', null, true, null, null, null)).id is not null as written;
-call core.run_pack_calls();
-select left(error_text, 45) as error from core.pack_calls; select count(*) as record_reads_written from core.record_reads;
-delete from core.pack_calls;
-\echo '── B7 a well-behaved pack reacts once and the row is gone'
-update hostile.mode set m = 'ok';
-select (core.write_entry('00000000-0000-0000-0000-0000000000e7', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000f1', null, '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000b1', null, 'staff', null, null, 'note', null, '{"kind":"progress","text":"w"}', 'Progress · w', null, true, null, null, null)).id is not null as written;
-call core.run_pack_calls();
-call core.run_pack_calls();
-select count(*) as pending from core.pack_calls; select count(*) as reacted_once from hostile.log;
-\echo '── B8 the funnel gates a pack caller: as the pack user it cannot write a type its role lacks, nor write as a doctor'
-select set_config('opencare.acting_user_id', '00000000-0000-0000-0000-0000000000ff', false);
-set role pack_hostile;
-select core.write_entry('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000f1', null, '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000ff', null, 'staff', null, null, 'prescription', null, '{}', 'x', null, true, null, null, null);
-select core.write_entry('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000f1', null, '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000b1', null, 'staff', null, null, 'note', null, '{}', 'x', null, true, null, null, null);
-reset role; select set_config('opencare.acting_user_id', '', false);
-select count(*) as entries_written_by_pack from core.entries where author_id = '00000000-0000-0000-0000-0000000000ff';
-\echo '── B9 advisory locks (informational: the revoke needs a superuser; the runner timeout is the fallback)'
-select has_function_privilege('pack_hostile', 'pg_catalog.pg_advisory_xact_lock(bigint)', 'EXECUTE') as pack_can_lock;
-\echo '── B10 rebuild with a hostile updater leaves core lists rebuilt (no pack list here: counts only)'
-select core.rebuild_record('00000000-0000-0000-0000-0000000000f1');
+\echo '── grants: the API holds no table; only the doors are callable'
+select t.ok(not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('core', 'base', 'pharmacy') and c.relkind in ('r', 'v', 'm')
+  and (has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE') or has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))), 'authenticated and anon hold no table in core, base or a pack');
+select t.ok(coalesce(string_agg(p.proname, ', ' order by p.proname), '') = 'choose_user, create_organization, erase_patient, merge_patients, my_users, read, redact, remove, save, save_patient, write, write_setting',
+  'the public doors: ' || coalesce(string_agg(p.proname, ', ' order by p.proname), '')) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
+select t.ok(coalesce(string_agg(p.proname, ', ' order by p.proname), '') = 'may_listen, may_read_file, may_upload_file', 'core functions the API may call: ' || coalesce(string_agg(p.proname, ', ' order by p.proname), ''))
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'core' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
+select t.ok(not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('base', 'pharmacy') and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
+  'no base or pack function is callable from the API');
+select t.ok(not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('core', 'base', 'pharmacy', 'public') and p.prokind = 'f'
+  and p.prosecdef and not coalesce(p.proconfig @> array['search_path=""'], false)), 'every definer function pins search_path empty');
+
+\echo '── only the owners write derived tables (the eraser deletes); the spine is written by the writer only'
+select t.ok(not exists (select 1 from core.derived d, pg_roles r where r.rolname not in ('postgres', 'supabase_admin') and r.rolname !~ '^pg_' and not r.rolsuper
+  and r.rolname <> (select l.role_name from core.layers l where l.key = d.layer) and has_table_privilege(r.oid, d.relation, 'INSERT,UPDATE')), 'no one but its layer writes a derived table');
+select t.ok(not exists (select 1 from pg_roles r where r.rolname not in ('postgres', 'supabase_admin', 'core_eraser') and r.rolname !~ '^pg_' and not r.rolsuper and has_table_privilege(r.oid, 'core.entries', 'INSERT,UPDATE,DELETE')),
+  'only the migration owner (the writer) and the eraser write entries');
+select t.ok(bool_and(not has_table_privilege(l.role_name, 'core.' || c.relname, 'SELECT,INSERT,UPDATE,DELETE')), 'packs hold no core table')
+  from core.layers l, pg_class c join pg_namespace n on n.oid = c.relnamespace where l.is_pack and n.nspname = 'core' and c.relkind = 'r';
+select case when not exists (select 1 from pg_namespace where nspname = 'net') then 'ok no net schema'
+            when bool_and(not has_schema_privilege(l.role_name, 'net', 'USAGE')) then 'ok packs cannot reach the network (no USAGE on net)'
+            when bool_and(t.host_granted(n.nspacl, n.nspowner, 'n', 'USAGE', (select oid from pg_roles where rolname = l.role_name))) then 'host limit: the host grants USAGE on net to PUBLIC; packs must not call it (review)'
+            else 'FAIL a pack can reach the network through a grant we made' end
+  from core.layers l, pg_namespace n where l.is_pack and n.nspname = 'net';

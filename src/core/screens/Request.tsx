@@ -2,34 +2,38 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDepartment } from '../hooks/organization'
 import { useEntry, useRequestQueue } from '../hooks/reads'
-import { useRequestActions } from '../hooks/writes'
-import type { Entry, ServiceField, Value } from '../db/types'
+import { useWrite } from '../hooks/writes'
+import { fitField } from '../hooks/ranges'
+import { oneSet, resultEntry, stepEntry } from '../db/entries'
+import { ageOf } from '../db/views'
+import type { Entry, ServiceField } from '../db/types'
 import { Button, Centered, Input, Spinner, Select, flagClass, dateTime } from '../ui'
 import { FallbackFull } from '../renderers'
 
-/** The request surface (spec 05): one request, its value grid from the service's fields, a report, not-done, steps; release → next. */
+/** One order (spec/openCare.md §4.6): the value grid from the service's fields, a report, not done, steps; release → next. */
 export function RequestScreen() { const { requestId } = useParams(); return <RequestBody key={requestId} requestId={requestId} /> }
 function RequestBody({ requestId }: { requestId?: string }) {
   const { org, dept, can } = useDepartment()
   const navigate = useNavigate()
   const queue = useRequestQueue(dept?.id ?? null)
+  // an order this department answers is on its worklist; the worklist row is what an answer is built from
   const row = queue.data?.requests.find((r) => r.id === requestId) ?? null
-  // technicians see the request, not the record (spec 02): the full entry is read only by those who may read the record
+  // technicians see the order, not the record: the full entry is read only by those who may read the record
   const full = useEntry(can('read:record') ? requestId ?? null : null)
-  const e = useMemo(() => full.data ? { data: full.data, isLoading: false, error: full.error } : row ? { data: { ...row, data: { question_text: row.question_text } as Record<string, unknown>, patient_id: row.patient.id, patient: { ...row.patient, age: 0 }, replies: [], files: [], steps: [], versions: [] } as Entry, isLoading: false, error: null } : { data: null, isLoading: queue.isLoading || full.isLoading, error: full.error ?? queue.error }, [full.data, full.error, full.isLoading, row, queue.isLoading, queue.error])
-  const acts = useRequestActions()
-  const service = useMemo(() => org?.services.find((s) => s.id === e.data?.service_id) ?? null, [org, e.data])
-  const fields = service?.fields ?? []
+  const e = useMemo(() => full.data ? { data: full.data, isLoading: false, error: full.error } : row ? { data: { ...row, data: { question: row.question_text } as Record<string, unknown>, patient_id: row.patient.id, patient: { ...row.patient, age: ageOf(row.patient.born_on) }, replies: [], files: [], steps: [], versions: [], related: [] } as Entry, isLoading: false, error: null } : { data: null, isLoading: queue.isLoading || full.isLoading, error: full.error ?? queue.error }, [full.data, full.error, full.isLoading, row, queue.isLoading, queue.error])
+  const w = useWrite()
+  const service = useMemo(() => org?.services.find((s) => s.id === (row?.service_id ?? e.data?.service_id)) ?? null, [org, row, e.data])
+  const fields = useMemo(() => (service?.fields ?? []).map((f) => row ? fitField(f, row.patient.sex, ageOf(row.patient.born_on)) : f), [service, row])
   const [vals, setVals] = useState<Record<string, string>>({}); const [text, setText] = useState(''); const [notDone, setNotDone] = useState(false); const [reason, setReason] = useState(''); const [final, setFinal] = useState(true); const [err, setErr] = useState<string | null>(null)
-  const req = e.data?.request
-  const mine = !!req && req.to_department_id === dept?.id
+  const req = row?.request ?? e.data?.request
+  const mine = !!row
   const open = req?.status === 'open'
   const next = queue.data?.requests.find((r) => r.id !== requestId) ?? null
+  const step = (status: string, why?: string, key?: string) => row && dept && w.mutate(oneSet([stepEntry(row, dept.id, status, why, key)]), { onError: (x) => setErr(x.message) })
   async function release(andNext: boolean) {
-    if (!e.data || !dept) return; setErr(null)
-    const values: Value[] = fields.flatMap((f) => { const raw = vals[f.code]; if (raw === undefined || raw === '') return []; const v: Value = { code: f.code, name: f.name, unit: f.unit ?? undefined }; if (f.kind === 'number') v.value_number = Number(raw); else v.value_text = raw; return [v] })
+    if (!row || !dept) return; setErr(null)
     try {
-      await acts.result.mutateAsync({ patient_id: e.data.patient_id, visit_id: e.data.visit_id, department_id: dept.id, request_id: e.data.id, values, text: text || null, is_final: final, not_done: notDone, not_done_reason_text: notDone ? reason : null })
+      await w.mutateAsync(oneSet([notDone ? stepEntry(row, dept.id, 'failed', reason.trim()) : resultEntry(row, dept.id, fields, vals, text, final)]))
       if (andNext && next) navigate(`/request/${next.id}`, { replace: true }); else navigate('/')
     } catch (x) { setErr(x instanceof Error ? x.message : String(x)) }
   }
@@ -40,7 +44,9 @@ function RequestBody({ requestId }: { requestId?: string }) {
   const patient = e.data.patient
   const replies = e.data.replies ?? []
   const canReply = mine && open && can('write:result')
-  const canStep = mine && open
+  const canStep = mine && open && can('write:step')
+  const question = (d.question ?? d.question_text) as string | undefined
+  const held = req?.order?.status === 'on-hold'
   return <div className="mx-auto grid max-w-4xl gap-4 p-4">
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-2.5">
       <button onClick={() => navigate('/')} className="text-xs text-neutral-500 hover:text-neutral-800">← queue</button>
@@ -49,8 +55,7 @@ function RequestBody({ requestId }: { requestId?: string }) {
       <span className="text-xs text-neutral-500">from {e.data.department_name} · {e.data.author_name} · {dateTime(e.data.occurred_at)}</span>
       {req && <span className={`ml-auto text-xs ${open ? 'text-amber-700' : 'text-neutral-500'}`}>{req.step}{req.priority !== 'routine' && <b className="ml-1.5 text-red-700">{req.priority.toUpperCase()}</b>}</span>}
     </div>
-    {typeof d.question_text === 'string' && d.question_text && <p className="rounded-md bg-neutral-100 px-3 py-2 text-sm">“{d.question_text}”</p>}
-    {Array.isArray(d.problems) && (d.problems as { name: string }[]).length > 0 && <p className="text-xs text-neutral-500">for: {(d.problems as { name: string }[]).map((p) => p.name).join(', ')}</p>}
+    {question && <p className="rounded-md bg-neutral-100 px-3 py-2 text-sm">“{question}”</p>}
     {replies.length > 0 && <section className="grid gap-2">{replies.map((r) => <div key={r.id} className="rounded-lg border border-neutral-200 bg-white p-3"><p className="mb-1 text-xs text-neutral-500">{r.author_name} · {dateTime(r.occurred_at)} {!r.is_final && <b className="text-amber-700">preliminary</b>} <span className={flagClass(r.flag)}>{r.flag !== 'normal' && r.flag}</span></p><FallbackFull card={r} data={r.data} /></div>)}</section>}
     {canReply && <section className="grid gap-3 rounded-lg border border-teal-200 bg-white p-4">
       {fields.length > 0 && <ValueGrid fields={fields} vals={vals} setVals={setVals} />}
@@ -61,31 +66,30 @@ function RequestBody({ requestId }: { requestId?: string }) {
         {notDone && <Input value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder="Why not (required)" className="w-64" />}
         <div className="flex-1" />
         {err && <span className="text-red-700">{err}</span>}
-        <Button onClick={() => release(true)} disabled={acts.result.isPending || (notDone && !reason.trim())}>Release{next ? ' → next' : ''} <kbd className="rounded bg-white/20 px-1 text-[10px]">⌘⏎</kbd></Button>
-        <Button variant="outline" onClick={() => release(false)} disabled={acts.result.isPending || (notDone && !reason.trim())}>Release</Button>
+        <Button onClick={() => release(true)} disabled={w.isPending || (notDone && !reason.trim())}>Release{next ? ' → next' : ''} <kbd className="rounded bg-white/20 px-1 text-[10px]">⌘⏎</kbd></Button>
+        <Button variant="outline" onClick={() => release(false)} disabled={w.isPending || (notDone && !reason.trim())}>Release</Button>
       </div>
     </section>}
     {canStep && req && <div className="flex flex-wrap items-center gap-2 text-xs">
-      {req.step === 'sent' && can('mark:started') && <Button size="sm" variant="outline" onClick={() => acts.step.mutate({ request_id: e.data!.id, from_step: 'sent', step: 'started' })}>Start</Button>}
-      {req.step !== 'held' && can('mark:held') && <Button size="sm" variant="ghost" onClick={() => acts.step.mutate({ request_id: e.data!.id, from_step: req.step, step: 'held', reason: 'held' })}>Hold</Button>}
-      {req.step === 'held' && can('mark:sent') && <Button size="sm" variant="outline" onClick={() => acts.step.mutate({ request_id: e.data!.id, from_step: 'held', step: 'sent' })}>Resume</Button>}
-      {can('mark:cancelled') && <CancelButton onCancel={(why) => acts.step.mutate({ request_id: e.data!.id, from_step: req.step, step: 'cancelled', reason: why })} />}
-      {acts.step.error && <span className="text-red-700">{acts.step.error.message}</span>}
+      {req.order?.status === 'active' && <Button size="sm" variant="outline" onClick={() => step('in-progress', undefined, 'started')}>Start</Button>}
+      {!held && <Button size="sm" variant="ghost" onClick={() => step('on-hold', 'held')}>Hold</Button>}
+      {held && <Button size="sm" variant="outline" onClick={() => step('in-progress')}>Resume</Button>}
+      <CancelButton onCancel={(why) => step('rejected', why)} />
+      {!canReply && err && <span className="text-red-700">{err}</span>}
     </div>}
-    {req?.review_needed_at && can('mark:reviewed') && <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm"><span className="flex-1">Needs your review{req.reply_flag && req.reply_flag !== 'normal' && <b className={`ml-2 ${flagClass(req.reply_flag)}`}>{req.reply_flag}</b>}</span><Button onClick={() => acts.reviewed.mutate([e.data!.id], { onSuccess: () => navigate('/') })} disabled={acts.reviewed.isPending}>Mark reviewed</Button></div>}
     {e.data.steps.length > 0 && <ol className="text-[11px] text-neutral-400">{e.data.steps.map((s, i) => <li key={i}>{dateTime(s.recorded_at)} · {s.step}{s.reason ? ` · ${s.reason}` : ''}</li>)}</ol>}
     {!mine && <p className="text-xs text-neutral-400">Addressed to {req?.to_department_name}. You are viewing only.</p>}
   </div>
 }
 function ValueGrid({ fields, vals, setVals }: { fields: ServiceField[]; vals: Record<string, string>; setVals: (v: Record<string, string>) => void }) {
   const flag = (f: ServiceField, raw: string) => { if (f.kind !== 'number' || raw === '') return null; const n = Number(raw); if (f.critical_low != null && n < f.critical_low) return 'critical'; if (f.critical_high != null && n > f.critical_high) return 'critical'; if (f.reference_low != null && n < f.reference_low) return 'low'; if (f.reference_high != null && n > f.reference_high) return 'high'; return 'normal' }
-  return <table className="text-sm"><tbody>{fields.map((f, i) => <tr key={f.code}><td className="pr-3 py-0.5 text-neutral-700">{f.name}</td>
-    <td className="py-0.5">{f.kind === 'choice' && f.choices ? <Select value={vals[f.code] ?? ''} onChange={(e) => setVals({ ...vals, [f.code]: e.target.value })} className="w-40"><option value="">—</option>{f.choices.map((c) => <option key={c}>{c}</option>)}</Select>
-      : <Input autoFocus={i === 0} type={f.kind === 'number' ? 'number' : 'text'} step="any" value={vals[f.code] ?? ''} onChange={(e) => setVals({ ...vals, [f.code]: e.target.value })} className={`w-32 text-right font-mono ${flagClass(flag(f, vals[f.code] ?? ''))}`} />}</td>
+  return <table className="text-sm"><tbody>{fields.map((f, i) => <tr key={f.key}><td className="pr-3 py-0.5 text-neutral-700">{f.name}</td>
+    <td className="py-0.5">{f.kind === 'choice' && f.choices ? <Select value={vals[f.key] ?? ''} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} className="w-40"><option value="">—</option>{f.choices.map((c) => <option key={c}>{c}</option>)}</Select>
+      : <Input autoFocus={i === 0} type={f.kind === 'number' ? 'number' : 'text'} step="any" value={vals[f.key] ?? ''} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} className={`w-32 text-right font-mono ${flagClass(flag(f, vals[f.key] ?? ''))}`} />}</td>
     <td className="pl-2 text-xs text-neutral-400">{f.unit}</td><td className="pl-3 font-mono text-[11px] text-neutral-400">{f.reference_low != null || f.reference_high != null ? `${f.reference_low ?? ''}–${f.reference_high ?? ''}` : ''}</td></tr>)}</tbody></table>
 }
 function CancelButton({ onCancel }: { onCancel: (why: string) => void }) {
   const [why, setWhy] = useState<string | null>(null)
   if (why === null) return <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setWhy('')}>Cancel…</Button>
-  return <span className="flex items-center gap-1.5"><Input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Reason" className="h-8 w-56" autoFocus /><Button size="sm" variant="danger" disabled={!why.trim()} onClick={() => onCancel(why)}>Cancel request</Button><Button size="sm" variant="ghost" onClick={() => setWhy(null)}>Keep</Button></span>
+  return <span className="flex items-center gap-1.5"><Input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Reason" className="h-8 w-56" autoFocus /><Button size="sm" variant="danger" disabled={!why.trim()} onClick={() => onCancel(why)}>Decline</Button><Button size="sm" variant="ghost" onClick={() => setWhy(null)}>Keep</Button></span>
 }

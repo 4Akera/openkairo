@@ -1,19 +1,35 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Copy, Plus, Search, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
-import { rpc } from '../../db/rpc'
+import { writeSetting } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
+import { ucumOf } from '../../db/entries'
 import type { FieldRange, Organization, Service, ServiceField } from '../../db/types'
-import { useRanges } from '../../hooks/ranges'
+import { replyFormFor } from '../../renderers'
 import { Badge, Button, Card, IconButton, Input, Kbd, Select, cn, errorText } from '../../ui'
 import { PageHead } from './parts'
 
-interface Code { code: string; name: string; kind: string; unit: string | null; is_local: boolean }
+// a field's code is written system:code (loinc:718-7); known names fill it in from the codes this page is given
+interface Code { code: string; name: string; unit: string | null }
 interface ReplyType { key: string; name: string; pack: string | null }
-type Band = Omit<FieldRange, 'service_id' | 'position'>
-type EField = ServiceField & { bands?: Band[] }
-type Draft = { id: string; department_id: string; section_name: string; code: string; name: string; reply_type: string; fields: EField[]; isNew: boolean }
-const blankField = (): ServiceField => ({ position: 0, code: '', name: '', kind: 'number', unit: null, choices: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null })
+type Band = FieldRange
+type EField = ServiceField
+type Draft = { id: string; department_id: string; section_name: string; code: string; name: string; reply_type: string; coding: string; fields: EField[]; isNew: boolean }
+const blankField = (): ServiceField => ({ position: 0, key: '', code: '', name: '', kind: 'number', unit: null, ucum: null, choices: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null, ranges: [] })
+const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+const coding = (c: string) => { const i = c.indexOf(':'); return i > 0 ? { system: c.slice(0, i).trim(), code: c.slice(i + 1).trim() } : undefined }
+const drop = <T extends Record<string, unknown>>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length)))
+/** the service as its setting's data (spec/openCare.md §4.6): each field keeps a stable key, so results over time stay one line */
+function serviceData(x: Draft) {
+  const used = new Set<string>()
+  const fields = x.reply_type !== 'result' ? [] : x.fields.filter((y) => y.name.trim()).map((y) => {
+    let key = y.key || slug(y.name) || 'field'; while (used.has(key)) key = `${key}_`; used.add(key)
+    return drop({ key, name: y.name.trim(), coding: coding(y.code), kind: y.kind, unit: y.kind === 'number' ? y.unit : null, ucum: y.kind === 'number' ? y.ucum ?? ucumOf(y.unit) : null,
+      choices: y.kind === 'choice' ? (y.choices ?? []).map((c) => c.trim()).filter(Boolean) : null, low: y.reference_low, high: y.reference_high, critical_low: y.critical_low, critical_high: y.critical_high,
+      ranges: y.kind === 'number' ? y.ranges.map((r) => drop({ ...r })) : null })
+  })
+  return drop({ code: x.code.trim(), name: x.name.trim(), section: x.section_name.trim(), coding: coding(x.coding), answer: x.reply_type, fields })
+}
 const num = (s: string | undefined) => { const t = (s ?? '').trim().replace(',', '.'); return t === '' || Number.isNaN(Number(t)) ? null : Number(t) }
 const range = (s: string | undefined): [number | null, number | null] => { const t = (s ?? '').trim(); if (!t) return [null, null]; const m = t.match(/^(-?[\d.,]*)\s*[-–]\s*(-?[\d.,]*)$/); if (m) return [num(m[1]), num(m[2])]; if (t.startsWith('<')) return [null, num(t.slice(1))]; if (t.startsWith('>')) return [num(t.slice(1)), null]; return [null, null] }
 const fmtRange = (lo: number | null, hi: number | null) => lo == null && hi == null ? '' : `${lo ?? ''}-${hi ?? ''}`
@@ -30,14 +46,18 @@ export function parseFields(text: string, codes: Code[]): ServiceField[] {
 }
 const toText = (fs: ServiceField[]) => fs.map((f) => [f.name, f.kind === 'choice' ? `[${(f.choices ?? []).join('/')}]` : f.unit ?? '', fmtRange(f.reference_low, f.reference_high), fmtRange(f.critical_low, f.critical_high), f.code].join(' | ').replace(/( \| )+$/, '')).join('\n')
 
-/** Services (spec 02): grouped by department and section, filtered as you type, edited in place. */
+/** Services (spec/openCare.md §4.6): each a setting owned by the department that does it; grouped by department and section, edited in place. */
 export function ServicesPage({ org }: { org: Organization }) {
-  const qc = useQueryClient(); const orgId = org.organization.id
-  const codes = useQuery({ queryKey: ['codes', orgId], queryFn: () => rpc<Code[]>('read_codes', { organization_id: orgId, limit: 1000 }), staleTime: 300_000 })
-  const replyTypes = useQuery({ queryKey: ['reply_types', orgId], queryFn: () => rpc<ReplyType[]>('read_reply_types', { organization_id: orgId }), staleTime: 300_000 })
-  const ranges = useRanges(orgId)
-  const save = useMutation({ mutationFn: (a: Record<string, unknown>) => rpc('save_service', { organization_id: orgId, ...a }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['codes'] }); qc.invalidateQueries({ queryKey: ['ranges'] }) } })
-  const retire = useMutation({ mutationFn: (id: string) => rpc('retire_service', { id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['organization'] }) })
+  const qc = useQueryClient()
+  // the codes a field name fills in: every field already used on a service here
+  const codes = { data: [...new Map(org.services.flatMap((x) => x.fields).filter((x) => x.code).map((x): [string, Code] => [x.name.toLowerCase(), { code: x.code, name: x.name, unit: x.unit }])).values()] }
+  // how an order is answered: values, a report, or a pack's own answer (a pack that is on and draws a reply form)
+  const replyTypes: ReplyType[] = [{ key: 'result', name: 'values', pack: null }, { key: 'note', name: 'a report', pack: null },
+    ...org.types.filter((t) => t.layer !== 'core' && t.layer !== 'base' && org.packs.some((p) => p.key === t.layer && p.enabled) && replyFormFor(t.key)).map((t) => ({ key: t.key, name: t.labels.en ?? t.key, pack: t.layer }))]
+  const done = () => qc.invalidateQueries({ queryKey: ['organization'] })
+  const save = useMutation({ mutationFn: (x: Draft) => writeSetting({ key: 'service', owner_id: x.department_id, thing_id: x.id, data: serviceData(x) }), onSuccess: done })
+  // a service is never deleted: retired, it is no longer offered, and every order and result keeps it
+  const retire = useMutation({ mutationFn: (x: Service) => writeSetting({ key: 'service', owner_id: x.department_id, thing_id: x.id, retired: true }), onSuccess: done })
   const [q, setQ] = useState(''); const [open, setOpen] = useState<Draft | null>(null); const [closed, setClosed] = useState<Set<string>>(new Set())
   const box = useRef<HTMLInputElement>(null)
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)) { e.preventDefault(); box.current?.focus() } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
@@ -45,14 +65,11 @@ export function ServicesPage({ org }: { org: Organization }) {
   const shown = org.services.filter((s) => !f || s.name.toLowerCase().includes(f) || s.code.includes(f) || (s.section_name ?? '').toLowerCase().includes(f) || s.fields.some((x) => x.name.toLowerCase().includes(f)))
   const depts = org.departments.filter((d) => shown.some((s) => s.department_id === d.id) || (!f && org.services.some((s) => s.department_id === d.id)))
   const sections = useMemo(() => [...new Set(org.services.map((s) => s.section_name).filter(Boolean) as string[])].sort(), [org.services])
-  const start = (s: Service | null, dept?: string, section?: string, copy = false) => setOpen(s ? { id: copy ? newId() : s.id, department_id: s.department_id ?? '', section_name: s.section_name ?? '', code: copy ? `${s.code}_copy` : s.code, name: copy ? `${s.name} (copy)` : s.name, reply_type: s.reply_type, fields: s.fields.map((x) => ({ ...x, bands: (ranges.data ?? []).filter((r) => r.service_id === s.id && r.position === x.position).map((r) => ({ sex: r.sex, age_low: r.age_low, age_high: r.age_high, reference_low: r.reference_low, reference_high: r.reference_high, critical_low: r.critical_low, critical_high: r.critical_high })) })), isNew: copy }
-    : { id: newId(), department_id: dept ?? org.departments.find((d) => d.type === 'ancillary')?.id ?? org.departments[0]?.id ?? '', section_name: section ?? '', code: '', name: '', reply_type: 'result', fields: [blankField()], isNew: true })
+  const start = (s: Service | null, dept?: string, section?: string, copy = false) => setOpen(s ? { id: copy ? newId() : s.id, department_id: s.department_id ?? '', section_name: s.section_name ?? '', code: copy ? `${s.code}_copy` : s.code, name: copy ? `${s.name} (copy)` : s.name, reply_type: s.reply_type, coding: s.coding ? `${s.coding.system}:${s.coding.code}` : '', fields: s.fields.map((x) => ({ ...x })), isNew: copy }
+    : { id: newId(), department_id: dept ?? org.departments.find((d) => d.work === 'bench')?.id ?? org.departments[0]?.id ?? '', section_name: section ?? '', code: '', name: '', reply_type: 'result', coding: '', fields: [blankField()], isNew: true })
   const toggle = (k: string) => setClosed((c) => { const n = new Set(c); if (n.has(k)) n.delete(k); else n.add(k); return n })
-  const editor = (d: Draft) => <Editor key={d.id} draft={d} codes={codes.data ?? []} replyTypes={replyTypes.data ?? []} sections={sections} org={org} saving={save.isPending} error={save.error}
-    onSave={(x) => save.mutate({ id: x.id, department_id: x.department_id, code: x.code, name: x.name, reply_type: x.reply_type, section_name: x.section_name || null,
-      fields: x.reply_type === 'result' ? x.fields.filter((y) => y.name.trim()).map((y, i) => ({ ...y, bands: undefined, position: i + 1, code: y.code || null, choices: y.kind === 'choice' ? y.choices : undefined })) : [],
-      ranges: x.reply_type === 'result' ? x.fields.filter((y) => y.name.trim()).flatMap((y, i) => (y.bands ?? []).map((b) => ({ ...b, position: i + 1 }))) : [] }, { onSuccess: () => setOpen(null) })}
-    onClose={() => { save.reset(); setOpen(null) }} />
+  const editor = (d: Draft) => <Editor key={d.id} draft={d} codes={codes.data} replyTypes={replyTypes} sections={sections} org={org} saving={save.isPending} error={save.error}
+    onSave={(x) => save.mutate(x, { onSuccess: () => setOpen(null) })} onClose={() => { save.reset(); setOpen(null) }} />
 
   return <div className="grid gap-4">
     <PageHead title="Services" hint="What each department does when asked: its fields, ranges and how it replies. Grouped by department and section; open one to edit it in place."
@@ -74,7 +91,7 @@ export function ServicesPage({ org }: { org: Organization }) {
             <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">{s.fields.map((x) => `${x.name}${x.unit ? ` (${x.unit})` : ''}`).join(' · ')}</span>
             <span className="flex opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
               <IconButton title="Duplicate" onClick={() => start(s, undefined, undefined, true)}><Copy className="h-3.5 w-3.5" /></IconButton>
-              <IconButton title="Retire" className="hover:text-red-700" onClick={() => confirm(`Retire ${s.name}? Existing results keep it.`) && retire.mutate(s.id)}><Trash2 className="h-3.5 w-3.5" /></IconButton></span>
+              <IconButton title="Retire" className="hover:text-red-700" onClick={() => confirm(`Retire ${s.name}? It is no longer offered; existing orders and results keep it.`) && retire.mutate(s)}><Trash2 className="h-3.5 w-3.5" /></IconButton></span>
           </div>}
         </li>)}</ul>
       </div>)}
@@ -91,7 +108,7 @@ function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave
   const move = (i: number, by: number) => setD((x) => { const f = [...x.fields]; const [m] = f.splice(i, 1); f.splice(Math.max(0, Math.min(f.length, i + by)), 0, m); return { ...x, fields: f } })
   const codeFor = (name: string) => codes.find((k) => k.name.toLowerCase() === name.trim().toLowerCase())
   // text mode has no ranges by sex/age: a field keeps its bands by name
-  const fields: EField[] = bulk ? parseFields(text, codes).map((x) => ({ ...x, bands: d.fields.find((y) => y.name.trim().toLowerCase() === x.name.trim().toLowerCase())?.bands })) : d.fields
+  const fields: EField[] = bulk ? parseFields(text, codes).map((x) => { const was = d.fields.find((y) => y.name.trim().toLowerCase() === x.name.trim().toLowerCase()); return { ...x, key: was?.key ?? '', ranges: was?.ranges ?? [] } }) : d.fields
   const ok = d.name.trim() && d.code.trim() && d.department_id && (d.reply_type !== 'result' || fields.some((x) => x.name.trim()))
   const submit = () => { if (!ok) return; onSave({ ...d, fields }) }
   const cell = 'h-7 rounded-md px-2 text-xs'
@@ -99,17 +116,18 @@ function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave
     <div className="grid grid-cols-2 gap-2 md:grid-cols-[7rem_1fr_11rem_10rem]">
       <label className="text-[11px] text-neutral-500">Code<Input value={d.code} onChange={(e) => setD({ ...d, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })} placeholder="cbc" className="mt-0.5 h-8 font-mono" autoFocus={!draft.name} /></label>
       <label className="text-[11px] text-neutral-500">Name<Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value, code: draft.isNew && (!d.code || d.code === d.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '')) ? e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '') : d.code })} placeholder="Complete blood count" className="mt-0.5 h-8" autoFocus={!!draft.name || draft.isNew} /></label>
-      <label className="text-[11px] text-neutral-500">Department<Select value={d.department_id} onChange={(e) => setD({ ...d, department_id: e.target.value })} className="mt-0.5 h-8">{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></label>
+      <label className="text-[11px] text-neutral-500" title={draft.isNew ? undefined : 'A service stays with its department — duplicate it to offer it elsewhere'}>Department<Select value={d.department_id} disabled={!draft.isNew} onChange={(e) => setD({ ...d, department_id: e.target.value })} className="mt-0.5 h-8">{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></label>
       <label className="text-[11px] text-neutral-500">Section<Input list="sections" value={d.section_name} onChange={(e) => setD({ ...d, section_name: e.target.value })} placeholder="Haematology" className="mt-0.5 h-8" /><datalist id="sections">{sections.map((s) => <option key={s} value={s} />)}</datalist></label>
     </div>
     <div className="mt-2.5 flex items-center gap-2 text-xs"><span className="text-neutral-500">Reply</span>
-      {replyTypes.map((t) => <button key={t.key} title={t.pack ? `from the ${t.pack} pack` : 'core'} onClick={() => setD({ ...d, reply_type: t.key })} className={cn('rounded-md px-2 py-0.5 ring-1 ring-inset', d.reply_type === t.key ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200')}>{({ result: 'values', note: 'a report', none: 'just done' } as Record<string, string>)[t.key] ?? t.name}{t.pack && <span className="ml-1 opacity-60">· {t.pack}</span>}</button>)}
+      {replyTypes.map((t) => <button key={t.key} title={t.pack ? `from the ${t.pack} pack` : 'core'} onClick={() => setD({ ...d, reply_type: t.key })} className={cn('rounded-md px-2 py-0.5 ring-1 ring-inset', d.reply_type === t.key ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200')}>{t.name}{t.pack && <span className="ml-1 opacity-60">· {t.pack}</span>}</button>)}
+      <label className="ml-3 flex items-center gap-1.5 text-neutral-500">Coded as<Input value={d.coding} onChange={(e) => setD({ ...d, coding: e.target.value })} placeholder="loinc:58410-2" className="h-7 w-36 font-mono text-xs" /></label>
       {!replyTypes.some((t) => t.key === d.reply_type) && <Badge tone="red">{d.reply_type}: no enabled pack answers this</Badge>}
       {d.reply_type === 'result' && <button onClick={() => { if (bulk) setD({ ...d, fields: parseFields(text, codes) }); else setText(toText(d.fields)); setBulk(!bulk) }} className="ml-auto text-teal-700 hover:underline">{bulk ? 'Edit as a grid' : 'Type or paste as text'}</button>}
     </div>
     {d.reply_type === 'result' && (bulk ? <div className="mt-2"><textarea value={text} onChange={(e) => setText(e.target.value)} rows={Math.max(5, text.split('\n').length + 1)} autoFocus spellCheck={false}
         placeholder={'Haemoglobin | g/dL | 12-16 | 7-20\nWBC | 10^9/L | 4-11 | 1-30\nBlood group | [A/B/AB/O]'} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 font-mono text-xs focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20" />
-      <p className="mt-1 text-[11px] text-neutral-500">One field per line: <span className="font-mono">name | unit | normal low-high | critical low-high | code</span>. Tabs work too, so a range pasted from a spreadsheet drops straight in. <span className="font-mono">[a/b/c]</span> in the unit makes a choice list. Known names get their code; new ones get a local code.</p>
+      <p className="mt-1 text-[11px] text-neutral-500">One field per line: <span className="font-mono">name | unit | normal low-high | critical low-high | system:code</span>. Tabs work too, so a range pasted from a spreadsheet drops straight in. <span className="font-mono">[a/b/c]</span> in the unit makes a choice list. A name already used here gets its code.</p>
       <p className="mt-1 text-[11px] text-teal-800">{parseFields(text, codes).length} fields · {parseFields(text, codes).filter((x) => x.code).length} matched to a code</p></div>
     : <div ref={grid} className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-xs"><thead><tr className="text-left text-[10.5px] uppercase tracking-wider text-neutral-400">
         <th className="w-14" /><th className="px-1 font-medium">Field</th><th className="w-24 px-1 font-medium">Unit</th><th className="w-36 px-1 font-medium">Normal</th><th className="w-36 px-1 font-medium">Critical</th><th className="w-24 px-1 font-medium">Kind</th><th className="w-40 px-1 font-medium">Code</th><th className="w-8" /></tr></thead>
@@ -121,11 +139,11 @@ function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave
         <td className="p-0.5">{x.kind !== 'choice' && <RangeInput lo={x.critical_low} hi={x.critical_high} onChange={(lo, hi) => setF(i, { critical_low: lo, critical_high: hi })} className={cell}
           onEnter={() => { if (i === d.fields.length - 1) setD((y) => ({ ...y, fields: [...y.fields, blankField()] })) }} />}</td>
         <td className="p-0.5"><Select value={x.kind} onChange={(e) => setF(i, { kind: e.target.value, choices: e.target.value === 'choice' ? x.choices ?? [] : null })} className={cn(cell, 'h-7')}>{['number', 'text', 'choice'].map((k) => <option key={k}>{k}</option>)}</Select></td>
-        <td className="p-0.5"><span className={cn('block truncate px-1 font-mono text-[10.5px]', x.code ? 'text-neutral-600' : known ? 'text-teal-700' : 'text-neutral-400')} title={x.code || (known ? `will use ${known.code}` : 'a local code is made on save')}>{x.code || (known ? known.code : 'new local code')}</span></td>
-        <td className="whitespace-nowrap">{x.kind === 'number' && <button title="Ranges by sex and age" onClick={() => setOpenBands(openBands === i ? null : i)} className={cn('mr-1 rounded px-1 text-[10.5px]', (x.bands?.length ?? 0) > 0 ? 'bg-teal-50 font-medium text-teal-800' : 'text-neutral-400 hover:text-neutral-700')}>♀♂{x.bands?.length ? ` ${x.bands.length}` : ''}</button>}
+        <td className="p-0.5"><Input value={x.code} onChange={(e) => setF(i, { code: e.target.value.trim() })} placeholder={known ? known.code : 'loinc:718-7'} title="system:code — optional" className={cn(cell, 'font-mono text-[10.5px]')} /></td>
+        <td className="whitespace-nowrap">{x.kind === 'number' && <button title="Ranges by sex and age" onClick={() => setOpenBands(openBands === i ? null : i)} className={cn('mr-1 rounded px-1 text-[10.5px]', x.ranges.length > 0 ? 'bg-teal-50 font-medium text-teal-800' : 'text-neutral-400 hover:text-neutral-700')}>♀♂{x.ranges.length ? ` ${x.ranges.length}` : ''}</button>}
           <IconButton title="Remove field" className="hover:text-red-700" onClick={() => setD({ ...d, fields: d.fields.filter((_, j) => j !== i) })}><Trash2 className="h-3 w-3" /></IconButton></td>
       </tr>
-      {openBands === i && <tr><td /><td colSpan={7} className="pb-2"><Bands bands={x.bands ?? []} onChange={(bands) => setF(i, { bands })} /></td></tr>}</Fragment> })}</tbody></table>
+      {openBands === i && <tr><td /><td colSpan={7} className="pb-2"><Bands bands={x.ranges} onChange={(ranges) => setF(i, { ranges })} /></td></tr>}</Fragment> })}</tbody></table>
       <datalist id="codenames">{codes.map((k) => <option key={k.code} value={k.name}>{k.unit ?? ''}</option>)}</datalist>
       <button onClick={() => setD({ ...d, fields: [...d.fields, blankField()] })} className="mt-1 text-xs text-teal-700 hover:underline">+ field</button><span className="ml-2 text-[11px] text-neutral-400">↵ in the last critical cell adds the next field</span></div>)}
     <div className="mt-3 flex items-center gap-2">{error && <span className="text-sm text-red-700">{errorText(error)}</span>}
@@ -147,13 +165,13 @@ function Bands({ bands, onChange }: { bands: Band[]; onChange: (b: Band[]) => vo
   return <div className="rounded-lg bg-white p-2 ring-1 ring-teal-200">
     <p className="mb-1 text-[11px] text-neutral-500">For some patients the range differs. The most specific row that fits wins (sex and age, then sex, then the field’s own range).</p>
     {bands.map((b, i) => <div key={i} className="mb-1 grid grid-cols-[6.5rem_4rem_4rem_8rem_8rem_1.5rem] items-center gap-1.5">
-      <Select value={b.sex ?? ''} onChange={(e) => set(i, { sex: (e.target.value || null) as Band['sex'] })} className={cell}><option value="">any sex</option><option value="female">female</option><option value="male">male</option></Select>
+      <Select value={b.gender ?? ''} onChange={(e) => set(i, { gender: (e.target.value || null) as Band['gender'] })} className={cell}><option value="">any sex</option><option value="female">female</option><option value="male">male</option></Select>
       <Input value={b.age_low ?? ''} onChange={(e) => set(i, { age_low: e.target.value === '' ? null : Number(e.target.value) })} placeholder="age ≥" className={cell} />
       <Input value={b.age_high ?? ''} onChange={(e) => set(i, { age_high: e.target.value === '' ? null : Number(e.target.value) })} placeholder="age <" className={cell} />
-      <RangeInput lo={b.reference_low} hi={b.reference_high} onChange={(lo, hi) => set(i, { reference_low: lo, reference_high: hi })} className={cell} />
+      <RangeInput lo={b.low} hi={b.high} onChange={(lo, hi) => set(i, { low: lo, high: hi })} className={cell} />
       <RangeInput lo={b.critical_low} hi={b.critical_high} onChange={(lo, hi) => set(i, { critical_low: lo, critical_high: hi })} className={cell} />
       <IconButton title="Remove" onClick={() => onChange(bands.filter((_, j) => j !== i))}><Trash2 className="h-3 w-3" /></IconButton></div>)}
-    <button onClick={() => onChange([...bands, { sex: null, age_low: null, age_high: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null }])} className="text-xs text-teal-700 hover:underline">+ range</button>
+    <button onClick={() => onChange([...bands, { gender: null, age_low: null, age_high: null, low: null, high: null, critical_low: null, critical_high: null }])} className="text-xs text-teal-700 hover:underline">+ range</button>
     <span className="ml-3 text-[10.5px] text-neutral-400">normal · critical as low-high, &lt;x or &gt;x</span>
   </div>
 }

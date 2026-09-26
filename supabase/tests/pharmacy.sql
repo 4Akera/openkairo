@@ -1,64 +1,72 @@
--- the pharmacy pack (spec 06): a prescription becomes a request to Pharmacy; prepared; dispensed in Done's write set; the boundary
-\set org  '00000000-0000-0000-0000-0000000000a1'
+-- the pharmacy pack (spec §5), ported: a medication sent is an order to the pharmacy; the queue (a pack table, fed after commit by a
+-- listener); prepared; a result cannot answer it; the dispense closes it; the pack off refuses new dispenses and the record still reads
 \set im   '00000000-0000-0000-0000-0000000000d1'
-\set ph   '00000000-0000-0000-0000-0000000000d6'
-\set dr   '00000000-0000-0000-0000-0000000000b1'
-\set pm   '00000000-0000-0000-0000-0000000000b6'
-\set ow   '00000000-0000-0000-0000-0000000000b9'
-\set jdr  '11111111-0000-0000-0000-0000000000b1'
-\set jpm  '11111111-0000-0000-0000-0000000000b6'
-\set jow  '11111111-0000-0000-0000-0000000000b9'
+\set ph   '00000000-0000-0000-0000-0000000000d3'
 \set pt   '00000000-0000-0000-0000-0000000000f1'
-insert into core.organizations (id, name) values (:'org', 'Demo');
-insert into core.users (id, organization_id, kind, name, login_id) values (:'dr', :'org', 'staff', 'Dr Ali', :'jdr'), (:'pm', :'org', 'staff', 'Pharmacist', :'jpm'), (:'ow', :'org', 'staff', 'Owner', :'jow');
-insert into core.departments (id, organization_id, type, name) values (:'im', :'org', 'clinic', 'Internal Medicine');
-insert into core.user_roles (organization_id, user_id, role_id, department_id) values (:'org', :'dr', '00000000-0000-0000-0000-00000000c002', :'im'), (:'org', :'ow', '00000000-0000-0000-0000-00000000c001', null);
-insert into core.record_numbers values (:'org', 0);
-insert into core.patients (id, organization_id, record_number, given_name, family_name, sex, born_on) values (:'pt', :'org', 1, 'Mona', 'Saleh', 'female', '1980');
+\set disp '00000000-0000-0000-0000-0000000000c3'
+\set dr   '11111111-0000-0000-0000-0000000000b1'
+\set pm   '11111111-0000-0000-0000-0000000000b6'
+\set ow   '11111111-0000-0000-0000-0000000000b9'
+select t.fixture();
 
 \echo '── the boundary: the pack role holds nothing on any core table; its functions are its own and definer'
-select case when bool_and(not has_table_privilege('pack_pharmacy', 'core.' || tablename, 'SELECT,INSERT,UPDATE,DELETE')) then 'ok pack_pharmacy holds no core table' else 'FAIL' end from pg_tables where schemaname = 'core';
-select case when bool_and(p.prosecdef and r.rolname = 'pack_pharmacy') then 'ok its functions are its own, definer' else 'FAIL' end
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace join pg_roles r on r.oid = p.proowner where n.nspname = 'pharmacy';
+select t.ok(bool_and(not has_table_privilege('pack_pharmacy', 'core.' || tablename, 'SELECT,INSERT,UPDATE,DELETE')), 'pack_pharmacy holds no core table') from pg_tables where schemaname = 'core';
+select t.ok(bool_and(p.prosecdef and r.rolname = 'pack_pharmacy'), 'its functions are its own, definer') from pg_proc p join pg_namespace n on n.oid = p.pronamespace join pg_roles r on r.oid = p.proowner where n.nspname = 'pharmacy';
 set role authenticated;
 
-\echo '── before the pack is on: a Pharmacy department and a dispensing service are refused; a prescription is a paper script'
-select set_config('request.jwt.claim.sub', :'jow', false);
-select public.save_department(:'ph', :'org', 'pharmacy', 'Pharmacy');
-select set_config('request.jwt.claim.sub', :'jdr', false);
-select case when not exists (select 1 from public.write_prescription('00000000-0000-0000-0000-0000000000e1', :'pt', null, :'im', drug := '{"name":"Metformin"}', dose_number := 500, dose_unit := 'mg', frequency := 'BD') where service_id is not null)
-  then 'ok no pack, no request' else 'FAIL' end;
-
-\echo '── the owner enables the pack; makes Pharmacy and its Dispensing service; gives the pharmacist the role'
-select set_config('request.jwt.claim.sub', :'jow', false);
-select public.save_organization_pack(:'org', 'pharmacy');
-select type from public.save_department(:'ph', :'org', 'pharmacy', 'Pharmacy');
-select reply_type from public.save_service('00000000-0000-0000-0000-0000000000c9', :'org', :'ph', 'dispense', 'Dispensing', 'pharmacy_dispense');
+\echo '── a medication not sent stays on the list only; one sent is an order to the pharmacy about it'
+select t.as(:'dr');
+select t.landed(t.w(t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug":{"text":"Amlodipine","codings":[{"system":"atc","code":"C08CA01"}]},"dosage":{"dose":{"value":"5","unit":"mg","ucum":"mg"},"timing":{"code":"OD"}},"status":"active"}')), 'not sent');
+select t.ok(count(*) = 0, 'no order') from t.rows('base.orders', :'im', jsonb_build_object('to_department_id', :'ph')) r;
+select t.landed(t.w(jsonb_build_array(
+  t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug":{"text":"Lithium","codings":[{"system":"atc","code":"N05AN01"}]},"dosage":{"dose":{"value":"400","unit":"mg","ucum":"mg"},"timing":{"code":"BD"}},"duration_days":30,"status":"active"}',
+    '00000000-0000-0000-0000-0000000000e1'),
+  t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'disp', 'code', 'dispense', 'name', 'Dispensing'), 'department_id', :'ph', 'priority', 'routine', 'status', 'active'),
+    '00000000-0000-0000-0000-0000000000e2', null, '00000000-0000-0000-0000-0000000000e1', 'about'))), 'sent: the medication and its order in one set');
 reset role;
-insert into core.user_roles (organization_id, user_id, role_id, department_id) values (:'org', :'pm', '00000000-0000-0000-0000-00000000ca01', :'ph');
+select t.ok(count(*) >= 1, 'the pack hears of it after commit (an outbox row)') from core.outbox where layer = 'pharmacy';
+select t.ok(core.drain() >= 1, 'drained');
 set role authenticated;
+select t.as(:'pm');
+select t.ok(r ->> 'drug' = 'Lithium' and (r ->> 'duration_days')::int = 30 and r ->> 'status' = 'to_prepare' and r ->> 'dose' = '400 mg', 'the queue carries what to give')
+  from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
 
-\echo '── the doctor prescribes: now a request to Pharmacy, carrying the Dispensing service and the details'
-select set_config('request.jwt.claim.sub', :'jdr', false);
-select case when service_id is not null then 'ok the prescription is a request to Pharmacy' else 'FAIL no service' end
-  from public.write_prescription('00000000-0000-0000-0000-0000000000e2', :'pt', null, :'im', drug := '{"name":"Lithium"}', dose_number := 400, dose_unit := 'mg', frequency := 'BD', duration_days := 30);
-select set_config('request.jwt.claim.sub', :'jpm', false);
-select case when q->'requests'->0->'details'->'drug'->>'name' = 'Lithium' and (q->'requests'->0->'details'->>'duration_days')::int = 30 then 'ok the queue carries what to give' else 'FAIL ' || (q->'requests'->0)::text end from public.read_queue(:'ph') q;
+\echo '── the pharmacist: prepared (a pack step); a result cannot answer it; the dispense closes it'
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","step":"prepared"}', '00000000-0000-0000-0000-0000000000e3', null, '00000000-0000-0000-0000-0000000000e2', 'answers')), 'prepared');
+select t.ok(r ->> 'status' = 'prepared', 'the queue: prepared (inline, its own type)') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e2')) r;
+select t.ok(r ->> 'status' = 'in-progress' and r ->> 'step_key' = 'prepared', 'the base order: in progress, step prepared') from t.rows('base.orders', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e2')) r;
+select t.as(:'ow');
+select t.refused(t.w(t.e('result', :'pt', :'ph', '{"status":"final","conclusion":"given"}', null, null, '00000000-0000-0000-0000-0000000000e2', 'answers')), 'wrong_answer', 'a result for a dispensing order');
+select t.as(:'pm');
+select t.refused(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed"}', null, null, '00000000-0000-0000-0000-0000000000e3', 'changes')), 'nothing_dispensed');
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed","pharmacy":{"items":[{"drug":{"text":"Lithium"},"dose":{"value":"400","unit":"mg","ucum":"mg"},"quantity":{"value":"60","unit":"tablets","ucum":"{tbl}"}}]}}',
+  '00000000-0000-0000-0000-0000000000e4', null, '00000000-0000-0000-0000-0000000000e3', 'changes')), 'dispensed');
+select t.ok(r ->> 'status' = 'completed', 'the order is done') from t.rows('base.orders', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e2')) r;
+select t.ok(r ->> 'status' = 'dispensed', 'the queue: dispensed') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e2')) r;
+select t.as(:'dr');
+select t.ok(count(*) = 0, 'nothing to review for a dispense') from t.rows('base.review', :'im', jsonb_build_object('for_user', '00000000-0000-0000-0000-0000000000b1')) r;
+select t.ok(string_agg(e ->> 'line', ' > ' order by (e ->> 'item_version')::int) = 'Prepared > Dispensed · Lithium 400 mg × 60', 'steps: ' || string_agg(e ->> 'line', ' > ' order by (e ->> 'item_version')::int))
+  from jsonb_array_elements(public.read(jsonb_build_object('shape', 'item', 'item', '00000000-0000-0000-0000-0000000000e3', 'department_id', :'im')) -> 'entries') e where e ->> 'item' = '00000000-0000-0000-0000-0000000000e3';
 
-\echo '── the pharmacist: prepared (a pack step); a result cannot answer it; the dispense in a write set closes it'
-select step from public.mark_step('00000000-0000-0000-0000-0000000000e2', 'sent', 'prepared');
-select public.write_result('00000000-0000-0000-0000-0000000000e3', :'pt', null, :'ph', request_id := '00000000-0000-0000-0000-0000000000e2', text := 'given');
-select display_line from public.write_set(:'ph', '[{"function":"pharmacy_write_dispense","params":{"id":"00000000-0000-0000-0000-0000000000e4","patient_id":"00000000-0000-0000-0000-0000000000f1",
-  "request_id":"00000000-0000-0000-0000-0000000000e2","items":[{"name":"Lithium","dose_number":400,"dose_unit":"mg","quantity":60}]}}]');
+\echo '── pack off: a new dispense is refused; a correction still lands; the record still reads; on again, its table catches up'
+select t.as(:'dr');
+select t.landed(t.w(jsonb_build_array(
+  t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug":{"text":"Metformin"},"status":"active"}', '00000000-0000-0000-0000-0000000000e5'),
+  t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'disp', 'code', 'dispense', 'name', 'Dispensing'), 'department_id', :'ph', 'priority', 'routine', 'status', 'active'),
+    '00000000-0000-0000-0000-0000000000e6', null, '00000000-0000-0000-0000-0000000000e5', 'about'))), 'another order to the pharmacy');
+select t.as(:'ow');
+select public.write_setting('{"key":"organization.packs_used","data":{"packs":[]}}') ->> 'key' as pack_off;
+select t.as(:'pm');
+select t.refused(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","step":"prepared"}', null, null, '00000000-0000-0000-0000-0000000000e6', 'answers')), 'pack_off', 'a new dispense');
+select t.as(:'ow');
+select t.ok(exists (select 1 from jsonb_array_elements(t.record(:'pt', :'im') -> 'entries') e where e ->> 'type' = 'pharmacy.dispense' and e ->> 'line' like 'Dispensed%'), 'the record still reads, with the pack''s line');
 reset role;
-select case when status = 'done' and review_needed_at is null then 'ok dispensed: done, nothing to review' else 'FAIL ' || status end from core.requests where entry_id = '00000000-0000-0000-0000-0000000000e2';
-select case when string_agg(step::text, ' > ' order by position) = 'sent > prepared > done' then 'ok steps: sent > prepared > done' else 'FAIL ' || string_agg(step::text, ' > ' order by position) end from core.request_steps where request_id = '00000000-0000-0000-0000-0000000000e2';
+delete from pharmacy.queue;
+select core.drain();
 set role authenticated;
-
-\echo '── pack off: a new dispense is refused; the old one still reads'
-select set_config('request.jwt.claim.sub', :'jow', false);
-select public.retire_organization_pack(:'org', 'pharmacy');
-select set_config('request.jwt.claim.sub', :'jpm', false);
-select public.pharmacy_write_dispense('00000000-0000-0000-0000-0000000000e5', :'pt', null, :'ph', request_id := '00000000-0000-0000-0000-0000000000e2', items := '[{"name":"x","quantity":1}]');
-select set_config('request.jwt.claim.sub', :'jow', false);
-select case when (public.read_record(:'pt', :'im')->'entries') @> '[{"type":"prescription"}]' then 'ok the record still reads' else 'FAIL' end;
+select t.as(:'ow');
+select public.write_setting('{"key":"organization.packs_used","data":{"packs":["pharmacy"]}}') ->> 'key' as pack_on;
+select t.as(:'pm');
+select t.ok(count(*) = 2, 'on again: its table caught up for the organization') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
+reset role;
+select t.ok(core.rebuild_check('00000000-0000-0000-0000-0000000000a1') = '[]'::jsonb, 'rebuild = live, the pack''s table included');

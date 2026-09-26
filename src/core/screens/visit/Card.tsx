@@ -6,6 +6,7 @@ import { Badge, IconButton, Input, Select, cn } from '../../ui'
 import { REACTIONS, findAllergen, findDrug, findProblem, classOfDrug, resolveDrug, type Warning } from './catalog'
 import { KIND_TONE, NOTE_KINDS } from './kinds'
 import { lineOf, partialDate, type Ctx, type Parsed } from './parse'
+import { cardFor } from './commands'
 
 const FREQS = ['OD', 'BD', 'TDS', 'QDS', 'q6h', 'q8h', 'q12h', 'weekly', 'monthly', 'once', 'stat']
 const ROUTES = ['oral', 'sc', 'im', 'iv', 'sl', 'topical', 'inhaled', 'nasal', 'pr', 'pv']
@@ -19,16 +20,18 @@ export interface CardProps { item: Parsed; ctx: Ctx; onChange: (p: Parsed) => vo
 /** one item of the card: its kind, its live line, its fields */
 export function CardItem({ item, ctx, onChange, onRemove, onLongNote, warnings, extra }: CardProps & { warnings: Warning[]; extra?: ReactNode }) {
   const q = item.params as Q
+  const reg = cardFor(item.function, ctx)                                          // a pack's card for its own type, or its department's for a core one
   const set = (patch: Q) => { const next = { ...item, params: { ...q, ...patch } }
-    onChange({ ...next, line: lineOf(next, ctx), tag: item.function === 'write_note' ? `note:${next.params.kind ?? 'progress'}` : item.tag }) }   // a note joins the note of its kind
-  const editor = item.function === 'write_prescription' ? <Rx q={q} set={set} ctx={ctx} />
-    : item.function === 'write_problem' ? <Dx q={q} set={set} />
-    : item.function === 'write_allergy' ? <Al q={q} set={set} />
-    : item.function === 'write_vitals' ? <Vitals q={q} set={set} />
-    : item.function === 'write_request' ? <Req q={q} set={set} ctx={ctx} />
-    : item.function === 'write_note' ? <Note q={q} set={set} onLong={onLongNote} />
+    onChange({ ...next, line: reg?.line ? reg.line(next.params) : lineOf(next, ctx), tag: item.function === 'note' ? `note:${next.params.kind ?? 'progress'}` : item.tag }) }   // a note joins the note of its kind
+  const editor = reg ? <reg.Editor q={q} set={set} ctx={ctx} />
+    : item.function === 'medication' ? <Rx q={q} set={set} ctx={ctx} />
+    : item.function === 'problem' ? <Dx q={q} set={set} />
+    : item.function === 'allergy' ? <Al q={q} set={set} />
+    : item.function === 'vitals' ? <Vitals q={q} set={set} />
+    : item.function === 'order' ? <Req q={q} set={set} ctx={ctx} />
+    : item.function === 'note' ? <Note q={q} set={set} onLong={onLongNote} />
     : null
-  const compact = item.function === 'write_request' && !!q.service_id || item.function === 'write_list_review'
+  const compact = item.function === 'order' && !!q.service_id || item.function === 'list_review'
   if (compact) return <div className="flex items-center gap-2 px-3 py-1.5 text-[13.5px]">
     <Badge tone={KIND_TONE[item.kind] ?? 'neutral'} className="w-20 justify-center">{item.kind}</Badge>
     <span className="min-w-0 flex-1 font-medium text-neutral-900">{item.line}</span>{editor}
@@ -37,7 +40,7 @@ export function CardItem({ item, ctx, onChange, onRemove, onLongNote, warnings, 
   return <div className="px-3 py-2.5">
     <div className="mb-2 flex items-start gap-2 text-[13.5px]">
       <Badge tone={KIND_TONE[item.kind] ?? 'neutral'} className="mt-0.5 w-20 justify-center">{item.kind}</Badge>
-      <span className="min-w-0 flex-1 font-medium text-neutral-900">{item.function === 'write_note' ? `${NOTE_KINDS.find(([k]) => k === q.kind)?.[1] ?? 'Progress'} note` : item.line || '—'}</span>
+      <span className="min-w-0 flex-1 font-medium text-neutral-900">{item.function === 'note' ? `${NOTE_KINDS.find(([k]) => k === q.kind)?.[1] ?? 'Progress'} note` : item.line || '—'}</span>
       {onRemove && <IconButton title="Leave this one out" onClick={onRemove}><X className="h-3.5 w-3.5" /></IconButton>}
     </div>
     {warnings.length > 0 && <ul className="mb-2 grid gap-1">{warnings.map((w, i) => <li key={i} className={cn('flex items-start gap-1.5 rounded-md px-2 py-1 text-xs', w.level === 'block' ? 'bg-red-50 text-red-800 ring-1 ring-red-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200')}>
@@ -99,6 +102,8 @@ function Rx({ q, set, ctx }: { q: Q; set: (p: Q) => void; ctx: Ctx }) {
       {q.action === 'start' && <Select aria-label="For problem" value={q.problems?.[0]?.id ?? ''} onChange={(e) => { const p = ctx.problems.find((x) => x.id === e.target.value); set({ problems: p ? [{ id: p.id, name: p.name }] : [] }) }} className={cn(small, 'ml-2 w-52')}>
         <option value="">For problem…</option>{ctx.problems.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>}
     </Row>}
+    {ctx.canSend && <Row label="Pharmacy"><Chip on={!!q.send} onClick={() => set({ send: !q.send })}>{q.send ? 'Send to pharmacy ✓' : 'Send to pharmacy'}</Chip>
+      <span className="text-[11px] text-neutral-500">{q.send ? 'The pharmacy gets it on Done' : 'Not sent — on the medication list only; the patient may buy it outside'}</span></Row>}
     <Row label="Instructions"><Input aria-label="Instructions" value={q.instructions_text ?? ''} onChange={(e) => set({ instructions_text: e.target.value || (q.action === 'change' ? '' : null) })} placeholder="after food, at night…" className={cn(small, 'max-w-md flex-1')} /></Row>
   </div>
 }

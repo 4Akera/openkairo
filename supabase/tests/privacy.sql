@@ -1,190 +1,213 @@
--- spec 07: private visits (the story hidden, the facts shown), open anyway, one read log, corrections stay put, department rules, the views
-\set org  '00000000-0000-0000-0000-0000000000a1'
+-- privacy (spec §4.3), ported from privacy: hide the story, never the fact. A private department's notes and results are private; who
+-- reads them; opened anyway; privacy per item across corrections and cross-outs; consult replies; hidden values; merge; tenancy; erase
+\set desk '00000000-0000-0000-0000-0000000000d4'
 \set im   '00000000-0000-0000-0000-0000000000d1'
 \set labd '00000000-0000-0000-0000-0000000000d2'
-\set psy  '00000000-0000-0000-0000-0000000000d3'
-\set rec  '00000000-0000-0000-0000-0000000000d4'
-\set dr   '00000000-0000-0000-0000-0000000000b1'
-\set ps   '00000000-0000-0000-0000-0000000000b3'
-\set rc   '00000000-0000-0000-0000-0000000000b4'
-\set ow   '00000000-0000-0000-0000-0000000000b9'
-\set jdr  '11111111-0000-0000-0000-0000000000b1'
-\set jps  '11111111-0000-0000-0000-0000000000b3'
-\set jrc  '11111111-0000-0000-0000-0000000000b4'
-\set jow  '11111111-0000-0000-0000-0000000000b9'
+\set psy  '00000000-0000-0000-0000-0000000000d5'
+\set dr   '11111111-0000-0000-0000-0000000000b1'
+\set ps   '11111111-0000-0000-0000-0000000000b8'
+\set rc   '11111111-0000-0000-0000-0000000000b4'
+\set ow   '11111111-0000-0000-0000-0000000000b9'
+\set ck   '11111111-0000-0000-0000-0000000000b7'
+\set mc   '11111111-0000-0000-0000-0000000000bb'
 \set pt   '00000000-0000-0000-0000-0000000000f1'
-\set pv   '00000000-0000-0000-0000-0000000000a1'
-\set iv   '00000000-0000-0000-0000-0000000000a2'
-insert into core.organizations (id, name) values (:'org', 'Demo');
-insert into core.users (id, organization_id, kind, name, login_id) values (:'dr', :'org', 'staff', 'Dr Ali', :'jdr'), (:'ps', :'org', 'staff', 'Dr Salma', :'jps'),
-  (:'rc', :'org', 'staff', 'Reception', :'jrc'), (:'ow', :'org', 'staff', 'Owner', :'jow');
-insert into core.departments (id, organization_id, type, name) values (:'im', :'org', 'clinic', 'Internal Medicine'), (:'labd', :'org', 'ancillary', 'Lab'),
-  (:'psy', :'org', 'clinic', 'Psychiatry'), (:'rec', :'org', 'reception', 'Front desk');
-insert into core.served_departments (department_id, served_department_id) values (:'rec', null), (:'labd', null);
-insert into core.user_roles (organization_id, user_id, role_id, department_id) values (:'org', :'dr', '00000000-0000-0000-0000-00000000c002', :'im'),
-  (:'org', :'ps', '00000000-0000-0000-0000-00000000c002', :'psy'), (:'org', :'rc', '00000000-0000-0000-0000-00000000c004', :'rec'), (:'org', :'ow', '00000000-0000-0000-0000-00000000c001', null);
+\set pv   '00000000-0000-0000-0000-0000000000a5'
+select t.fixture();
+-- a second psychiatrist and a second internist
+select t.as(:'ow');
+select public.save('user', '{"id":"00000000-0000-0000-0000-0000000000be","name":"Dr Nour","login_id":"11111111-0000-0000-0000-0000000000be","holdings":[{"role_id":"00000000-0000-0000-0000-00000000c002","department_id":"00000000-0000-0000-0000-0000000000d5"}]}') ->> 'id';
+select public.save('user', '{"id":"00000000-0000-0000-0000-0000000000bf","name":"Dr Karim","login_id":"11111111-0000-0000-0000-0000000000bf","holdings":[{"role_id":"00000000-0000-0000-0000-00000000c002","department_id":"00000000-0000-0000-0000-0000000000d1"}]}') ->> 'id';
 set role authenticated;
 
-\echo '── the owner makes Psychiatry keep its visits private'
-select set_config('request.jwt.claim.sub', :'jow', false);
-select case when private_visits then 'ok Psychiatry: visits private' else 'FAIL' end from public.save_department(:'psy', :'org', 'clinic', 'Psychiatry', private_visits := true);
+create or replace function pg_temp.seen_as(p_login uuid, p_dept uuid, p_id uuid) returns jsonb language sql as $$
+  select t.as(p_login); select e from jsonb_array_elements(t.record('00000000-0000-0000-0000-0000000000f1', p_dept, '{"limit":500}') -> 'entries') e where (e ->> 'id')::uuid = p_id
+$$;
 
-\echo '── reception checks the patient into Psychiatry: the visit starts private; reception (serving it) sees the department in search'
-select set_config('request.jwt.claim.sub', :'jrc', false);
-select given_name from public.register_patient(:'pt', :'org', 'Mona', 'Saleh', 'female', '1980');
-select case when is_private then 'ok private from the start' else 'FAIL not private' end from public.open_visit(:'pv', :'pt', :'psy');
-select case when h->'open_visits'->0->>'department_name' = 'Psychiatry' then 'ok reception sees Psychiatry' else 'FAIL ' || (h->'open_visits'->0->>'department_name') end
-  from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;
+\echo '── reception checks Mona''s namesake into Psychiatry; everyone''s search shows the real department'
+select t.as(:'rc');
+select t.landed(t.check_in(:'pv', :'pt', :'desk', :'psy'), 'checked in to Psychiatry');
+select t.as(:'dr');
+select t.ok(r ->> 'department_id' = :'psy', 'the IM doctor''s search shows Psychiatry') from jsonb_array_elements(public.read(jsonb_build_object('shape', 'patients', 'q', 'ahmed',
+  'department_id', :'im', 'include', jsonb_build_object('base.presence', jsonb_build_object('state', 'waiting')))) -> 'tables' -> 'base.presence' -> 'rows') r;
 
-\echo '── the internal-medicine doctor searches: "Private visit", no department'
-select set_config('request.jwt.claim.sub', :'jdr', false);
-select case when h->'open_visits'->0->>'department_name' = 'Private visit' and h->'open_visits'->0->>'department_id' is null then 'ok search hides the department' else 'FAIL ' || (h->'open_visits'->0)::text end
-  from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;
+\echo '── the psychiatrist: a note (the story); lithium, a problem, an order (the facts); the IM doctor is assigned; a phone note with no visit'
+select t.as(:'ps');
+select t.landed(t.w(t.move('called', :'pv', :'psy')), 'called');
+select t.landed(t.w(jsonb_build_array(
+  t.e('note', :'pt', :'psy', '{"kind":"history_physical","text":"SECRET hears voices at night; low mood"}', '00000000-0000-0000-0000-0000000000e1', :'pv'),
+  t.e('medication', :'pt', :'psy', '{"basis":"prescribed","drug":{"text":"Lithium","codings":[{"system":"atc","code":"N05AN01"}]},"dosage":{"dose":{"value":"400","unit":"mg","ucum":"mg"},"timing":{"code":"BD"}},"status":"active"}', '00000000-0000-0000-0000-0000000000e2', :'pv'),
+  t.e('problem', :'pt', :'psy', '{"concept":{"text":"Bipolar disorder","codings":[{"system":"icd10","code":"F31.9"}]},"clinical_status":"active","verification":"confirmed"}', '00000000-0000-0000-0000-0000000000e3', :'pv'),
+  t.e('order', :'pt', :'psy', '{"service":{"id":"00000000-0000-0000-0000-0000000000c1","code":"cbc","name":"Lithium level"},"department_id":"00000000-0000-0000-0000-0000000000d2","priority":"routine","status":"active"}', '00000000-0000-0000-0000-0000000000e5', :'pv'),
+  t.move('assigned', :'pv', :'psy', '{"user_id":"00000000-0000-0000-0000-0000000000b1"}'))), 'the story and the facts, one set');
+select t.as(:'dr');
+select t.ok(t.try($q$select 1$q$) = 'ok', 'the IM doctor is assigned to the Psychiatry visit');
+select t.as(:'ps');
+select t.landed(t.w(t.e('note', :'pt', :'psy', '{"kind":"progress","text":"SECRET phoned: sleeping better"}', '00000000-0000-0000-0000-0000000000e9')), 'a Psychiatry note with no visit');
+select t.landed(t.w(t.move('done', :'pv', :'psy', '{"wait":false}')), 'done, the level still out');
 
-\echo '── the psychiatrist: a note (the story) and lithium (a fact) in the private visit'
-select set_config('request.jwt.claim.sub', :'jps', false);
-select case when jsonb_typeof(public.read_record(:'pt', :'psy')) = 'object' then 'ok opened' end;
-select status from public.mark_visit(:'pv', 'waiting', 'in_consult');
-select display_line from public.write_note('00000000-0000-0000-0000-0000000000e1', :'pt', :'pv', :'psy', text := 'Hears voices at night; low mood');
-select display_line from public.write_prescription('00000000-0000-0000-0000-0000000000e2', :'pt', :'pv', :'psy', drug := '{"name":"Lithium"}', dose_number := 400, dose_unit := 'mg', frequency := 'BD');
-select status from public.mark_visit(:'pv', 'in_consult', 'done');
+\echo '── the IM doctor reads: the story is "Private note" with Psychiatry''s name; the facts show in full'
+select t.ok(e ->> 'line' = 'Private note' and (e ->> 'hidden')::boolean and e ->> 'author_id' is null and e -> 'data' is null and e ->> 'department_id' = :'psy', 'the note is a placeholder, its department named')
+  from pg_temp.seen_as(:'dr', :'im', '00000000-0000-0000-0000-0000000000e9') e;
+select t.ok(e ->> 'line' like 'Lithium%' and e ->> 'author_id' = '00000000-0000-0000-0000-0000000000b8', 'the lithium shows in full') from pg_temp.seen_as(:'dr', :'im', '00000000-0000-0000-0000-0000000000e2') e;
+select t.ok(e ->> 'line' like 'Bipolar%', 'the problem shows') from pg_temp.seen_as(:'dr', :'im', '00000000-0000-0000-0000-0000000000e3') e;
+select t.ok(e ->> 'line' like 'Lithium level%', 'the order shows') from pg_temp.seen_as(:'dr', :'im', '00000000-0000-0000-0000-0000000000e5') e;
+select t.ok(exists (select 1 from jsonb_array_elements(t.record(:'pt', :'im') -> 'tables' -> 'base.lists' -> 'rows') r where r ->> 'code' = 'atc:N05AN01'), 'lithium is on the medication list');
+select t.ok(r -> 'hidden' -> 0 ->> 'department_id' = :'psy' and (r -> 'hidden' -> 0 ->> 'items')::int = 1, 'the record says where private items are: one in Psychiatry') from t.record(:'pt', :'im') r;
+select t.ok(not (t.record(:'pt', :'im')::text like '%phoned%'), 'nothing of the phone note anywhere in his record');
+select t.ok(e ->> 'line' like '%hears voices%', 'the assigned clinician reads the visit''s note') from pg_temp.seen_as(:'dr', :'im', '00000000-0000-0000-0000-0000000000e1') e;
 
-\echo '── the internal-medicine doctor opens the record: the note is "Private note", the lithium shows with its author'
-select set_config('request.jwt.claim.sub', :'jdr', false);
-select case when c->>'display_line' = 'Private note' and c->>'author_name' is null and c->>'department_name' = 'Private visit' then 'ok the note is hidden' else 'FAIL ' || c::text end
-  from jsonb_array_elements(public.read_record(:'pt', :'im')->'entries') c where c->>'type' = 'note';
-select case when c->>'display_line' like 'Lithium%' and c->>'author_name' = 'Dr Salma' and c->>'department_name' = 'Private visit' then 'ok the lithium shows, department hidden' else 'FAIL ' || c::text end
-  from jsonb_array_elements(public.read_record(:'pt', :'im')->'entries') c where c->>'type' = 'prescription';
-select case when m->>'drug_name' = 'Lithium' then 'ok lithium is on the medication list' else 'FAIL' end from jsonb_array_elements(public.read_record(:'pt', :'im')->'medications') m;
-select case when e->'data' = '{}'::jsonb and e->>'display_line' = 'Private note' then 'ok read_entry hides it too' else 'FAIL ' || e::text end from public.read_entry('00000000-0000-0000-0000-0000000000e1') e;
-select case when v->>'department_name' = 'Private visit' and (v->>'is_hidden')::boolean and v->>'first_line' is null then 'ok read_visits: Private visit' else 'FAIL ' || v::text end
-  from jsonb_array_elements(public.read_visits(:'pt')->'visits') v;
+\echo '── who reads it: its author and a doctor at Psychiatry; not the owner (held everywhere), a clerk there, a machine user there'
+select t.ok(e ->> 'line' like '%phoned%', 'a second psychiatrist reads it') from pg_temp.seen_as('11111111-0000-0000-0000-0000000000be', :'psy', '00000000-0000-0000-0000-0000000000e9') e;
+select t.ok(e ->> 'line' = 'Private note', 'the owner does not') from pg_temp.seen_as(:'ow', :'im', '00000000-0000-0000-0000-0000000000e9') e;
+select t.as(:'ck');
+select t.refuses($q$select public.read('{"shape":"record","patient_id":"00000000-0000-0000-0000-0000000000f1","department_id":"00000000-0000-0000-0000-0000000000d5"}')$q$, 'not_allowed');
+select t.ok(e ->> 'line' = 'Private note', 'a machine user holding Doctor at Psychiatry does not') from pg_temp.seen_as(:'mc', :'psy', '00000000-0000-0000-0000-0000000000e9') e;
+select t.as(:'ow');
+select t.refused(t.w(t.e('not_private', :'pt', :'im', '{"reason":"curious"}', null, null, '00000000-0000-0000-0000-0000000000e9', 'about')), 'not_found', 'the owner cannot even address it');
 
-\echo '── he cannot correct the psychiatrist''s note: a correction stays in its department'
-select public.write_note('00000000-0000-0000-0000-0000000000e3', :'pt', null, :'im', text := 'edited', replaces_id := '00000000-0000-0000-0000-0000000000e1');
-
-\echo '── he opens it anyway: a reason is required; then he reads it for 12 hours'
-select public.read_record(:'pt', :'im', open_visit_id := :'pv');
-select case when jsonb_array_length(r->'hidden_visits') = 0 then 'ok opened anyway' else 'FAIL still hidden' end from public.read_record(:'pt', :'im', open_visit_id := :'pv', reason := 'Emergency') r;
-select case when e->>'display_line' like '%Hears voices%' then 'ok the note reads after open anyway' else 'FAIL ' || (e->>'display_line') end from public.read_entry('00000000-0000-0000-0000-0000000000e1') e;
-
-\echo '── the owner: no private visit by role; reviews the log instead'
-select set_config('request.jwt.claim.sub', :'jow', false);
-select case when c->>'display_line' = 'Private note' then 'ok the owner sees "Private note"' else 'FAIL owner reads it' end
-  from jsonb_array_elements(public.read_record(:'pt', :'im')->'entries') c where c->>'type' = 'note';
-select case when jsonb_array_length(public.read_opened_anyway(:'org')) = 1 and public.read_opened_anyway(:'org')->0->>'reason_text' = 'Emergency' then 'ok one open-anyway, with its reason' else 'FAIL ' || public.read_opened_anyway(:'org')::text end;
-select string_agg(r->>'user_name' || ':' || (r->>'basis'), ', ' order by r->>'read_at') as log from jsonb_array_elements(public.read_record_reads(:'pt')) r;
-\echo '── (a doctor may not read the log: not_allowed)'
-select set_config('request.jwt.claim.sub', :'jdr', false);
-select public.read_record_reads(:'pt');
-
-\echo '── Internal Medicine sends patients home without waiting; a visit made private hides its notes from Psychiatry'
-select set_config('request.jwt.claim.sub', :'jow', false);
-select patients_wait from public.save_department(:'im', :'org', 'clinic', 'Internal Medicine', patients_wait := false);
+\echo '── open anyway: a reason, then Psychiatry''s private items open to him for 12 hours; flagged and logged'
+select t.as('11111111-0000-0000-0000-0000000000bf');
+select t.ok(e ->> 'line' = 'Private note', 'a second internist does not read it') from pg_temp.seen_as('11111111-0000-0000-0000-0000000000bf', :'im', '00000000-0000-0000-0000-0000000000e9') e;
+select t.refused(t.w(t.e('opened_anyway', :'pt', :'im', jsonb_build_object('department_id', :'psy', 'reason', 'other', 'text', 'x'))), 'reason_missing');
+select t.flagged(t.w(t.e('opened_anyway', :'pt', :'im', jsonb_build_object('department_id', :'psy', 'reason', 'ETREAT'))), 'opened_anyway', 'opened anyway (emergency)');
+select t.ok(e ->> 'line' like '%phoned%', 'the note reads after open anyway')
+  from jsonb_array_elements(t.record(:'pt', :'im', '{"purpose":"BTG","reason":"Emergency"}') -> 'entries') e where e ->> 'id' = '00000000-0000-0000-0000-0000000000e9';
+select t.refused(t.w(t.e('note', :'pt', :'im', '{"text":"edited"}', null, null, null, null, '00000000-0000-0000-0000-0000000000e9')), 'not_allowed', 'opening is not writing: no correction');
 reset role;
-insert into core.codes (code, name, kind, unit) values ('loinc:718-7', 'Haemoglobin', 'number', 'g/dL') on conflict do nothing;
+select t.ok(exists (select 1 from core.read_log where user_id = '00000000-0000-0000-0000-0000000000bf' and purpose = 'BTG' and reason = 'Emergency'), 'the read log says BTG and why');
 set role authenticated;
-select set_config('request.jwt.claim.sub', :'jow', false);
-select name from public.save_service('00000000-0000-0000-0000-0000000000c1', :'org', :'labd', 'cbc', 'CBC', 'result', fields := '[{"code":"loinc:718-7","name":"Hb","unit":"g/dL","reference_low":12,"reference_high":16}]');
-select set_config('request.jwt.claim.sub', :'jrc', false);
-select status from public.open_visit(:'iv', :'pt', :'im');
-select set_config('request.jwt.claim.sub', :'jdr', false);
-select status from public.mark_visit(:'iv', 'waiting', 'in_consult');
-select display_line from public.write_note('00000000-0000-0000-0000-0000000000e4', :'pt', :'iv', :'im', text := 'Discussed home situation');
-select display_line from public.write_request('00000000-0000-0000-0000-0000000000e5', :'pt', :'iv', :'im', service_id := '00000000-0000-0000-0000-0000000000c1');
-select case when is_private then 'ok the doctor made the visit private' else 'FAIL' end from public.mark_visit_private(:'iv', true, 'patient asked');
-select case when status = 'done' then 'ok the rule: not waiting → done' else 'FAIL ' || status end from public.mark_visit(:'iv', 'in_consult', 'done');
-select set_config('request.jwt.claim.sub', :'jps', false);
-select case when c->>'display_line' = 'Private note' then 'ok Psychiatry cannot read the IM private visit' else 'FAIL ' || (c->>'display_line') end
-  from jsonb_array_elements(public.read_record(:'pt', :'psy')->'entries') c where c->>'id' = '00000000-0000-0000-0000-0000000000e4';
-select case when c->>'display_line' like '%Hears voices%' then 'ok the psychiatrist reads their own visit' else 'FAIL' end
-  from jsonb_array_elements(public.read_record(:'pt', :'psy')->'entries') c where c->>'id' = '00000000-0000-0000-0000-0000000000e1';
+select t.as(:'dr');
+select t.ok(exists (select 1 from t.rows('base.review', :'im', '{"why":"flag"}') r where r ->> 'level' = 'opened_anyway'), 'opened anyway waits for review in his department');
+
+\echo '── private or not: its author or its department; not private needs a reason; the story shows when not private'
+select t.as('11111111-0000-0000-0000-0000000000bf');
+select t.refused(t.w(t.e('not_private', :'pt', :'im', '{"reason":"curious"}', null, null, '00000000-0000-0000-0000-0000000000e9', 'about')), 'not_allowed', 'a reader who opened anyway');
+select t.as(:'ps');
+select t.refused(t.w(t.e('private', :'pt', :'psy', '{}', null, null, '00000000-0000-0000-0000-0000000000e2', 'about')), 'never_private', 'the lithium');
+select t.refused(t.w(t.e('not_private', :'pt', :'psy', '{"reason":""}', null, null, '00000000-0000-0000-0000-0000000000e9', 'about')), 'reason_missing');
+select t.flagged(t.w(t.e('not_private', :'pt', :'psy', '{"reason":"agreed with the patient"}', null, null, '00000000-0000-0000-0000-0000000000e9', 'about')), 'made_not_private');
+select t.ok(e ->> 'line' like '%phoned%', 'now the owner reads it') from pg_temp.seen_as(:'ow', :'im', '00000000-0000-0000-0000-0000000000e9') e;
+select t.as(:'ps');
+select t.landed(t.w(t.e('private', :'pt', :'psy', '{}', null, null, '00000000-0000-0000-0000-0000000000e9', 'about')), 'private again');
+select t.ok(e ->> 'line' = 'Private note', 'hidden again') from pg_temp.seen_as(:'ow', :'im', '00000000-0000-0000-0000-0000000000e9') e;
+
+\echo '── one private note anywhere: the IM doctor makes his own note private; the psychiatrist cannot read it'
+select t.as(:'rc');
+select t.landed(t.check_in('00000000-0000-0000-0000-0000000000a6', :'pt', :'desk', :'im'), 'an IM visit');
+select t.as(:'dr');
+select t.landed(t.w(jsonb_build_array(t.move('called', '00000000-0000-0000-0000-0000000000a6', :'im'),
+  t.e('note', :'pt', :'im', '{"text":"SECRET discussed home situation"}', '00000000-0000-0000-0000-0000000000e4', '00000000-0000-0000-0000-0000000000a6'),
+  t.e('private', :'pt', :'im', '{}', null, null, '00000000-0000-0000-0000-0000000000e4', 'about'))), '! at the start of a line: the note and its privacy in one set');
+select t.ok(e ->> 'line' = 'Private note' and e ->> 'department_id' = :'im', 'the psychiatrist sees "Private note" from Internal Medicine')
+  from pg_temp.seen_as(:'ps', :'psy', '00000000-0000-0000-0000-0000000000e4') e;
+
+\echo '── a corrected private note keeps its privacy in every version; a crossed-out note can be made private'
+select t.as(:'ps');
+select t.ok(r -> 'entries' -> 0 ->> 'item' = '00000000-0000-0000-0000-0000000000e1', 'the psychiatrist corrects her note')
+  from t.w(t.e('note', :'pt', :'psy', '{"text":"SECRET hears voices (corrected)"}', '00000000-0000-0000-0000-0000000000e6', :'pv', null, null, '00000000-0000-0000-0000-0000000000e1')) r;
+select t.ok(not exists (select 1 from jsonb_array_elements(public.read(jsonb_build_object('shape', 'item', 'item', '00000000-0000-0000-0000-0000000000e1', 'department_id', :'im')) -> 'entries') x
+  where x -> 'data' is not null and x ->> 'type' = 'note'), 'both versions are hidden from the owner') from (select t.as(:'ow')) a;
+select t.as(:'dr');
+select t.landed(t.w(t.e('note', :'pt', :'im', '{"text":"SECRET family conflict"}', '00000000-0000-0000-0000-0000000000ec', '00000000-0000-0000-0000-0000000000a6')), 'an IM note');
+select t.landed(t.w(t.e('crossed_out', :'pt', :'im', '{"reason":"wrong_patient"}', '00000000-0000-0000-0000-0000000000ed', null, null, null, '00000000-0000-0000-0000-0000000000ec')), 'crossed out');
+select t.landed(t.w(t.e('private', :'pt', :'im', '{}', null, null, '00000000-0000-0000-0000-0000000000ed', 'about')), 'a crossed-out note can be made private');
+select t.ok(e ->> 'line' = 'Private note', 'its first version is hidden from Psychiatry') from pg_temp.seen_as(:'ps', :'psy', '00000000-0000-0000-0000-0000000000ec') e;
+
+\echo '── a striker is not an author: the owner crosses out an IM note; the owner cannot make it not private'
+select t.as(:'dr');
+select t.landed(t.w(t.e('note', :'pt', :'im', '{"text":"SECRET another"}', '00000000-0000-0000-0000-0000000000c7', '00000000-0000-0000-0000-0000000000a6')), 'an IM note');
+select t.as(:'ow');
+select t.landed(t.w(t.e('crossed_out', :'pt', :'im', '{"reason":"other","text":"audit"}', null, null, null, null, '00000000-0000-0000-0000-0000000000c7')), 'the owner crosses it out');
+select t.as(:'dr');
+select t.landed(t.w(t.e('private', :'pt', :'im', '{}', null, null, '00000000-0000-0000-0000-0000000000c7', 'about')), 'its author makes it private');
+select t.as(:'ow');
+select t.refused(t.w(t.e('not_private', :'pt', :'im', '{"reason":"audit"}', null, null, '00000000-0000-0000-0000-0000000000c7', 'about')), 'not_found', 'the striker cannot');
+
+\echo '── a consult reply is for whoever asked: the requester and his department read it; anyone else sees "Private note"'
+select t.as(:'dr');
+select t.landed(t.w(t.e('order', :'pt', :'im', '{"service":{"id":"00000000-0000-0000-0000-0000000000c5","code":"psych","name":"Psychiatry consult"},"department_id":"00000000-0000-0000-0000-0000000000d5","priority":"routine","status":"active","question":"Is lithium still needed?"}',
+  '00000000-0000-0000-0000-0000000000f6')), 'IM asks Psychiatry');
+select t.as(:'ps');
+select t.landed(t.w(t.e('note', :'pt', :'psy', '{"kind":"consult","text":"SECRET continue lithium, level 0.8"}', '00000000-0000-0000-0000-0000000000f7', null, '00000000-0000-0000-0000-0000000000f6', 'answers')), 'the psychiatrist answers');
+select t.ok(e ->> 'line' like '%continue lithium%', 'the requester reads the reply') from pg_temp.seen_as(:'dr', :'im', '00000000-0000-0000-0000-0000000000f7') e;
+select t.ok(e ->> 'line' like '%continue lithium%', 'a doctor of the asking department reads it') from pg_temp.seen_as('11111111-0000-0000-0000-0000000000bf', :'im', '00000000-0000-0000-0000-0000000000f7') e;
+select t.ok(e ->> 'line' = 'Private note', 'the owner does not') from pg_temp.seen_as(:'ow', :'im', '00000000-0000-0000-0000-0000000000f7') e;
+select t.as(:'ow');
+select t.ok(o -> 'answers' ->> 0 = '00000000-0000-0000-0000-0000000000f7' and (r -> 'tables' -> 'base.orders' -> 'entries' -> '00000000-0000-0000-0000-0000000000f7' ->> 'hidden')::boolean,
+  'the order shows answered; its answer is a placeholder') from t.record(:'pt', :'im') r, jsonb_array_elements(r -> 'tables' -> 'base.orders' -> 'rows') o where o ->> 'item' = '00000000-0000-0000-0000-0000000000f6';
+
+\echo '── a private result: its values vanish from the others'' trends'
+select t.as(:'ps');
+select t.landed(t.w(t.e('result', :'pt', :'psy', '{"status":"final","code":{"text":"Lithium level"},"analytes":[{"key":"li","name":"Lithium","code":{"system":"loinc","code":"14334-7"},"value":{"value":"9.9","ucum":"mmol/L"},"interpretation":"HH"}]}',
+  '00000000-0000-0000-0000-0000000000f8')), 'an outside lithium level, recorded in Psychiatry');
+select t.as(:'ow');
+select t.ok(not exists (select 1 from jsonb_array_elements(t.record(:'pt', :'im') -> 'tables' -> 'base.values' -> 'rows') v where v ->> 'value' = '9.9'), 'not in the owner''s trend');
+select t.ok(not (t.record(:'pt', :'im')::text like '%9.9%'), 'nowhere in the owner''s record');
+select t.as(:'ps');
+select t.ok(exists (select 1 from jsonb_array_elements(t.record(:'pt', :'psy') -> 'tables' -> 'base.values' -> 'rows') v where v ->> 'value' = '9.9'), 'the psychiatrist sees the value');
+
+\echo '── lists and queues: department names are real everywhere; Psychiatry''s desk sees its queue; the review list is its reviewers'''
+select t.as(:'rc');
+select t.landed(t.check_in('00000000-0000-0000-0000-0000000000a9', :'pt', :'desk', :'psy'), 'back in Psychiatry');
+select t.as(:'ck');
+select t.ok(exists (select 1 from t.rows('base.presence', :'psy', jsonb_build_object('department_id', :'psy')) r where r ->> 'item' = '00000000-0000-0000-0000-0000000000a9'), 'Psychiatry''s clerk sees its queue');
+select t.refuses($q$select public.read('{"shape":"table","table":"base.review","department_id":"00000000-0000-0000-0000-0000000000d5"}')$q$, 'not_allowed');
+select t.as(:'rc');
+select t.landed(t.w(t.e('crossed_out', :'pt', :'desk', '{"reason":"typo"}', null, null, null, null, '00000000-0000-0000-0000-0000000000a9')), 'checked in by mistake: crossed out');
+select t.ok(not exists (select 1 from t.rows('base.presence', :'desk', '{}') r where r ->> 'item' = '00000000-0000-0000-0000-0000000000a9'), 'a crossed-out visit is gone');
+
+\echo '── the read log: every read, with its purpose; the machine user''s read too'
 reset role;
-select case when changes->>'is_private' = 'true' and actor_id = :'dr' then 'ok the visit history records who made it private' else 'FAIL' end
-  from core.visit_steps where visit_id = :'iv' and changes ? 'is_private';
-select case when basis = 'visit' then 'ok the psychiatrist''s read had a reason: an open visit' else 'FAIL ' || coalesce(basis, '-') end from core.record_reads where user_id = :'ps' order by read_at limit 1;
-select case when basis = 'none' then 'ok the IM doctor''s first read had none' else 'FAIL ' || coalesce(basis, '-') end from core.record_reads where user_id = :'dr' order by read_at limit 1;
-
--- ════ the leaks the adversarial review found (0024): each one closed ════
-\set d2  '00000000-0000-0000-0000-0000000000b2'
-\set jd2 '11111111-0000-0000-0000-0000000000b2'
-\set lt  '00000000-0000-0000-0000-0000000000b5'
-\set jlt '11111111-0000-0000-0000-0000000000b5'
-\set pv2 '00000000-0000-0000-0000-0000000000a3'
-insert into core.users (id, organization_id, kind, name, login_id) values (:'d2', :'org', 'staff', 'Dr Omar', :'jd2'), (:'lt', :'org', 'staff', 'Lab Tech', :'jlt');
-insert into core.user_roles (organization_id, user_id, role_id, department_id) values (:'org', :'d2', '00000000-0000-0000-0000-00000000c002', :'im'), (:'org', :'lt', '00000000-0000-0000-0000-00000000c005', :'labd');
-insert into core.entry_files (entry_id, position, path, mime, name) values ('00000000-0000-0000-0000-0000000000e1', 1, 'records/letter.pdf', 'application/pdf', 'letter');
+select t.ok(count(*) >= 1, 'the psychiatrist''s reads are logged (TREAT)') from core.read_log where user_id = '00000000-0000-0000-0000-0000000000b8' and purpose = 'TREAT';
+select t.ok(count(*) >= 1, 'the machine user''s read is logged') from core.read_log where user_id = '00000000-0000-0000-0000-0000000000bb';
 set role authenticated;
+select t.as(:'dr');
+select t.refuses($q$select public.read('{"shape":"log"}')$q$, 'not_allowed');
+select t.as(:'ow');
+select t.ok(jsonb_array_length(public.read('{"shape":"log","patient_id":"00000000-0000-0000-0000-0000000000f1"}') -> 'reads') >= 3, 'the owner reads the read log');
 
-\echo '── a second IM doctor replays the hidden note''s id through write_note and write_set: refused, nothing returned'
-select set_config('request.jwt.claim.sub', :'jd2', false);
-select case when jsonb_typeof(public.read_record(:'pt', :'im')) = 'object' then 'ok opened' end;
-select public.write_note('00000000-0000-0000-0000-0000000000e1', :'pt', null, :'im', text := 'x');
-select public.write_set(:'im', '[{"function":"write_note","params":{"id":"00000000-0000-0000-0000-0000000000e1","patient_id":"00000000-0000-0000-0000-0000000000f1","text":"x"}}]');
-\echo '── … the hidden note''s file: refused'
-select public.read_entry_file('00000000-0000-0000-0000-0000000000e1', 1::smallint);
-\echo '── … replaying the private visit''s id through open_visit: refused'
-select public.open_visit(:'pv', :'pt', :'im');
+\echo '── the live record channel needs a recent read; the organization channel is everyone''s'
+select t.as(:'dr');
+select t.ok(core.may_listen('record:' || :'pt'), 'he read Ahmed''s record: he may listen');
+select t.ok(not core.may_listen('record:00000000-0000-0000-0000-000000000099'), 'not to a record he never read');
+select t.ok(core.may_listen('organization:00000000-0000-0000-0000-0000000000a1') and not core.may_listen('organization:00000000-0000-0000-0000-0000000000a2'), 'his organization''s channel only');
 
-\echo '── the owner (a role everywhere) cannot make the private visit not private'
-select set_config('request.jwt.claim.sub', :'jow', false);
-select public.mark_visit_private(:'pv', false);
+\echo '── a correction written under the survivor after a merge stays private'
+select t.as(:'rc');
+select (public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000f2', 'given', jsonb_build_array('Lina'), 'family', 'Adel', 'gender', 'female'))) -> 'patient' ->> 'number') as lina;
+select (public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000f3', 'given', jsonb_build_array('Lina'), 'family', 'Adel', 'gender', 'female'))) -> 'patient' ->> 'number') as lina_again;
+select t.as(:'ps');
+select t.landed(t.w(t.e('note', '00000000-0000-0000-0000-0000000000f2', :'psy', '{"text":"SECRET first version"}', '00000000-0000-0000-0000-0000000000a7')), 'a private note on the first record');
+select t.as(:'rc');
+select t.ok(public.merge_patients(jsonb_build_object('department_id', :'desk', 'from', '00000000-0000-0000-0000-0000000000f2', 'into', '00000000-0000-0000-0000-0000000000f3', 'reason', 'registered twice')) ->> 'survivor'
+  = '00000000-0000-0000-0000-0000000000f3', 'merged into the second record');
+select t.as(:'ps');
+select t.ok(r -> 'entries' -> 0 ->> 'item' = '00000000-0000-0000-0000-0000000000a7', 'she corrects the note from the survivor')
+  from t.w(t.e('note', '00000000-0000-0000-0000-0000000000f3', :'psy', '{"text":"SECRET second version"}', '00000000-0000-0000-0000-0000000000a8', null, null, null, '00000000-0000-0000-0000-0000000000a7')) r;
+select t.as(:'dr');
+select t.ok(not (public.read('{"shape":"record","patient_id":"00000000-0000-0000-0000-0000000000f2","department_id":"00000000-0000-0000-0000-0000000000d1"}')::text like '%SECRET%'), 'nothing of it shows from either record');
+select t.ok(public.read('{"shape":"record","patient_id":"00000000-0000-0000-0000-0000000000f2","department_id":"00000000-0000-0000-0000-0000000000d1"}') -> 'patient' ->> 'id' = '00000000-0000-0000-0000-0000000000f3', 'the merged record reads as its survivor');
 
-\echo '── IM asks Psychiatry a question; the psychiatrist answers inside a private visit, with a value in the note'
-select set_config('request.jwt.claim.sub', :'jdr', false);
-select display_line from public.write_request('00000000-0000-0000-0000-0000000000e6', :'pt', null, :'im', to_department_id := :'psy', question_text := 'Is lithium still needed?');
-select set_config('request.jwt.claim.sub', :'jrc', false);
-select case when is_private then 'ok the consult visit is private' else 'FAIL' end from public.open_visit(:'pv2', :'pt', :'psy', request_id := '00000000-0000-0000-0000-0000000000e6');
-select set_config('request.jwt.claim.sub', :'jps', false);
-select case when jsonb_typeof(public.read_record(:'pt', :'psy')) = 'object' then 'ok opened' end;
-select display_line from public.write_note('00000000-0000-0000-0000-0000000000e7', :'pt', :'pv2', :'psy', kind := 'consult_reply', text := 'Yes, continue lithium; level in 3 months',
-  reply_to_id := '00000000-0000-0000-0000-0000000000e6', fields := '{"values":[{"code":"loinc:718-7","name":"Hb","value_number":9.9,"unit":"g/dL"}]}');
-
-\echo '── the requesting department reads the answer; anyone else sees "Private reply"'
-select set_config('request.jwt.claim.sub', :'jd2', false);
-select case when c->'request'->>'reply_line' like '%continue lithium%' then 'ok IM (who asked) reads the reply' else 'FAIL ' || coalesce(c->'request'->>'reply_line', '-') end
-  from jsonb_array_elements(public.read_record(:'pt', :'im')->'entries') c where c->>'id' = '00000000-0000-0000-0000-0000000000e6';
-select set_config('request.jwt.claim.sub', :'jow', false);
-select case when c->'request'->>'reply_line' = 'Private reply' then 'ok the owner sees "Private reply" on the request' else 'FAIL ' || coalesce(c->'request'->>'reply_line', '-') end
-  from jsonb_array_elements(public.read_record(:'pt', :'im')->'entries') c where c->>'id' = '00000000-0000-0000-0000-0000000000e6';
-select case when (r->'reply'->>'is_hidden')::boolean and r->'reply'->'data' = '{}'::jsonb then 'ok the queue''s released list hides it too' else 'FAIL ' || coalesce((r->'reply')::text, '-') end
-  from jsonb_array_elements(public.read_queue(:'psy')->'recent') r where r->>'id' = '00000000-0000-0000-0000-0000000000e6';
-select case when jsonb_typeof(public.read_values(:'pt', array['loinc:718-7'])->'loinc:718-7') is distinct from 'array' then 'ok the note''s value is not in the owner''s trend' else 'FAIL' end;
-select case when not (public.read_results_table(:'pt')::text like '%9.9%') then 'ok nor in results over time' else 'FAIL' end;
-select set_config('request.jwt.claim.sub', :'jps', false);
-select case when jsonb_typeof(public.read_values(:'pt', array['loinc:718-7'])->'loinc:718-7') = 'array' and jsonb_array_length(public.read_values(:'pt', array['loinc:718-7'])->'loinc:718-7') = 1 then 'ok the psychiatrist sees the value' else 'FAIL' end;
-
-\echo '── search: the lab tech (a lab serving every department) sees "Private visit"; reception serving Psychiatry sees Psychiatry'
-select set_config('request.jwt.claim.sub', :'jlt', false);
-select case when h->'open_visits'->0->>'department_name' = 'Private visit' and h->'open_visits'->0->>'assignee_id' is null then 'ok the lab tech sees "Private visit"' else 'FAIL ' || (h->'open_visits')::text end
-  from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;
-select set_config('request.jwt.claim.sub', :'jrc', false);
-select case when h->'open_visits'->0->>'department_name' = 'Psychiatry' then 'ok reception sees Psychiatry' else 'FAIL' end from jsonb_array_elements(public.read_patients(:'org', 'mona')) h;
-
-\echo '── 0034: reception lists a private visit apart, as "Private visit" — never under its department'
-select set_config('request.jwt.claim.sub', :'jrc', false);
-select given_name from public.register_patient('00000000-0000-0000-0000-0000000000f9', :'org', 'Hala', 'Nour', 'female', '1990');
-select case when is_private then 'ok the new Psychiatry visit is private' else 'FAIL not private' end from public.open_visit('00000000-0000-0000-0000-0000000000a9', '00000000-0000-0000-0000-0000000000f9', :'psy');
-select case when not exists (select 1 from jsonb_array_elements(public.read_visit_queue(:'psy')->'rows') r where r->>'id' = '00000000-0000-0000-0000-0000000000a9')
-  then 'ok reception does not see it under Psychiatry' else 'FAIL listed under Psychiatry at reception' end;
-select case when exists (select 1 from jsonb_array_elements(public.read_private_visits(:'rec')) r where r->>'id' = '00000000-0000-0000-0000-0000000000a9' and not (r ? 'department_id') and not (r ? 'department_name'))
-  then 'ok reception''s private list has it, without its department' else 'FAIL private list' end;
-select set_config('request.jwt.claim.sub', :'jps', false);
-select case when exists (select 1 from jsonb_array_elements(public.read_visit_queue(:'psy')->'rows') r where r->>'id' = '00000000-0000-0000-0000-0000000000a9')
-  then 'ok Psychiatry sees its own patient' else 'FAIL Psychiatry lost its patient' end;
-
-\echo '── 0035: a department''s review list is for those who review there — not for a desk or a bench that serves it'
-select set_config('request.jwt.claim.sub', :'jrc', false);
-do $$ begin perform public.read_to_review('00000000-0000-0000-0000-0000000000d3'); raise notice 'FAIL reception read Psychiatry''s review list';
-  exception when others then raise notice '%', case when sqlerrm = 'not_allowed' then 'ok refused: reception reading Psychiatry''s review list' else 'FAIL refused with ' || sqlerrm end; end $$;
-
-\echo '── 0035: Psychiatry''s own desk (a role there without read:record) still sees its queue'
+\echo '── another organization can neither change Psychiatry nor its people'
 reset role;
-insert into core.users (id, organization_id, kind, name, login_id) values ('00000000-0000-0000-0000-0000000000b6', :'org', 'staff', 'Psych desk', '11111111-0000-0000-0000-0000000000b6');
-insert into core.roles (id, organization_id, key, name) values ('00000000-0000-0000-0000-00000000e006', :'org', 'psych_desk', 'Psych desk');
-insert into core.role_actions (role_id, action) values ('00000000-0000-0000-0000-00000000e006', 'read:queue'), ('00000000-0000-0000-0000-00000000e006', 'read:organization');
-insert into core.user_roles (organization_id, user_id, role_id, department_id) values (:'org', '00000000-0000-0000-0000-0000000000b6', '00000000-0000-0000-0000-00000000e006', :'psy');
+insert into core.organizations (id, name) values ('00000000-0000-0000-0000-0000000000a2', 'Other');
+insert into core.users (organization_id, id, login_id, kind, name) values ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000c9', '11111111-0000-0000-0000-0000000000c9', 'staff', 'Their owner');
+insert into core.holdings (organization_id, user_id, role_id, department_id) values ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000c9', '00000000-0000-0000-0000-00000000c001', null);
 set role authenticated;
-select set_config('request.jwt.claim.sub', '11111111-0000-0000-0000-0000000000b6', false);
-select case when exists (select 1 from jsonb_array_elements(public.read_visit_queue(:'psy')->'rows') r where r->>'id' = '00000000-0000-0000-0000-0000000000a9')
-  then 'ok Psychiatry''s desk sees its own queue' else 'FAIL Psychiatry''s desk sees an empty queue' end;
+select t.as('11111111-0000-0000-0000-0000000000c9');
+select t.refuses(format($q$select public.save('department', '{"id":"%s","name":"Taken over","work":"visits"}')$q$, :'psy'), 'not_found');
+select t.refuses($q$select public.write_setting('{"key":"department.private","owner_id":"00000000-0000-0000-0000-0000000000d5","data":{"private":false}}')$q$, 'not_found');
+select t.refuses($q$select public.save('user', '{"id":"00000000-0000-0000-0000-0000000000b1","name":"Taken over"}')$q$, 'not_found');
+select t.ok(jsonb_array_length(public.read('{"shape":"patients","q":"ahmed"}') -> 'patients') = 0, 'their search finds none of ours');
+reset role;
+select t.ok((core.setting_at('00000000-0000-0000-0000-0000000000a1', 'department.private', :'psy') ->> 'private')::boolean and (select name from core.departments where id = :'psy') = 'Psychiatry', 'Psychiatry is unchanged');
+
+\echo '── erasing a patient with private notes and consult replies works and leaves nothing'
+update core.server_settings set value = 'off' where key = 'require_mfa';
+set role authenticated;
+select t.as(:'ow');
+select t.ok((public.erase_patient(jsonb_build_object('patient_id', :'pt', 'reason', 'the law')) ->> 'rows')::int > 0, 'erased');
+reset role;
+select t.ok(not exists (select 1 from core.entries where patient_id = :'pt') and not exists (select 1 from base.values where patient_id = :'pt')
+  and not exists (select 1 from core.read_log where patient_id = :'pt') and not exists (select 1 from core.patients where id = :'pt'), 'nothing of him is left');
+select t.ok(exists (select 1 from core.erasures where reason = 'the law' and rows_removed > 0), 'the log keeps only the fact');

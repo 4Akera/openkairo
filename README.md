@@ -2,7 +2,7 @@
 
 A clinical record system built on one idea: the record is a list of entries that are written once and never changed; every department reads and writes that same record; packs add kinds, never core.
 
-The design is in [`spec/`](spec/README.md) — six locked core specs (the record, the organization, patients and visits, the core entry types, the screens, the pack contract) and the audit that reviewed them. Read `spec/01-record.md` first.
+The design is one document: [`spec/openCare.md`](spec/openCare.md) — the layers, the spine, the core (the writer and the reader are the only ways in and out), the base, packs, standards (ICD-10, ATC, LOINC, UCUM, FHIR R4), the decisions, the permanent tests and the build record. Earlier specs are in `spec/archive/`.
 
 ## Run locally
 
@@ -11,117 +11,78 @@ Prerequisites: Docker (Colima on this machine), the Supabase CLI, Node 22+.
 ```bash
 colima start                    # once per boot
 supabase start                  # Postgres 17, Auth, Realtime, Storage, Studio
-npm run db:reset                # migrations → registry → dev seed
-npm run db:test                 # every SQL test on a fresh database
-npm run db:demo                 # optional: a clinic morning — 30 patients checked in, lab requests for a third
+npm run db:reset                # migrations → auth users, codes, the demo clinic
+npm run db:test                 # every SQL suite (16), each in its own rolled-back transaction
+npm run db:demo                 # optional: a clinic day written through write() — check-ins, orders, results, dispensing, two stays
+npm run test:composer           # the composer's typed lines and drafts → entries (no browser, no database)
 npm install && npm run dev      # the client on http://localhost:3000 (copy .env.example to .env.local first)
 ```
 
 Studio: http://127.0.0.1:54323 · API: http://127.0.0.1:54321 · DB: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 
-Dev users (password `Demo123!`): admin@demo.com (owner), dr.ali@demo.com, nurse@demo.com, lab@demo.com, reception@demo.com. With `VITE_DEMO_LOGINS=true` the login page has one-click buttons for them.
+Dev users (password `Demo123!`): admin@demo.com (owner), reception@demo.com (front desk), nurse@demo.com and dr.ali@demo.com (General Practice; Dr. Ali also the Medical Ward), lab@demo.com (Laboratory), psych@demo.com (Psychiatry, a private department), pharm@demo.com (Pharmacy). With `VITE_DEMO_LOGINS=true` the login page has one-click buttons for them.
 
-Settings changes need a second factor (spec 02). The dev seed turns that off locally (`core.server_settings` row `require_mfa = off`, migration 0019); when it is on, the Settings page enrols an authenticator app the first time a save is refused.
+Settings changes need a second factor. The dev seed turns that off locally (`core.server_settings`, `require_mfa = off`); when it is on, the Settings page enrols an authenticator app the first time a save is refused.
 
-## What is built (Phase 0)
+## What is built
 
-The database half of the core, from specs 01–04, in `supabase/migrations/`:
+**The database** (`supabase/migrations/`, one baseline of 2026-09-26; the earlier migrations are in `supabase/archive/`):
 
 | # | Migration | Spec |
 |---|---|---|
-| 0001 | foundation: schemas, roles, enums, helpers | 01, 02 |
-| 0002 | the organization: users, roles, actions, departments, services, packs, audit | 02 |
-| 0003 | patients and visits | 03 |
-| 0004 | the record: entries (insert-only), requests, steps, values, files, drafts, patient lists | 01, 04 |
-| 0005 | the gate: `require_access`, `require_pack`, `current_user_id` | 02 |
-| 0006 | the funnels: `write_entry`, `change_request`, the fold, values, updaters, holds | 01 |
-| 0007 | the registry core ships: actions, built-in roles, department types, entry types, vitals codes | 02, 04 |
-| 0008 | the patient-list updaters and `rebuild_record` | 04 |
-| 0009 | the nine public writes, `write_set`, `write_entered_in_error`, the marks | 04 |
-| 0010 | the public reads: `read_record`, `read_entries`, `read_entry`, `read_values`, `read_queue`, `read_to_review` | 04 |
-| 0011 | registration, search, the Here button, visit moves, the visit queue, the sweep | 03 |
-| 0012 | organization functions: `save_…`, `retire_…`, `read_organization`, birth and invitations | 02 |
-| 0013 | the runner, cron, the RLS backstop, revocations, `erase_patient` | 01, 02, 06 |
-| 0014 | `my_organization`, realtime channel policy | 05 |
-| 0015 | `read_entry` names its patient | 05 |
-| 0016 | `auth_uid`/`auth_aal` read PostgREST's JSON claims | 02 |
-| 0017 | `core.fill_values`: results carry ranges and flags from the service fields | 01, 04 |
-| 0018 | `save_service` accepts fields without choices | 02 |
-| 0019 | `core.server_settings`: the `require_mfa` switch on the gate (local development sets it off) | 02 |
-| 0020 | problems carry a note and a certainty; `core.local_code` + `read_codes`; `save_service` makes local codes | 02, 04 |
-| 0022 | spec 07: private visits, the one read log, a correction stays put, department rules, reads for the record views | [07](spec/07-privacy-and-record.md) |
-| 0023 | what a pack needs to answer a request: pack writers in Done's write set, one reply-type check in the funnel, prescription requests carry their service and details; enabling a pack fixed | 06 |
-| 0035 | review fixes: nobody can take the last administrator's rights (counted per person), roles of another organization or retired ones cannot be given, a private department's own staff see their queue, a department's review list is read only by its reviewers, live signals carry nothing | [02](spec/02-organization.md), [07](spec/07-privacy-and-record.md) |
-| 0034 | reception's lists keep private visits private: a department's queue leaves out what the reader may not see; reception lists them apart as "Private visit" (`read_private_visits`) | [07](spec/07-privacy-and-record.md) |
-| 0033 | a clinic's own roles: `save_role` (copy a built-in role, choose its actions), `retire_role`, `read_actions` | [02](spec/02-organization.md) |
-| 0032 | the review list shows each result beside the patient's previous value (a private visit's value the reader cannot see is left out) | [05](spec/05-screens.md) |
-| 0031 | a change can turn PRN off and clear instructions; a problem update can clear its note and onset (the updaters take a key that is present) | [05](spec/05-screens.md) |
-| 0030 | Settings reads each department's After Done (the editor showed 'Next patient' whatever the rule, and saving put it back) | 07 |
-| 0029 | presets as shortcuts: a preset carries a `/shortcut` and speed lines the visit's composer runs; a preset may be lines only | [05](spec/05-screens.md) |
-| 0028 | department rule: after Done, the next patient or back to the queue | 07 |
-| 0027 | the record view (by visit · all entries) is the organization's setting, not each department's | [07](spec/07-privacy-and-record.md) |
-| 0026 | the clinic's time zone: "today" (counts, ages, a medication's start) is the clinic's day; `save_organization` | 02 |
-| 0025 | the record's view is a department rule (by visit · all entries); visits come newest activity first | [07](spec/07-privacy-and-record.md) |
-| 0024 | the private-visit leaks from the adversarial review closed (retry by id, consult replies, files, values, search, live channels, owner roles); a consult may name only a department | [07](spec/07-privacy-and-record.md) |
-| 0021 | the amendments of 2026-09-23: waiting for results, the review rule and reasons, ranges by sex/age, reply types from the registry, the day's released results | [amendments](spec/amendments-2026-09-23.md) |
+| 01 | the spine: `core.entries` (insert-only), sets, patients, users, roles and holdings, departments and places, settings, codes, files, the read log, the audit | §2, §3.1–3.7 |
+| 02 | the registry: `core.declare_*` for types, systems, tables, rules, actions, settings, screens, listeners, packs, roles — each checked when declared | §3.8 |
+| 03 | the writer `public.write(set)`: identity from the JWT, the set ledger, locks and claims, checks, live vs late, refreshes, the outbox | §3.9 |
+| 04 | the reader `public.read(query)`: me · patients · patient · record · item · table · file · fhir · log · audit · codes; masked, logged | §3.10 |
+| 05 | the other doors: `my_users`, `choose_user`, `save`, `remove`, `save_patient`, `merge_patients`, `write_setting`, `erase_patient`, `redact` | §3.11–3.12 |
+| 06 | the base's code systems and catalogs (ICD-10, ATC, allergens, reactions) and identifier checks | §4, §6 |
+| 07 | the base's derived tables: `base.orders`, `base.presence`, `base.review`, `base.lists`, `base.values`, `base.deceased` | §4.5 |
+| 08 | the base's 34 types, their checks and lines, the privacy rule, settings keys, actions, built-in roles, screens | §4.1–4.6 |
+| 09 | FHIR R4: one mapping per type version | §6.4 |
+| 10 | guards: the rebuild check, the cron jobs (outbox every 5 s, the file sweep), realtime | §8 |
+| 11 | the pharmacy pack on the pack contract: its role and schema, `pharmacy.dispense`, `pharmacy.queue`, its screen | §5 |
+| 12 | privileges: every routine revoked from PUBLIC, then granted by name | §8 |
 
-Tables live in schema `core` and are reachable only through functions in `public`. Every public function is `security definer` with a pinned search path and starts with `require_access`.
+**The client** (`src/core/`, Vite · React · TanStack Query · zustand). Every read goes through `read`, every Done through `write` as one set; settings through `save`/`remove`/`write_setting`.
 
-## What is built (Phase 1)
-
-The client, `src/core/` — Vite, React, TanStack Query, zustand. Every server call is a function through `src/core/db/rpc.ts`; the department is a client-held choice passed on every call; drafts live in the client until Done writes them as one `write_set`.
-
-- `shell/` — sign-in (demo one-click), the department switcher, ⌘K patient search, the second-factor step-up
-- `screens/Reception.tsx` — search-first; Here opens or marks present; New patient is four fields with a duplicate warning
-- `screens/Department.tsx`, `Queue.tsx` — the patient queue in bands (Back · In consult · Waiting · Here-pending) and the request queue
-- `screens/visit/` — the visit, built for typing. A sticky banner holds Done → next (⌘↵, which adds what is in the line first). The side lists problems, medications and allergies, then Key results; their + and ✎ open the composer (Alt+P / Alt+M / Alt+A). One composer line: **a line that starts with `/` is a command, anything else is today's note** (`parse.ts`, commands registered in `commands.ts` the way a pack registers its own); the card under the line shows and edits what it will write:
+- `db/rpc.ts` — the doors; `db/views.ts` — the screens' view models from server rows; `db/entries.ts` — drafts, moves, bench answers and reviews as entries (codings, UCUM quantities)
+- `shell/` — sign-in (demo one-click), choosing which clinic when a login has more than one user, the department switcher, ⌘K patient search
+- `screens/Reception.tsx` — the front desk: search-first, send to a clinic, urgent, undo a check-in, edit details, the clinics' lines
+- `screens/clinic/`, `Queue.tsx` — a clinic's queue in bands and its results to review (Reviewed writes a `reviewed` entry)
+- `screens/visit/` — the visit, built for typing. One composer line: **`/` starts a command, `#` a preset, anything else is the note**; Done writes one set and moves to the next patient
 
   ```
   /v 148/92 84 37 86                     vitals (by position, or p 84 t 37)
-  /rx metformin 500 bd 30d for dm        prescription, linked to a problem (dm, htn, ckd… understood)
-  /rx paracetamol 1g qds prn pain        a PRN says what it is for
-  /order hba1c, lipid · /order urgent cbc  requests (or a preset's services by name); Tab completes
-  /ref cardiology chest pain on effort   consult
-  /dx hypertension since 3y ; note       problem (/ddx = suspected)
-  /al penicillin: rash severe · /nka     allergy · no known allergies
-  /hx · /ex · /plan · /soap · /note …    notes; a command alone opens its card or its note beside the record
-  /dm                                    a preset's shortcut (Settings → Presets)
-  anything else                          joins today's note
+  /rx metformin 500 bd 30d for dm        a medication (ATC), linked to a problem; … send → an order to the pharmacy
+  /dx hypertension                       a problem (ICD-10); /dx ? pneumonia = suspected
+  /al penicillin: rash severe            an allergy · /al none: no known allergies
+  /order hba1c, lipid · /order urgent cbc  orders; /order cardiology: chest pain is a consult
+  #dm · #soap · #hx                      presets (Settings → Presets)
+  hx: … · ex: … · plan: …                a note line under that heading
   ```
-- `screens/bench/` — any department that offers services and sees no patients of its own (laboratory, imaging, pharmacy) works a bench: open requests grouped one row per patient, a scan box for record number or name, section and step filters, Collect all, and one screen per patient where Enter walks every field and ⌘↵ releases every result in one atomic set, then opens the next patient. Values that are not numbers block release; values ten times outside the range ask for a second look; flags use the range that fits the patient's sex and age. Core shows no working steps: packs register them (`registerBenchSteps`). *Released today* lists the last day's results, and Correct replaces one.
-- `screens/Request.tsx` — one request: the value grid from the service's fields, a report, preliminary, not done, steps, Release → next; technicians work from the queue row and never read the record
-- `screens/Settings.tsx`, `settings/Services.tsx`, `settings/Roles.tsx` — organization, departments, users, roles (a clinic's own: copy a built-in one and tick its rights; each page opens to whoever holds its own manage right), presets, packs; services grouped by department and section, filtered as you type, edited in place (⌘S), fields typed or pasted one per line (`name | unit | 12-16 | 7-20`, tabs from a spreadsheet work); a field without a registered code gets a local one
-- `renderers/` — one card per entry from its display line; packs register richer renderers here
-- `packs/index.ts` — the only place packs are named; ESLint keeps core from importing packs
+- `screens/bench/` — a bench (laboratory, imaging, pharmacy): open orders one row per patient, a scan box, one screen per patient where ⌘↵ releases every result in one set; ranges by sex and age; Correct replaces a released result
+- `screens/ward/BedBoard.tsx` — a ward: its beds, admit to a free bed, move, discharge
+- `screens/Request.tsx` — one order: the value grid, a report, not done, start · hold · decline
+- `screens/Settings.tsx`, `settings/` — organization (time zone, record view, recent changes), departments and their rules, services (fields, units, ranges by sex and age, LOINC codings), users and roles, presets, packs, record reads
 
-## The first pack: Pharmacy
-
-`supabase/migrations/20260924000001_pharmacy_step.sql`, `…0002_pharmacy_pack.sql`, `src/packs/pharmacy`. Kinds only: a `pharmacy` department type, the `pharmacy_dispense` reply type, the `prepared` step, the `pharmacy_pharmacist` role. Its code runs as its own role in its own schema (`pharmacy.write_dispense`), behind a thin public door (`pharmacy_write_dispense`). On the bench it adds a Prepare button and a dispense form filled from the prescription (quantity from dose frequency × days, substitution, not dispensed). A prescription becomes a request only while the pack is on and a Dispensing service exists.
+**The pharmacy pack** (`…000011_pharmacy.sql`, `src/packs/pharmacy`): a prescription reaches the pharmacy only when the doctor sends it; its bench (To give · Given today) gives with **Give all** or Given / Not given with a reason. Its `pharmacy.queue` table is filled by a listener after commit.
 
 ## Tests
 
-`supabase/tests/` — each runs on a fresh database:
-
-- `smoke_spine.sql` — the record itself: routing, idempotency, steps, flags, values, the fold, permanence, correction, refusals
-- `smoke_api.sql` — a clinic day through the public functions as three users: the gate, one atomic Done, both lists, two routed requests, the lab, a critical result to review, the chart
-- `smoke_visits.sql` — reception → queue → consult → results → BACK → done → follow-up
-- `privacy.sql` — private visits: hidden notes, visible facts, open anyway, the read log, corrections stay put, department rules
-- `pharmacy.sql` — the first pack: boundary, a prescription becomes a request, prepared, dispensed in a write set, pack off
-- `amendments.sql` — waiting for results, not-seen results, the review rule, ranges by sex, reply types, correction
-- `boundary.sql` — the pack boundary against a hostile fixture pack: grants, ownership, a sleeping pack, a raising pack, a pack writing core, the gate on a pack caller, the record lock
+`supabase/tests/`, run by `scripts/db-test.sh`: spine · presence · clinic · review · lists · admin · privacy · pharmacy, and the eight permanent tests — rebuild (= live) · boundary · canary · concurrency · registry · fhir · tenancy · pack contract. `supabase/tests/ported.md` maps every check of the earlier suites to its new home.
 
 ## Layout
 
 ```
-spec/                 the design; locked
+spec/openCare.md      the design (spec/archive/: the earlier specs)
 supabase/migrations/  the database, in order
-supabase/seeds/       auth users and a dev clinic (local only)
-supabase/tests/       SQL tests
-scripts/db-test.sh    runs them
+supabase/seeds/       auth users, codes, the demo clinic (local only)
+supabase/tests/       SQL suites (lib/: assertions and the fixture)
+scripts/              db-test.sh, demo-day.sql, gen-codes.py, import-codes.sh, test-composer.ts
 src/core/             the client: db, auth, hooks, shell, screens, renderers
-src/packs/            packs: pharmacy (the first)
+src/packs/            packs: pharmacy
 ```
 
 ## Next
 
-Phase 2: the first packs — Laboratory, Pharmacy, Billing, Internal medicine (spec 06) — then the core-later items from the audit: `read_cohort`, the outbound door, server-side drafts, user invitations from Settings.
+What the build record lists as open (spec §11): the Storage API sweep for erased files' bytes, and Settings editors for sites, beds, the kind of encounter and the Screens line. Packs wait for the owner's go.

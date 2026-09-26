@@ -1,24 +1,73 @@
-// Every server call is a function (spec 01). A refusal arrives as its code in error.message.
+// The client's two doors (spec/openCare.md §3.9–§3.10) and the few others (§3.12). Nothing else reaches the server.
+// write() returns an outcome, never rows: a refusal or a warning arrives as findings, which the screens put words on.
 import { db } from './client'
-import type { Database } from './types.generated'
-type Fns = Database['public']['Functions']
-export type FnName = keyof Fns & string
-// refusal codes are the API (spec 01); the client only puts words on them
+import type { Json } from './types.generated'
+
+// the words for refusal and finding codes (the codes are the API; the client only says them)
 const WORDS: Record<string, string> = {
-  not_allowed: 'You are not allowed to do this here', not_a_member: 'This login belongs to no organization', mfa_required: 'Settings changes need a second factor — turn it on above',
-  record_not_open: 'Open the record first', visit_moved: 'Someone moved this visit first — the queue has been refreshed', request_moved: 'Someone moved this request first',
-  illegal_move: 'That step is not allowed from here', reason_missing: 'A reason is required', changed_since_read: 'Saved by someone else since you opened it — reload',
-  not_found: 'Not found', request_not_found: 'Request not found', already_replaced: 'This entry was already corrected', duplicate: 'Already exists', stale_time: 'The time is in the future',
-  author_mismatch: 'The author does not match the signed-in user', wrong_organization: 'Not in this organization', last_administrator: 'Someone must keep the right to manage users and roles in every department',
-  self_change: 'You cannot change your own roles or a role you hold', cannot_grant: 'You cannot give a right you do not hold everywhere', builtin_role: 'Built-in roles are read-only — copy one to change it',
-  unknown_action: 'Unknown action', pack_off: 'That pack is off in this organization', retired: 'Already retired', name_missing: 'A name is needed',
+  not_signed_in: 'Sign in first', not_a_member: 'This login belongs to no organization', choose_user: 'Choose which clinic you are working in',
+  mfa_required: 'Settings changes need a second factor — turn it on above', not_allowed: 'Your role cannot do this here', not_found: 'Not found',
+  bad_shape: 'Something in it is not in the right form', bad_entry: 'Something in it is not in the right form', unknown_type: 'Not a kind of entry this clinic knows',
+  pack_off: 'That pack is off in this organization', wrong_patient: 'That belongs to another patient', two_patients: 'One Done is for one patient',
+  changed_since_opened: 'Changed by someone else since you opened it — look again', set_changed: 'This was already sent with other content', busy: 'Someone else is writing for this patient — try again',
+  unknown_system: 'An unknown code system', wrong_resource: 'That cannot continue this entry', wrong_target: 'That cannot correct this entry', in_the_future: 'The time is in the future',
+  already_here: 'Already here: the open visit is used', already_called: 'Someone called this patient first', visit_closed: 'This visit has ended', not_admitted: 'Not admitted',
+  already_admitted: 'Already admitted', bed_taken: 'That bed is taken', wrong_work: 'Patients are not checked in there', not_served: 'That department does not work for this one',
+  same_department: 'Already there', bad_visit: 'Not a move of this visit', unknown_service: 'That service is not offered any more', wrong_department: 'Another department answers it',
+  order_closed: 'That order is closed', wrong_answer: 'This order is answered another way', has_answers: 'It has answers already: it stays', already_crossed_out: 'Already crossed out',
+  never_private: 'Only notes and results can be private', reason_missing: 'A reason is needed', bad_target: 'That cannot be pointed at', nothing_dispensed: 'Say what was given',
+  last_administrator: 'Someone must keep the right to manage people and roles everywhere', self_change: 'You cannot change your own roles or a role you hold',
+  cannot_grant: 'You cannot give a right you do not hold everywhere', builtin_role: 'Built-in roles are read-only — copy one to change it', unknown_action: 'Unknown action',
+  in_use: 'It has been used, so it stays — retire it instead', name_missing: 'A name is needed', duplicate: 'Already exists', merged: 'That record was merged',
+  bad_answer: 'No pack here answers that way', unknown_setting: 'Unknown setting', no_session: 'Sign in again to choose',
+  allergy_clash: 'Allergy', allergy_caution: 'Caution', duplicate_medication: 'Already on this medicine', duplicate_class: 'Another medicine of the same class', already_on_list: 'Already on the list',
 }
+const USED: Record<string, string> = { record: 'the record points at it', services: 'it has services', people: 'people hold roles there', signed_in: 'this person has signed in', places: 'it has beds or rooms', outside: 'every organization keeps one' }
+export const words = (code: string) => WORDS[code] ?? code.replace(/_/g, ' ')
+
 export class Refusal extends Error {
-  constructor(public code: string, public detail?: string) { super(`${WORDS[code] ?? code.replace(/_/g, ' ')}${detail && /^(cannot_grant|pack_off|unknown_action)$/.test(code) ? `: ${detail}` : ''}`) }
+  constructor(public code: string, public detail?: string) {
+    super(`${words(code)}${code === 'in_use' && detail ? ` (${USED[detail] ?? detail})` : detail && /^(cannot_grant|pack_off|unknown_action|not_allowed)$/.test(code) ? `: ${detail}` : ''}`)
+  }
 }
-export async function rpc<T = unknown>(fn: FnName, args?: Record<string, unknown>): Promise<T> {
-  const { data, error } = await db.rpc(fn as never, (args ?? {}) as never)
+
+export interface Finding { code: string; level: 'refuse' | 'warn' | 'flag' | 'info'; detail?: string; entries?: string[]; confirmed?: boolean; late?: boolean }
+export interface Outcome { set_id: string; outcome: 'landed' | 'refused' | 'warn' | 'busy'; entries?: { id: string; item: string; item_version: number }[]; findings: Finding[]; repeat?: boolean; recorded_at?: string }
+/** a set the writer refused, or sent back with warnings to confirm (inline cards) */
+export class WriteRefused extends Refusal { constructor(public outcome: Outcome) { const f = outcome.findings[0]; super(f?.code ?? outcome.outcome, f?.detail) } }
+export class WriteWarned extends Error { constructor(public outcome: Outcome) { super(outcome.findings.map((f) => `${words(f.code)}${f.detail ? `: ${f.detail}` : ''}`).join(' · ')) } }
+
+async function call<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await db.rpc(fn as never, args as never)
   if (error) throw new Refusal(error.message, error.details ?? undefined)
   return data as T
 }
+
+/** one read through the one door out; every read is logged by the server */
+export const read = <T = unknown>(query: Record<string, unknown>) => call<T>('read', { p_query: query as Json })
+
+export interface EntryIn { id: string; type: string; type_version?: number; patient_id: string; department_id: string; visit_id?: string | null; occurred_at?: string; precision?: string
+  data: Record<string, unknown>; replaces?: string | null; refers_to?: string | null; relation?: 'answers' | 'changes' | 'about' | null }
+export interface SetIn { set_id: string; made_at?: string; entries: EntryIn[]; confirmed?: string[]; seen?: Record<string, number> }
+/** one Done through the one door in: landed, or a refusal (WriteRefused), warnings to confirm (WriteWarned), or busy (retried here) */
+export async function write(set: SetIn): Promise<Outcome> {
+  const body = { ...set, made_at: set.made_at ?? new Date().toISOString(), entries: set.entries.map((e) => Object.fromEntries(Object.entries(e).filter(([, v]) => v !== undefined && v !== null))) }
+  for (let tries = 0; ; tries++) {
+    const o = await call<Outcome>('write', { p_set: body as unknown as Json })
+    if (o.outcome === 'landed') return o
+    if (o.outcome === 'busy' && tries < 3) { await new Promise((r) => setTimeout(r, 400 * (tries + 1))); continue }
+    if (o.outcome === 'warn') throw new WriteWarned(o)
+    throw new WriteRefused(o)
+  }
+}
+
+// the other doors
+export const save = (what: 'organization' | 'site' | 'department' | 'place' | 'user' | 'role', row: Record<string, unknown>) => call<{ id: string; key?: string; unassigned?: number }>('save', { p_what: what, p_row: row as Json })
+export const remove = (what: 'department' | 'place' | 'user' | 'role', id: string) => call<{ deleted: string }>('remove', { p_what: what, p_id: id })
+export const savePatient = (p: Record<string, unknown>) => call<{ patient: unknown; findings: Finding[]; created: boolean }>('save_patient', { p: p as Json })
+export const mergePatients = (p: Record<string, unknown>) => call<{ survivor: string }>('merge_patients', { p: p as Json })
+export const writeSetting = (p: { key: string; owner_id?: string | null; thing_id?: string | null; data?: unknown; retired?: boolean }) => call<{ id: string; thing_id: string }>('write_setting', { p: p as unknown as Json })
+export const myUsers = () => call<{ id: string; organization_id: string; organization: string; name: string }[]>('my_users', {})
+export const chooseUser = (userId: string) => call<{ user_id: string; organization_id: string }>('choose_user', { p_user_id: userId })
+export const erasePatient = (p: { patient_id: string; reason: string }) => call('erase_patient', { p: p as unknown as Json })
 export { db as _db }

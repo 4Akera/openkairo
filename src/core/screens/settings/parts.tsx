@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Check, ChevronRight, Search } from 'lucide-react'
+import { Check, ChevronRight, Search, Trash2 } from 'lucide-react'
 import { Button, Card, Input, Kbd, cn, errorText } from '../../ui'
 
 /** open or folded, remembered in this browser (a private window starts every section open) */
@@ -119,4 +119,14 @@ export function Group({ title, children }: { title: string; children: ReactNode 
 export const Filter = ({ value, onChange, placeholder, onEnter }: { value: string; onChange: (v: string) => void; placeholder: string; onEnter?: () => void }) =>
   <div className="relative max-w-sm"><Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="h-8 pl-8"
     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter?.() } }} /></div>
+/** delete a mistake: gone for good, and only if nothing ever used it — the server refuses anything used (retire that) */
+export function DeleteButton({ what, onDelete }: { what: string; onDelete: () => void }) {
+  return <Button type="button" size="sm" variant="ghost" className="text-neutral-500 hover:bg-red-50 hover:text-red-700" aria-label={`Delete ${what}`} title="Only for a mistake that was never used"
+    onClick={() => confirm(`Delete ${what}? It goes for good — this works only if nothing ever used it. Anything used stays and can be retired.`) && onDelete()}>Delete</Button>
+}
 export const Empty = ({ children }: { children: ReactNode }) => <p className="px-4 py-6 text-center text-sm text-neutral-400">{children}</p>
+
+/** a new thing's editor, above the lists until it is saved */
+export const NewCard = ({ title, children }: { title: string; children: ReactNode }) => <Card className="overflow-hidden ring-2 ring-teal-700/15"><p className="px-4 pt-3 text-sm font-semibold">{title}</p>{children}</Card>
+/** retire from inside the editor, never by a stray click on a row */
+export const RetireButton = ({ what, onRetire }: { what: string; onRetire: () => void }) => <Button type="button" size="sm" variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => confirm(`Retire ${what}?`) && onRetire()}><Trash2 className="h-3.5 w-3.5" />Retire</Button>

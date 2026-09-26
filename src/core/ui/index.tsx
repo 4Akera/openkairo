@@ -23,6 +23,9 @@ export function Select({ className, ...rest }: React.SelectHTMLAttributes<HTMLSe
   return <select className={cn('h-9 w-full rounded-lg border border-neutral-300 bg-white px-2 text-sm focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20', className)} {...rest} />
 }
 export const flagClass = (f: string | null | undefined) => f === 'critical' ? 'text-red-700 font-semibold' : f === 'low' || f === 'high' || f === 'abnormal' ? 'text-amber-700' : 'text-neutral-500'
+/** the mouse really moved: a browser also sends mousemove when a list shifts under a still pointer (typing a filter), and
+ *  that one must not bring hover back while the keys are in use */
+export const movedMouse = (e: React.MouseEvent) => e.movementX !== 0 || e.movementY !== 0
 export const minutesSince = (iso: string | null) => iso ? Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)) : 0
 
 /** A panel: the one container every screen uses. */

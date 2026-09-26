@@ -1,0 +1,575 @@
+# openCare · the specification
+
+One file for the whole system. It replaces specs 00–08, the amendments and the appendices, which are kept in `spec/archive/` for
+their history only. Status: **approved by the owner, 2026-09-26**. A later change is written into this file with its date.
+
+openCare is an open-source clinical record. Egypt first (Arabic names, Africa/Cairo); English screens now, Arabic later. Typing
+first. Inline cards appended below the line, never overlays on the record. Plain names. Local demo data only: there is no real
+deployment, so nothing here needs a data migration.
+
+---
+
+## 1. The layers
+
+```
+   screens: base defaults (desk, queue, bench, bed board, record, composer, settings) and pack screens. They only call actions.
+                          │  write(set)                                   │  read(query)
+ ┌────────────────────────┴───────────────────────────────────────────────┴───────────────────────────┐
+ │ PACKS   pharmacy.* …  own types (often extending a base type), checks, visibility rules (hide only), │
+ │         settings, screens. React to other layers' types after commit.                               │
+ ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ BASE    all meaning: 34 types, presence, privacy, checks, derived tables, the review loop,         │
+ │         code systems and their rows, settings keys, FHIR mappings. Always on; released with core.  │
+ ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ CORE    people · patients · places · registry · settings · codes · counters · files · datatypes    │
+ │         WRITER (only way in)  ·  READER (only way out, logs every read)  ·  ERASER (2 exceptions)  │
+ │         no types, no medicine                                                                      │
+ ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ SPINE   entries: written once, never changed                                                       │
+ └────────────────────────────────────────────────────────────────────────────────────────────────────┘
+   derived tables (who is where, lists, orders, review, values): refreshed from entries only, read only through the reader
+   FHIR R4: a mapping of what the reader returns; never stored
+```
+
+Each layer uses only the one below it. Nothing reaches the spine except through the writer, and nothing leaves except through the
+reader. The two are the core's promise: no screen or pack can go around the base's checks or its privacy rule.
+
+| layer | Postgres | owner role |
+|---|---|---|
+| spine and core | schema `core` | `postgres` (the migration owner); the eraser functions are owned by the NOLOGIN role `core_eraser` |
+| base | schema `base` | NOLOGIN role `base_role` |
+| a pack | schema `<key>` | NOLOGIN role `pack_<key>` |
+| the API | schema `public` | `postgres`; every function SECURITY DEFINER with `search_path = ''`, granted to `authenticated` |
+
+`authenticated` holds no privilege on any table in `core`, `base` or a pack schema. Realtime publishes no tables.
+
+---
+
+## 2. The spine: `core.entries`
+
+| column | what |
+|---|---|
+| `organization_id` | first in every key and index |
+| `id` | uuid v7, minted by the client, so a retried Done can never land twice |
+| `patient_id` | the patient (the survivor of the merged family at the time of writing, §3.2) |
+| `type`, `type_version` | a registry key (`problem`, `pharmacy.dispense`) and the shape version it followed. Old entries always read with their own shape |
+| `item`, `item_version` | `item` = the id of the entry that started the thing; `item_version` = 1, 2, 3… FHIR `Resource.id` and `meta.versionId`; derived rows key on it; a stale edit is found by version |
+| `data` | jsonb, built only from core datatypes (§3.7) and checked against the type version's JSON schema |
+| `codes` | text[] of every coding in `data` (`icd10:E11.9`), filled by the writer; GIN index. A copy of `data`, fixed when written |
+| `author_id` | the user who wrote it (staff, machine or importer) |
+| `source` | `staff` · `machine` · `import` · `patient`, set by the writer from the user's kind, never taken as a parameter |
+| `source_system`, `source_id` | optional outside id (analyser message, FHIR `Observation/123`, CSV row); unique per organization, so an import or resend lands once |
+| `department_id` | never null. Patient and import entries go to the organization's automatic intake department (work `outside`) |
+| `visit_id` | the `item` of the visit's opening entry (`checked_in`, or `admitted` for a stay) |
+| `occurred_at`, `precision`, `until` | clinical time with `year`·`month`·`day`·`minute`·`second`. A coarse time is stored as the start of the period in the organization's time zone |
+| `recorded_at` | set by the writer after taking the locks: ordering by (recorded_at, id) is the order writes happened |
+| `replaces` | a correction: "it was wrong" |
+| `refers_to`, `relation` | `answers` · `changes` ("it was right until now") · `about` |
+| `set_id` | the Done: all or nothing, the unit of a retry, one Provenance |
+| `findings` | the check outcomes kept with the entry: flags, and warnings the user confirmed. A rebuild never runs checks again |
+
+**The item rule** (the writer's; no medicine in it). A new entry starts its own item (`item = id`, version 1). `replaces` and
+`changes` continue the target's item (the next version). `answers` and `about` start a new item. The target and the new entry must
+declare the same FHIR resource, except `crossed_out`, which continues any item. `unique (organization_id, item, item_version)`.
+
+**Kept rules.** Insert-only, enforced by a trigger and by grants. No copies of note text anywhere else: lists and worklists point to
+entries. Everything that happens is an entry, including "made private", "called", "moved to bed 12" and "crossed out". There is no
+`code` or `unit` column, no stored FHIR, no `responsible` column (derived from presence), no `privacy` column (privacy is entries).
+
+---
+
+## 3. The core
+
+### 3.1 People
+- **login**: an auth account (`auth.users`). **user**: a person in one organization (`core.users`), kind `staff` · `machine` ·
+  `importer`. A doctor at two clinics has two users. When a login has more than one live user, the client asks which one and calls
+  `choose_user`, which binds the choice to the JWT's `session_id`. Nothing is ever shown across organizations.
+- **roles**: bundles of declared actions. Built-in roles belong to a layer (organization null) and are read-only; a clinic copies one
+  to make its own. **holdings** are insert-only rows with a validity period, held everywhere (department null) or in one department.
+  Ending a holding inserts a row into `core.holding_ends`.
+- `core.may(user, action, department)` → yes/no. **A null department matches only roles held everywhere.** `core.may_somewhere(user,
+  action)` answers "in any department". A pack's actions need the pack in the organization's `packs_used` setting. Retired users and
+  machine users hold nothing that opens a private item (§5.3).
+- Identifiers for users, organizations, sites and departments are stored like patients' (`core.identifiers`, by owner kind).
+- **The last administrator.** Somebody must keep `manage:users` and `manage:roles` held everywhere (possibly on two roles). Nobody edits
+  their own holdings or a role they hold, and nobody grants an action they do not hold everywhere.
+
+### 3.2 Patients
+- Names: ordered given parts (own, father, grandfather), family name and full text, plus an optional Latin form (passport spelling).
+  A stored Arabic-folded name (أ/إ/آ→ا, ى→ي, ة→ه, no tatweel or harakat, lower case) with a trigram index, because `unaccent` does not
+  fold Arabic. Search matches the folded name, a phone, the record number or any identifier.
+- `gender`: male · female · other · unknown. Birth date with precision and an `estimated` flag. An unknown patient has `anonymous`.
+- Identifiers `(system key, value, verified)`. The system's check function validates the value (§7.3). The record number is an
+  integer from `next_number(organization, 'record_number')`, exported as an identifier in the organization's MR system.
+- Relations: mother of, guardian of, not the same person as; each with who recorded it and when.
+- **Identity changes are insert-only** (`core.patient_changes` holds each full snapshot); `core.patients` is the current state built from
+  them. Death is not a patient field: it comes from the base's `died` entry.
+- **Merge.** `merged_into` points to the survivor. The merged family counts as one patient everywhere: reads take the family, the
+  writer stores new entries under the survivor and re-reads it after taking the lock. Exported as `Patient.link`.
+
+### 3.3 Places
+Organization → sites → departments → **places**. A department has one core `work` key: `desk` · `visits` · `stays` · `bench` ·
+`outside`; what each means belongs to the base. A place is a room, bed, chair or cubicle in one table (the word is a label; a bed may
+sit in a room). Every organization gets one `outside` intake department automatically. Department flags that carry meaning (private,
+encounter class, after Done, works for, review rule) are settings.
+
+### 3.4 Settings
+`core.settings (organization_id, id, key, owner_id, thing_id, data, retired, author_id, recorded_at)`: insert-only, so the history is
+free. `thing_id` is the setting's own id over time (a service's id; the owner's id for a one-per-owner key). Each key is declared in
+the registry with an owner kind (`organization` · `department` · `place`), a JSON schema and an optional check function.
+`core.setting_at(organization, key, thing, at)` returns the setting as it stood at a moment. **Checks and refreshes read settings as of
+each entry's `recorded_at`**, so a later range change never alters an old flag and a rebuild stays identical. Services, presets,
+department rules, the packs used here and the Screens line are all settings rows; packs need no configuration tables of their own.
+Written only by `public.write_setting`, which checks `may(user, 'manage:settings', owner department)` (or held everywhere for an
+organization key), the shape and the key's check; every change is an AuditEvent.
+
+### 3.5 Codes
+- `core.systems`: declared in the registry: key, kind (`code` | `identifier`), canonical URI, version, labels, `closed`, an optional
+  check function, a licence note.
+- `core.codes (system, code, labels per language, parent, props jsonb, retired_at, replaced_by)`. `props` holds per-system extras (a
+  LOINC code's canonical UCUM unit and allowed units, an ATC level, an EDA product's strength and form). Codes are plain data loaded by
+  the base, packs and import scripts. Maps between systems come later as `code_maps`, applied only when reading.
+- **Entries store system keys, never URIs.** URIs are resolved at export (`{canon}` is one row of `core.canon`).
+
+### 3.6 Counters and files
+- `core.next_number(organization, key, scope, day)`: record numbers, queue numbers (#12), specimen numbers, invoices.
+- Files: one private storage bucket `files`, objects at `<organization>/<patient>/<sha256>`. An entry names a file in `data` as an
+  attachment. A download link comes only through the reader, and the storage SELECT policy calls the same visibility function. A file
+  never signed into an entry is removed after a day. Erase removes the objects.
+
+### 3.7 Datatypes: the only building blocks of `data`
+FHIR datatypes, not resources, so they carry no medicine. Every type's JSON schema is built from them; `core.datatypes()` returns the
+`$defs` that the declaration inlines.
+
+| datatype | shape |
+|---|---|
+| coding | `{system: key, code, display}`; `display` is the label as picked, kept because the entry never changes |
+| concept | `{text, codings: [coding]}`; `text` is the words as typed; zero codings means "as written" |
+| quantity | `{value: "1.50" (a decimal string, so precision is kept), unit: "mmol/L" (as written), ucum: "mmol/L", comparator}` |
+| range, ratio | low/high quantities and a text; numerator/denominator (a titre of 1:160) |
+| period, partial date | start/end; `{value, precision}` |
+| reference | `{to: item · patient · user · department · place, id}` |
+| identifier | `{system: key, value}` |
+| timing | a subset of FHIR Timing: `frequency`, `period`, `period_unit`, `when` (AC, PC, HS), `bounds_days`, `code` (BID, TID) |
+| attachment | `{sha256, sha1, mime, size, name, created}` |
+
+The writer checks every coding (any object with `system` and `code`). A system that is not registered is refused
+(`unknown_system`: a bug). An unknown or retired code in a `closed` system lands with a `code_unknown` flag. A quantity whose `ucum` is
+not a known UCUM unit lands with a `unit_not_ucum` flag.
+
+### 3.8 The registry
+Only migrations write the registry: there is no RPC for it, and neither `authenticated` nor pack roles hold any privilege on it.
+Organizations change only labels (through settings) and settings.
+
+```sql
+select core.declare_type(
+  key => 'medication', version => 1, layer => 'base',
+  base_type      => null,                               -- pack types only: the base type this one extends ('given', 'step')
+  shape          => '{…JSON schema using #/$defs/…}',
+  resource       => array['MedicationRequest','MedicationStatement'],   -- FHIR R4
+  to_fhir        => 'base.medication_fhir(jsonb)',      -- the reader's rows of one item → jsonb[] of resources
+  line           => 'base.medication_line(jsonb)',      -- the one-line summary, even when a pack's client code is missing
+  checks         => array['base.medication_check(jsonb,jsonb)'],   -- (entry, set) → findings
+  feeds          => array['base.lists'],                -- derived tables refreshed with this type's items
+  claims         => null,                               -- (entry) → text[] such as 'place:<id>'
+  may_be_private => false,
+  in_record      => true,   -- false hides it from the record view only; the reader and FHIR still include it
+  other_patient  => false,  -- may sit in a set beside another patient (the birth card)
+  labels         => '{"en":"Medication","ar":"دواء"}');
+select core.declare_system  (key, kind, uri, version, closed, check, licence, labels);
+select core.declare_table   (key => 'base.lists', layer => 'base', refresh => 'base.lists_refresh(uuid,uuid[])', action => 'read:record');
+select core.declare_rule    (key => 'base.private', layer => 'base', hidden => 'base.private_hidden(uuid,uuid[])');
+select core.declare_action  (key => 'write:note', layer => 'base', scope => 'department', labels => '{…}');
+select core.declare_setting (key => 'department.private', layer => 'base', owner => 'department', shape => '{…}', check_fn => null, many => false);
+select core.declare_screen  (key => 'base.queue', layer => 'base', work => 'visits', labels => '{…}');
+select core.declare_listener(layer => 'pharmacy', types => array['medication','order'], refresh => 'pharmacy.queue_refresh(uuid,uuid[])');
+select core.declare_pack    (key => 'pharmacy', version => 1, requires => '{}', labels => '{…}');
+select core.declare_role    (id, key, layer, actions, labels);   -- a built-in role (read-only to organizations)
+```
+
+**Enforced when something is declared**
+- Functions are stored as `regprocedure` OIDs with `md5(prosrc)` beside them. Each must be owned by the layer's role, be SECURITY
+  DEFINER with `search_path=''`, and live in the layer's schema. Checks, lines, claims, rules and to_fhir must be STABLE (Postgres then
+  refuses writes inside them); refreshes must be VOLATILE.
+- Keys must sit inside the layer's prefix: pharmacy cannot declare `note` or `obgyn.x`. `requires` may not form a loop.
+- `may_be_private` is refused for a type whose resources include MedicationRequest, MedicationStatement, MedicationAdministration,
+  Immunization or AllergyIntolerance, pack types included.
+- Every derived table has `organization_id, patient_id, item, source_entries uuid[]`, so the reader can mask it, and erase and rebuild
+  can find it. A refresh has the signature `(organization uuid, items uuid[])` and recomputes, from entries and settings-as-of only,
+  every row it owns that depends on those items.
+
+### 3.9 The writer: `public.write(set)` (the only way in)
+The client sends `{set_id, made_at, entries[], confirmed[], seen{item: version}}`; each entry is `{id, type, type_version?, patient_id,
+department_id, visit_id?, occurred_at?, precision?, until?, data, replaces?, refers_to?, relation?, source_system?, source_id?}`.
+The writer:
+1. **Refuses nested calls** (a transaction-local flag) and asserts READ COMMITTED.
+2. Takes **identity from the JWT** (the login, the session's chosen user, its organization and kind). Never from parameters or GUCs.
+3. **Checks the set ledger** (`core.sets`). The same `set_id` with the same hash (md5 of the entries) returns the stored outcome without
+   running checks again; with a different hash it is refused `set_changed`.
+4. **Locks**: advisory transaction locks on every patient family in the set plus every claim, in sorted order, with `lock_timeout` 3 s
+   (a timeout returns outcome `busy`, which the client retries). It works out each survivor again after locking. Then
+   `recorded_at = clock_timestamp()`.
+5. **Generic checks**, which always refuse: the type exists and is on (its pack used here); the shape; `may(user, 'write:<type>',
+   the entry's department)`; the department and visit belong to the organization; one patient family per set unless the type declares
+   `other_patient`; `replaces` and `refers_to` targets exist in the family and are visible to the writer; the same-resource item rule;
+   registered code systems only.
+6. **Assigns item and version** under the lock. A `replaces` or `changes` whose seen version (from `seen`, default the target's own
+   version) is older than the item's current version gives `changed_since_opened` (level refuse; a type's check may name it better).
+7. **Type checks**: each declared check returns findings `{code, level: refuse | warn | flag, entries}` and never raises. A set is
+   **live** when it is staff-sourced and arrives within 5 minutes of its `made_at`; every other set is **late**. `refuse` refuses a live
+   set, while a late set lands flagged. `warn` comes back to the composer as an inline card and passes when resent with that code in
+   `confirmed` (the confirmation is stored in `findings`). `flag` is stored and raises a review row.
+8. **Inserts** the entries, fills `codes`, stores `findings`, writes the set ledger row.
+9. **Refreshes**: every derived table fed by the new entries' types and their targets' types, with the touched items (the new entries'
+   items, their targets' items and their visits). Base tables refresh inline and must succeed. A pack's tables fed by its own types
+   refresh inline inside a savepoint; an error marks (pack, patient) stale and never refuses. A pack listening to another layer's
+   types gets an outbox row, drained after commit by a pg_cron job every 5 seconds, with the same refresh. The job is a lone
+   `call core.drain_outbox()`: a command of two statements runs as one transaction block, where the procedure's commit per batch is
+   refused. Each drained batch sends the same content-free hints as a write, so a pack's worklist catches up without polling.
+   Settings → Packs shows "N patients to refresh".
+10. Sends a realtime hint with no content (`record:<patient>`, `organization:<id>`), and returns `{set_id, outcome, entries: [{id, item,
+   item_version}], findings}`. It never returns rows, so a refusal cannot leak private data.
+
+Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not_signed_in`, `choose_user`, `nested_write`,
+`set_changed`, `unknown_type`, `pack_off`, `bad_shape`, `not_allowed`, `wrong_organization`, `wrong_patient`, `two_patients`,
+`not_found`, `already_replaced`, `wrong_resource`, `unknown_system`, `changed_since_opened`, `empty_set`.
+
+### 3.10 The reader: `public.read(query)` (the only way out)
+- One VOLATILE function. It logs in the same transaction; if the log insert fails, the read fails. The log (`core.read_log`) keeps one
+  row per (user, patient, purpose) per 10 minutes: organization, user, department, patient, purpose, what (items or the query), the
+  withheld count, time. `purpose` is a registered key: TREAT (default), ETREAT, PATADMIN, HOPERAT, HRESCH, PATRQT, BTG; free text is
+  only added to it.
+- Read shapes (`query.shape`):
+
+| shape | returns | needs |
+|---|---|---|
+| `me` | the login's users, the chosen user, the organization, departments, sites, places, users, roles, actions, current settings, the registry the client needs, stale counts | a live user |
+| `patients` | search hits: identity and open visits | `read:patients` somewhere |
+| `patient` | one patient's identity (the banner) | `read:patients` somewhere |
+| `record` | banner, lists, visits, a page of entries (filters: types, visits, departments, before), key values, hidden counts | `read:record` in the department |
+| `item` | every version of an item and the entries that refer to it | `read:record` in the department |
+| `table` | rows of one derived table with a fixed filter, plus their source entries and patients | the table's declared action in the department |
+| `file` | a storage path for one attachment | the entry is visible |
+| `fhir` | an R4 Bundle (`bundle`) or International Patient Summary (`ips`) for a patient | `read:record` and `export:fhir` |
+| `log` | the read log, opened-anyway and privacy changes | `read:log` |
+| `audit` | settings and admin changes | `manage:settings` |
+
+- It collects the source entry ids of every row and calls each visibility rule once as `rule(reader, ids[]) → hidden ids[]`. Rules only
+  hide and combine with OR over hidden (AND over visible); a rule that raises means hidden, and is logged. Base rules apply to every
+  type, a pack's only to its own types. Types that may never be private skip every rule. Only the base's `opened_anyway` grants
+  anything.
+- A hidden entry becomes a placeholder: "Private note · Psychiatry · 3 Sep", with no data, no author and no findings. Derived rows that
+  came from it are masked too (a private result's values vanish from trends and counts).
+- FHIR mappings take the reader's rows as input, never `entries`. No `service_role` is used for a patient read.
+
+### 3.11 The two exceptions (owned by `core_eraser`; the permanence trigger allows only `current_user = core_eraser`)
+- **Erase** (the law): removes the merged family from entries, every registered table (base and packs), patient stores and storage,
+  then refreshes what it touched. The log (`core.erasures`) keeps only the fact: who, when, reason, row count. Only a user holding
+  `erase:patient` everywhere, with a second factor, never pack or machine users; the writer never calls it.
+- **Redact** (a misfiled entry): blanks `data` and `codes` on the whole item and keeps tombstones (id, type, patient, set, times); logs
+  `core.redactions (entry, by, at, reason)` without quoting the content; refused while other entries refer to it unless they are
+  redacted too; then refreshes and removes files. The copy on the right patient is a new `import` entry, linked only in the redaction
+  log. Shows as "Removed · misfiled · date"; FHIR shows `entered-in-error`.
+
+### 3.12 The other doors (public, SECURITY DEFINER, each checks `may`)
+`my_users` (the live users of this login, one per organization, to choose from), `choose_user`, `create_organization` (a login with no user makes the first organization and becomes its owner), `save(what, row)` and
+`remove(what, id)` for `organization` · `site` · `department` · `place` · `user` · `role` (remove only what nothing ever used;
+anything used is refused `in_use` and retired instead), `save_patient` (register or change identity), `merge_patients`,
+`write_setting`, `erase_patient`, `redact`. Every change is a row in `core.audit` (an AuditEvent).
+
+---
+
+## 4. The base (schema `base`, role `base_role`; first-party, always on)
+
+Type keys are identifiers (`checked_in`, `list_review`); their labels are the words ("Checked in", "List review"). Every status is
+FHIR's own code wherever the meaning matches, so the mapping is identity and the screen labels stay plain.
+
+### 4.1 Clinical types
+
+| type | purpose · key fields | FHIR R4 | codes |
+|---|---|---|---|
+| `note` | text and/or files · kind (history, progress, plan, letter, scan, consult reply…), text, language, attachments | DocumentReference (docStatus amended on correction) | LOINC 11506-3, 34117-2, 11488-4, 34111-1, 28570-0, 18842-5, 18776-5 |
+| `vitals` | one set of measurements · a quantity per stable key: `bp`{sys,dia}, `hr`, `rr`, `temp`, `spo2`, `weight`, `height`, `bmi`, `head`, `pain`, `glucose`; method, site | Observation panel 85353-1 + one Observation per key, id `{item}-{key}` | LOINC 85354-9 (8480-6/8462-4), 8867-4, 9279-1, 8310-5, 2708-6 + 59408-5, 29463-7, 8302-2, 39156-5, 9843-4, 72514-3, 41653-7 (glucose 2339-0); UCUM |
+| `observation` | one coded fact · code, value (quantity, concept, text or date) | Observation | LOINC (smoking 72166-2, pregnancy 82810-3, LMP 8665-2) |
+| `problem` | a problem or visit diagnosis · concept, category (problem-list-item · encounter-diagnosis), clinical status, verification (`/dx ?` = provisional), severity, body site, onset/abatement (partial date or words), note | Condition | WHO ICD-10; HL7 condition statuses |
+| `allergy` | allergy or intolerance · concept, type, category (food · medication · environment · biologic), criticality, statuses, reactions[{manifestation, severity}], note | AllergyIntolerance | ATC or EDA ingredient, ATC class; local allergens and reactions |
+| `medication` | a medicine · **basis** (prescribed · reported), drug concept, dosage {text, dose, timing, as needed + reason, route}, duration, quantity, instructions, reason → problem items, status (active · stopped · completed), send (to a dispensing department) | prescribed: MedicationRequest per version (id = entry id); the item: MedicationStatement | EDA, ATC, UCUM, v3 route, GTS timing |
+| `given` | a dose given or not · what (→ medication item or a concept), dose, route, site, lot, status completed · not-done + reason | MedicationAdministration (a vaccine pack type maps to Immunization) | EDA, ATC, CVX |
+| `list_review` | "reviewed" or "none known" for problems, medications or allergies (`/nka`) | List.emptyReason; IPS absent-unknown | IPS absent-unknown |
+| `order` | one service asked of one department · service (id, code, name as it stood), target department, priority (routine · urgent · asap · stat), status (active · on-hold · revoked · completed), question, reason, answers | ServiceRequest (requisition = set) | organization service codes + LOINC |
+| `step` | the performing department's progress on an order · status (received · accepted · rejected · in-progress · on-hold · completed · cancelled), step key, reason, specimen number. The first step `answers` the order; later steps `change` it | Task (fulfil) | HL7 task status |
+| `result` | an answer to an order, or an outside result · code, status (preliminary · final · corrected · amended), analytes[{key, code, name, value, text, interpretation, reference range copied at write, critical range}], conclusion, attachments | DiagnosticReport + Observation per analyte, id `{item}-{key}` | LOINC, UCUM, v3 ObservationInterpretation |
+| `procedure` | something done · code, status, performed time, body site, outcome, reason | Procedure | local |
+| `reviewed` | the requester saw an answer (`about` → result or step) | Task (review), completed | — |
+| `alert` | a standing warning (DNR, isolation, fall risk) · code, status, period | Flag | local |
+| `died` | death · time with precision, cause | Patient.deceasedDateTime | WHO ICD-10 |
+| `crossed_out` | "this should not be here" · reason (typo · wrong value · wrong patient · late information · other), text | the target's next version, entered-in-error; Provenance NULLIFY | local reasons |
+
+Corrections: `replaces` gives the next version (Observation and DiagnosticReport status `corrected`). A requester's cancel or hold is
+an `order` that `changes` the order. The performer's "not done" is a `step`. Preliminary → final is a `changes`. A change of dose is a
+`medication` that `changes` the medication; stopping it is a `medication` with status `stopped` that `changes` it.
+
+### 4.2 Presence (each move `changes` the visit's latest version, so each move is a new Encounter version)
+
+| type | meaning | Encounter (R4) |
+|---|---|---|
+| `checked_in` | starts the visit item in a department: reason, how arrived, priority, here | arrived; class from the department's `encounter_class` |
+| `here`, `not_here` | the desk's presence marker | local |
+| `called` | a clinician called the patient (calling is not seeing) | local |
+| `back_to_waiting` | back to the queue: not here after a call (a missed call), sent out, other | local |
+| `away` | stepped out, coming back (to the lab, to pay); after 30 minutes shows as not here | local |
+| `urgent` | priority changed (urgent · routine) | priority |
+| `assigned` | a clinician takes the visit | participant |
+| `seen` | seen by a clinician (written by the composer with the first clinical entry, or implied by `done`) | in-progress; participant ATND |
+| `transferred` | Send to…: the same visit moves to another department | location |
+| `left` | left before the end (not seen: cancelled; seen: finished + `aadvice`) | cancelled / finished |
+| `done` | the clinician's Done; `wait` (default the department's `patients_wait`) keeps the visit open while orders are out | finished; period.end |
+| `admitted` | starts a stay item (`about` the visit it came from), department of work `stays`, optional place; admit source required | class IMP; admitSource |
+| `moved` | the stay moves to another place | location[] |
+| `discharged` | ends the stay; disposition required | finished; dischargeDisposition |
+
+`base.presence` holds one row per open or recent visit/stay: patient, department, place, state (`waiting` · `called` · `with` · `pending`
+· `back` · `done` · `left` · `in_bed`, and for stays `admitted` · `discharged`), here, away since, urgent, assigned, called count and
+missed calls, seen at, times. Time-based states are worked out when reading, never by a timer that writes: away for more than 30
+minutes shows as not here; a visit with no move for 12 hours shows as left on screens; an opened anyway lasts 12 hours.
+
+**The review of results while the patient waits.** A `done` with `wait` and orders out leaves the visit `pending`; when every order
+from it has an answer it is `back`, and the clinician sees the patient again. A result that arrives while the patient still waits in
+the visit is seen there; it needs a review row only when critical, when the patient left or was marked not here before being seen
+again, or when it was corrected after being seen.
+
+### 4.3 Privacy (the base's one visibility rule, `base.private`): hide the story, never the fact
+- Types that may be private: `note` and `result`, and pack types that declare it. Medications, allergies, given, problems, vitals,
+  orders and presence always show. A doctor must see the lithium.
+- An item is private when the latest `private` or `not_private` entry about it says so; otherwise it follows its department's
+  `private` setting as of the item's first `recorded_at`. A correction shares the item, so it shares the privacy, and an earlier version
+  never shows what the item hides.
+- Who reads a private item: holders of a live role with `read:record` in its department (a role held everywhere does not count; a
+  machine, importer or retired user never counts); an author of any of its versions; the visit's responsible clinician (`assigned` or
+  `seen` in that visit); for an answer to an order, the order's author and holders of `read:record` in the ordering department; anyone
+  with an `opened_anyway` for this patient and department in the last 12 h.
+- `private` / `not_private` are written by an author of the item or a holder of `read:record` in its department; `not_private` needs a
+  reason. A striker (the author of a `crossed_out`) is not an author of the item.
+- `opened_anyway` needs a reason (TREAT · ETREAT · PATADMIN · other with a few words); machine, importer and pack users cannot write it.
+- `!` at the start of a composer line writes a `private` entry in the same set. FHIR: `meta.security` R or N; `opened_anyway` exports
+  as an AuditEvent with purpose BTG, never as a resource.
+
+### 4.4 Checks (base)
+- **Claims**: `admitted` and `moved` claim `place:<id>`, so two patients cannot both pass "the bed is free". `base.presence` has no unique
+  index on beds: a late conflict lands and shows on the bed board as a conflict.
+- **Presence**: `called` needs a waiting visit, and a second `called` for the same version is `already_called`; `discharged` needs an
+  admitted stay; `checked_in` refuses a second open visit of the patient in the same department (`already_here`, and the client reuses
+  the open visit); `transferred` needs an open visit and another department.
+- **Orders**: a service must belong to the target department; the target must work for the ordering department (`not_served`); a
+  `result` may answer only an order whose service answers with results, and a note only a note-answered one (`wrong_answer`); a step
+  follows the service's steps.
+- **Warnings** (inline cards): allergy clash and duplicate therapy (by ATC ingredient and class), a dose above the usual, a problem
+  already on the list.
+- **Flags**: an unknown code, a unit that is not UCUM, a late conflict, a stale correction, a critical result (LL, HH, AA).
+
+### 4.5 Derived tables (keyed by item or uuid v5(item, key); refreshed from entries and settings-as-of only)
+
+| table | holds | serves | read action |
+|---|---|---|---|
+| `base.presence` | visit or stay: patient, department, place, state, here, away, urgent, assigned, calls, times | desk, queue, bed board | `read:queue` |
+| `base.lists` | patient, list (problems · medications · allergies), item, status, current entry, last review | the record's lists, IPS | `read:record` |
+| `base.orders` | order item: requester, ordering and target department, service, status, step, priority, due, answers | bench worklists, open orders | `read:bench` or `read:record` |
+| `base.review` | the item to review, for whom (a user or department), why (result · not seen · corrected · critical · flag), critical | the review loop | `read:review` |
+| `base.values` | patient, item, key, code, numeric value, ucum, interpretation, at | trends, key results | `read:record` |
+| `base.deceased` | patient, died item, time | the banner | `read:patients` |
+
+**The review loop.** A `result` answering an order raises a review row for the order's author (why `result`, or `critical`), unless
+the patient was still waiting in the ordering visit and saw it there (then only a critical one); a correction raises it again
+(`corrected`); a `step` that ends an order (rejected, cancelled) raises one too. The department's `review_results` setting (`critical`
+· `abnormal` · `all`, as of the result) decides which results of a patient who is not waiting need review. A `reviewed` about the
+latest version clears it. Flagged entries raise a review row for the entry's department.
+
+### 4.6 Settings keys, actions, roles and screens
+- Settings keys: `organization.time_zone` and `organization.packs_used` (declared by the core), `organization.record_view` (visits ·
+  entries), `department.private`, `department.encounter_class`, `department.after_done` (next · queue), `department.patients_wait`,
+  `department.review_results`, `department.works_for` (a bench: department ids, or all), `department.checks_in_for` (a desk: the
+  clinics it checks in for, or all), `department.screens` (the Screens line: the default
+  screen or a pack screen, and which opens first), `service` (owner = the performing department: code, name, section, LOINC coding,
+  answer type, fields with LOINC, UCUM units, ranges by sex and age, critical ranges, choices), `preset` (name, shortcut, lines,
+  services, department or all), `place.closed`.
+- Actions: `write:<type>` for every type; `read:patients`, `read:record`, `read:queue`, `read:bench`, `read:review`, `read:log`,
+  `export:fhir`, `manage:patients`, `manage:settings`, `manage:users`, `manage:roles`, `manage:places`, `erase:patient`.
+- Built-in roles (fixed ids): Owner `…c001` (every action, held everywhere), Doctor `…c002`, Nurse `…c003`, Reception `…c004`, Lab
+  technician `…c005`. A pack may ship its own (Pharmacist `…ca01`).
+- Default screens: front desk (work `desk`), queue and visit (work `visits`), bench (work `bench`), bed board (work `stays`), record,
+  composer, settings. All of them write and read through the same two doors.
+
+### 4.7 The composer
+The composer turns typed lines into one set. `/v 120/80 88` becomes `vitals` with codings by stable key; `/dx` a `problem`; `/rx` a
+`medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s; a plain line a `note`; `!` a `private`
+entry about the line's entry; `#preset` expands the preset's lines. Warnings come back as inline cards below the line. Done is one set
+that includes `seen` (when not yet seen) and `done`; drafts live in the browser (IndexedDB per user, patient and department), cleared
+at sign-out.
+
+---
+
+## 5. Packs
+- A pack is a key (`pharmacy`), a schema and a role (`pack_pharmacy`), registry declarations inside its prefix, and client screens
+  under `src/packs/<key>/`. It is built exactly like the base.
+- **`base_type`**: a pack type that is a base idea names it, and the base's checks, privacy, lists, review loop, record line and FHIR
+  mapping apply. The pack adds its fields under `data.<pack>`. `pharmacy.dispense` extends `step`, answering the order sent to the
+  pharmacy.
+- **May**: add types, checks, inline refreshes and visibility rules for its own types; react to base or other packs' types only through
+  listeners after commit; add settings keys, screens, roles and code systems.
+- **May not**: redefine base ideas; loosen visibility; declare outside its prefix; call the writer from a check or refresh; reach the
+  network; read another pack's tables; hold any privilege on core tables.
+- **Dependencies**: `requires` other packs, with no loops, checked at declaration.
+- **Off** (not in `organization.packs_used`): its types refuse new entries except corrections and cross-outs, and its visibility
+  rules keep applying. **On again**: its tables are refreshed for the organization before its screens show. There is no removal while
+  its entries exist.
+- A pack screen may look nothing like the base's and may replace a department's default screen, but it calls the same actions.
+- **No new packs until the owner says so.** Pharmacy is the one pack, ported as the proof.
+
+---
+
+## 6. Standards
+
+### 6.1 Code systems (stored by key; the URI is resolved at export)
+
+| key | URI | used for | ships |
+|---|---|---|---|
+| `icd10` | http://hl7.org/fhir/sid/icd-10 (WHO 2019, not CM) | problems, diagnoses, cause of death | import script per installation; the demo seed loads the composer's catalog subset |
+| `loinc` | http://loinc.org | vitals, observations, analytes, orders, note kinds | committed subset + notice |
+| `ucum` | http://unitsofmeasure.org | every quantity | committed common units |
+| `atc` | http://www.whocc.no/atc | ingredient and class: allergy and duplicate checks | import script; the demo seed loads the catalog subset |
+| `eda` | {canon}/sid/eg-eda-drug (minted) | the Egyptian drug product | import script |
+| `cvx`, `gtin` | http://hl7.org/fhir/sid/cvx, https://www.gs1.org/gtin | vaccines, pack barcodes | with the pack |
+| HL7 | terminology.hl7.org | statuses, v3 route, TimingEvent, ObservationInterpretation, ActCode, Confidentiality, PurposeOfUse, v2-0203, admit source, discharge disposition, IPS absent-unknown | committed |
+| `local` | {canon}/CodeSystem/{name} | allergens, reactions, procedures, cross-out reasons, alerts | committed |
+| per organization | {canon}/CodeSystem/local/{organization id} | a clinic's own service codes, with a LOINC coding beside | settings |
+
+No SNOMED CT (Egypt is not a member and no required binding needs it); `concept.codings` is a list, so it can be added later without a
+new type version. ICD-11 comes later through WHO maps applied when reading. Arabic labels are openCare data beside the published names.
+
+### 6.2 Units
+Every value keeps the unit as written plus its UCUM code; the value is a decimal string. The codes row of each LOINC code holds the
+canonical UCUM unit and the allowed units. Trends and checks convert when reading (mg/dL ↔ mmol/L). Nothing is ever rewritten.
+
+### 6.3 Identifiers
+
+| what | v2-0203 | system key |
+|---|---|---|
+| National ID | NI | `eg-national-id`: 14 digits, century digit, YYMMDD, governorate, sex digit, check digit (its algorithm is not published, so it is not verified); cross-checks birth date and sex. It warns and never refuses; it prefills birth date, sex and governorate |
+| Passport | PPN | `passport-<ISO3>` |
+| Record number | MR | `mrn` (per organization) |
+| Insurance member | MB | `eg-payer-<key>` |
+| UNHCR registration | — | `unhcr` |
+| Staff syndicate numbers | MD / PRN | `eg-syndicate-<key>` |
+
+Addresses: governorate as ISO 3166-2:EG (EG-C, EG-GZ, EG-ALX), country EG. Phones as E.164 (+20…).
+
+### 6.4 FHIR mapping rules (R4 4.0.1)
+1. `Resource.id` = item; `meta.versionId` = item_version; `meta.lastUpdated` = recorded_at. A type with several resources uses
+   `{item}-{key}`; a resource that is one per entry (MedicationRequest) uses the entry id. Any other derived id is uuid v5(item, key).
+2. `meta.profile` = {canon}/StructureDefinition/{type}|{version}. Private items → `meta.security` R, others N.
+3. subject → the survivor Patient; encounter → `Encounter/{visit_id}`; recorder/asserter → the PractitionerRole of the author.
+4. occurred_at + precision → a FHIR partial date in the organization's time zone; until → Period.end; recorded_at → recordedDate,
+   authoredOn or issued.
+5. One **Provenance** per set: targets are every resource version in the set; activity CREATE, UPDATE or NULLIFY.
+6. A login → Practitioner; a user → PractitionerRole; a machine → Device. Organization → Organization; site → Location si; department →
+   Organization (partOf) + Location wa; room · bed → Location ro · bd with operationalStatus from `base.presence`.
+7. The read log → AuditEvent. Settings changes, merge, erase and redact are AuditEvents too.
+8. Erased resources vanish. Redacted ones show as entered-in-error. Merge maps to Patient.link.
+9. "None known" is a `list_review` exported with IPS absent-unknown codes, never an empty list.
+10. The first export is the **International Patient Summary**: Composition + Patient, Condition, MedicationStatement,
+    AllergyIntolerance, Immunization, results and Procedure. `{canon}` defaults to `https://opencare.example` until the owner picks the
+    project's domain (one row of `core.canon`).
+
+---
+
+## 7. Decisions the owner approved (2026-09-26 defaults)
+1. **ICD-10**: WHO ICD-10 2019; an ICD-10-CM coding beside it only if a payer requires it.
+2. **Canonical URL**: a domain the project owns, chosen before the first real export; only keys are stored, so nothing waits on it.
+3. **Two patients in one set**: only for types that declare `other_patient`.
+4. **Live vs late**: 5 minutes from Done to arrival; older, offline, machine and import sets land flagged instead of being refused.
+5. **Licensed code files** (WHO ICD-10, ATC, EDA): an import script per installation (`scripts/import-codes.sh`), no files in the
+   repository; the demo seed loads only the subset the composer's catalog names.
+6. **Patient- and machine-reported facts** land but feed lists and the review loop only after a staff member accepts them with a
+   `changes` entry; a lab service may declare autoverification.
+
+---
+
+## 8. Guardrails and the permanent tests
+1. **Rebuild = live.** `core.rebuild_check()` recomputes every registered table from entries (refreshes only, never checks) and
+   compares row by row. It runs in the test suite and can run nightly on the live database.
+2. **Boundary scan**: only the writer, reader, refreshes and eraser name `entries` or a registered table; only the writer and refreshes
+   write derived tables (grants).
+3. **Privacy canary**: a private note and result carry a marker; every exposed function and storage path is called as a user who may not
+   read them; the marker never appears.
+4. **Concurrency**: two sessions call one visit, admit two patients to one bed, correct one item: one of each wins; a late copy lands
+   flagged.
+5. **Registry integrity**: OIDs, owners, volatility, prefixes, may_be_private against the resource, prosrc hashes.
+6. **FHIR**: the demo patients export as an R4 Bundle and an IPS whose resources pass the structural checks; every coding resolves;
+   every unit is UCUM.
+7. **Tenancy matrix**: every read and write across organizations sees nothing.
+8. **Pack contract**: one suite for every pack (prefix, grants, refresh = rebuild, canary on its types, off and on).
+
+`scripts/db-test.sh` runs every `supabase/tests/*.sql` (one rolled-back transaction each; `-- needs: reset` suites commit;
+`-- expects:` counts expected errors). **Acceptance**: every check of the suites before the rebuild has a green counterpart or is
+listed as retired with its reason in `supabase/tests/ported.md`, and the eight permanent tests pass.
+
+---
+
+## 9. Kept, later, dropped
+**Kept**: correction vs change · type version per entry · signed sets · clinical time with precision · facts land (live vs late) ·
+merged family · users per organization · organization first in every key · permanent namespaced text keys, never enums · no copies of
+note text · two named exceptions · labels are data (Arabic is a translation) · packs never redefine base ideas · calling is not seeing ·
+the read log · the Screens line.
+
+**Later, with no core redesign**: patient portal and proxies, consent, VIP/HIV restrictions, drug rounds, escalations, order sets,
+e-prescriptions and referrals, the FHIR API (read, search, `$export`), devices, offline clinics, AI scribes, ICD-11 and `code_maps`,
+SNOMED, Coverage and claims, Appointment, Communication, FamilyMemberHistory, clinic-own forms, outside developers' packs, the HL7
+Java validator in CI.
+
+**Dropped**: a generic task engine in the core, field-level privacy, separate tags/marks/links tables, read leases, privacy groups,
+converters, a sandbox API, API versions by date, sync cursors, timers that write (`sweep_visits`), `core.drafts`, a `code` column,
+stored FHIR JSON, URIs, `responsible` and `display_line` on entries, an `outside` source kind, separate `cancelled` and `not done`
+types, parked pack calls with per-call Retry, Postgres enums.
+
+---
+
+## 10. Names
+
+| name | means |
+|---|---|
+| entry · item · version | one fact · the thing it is about over time (its first entry's id) · the entry's place in the item |
+| set | one Done, all or nothing (`set_id`) |
+| type · base type | a declared kind of entry · the base idea a pack type extends |
+| work · place | a department's key (desk, visits, stays, bench, outside) · a room, bed, chair or cubicle |
+| user · login | a person in one organization · the account behind them; the column is always `user_id` |
+| `may` · writer · reader · eraser | the one permission question · the only way in · the only way out · the two exceptions |
+| check · finding · claim | a type's rule · its outcome (refuse, warn, flag) · a lock on a shared thing (`place:<id>`) |
+| refresh · derived table · listener | recompute rows from entries · a table holding nothing entries do not · a pack's refresh on others' types, after commit |
+| setting | an insert-only row of configuration, read as of a moment |
+| system · coding · concept · quantity | a code or identifier system · one code · words plus codes · a value with unit and UCUM |
+| live · late | a staff set arriving within 5 minutes of Done · everything else |
+| order · medication | the type names in code and on screen; a service's label may still say Consult |
+| Send to… · moved | the desk's button to another department (writes `transferred`) · only for beds and places |
+
+---
+
+## 11. Build record
+- 2026-09-26: the core v3 build, in one pass. The migrations before it are in `supabase/archive/baseline-2026-09-25/`, the old suites in
+  `supabase/archive/tests-2026-09-25/`, the old specs in `spec/archive/`.
+  - **Migrations** `20260926000001`–`…12`: core spine · registry · writer · reader · other doors · base codes · base tables · base types ·
+    FHIR · guards (rebuild check, cron jobs, file sweep) · the pharmacy pack on the new contract · privileges (every routine revoked from
+    PUBLIC, then granted by name).
+  - **Seeds**: `auth.sql` (demo logins), `codes.sql` (ICD-10, ATC, the local catalogs; generated by `scripts/gen-codes.py`), `dev.sql`
+    (the demo clinic, written through the doors). `scripts/demo-day.sql` fills a day through `write`; `scripts/import-codes.sh` loads a
+    licensed code set.
+  - **Tests**: 16 suites, 430 checks, all green, the eight permanent tests among them (`supabase/tests/ported.md` maps the old checks).
+    The composer's pure half: `npm run test:composer`, 12 groups, including drafts → entries (codings, UCUM quantities).
+  - **Client**: every screen reads through `read` and writes through `write` or the other doors. `src/core/db/views.ts` builds the
+    screens' view models from server rows; `src/core/db/entries.ts` turns drafts, moves, bench answers and reviews into entries.
+    New: the ward's bed board (admit to a free bed, move, discharge). Settings writes rows through `save`/`remove` and everything else
+    through `write_setting`; the change list is the `audit` read; Record reads is the `log` read.
+  - **Found in the browser pass and fixed**: the outbox job ran as two statements and never committed (now a lone `CALL`, with a guard
+    check in the pack contract suite); drained batches now send hints; a department's reads check rights where the read is made, not
+    where the screen stands; the pharmacy's answer waits until its own table names the drug.
+- **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built; Settings has no
+  editor yet for sites, places (beds), `department.encounter_class` and `department.screens` (the seed and the `save` door set them).

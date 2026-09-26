@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
-import { rpc } from '../../db/rpc'
+import { write, type EntryIn } from '../../db/rpc'
 import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue } from '../../hooks/reads'
-import { newId, useRequestActions } from '../../hooks/writes'
-import { fitField, useRanges } from '../../hooks/ranges'
+import { newId, refresh } from '../../hooks/writes'
+import { fitField } from '../../hooks/ranges'
+import { oneSet, resultEntry, stepEntry } from '../../db/entries'
 import { benchStepsFor, replyFormFor } from '../../renderers'
-import type { RequestQueueRow, ServiceField, Value } from '../../db/types'
+import type { RequestQueueRow, ServiceField } from '../../db/types'
 import { Badge, Button, Card, Centered, Heading, Input, Kbd, Select, Spinner, cn, errorText, flagClass, hm } from '../../ui'
 import { ageOf, groupByPatient, STEP_LABEL, STEP_TONE } from './shared'
 
@@ -35,7 +36,7 @@ export function flagOf(f: ServiceField, raw: string) {
 export function BenchPatient() {
   const { patientId } = useParams(); const navigate = useNavigate(); const qc = useQueryClient()
   const { org, dept, can } = useDepartment()
-  const q = useRequestQueue(dept?.id ?? null); const acts = useRequestActions(); const ranges = useRanges(org?.organization.id ?? null)
+  const q = useRequestQueue(dept?.id ?? null)
   const groups = useMemo(() => groupByPatient(q.data?.requests ?? []), [q.data])
   const g = groups.find((x) => x.patient.id === patientId)
   const next = groups.find((x) => x.patient.id !== patientId)
@@ -44,21 +45,25 @@ export function BenchPatient() {
   const e = (id: string) => entries[id] ?? blank()
   const set = (id: string, patch: Partial<Entry>) => setEntries((s) => ({ ...s, [id]: { ...(s[id] ?? blank()), ...patch } }))
   // each field carries the range that fits this patient, as the server will flag it
-  const fieldsOf = (r: RequestQueueRow) => (org?.services.find((s) => s.id === r.service_id)?.fields ?? []).map((f) => fitField(f, r.service_id!, ranges.data ?? [], r.patient.sex, ageOf(r.patient.born_on)))
+  const fieldsOf = (r: RequestQueueRow) => (org?.services.find((s) => s.id === r.service_id)?.fields ?? []).map((f) => fitField(f, r.patient.sex, ageOf(r.patient.born_on)))
   const formOf = (r: RequestQueueRow) => replyFormFor(r.reply_type)
   const ready = (g?.rows ?? []).filter((r) => { const pf = formOf(r); if (pf) return !!pf.toWrite(r, packVals[r.id]); const x = e(r.id); return x.notDone ? !!x.reason.trim() : Object.values(x.vals).some((v) => v !== '') || !!x.text.trim() })
-  const problems = ready.flatMap((r) => fieldsOf(r).map((f) => problemOf(f, e(r.id).vals[f.code] ?? '')).filter(Boolean))
+  const problems = ready.flatMap((r) => fieldsOf(r).map((f) => problemOf(f, e(r.id).vals[f.key] ?? '')).filter(Boolean))
   const invalid = problems.includes('not a number'); const toCheck = problems.filter((p) => p === 'check value').length
-  const flagged = ready.flatMap((r) => fieldsOf(r).map((f) => flagOf(f, e(r.id).vals[f.code] ?? ''))).filter((f) => f && f !== 'normal')
+  const flagged = ready.flatMap((r) => fieldsOf(r).map((f) => flagOf(f, e(r.id).vals[f.key] ?? ''))).filter((f) => f && f !== 'normal')
   async function release() {
     if (!g || !dept || !ready.length || invalid) return
     if (toCheck && !checked) { setChecked(true); setErr(`${toCheck} value${toCheck > 1 ? 's look' : ' looks'} implausible — check, then release again`); return }
     setErr(null); setBusy(true)
     try {
-      const items = ready.map((r) => { const pf = formOf(r); if (pf) { const w = pf.toWrite(r, packVals[r.id])!; return { function: w.function, params: { ...w.params, id: newId(), patient_id: g.patient.id, request_id: r.id } } } const x = e(r.id); const values: Value[] = fieldsOf(r).flatMap((f) => { const raw = x.vals[f.code]; if (raw === undefined || raw === '') return []; return [f.kind === 'number' ? { code: f.code, name: f.name, value_number: Number(raw) } : { code: f.code, name: f.name, value_text: raw }] })
-        return { function: 'write_result', params: { id: newId(), patient_id: g.patient.id, request_id: r.id, values, text: x.text.trim() || null, is_final: !prelim, not_done: x.notDone, not_done_reason_text: x.notDone ? x.reason.trim() : null } } })
-      await rpc('write_set', { department_id: dept.id, items })
-      qc.invalidateQueries({ queryKey: ['request_queue'] })
+      // every answer for this patient in one set: a result (or a report) answering its order, a step when not done, a pack's own answer
+      const items: EntryIn[] = ready.map((r) => { const pf = formOf(r)
+        if (pf) { const w = pf.toWrite(r, packVals[r.id])!; return { id: newId(), type: w.type, patient_id: g.patient.id, department_id: dept.id, data: w.data,
+          ...(r.order.step_entry ? { refers_to: r.order.step_entry, relation: 'changes' as const } : { refers_to: r.order.latest_entry, relation: 'answers' as const }) } }
+        const x = e(r.id)
+        return x.notDone ? stepEntry(r, dept.id, 'failed', x.reason.trim()) : resultEntry(r, dept.id, fieldsOf(r), x.vals, x.text, !prelim) })
+      await write(oneSet(items))
+      refresh(qc)
       setEntries({}); setPackVals({}); setChecked(false)
       if (ready.length === g.rows.length) navigate(next && dept.after_done !== 'queue' ? `/bench/${next.patient.id}` : '/', { replace: true })
     } catch (x) { setErr(errorText(x)) } finally { setBusy(false) }
@@ -83,7 +88,7 @@ export function BenchPatient() {
         <p className="text-xs text-neutral-500 tnum">#{g.patient.record_number} · {g.rows.length} open · from {g.from.join(', ')}</p></div>
       {g.priority !== 'routine' && <Badge tone="red">{g.priority.toUpperCase()}</Badge>}
       <div className="ml-auto flex items-center gap-2">
-        {packSteps.map((ps) => { const rs = g.rows.filter((r) => ps.from.includes(r.request?.step ?? 'sent')); return rs.length > 0 && <Button key={ps.step} variant="outline" onClick={() => rs.forEach((r) => acts.step.mutate({ request_id: r.id, from_step: r.request!.step, step: ps.step }))}>{ps.label} {rs.length}</Button> })}
+        {packSteps.map((ps) => { const rs = g.rows.filter((r) => ps.from.includes(r.request?.step ?? 'sent')); return rs.length > 0 && <Button key={ps.step} variant="outline" onClick={() => void write(oneSet(rs.map((r) => stepEntry(r, dept.id, 'in-progress', undefined, ps.step)))).then(() => refresh(qc))}>{ps.label} {rs.length}</Button> })}
         {next && <Button variant="ghost" onClick={() => navigate(`/bench/${next.patient.id}`)}>Skip →</Button>}
       </div>
     </div></div>
@@ -101,10 +106,10 @@ export function BenchPatient() {
           {r.question_text && <p className="mb-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">“{r.question_text}”</p>}
           {formOf(r) ? (() => { const F = formOf(r)!.Editor; return <F request={r} value={packVals[r.id]} onChange={(v) => setPackVals((p) => ({ ...p, [r.id]: v }))} /> })()
           : x.notDone ? <Input data-v value={x.reason} onChange={(ev) => set(r.id, { reason: ev.target.value })} placeholder="Why not — haemolysed, insufficient sample, patient left…" /> : <>
-            {fields.length > 0 && <table className="w-full text-sm"><tbody>{fields.map((f) => { const raw = x.vals[f.code] ?? ''; const fl = flagOf(f, raw); return <tr key={f.code} className="border-b border-neutral-100 last:border-0">
+            {fields.length > 0 && <table className="w-full text-sm"><tbody>{fields.map((f) => { const raw = x.vals[f.key] ?? ''; const fl = flagOf(f, raw); return <tr key={f.key} className="border-b border-neutral-100 last:border-0">
               <td className="w-56 py-1 pr-3 text-neutral-700">{f.name}</td>
-              <td className="w-36 py-1">{f.kind === 'choice' && f.choices ? <Select data-v="" value={raw} onChange={(ev) => set(r.id, { vals: { ...x.vals, [f.code]: ev.target.value } })} className="h-8">{['', ...f.choices].map((o) => <option key={o} value={o}>{o || '—'}</option>)}</Select>
-                : <Input data-v inputMode={f.kind === 'number' ? 'decimal' : undefined} autoComplete="off" value={raw} onFocus={(ev) => ev.target.select()} onChange={(ev) => { setChecked(false); set(r.id, { vals: { ...x.vals, [f.code]: f.kind === 'number' ? ev.target.value.replace(',', '.').replace(/[^\d.-]/g, '') : ev.target.value } }) }}
+              <td className="w-36 py-1">{f.kind === 'choice' && f.choices ? <Select data-v="" value={raw} onChange={(ev) => set(r.id, { vals: { ...x.vals, [f.key]: ev.target.value } })} className="h-8">{['', ...f.choices].map((o) => <option key={o} value={o}>{o || '—'}</option>)}</Select>
+                : <Input data-v inputMode={f.kind === 'number' ? 'decimal' : undefined} autoComplete="off" value={raw} onFocus={(ev) => ev.target.select()} onChange={(ev) => { setChecked(false); set(r.id, { vals: { ...x.vals, [f.key]: f.kind === 'number' ? ev.target.value.replace(',', '.').replace(/[^\d.-]/g, '') : ev.target.value } }) }}
                     className={cn('h-8 text-right font-medium tnum', fl && fl !== 'normal' && 'border-amber-400 bg-amber-50', fl === 'critical' && 'border-red-500 bg-red-50', problemOf(f, raw) && 'border-red-500 ring-2 ring-red-200', flagClass(fl))} />}</td>
               <td className="w-20 py-1 pl-2 text-xs text-neutral-500">{f.unit}</td>
               <td className="py-1 text-xs text-neutral-400 tnum">{f.reference_low != null || f.reference_high != null ? `${f.reference_low ?? ''} – ${f.reference_high ?? ''}` : ''}</td>
@@ -131,22 +136,23 @@ export function BenchPatient() {
 export function BenchCorrect() {
   const { requestId } = useParams(); const navigate = useNavigate(); const qc = useQueryClient()
   const { org, dept, can } = useDepartment()
-  const q = useRequestQueue(dept?.id ?? null); const ranges = useRanges(org?.organization.id ?? null)
+  const q = useRequestQueue(dept?.id ?? null)
   const row = q.data?.recent.find((r) => r.id === requestId)
   const svc = org?.services.find((s) => s.id === row?.service_id)
-  const fields = (svc?.fields ?? []).map((f) => fitField(f, svc!.id, ranges.data ?? [], row?.patient.sex ?? '', row ? ageOf(row.patient.born_on) : 0))
-  const old = (row?.reply?.data.values as Value[] | undefined) ?? []
+  const fields = (svc?.fields ?? []).map((f) => fitField(f, row?.patient.sex ?? '', row ? ageOf(row.patient.born_on) : 0))
+  const old = ((row?.reply?.data.analytes as { key: string; value?: { value: string }; text?: string }[] | undefined) ?? []).map((a) => ({ code: a.key, value_number: a.value ? Number(a.value.value) : undefined, value_text: a.text }))
   const [vals, setVals] = useState<Record<string, string> | null>(null); const [text, setText] = useState<string | null>(null); const [why, setWhy] = useState(''); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
+  const said = String(row?.reply?.data.conclusion ?? row?.reply?.data.text ?? '')
   const v = vals ?? Object.fromEntries(old.map((x) => [x.code, String(x.value_number ?? x.value_text ?? '')]))
-  const t = text ?? String(row?.reply?.data.text ?? '')
-  const invalid = fields.some((f) => problemOf(f, v[f.code] ?? '') === 'not a number')
-  const changed = fields.some((f) => (v[f.code] ?? '') !== String(old.find((x) => x.code === f.code)?.value_number ?? old.find((x) => x.code === f.code)?.value_text ?? '')) || t !== String(row?.reply?.data.text ?? '')
+  const t = text ?? said
+  const invalid = fields.some((f) => problemOf(f, v[f.key] ?? '') === 'not a number')
+  const changed = fields.some((f) => (v[f.key] ?? '') !== String(old.find((x) => x.code === f.key)?.value_number ?? old.find((x) => x.code === f.key)?.value_text ?? '')) || t !== said
   async function save() {
     if (!row?.reply || !dept || invalid || !changed || !why.trim()) return; setBusy(true); setErr(null)
     try {
-      const values: Value[] = fields.flatMap((f) => { const raw = v[f.code]; if (raw === undefined || raw === '') return []; return [f.kind === 'number' ? { code: f.code, name: f.name, value_number: Number(raw) } : { code: f.code, name: f.name, value_text: raw }] })
-      await rpc('write_result', { id: newId(), patient_id: row.patient.id, department_id: dept.id, request_id: row.id, replaces_id: row.reply.id, values, text: [t.trim(), `Corrected: ${why.trim()}`].filter(Boolean).join('\n') })
-      qc.invalidateQueries({ queryKey: ['request_queue'] }); navigate('/')
+      // the correction is the next version of the released result: it replaces it; the requester is asked to look again
+      await write(oneSet([resultEntry(row, dept.id, fields, v, [t.trim(), `Corrected: ${why.trim()}`].filter(Boolean).join('\n'), true, row.reply.id)]))
+      refresh(qc); navigate('/')
     } catch (x) { setErr(errorText(x)) } finally { setBusy(false) }
   }
   if (!dept || q.isLoading) return <Centered><Spinner label="Opening" /></Centered>
@@ -156,9 +162,9 @@ export function BenchCorrect() {
       <div><p className="text-lg font-semibold tracking-tight">Correct: {row.service_name}</p><p className="text-xs text-neutral-500 tnum">#{row.patient.record_number} · {row.patient.given_name} {row.patient.family_name} · released {(row.reply ? hm(row.reply.recorded_at) : '')} by {row.reply?.author_name}</p></div></div>
     <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">The corrected result replaces the released one. The record keeps both, and the requesting doctor gets it on their review list.</p>
     <Card className="p-4">
-      {fields.length > 0 && <table className="w-full text-sm"><thead><tr className="text-left text-[10.5px] uppercase tracking-wider text-neutral-400"><th className="font-medium">Field</th><th className="font-medium">Released</th><th className="font-medium">Corrected</th><th /><th /></tr></thead><tbody>{fields.map((f) => { const raw = v[f.code] ?? ''; const fl = flagOf(f, raw); const was = old.find((x) => x.code === f.code); return <tr key={f.code} className="border-b border-neutral-100 last:border-0">
+      {fields.length > 0 && <table className="w-full text-sm"><thead><tr className="text-left text-[10.5px] uppercase tracking-wider text-neutral-400"><th className="font-medium">Field</th><th className="font-medium">Released</th><th className="font-medium">Corrected</th><th /><th /></tr></thead><tbody>{fields.map((f) => { const raw = v[f.key] ?? ''; const fl = flagOf(f, raw); const was = old.find((x) => x.code === f.key); return <tr key={f.key} className="border-b border-neutral-100 last:border-0">
         <td className="w-48 py-1 pr-3 text-neutral-700">{f.name}</td><td className="w-28 py-1 text-neutral-400 line-through tnum">{was?.value_number ?? was?.value_text ?? '—'}</td>
-        <td className="w-36 py-1"><Input inputMode={f.kind === 'number' ? 'decimal' : undefined} value={raw} onFocus={(e) => e.target.select()} onChange={(e) => setVals({ ...v, [f.code]: f.kind === 'number' ? e.target.value.replace(',', '.').replace(/[^\d.-]/g, '') : e.target.value })} className={cn('h-8 text-right font-medium tnum', flagClass(fl))} /></td>
+        <td className="w-36 py-1"><Input inputMode={f.kind === 'number' ? 'decimal' : undefined} value={raw} onFocus={(e) => e.target.select()} onChange={(e) => setVals({ ...v, [f.key]: f.kind === 'number' ? e.target.value.replace(',', '.').replace(/[^\d.-]/g, '') : e.target.value })} className={cn('h-8 text-right font-medium tnum', flagClass(fl))} /></td>
         <td className="w-20 py-1 pl-2 text-xs text-neutral-500">{f.unit}</td><td className="py-1 text-xs text-neutral-400 tnum">{f.reference_low ?? ''} – {f.reference_high ?? ''}</td></tr> })}</tbody></table>}
       <Input value={t} onChange={(e) => setText(e.target.value)} placeholder={fields.length ? 'Comment' : 'Report'} className="mt-2 h-8" />
       <Input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Why the correction — transcription error, wrong sample…" className="mt-2 h-8 border-amber-300" />

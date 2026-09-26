@@ -2,81 +2,131 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RecentRow } from '../../db/types'
 import { useNavigate } from 'react-router-dom'
 import { ClipboardList, ScanLine } from 'lucide-react'
+import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue } from '../../hooks/reads'
-import { useRequestActions } from '../../hooks/writes'
-import { benchStepsFor } from '../../renderers'
-import { Badge, Button, Card, Heading, Input, Kbd, Spinner, cn, minutesSince, hm } from '../../ui'
-import { ageOf, groupByPatient, STEP_LABEL, STEP_TONE } from './shared'
+import { refresh } from '../../hooks/writes'
+import { benchStepsFor, benchWordsFor, replyFormFor } from '../../renderers'
+import { useQueryClient } from '@tanstack/react-query'
+import { write, type EntryIn } from '../../db/rpc'
+import { newId, oneSet, stepEntry } from '../../db/entries'
+import type { RequestQueueRow } from '../../db/types'
+import { Button, Card, Input, Kbd, Spinner, cn, minutesSince, movedMouse, hm, shortDate } from '../../ui'
+import { ListRow, ListSection, Tag } from '../lists/ListRow'
+import { ageSex, firstStepName, groupByPatient, matches, phaseOf, splitByDay, stepWords, testsLine, todayYmd, type DayGroup, type Phase } from './shared'
 
-/** The bench: a department's open requests, one row per patient; scan, filter, collect, enter. */
+type Segment = Phase | 'done'
+
+/** The bench: whose sample is next, and what is waiting on us. Scan or type, then one row per patient in three segments —
+ *  to collect (not started), in progress, done today — today's work only; older open requests fold at the bottom. */
 export function Bench({ departmentId, name, type }: { departmentId: string; name: string; type: string }) {
-  const q = useRequestQueue(departmentId); const navigate = useNavigate(); const acts = useRequestActions()
-  const [find, setFind] = useState(''); const [section, setSection] = useState<string | null>(null); const [step, setStep] = useState<string | null>(null); const [cursor, setCursor] = useState(0); const [view, setView] = useState<'open' | 'released'>('open')
-  const packSteps = benchStepsFor(type)
-  const box = useRef<HTMLInputElement>(null)
+  const q = useRequestQueue(departmentId); const navigate = useNavigate(); const { can } = useDepartment()
+  const [stepping, setStepping] = useState(false)
+  const [find, setFind] = useState(''); const [section, setSection] = useState<string | null>(null); const [seg, setSeg] = useState<Segment>('todo')
+  const [cursor, setCursor] = useState(0); const [showOld, setShowOld] = useState(false); const [, tick] = useState(0)
+  const [kbd, setKbd] = useState(false)                  // the keys are in use (arrows, a scan, typing): no hover; the mouse never moves the cursor
+  const [arrows, setArrows] = useState(false)            // the arrows moved the cursor: show it as a bar (typed, only a ↵ beside the name)
+  useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t) }, [])   // waits and the day move on their own
+  const packSteps = benchStepsFor(type); const words = benchWordsFor(type); const qc = useQueryClient(); const [quickBusy, setQuickBusy] = useState<string | null>(null)
+  const myPackSteps = can('write:step') ? packSteps : []   // step buttons only for those who may write a step
+  const box = useRef<HTMLInputElement>(null); const list = useRef<HTMLUListElement>(null)
   const rows = useMemo(() => q.data?.requests ?? [], [q.data])
-  const sections = [...new Set(rows.map((r) => r.section_name ?? 'Other'))].sort()
-  const filtered = rows.filter((r) => (!section || (r.section_name ?? 'Other') === section) && (!step || r.request?.step === step))
-  const f = find.trim().toLowerCase()
-  const groups = groupByPatient(filtered).filter((g) => !f || String(g.patient.record_number) === f.replace(/^#/, '') || `${g.patient.given_name} ${g.patient.family_name}`.toLowerCase().includes(f))
-  const c = Math.min(cursor, Math.max(0, groups.length - 1))
-  const advance = (rs: { id: string; request?: { step: string } }[], to: string) => rs.forEach((r) => acts.step.mutate({ request_id: r.id, from_step: r.request!.step, step: to }))
-  const stepsSeen = [...new Set(rows.map((r) => r.request?.step ?? 'sent'))]
-  const open = (pid: string) => navigate(`/bench/${pid}`)
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)) { e.preventDefault(); box.current?.focus() } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
-  const stat = rows.filter((r) => r.request?.priority !== 'routine').length
   const recent = q.data?.recent ?? []
-  return <div className="mx-auto grid max-w-6xl gap-4 p-4">
-    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-      <div><h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight"><ClipboardList className="h-5 w-5 text-teal-700" />{name}</h1><p className="text-sm text-neutral-500">Requests for us, one row per patient</p></div>
-      <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm tnum sm:ml-auto">
-        {([['Open', rows.length, ''], ['Patients', groupByPatient(rows).length, ''], ['Urgent', stat, stat ? 'text-red-700' : ''], ['Released 24 h', recent.length, 'text-teal-700']] as const).map(([l, n, cls]) =>
-          <div key={l} className="text-right"><p className={cn('text-xl font-semibold leading-none', cls)}>{n}</p><p className="mt-1 text-[11px] text-neutral-500">{l}</p></div>)}
-      </div>
+  const sections = [...new Set([...rows.map((r) => r.section_name ?? 'Other'), ...(section ? [section] : [])])].sort()
+  const inSection = (s: string | null) => !section || (s ?? 'Other') === section
+  const f = find.trim().toLowerCase(); const today = todayYmd()
+  const shown = rows.filter((r) => inSection(r.section_name))
+  const byPhase = (p: Phase) => splitByDay(groupByPatient(shown.filter((r) => phaseOf(r.request?.step, packSteps) === p), today).filter((g) => matches(g.patient, f)))
+  const todo = byPhase('todo'); const doing = byPhase('doing')
+  const done = recent.filter((r) => inSection(r.section_name) && matches(r.patient, f))
+  const first = words.todo ?? firstStepName(packSteps)
+  const segs: [Segment, string, number][] = [['todo', first, todo.today.length], ['doing', 'In progress', doing.today.length], ['done', words.done ?? 'Done today', done.length]]
+  const lists = seg === 'todo' ? todo : seg === 'doing' ? doing : null
+  const oldOpen = showOld || !!f   // a scan finds a patient from an older day too
+  const visible: DayGroup[] = lists ? [...lists.today, ...(oldOpen ? lists.older : [])] : []
+  const n = lists ? visible.length : done.length
+  const c = Math.min(cursor, Math.max(0, n - 1))
+  const open = (pid: string) => navigate(`/bench/${pid}`)
+  // a pack's step (prepared, collected): one set per patient, each step answering (or changing the step of) its order
+  const advance = async (rs: RequestQueueRow[], to: string) => { setStepping(true)
+    try { await write(oneSet(rs.map((r) => stepEntry(r, departmentId, 'in-progress', undefined, to)))); refresh(qc) } catch (x) { alert(x instanceof Error ? x.message : String(x)) } finally { setStepping(false) } }
+  const pick = (s: Segment) => { setSeg(s); setCursor(0); box.current?.focus() }
+  // ↵ opens the patient under the cursor; a scanned patient with nothing listed here opens from wherever they are
+  const enter = () => { const g = visible[c] ?? (f ? [...todo.today, ...doing.today, ...todo.older, ...doing.older][0] : undefined); if (g) open(g.patient.id) }
+  const onKey = (e: { key: string; preventDefault: () => void }) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setKbd(true); setArrows(true); setCursor(Math.max(0, Math.min(c + 1, n - 1))) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setKbd(true); setArrows(true); setCursor(Math.max(c - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); enter() }
+    else if (e.key === 'Escape') { setFind(''); setCursor(0) }
+  }
+  // typing anywhere goes to the box; / jumps there; ↑↓ ↵ Esc work with nothing focused
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === '/') { e.preventDefault(); box.current?.focus() }
+      else if (e.key.length === 1 && e.key !== ' ') box.current?.focus()
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape' || (e.key === 'Enter' && t === document.body)) onKey(e)
+    }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  })
+  useEffect(() => { list.current?.querySelector('.bench-cursor')?.scrollIntoView({ block: 'nearest' }) }, [c, seg])
+
+  // while scanning, where else the patient is, older days included
+  const found: [Segment, string, number][] = segs.map(([k, l]) => [k, l, k === 'todo' ? todo.today.length + todo.older.length : k === 'doing' ? doing.today.length + doing.older.length : done.length])
+  const none = (text: string) => <Nothing text={f ? 'No match here.' : text} others={f ? found.filter(([k, , m]) => k !== seg && m > 0) : []} onPick={pick} />
+  const row = (g: DayGroup, i: number, old: boolean) => {
+    const steps = myPackSteps.flatMap((ps) => { const rs = g.rows.filter((r) => ps.from.includes(r.request?.step ?? 'sent')); return rs.length ? [<Button key={ps.step} size="sm" variant="outline" onClick={() => void advance(rs, ps.step)} disabled={stepping}>{ps.label} {rs.length}</Button>] : [] })
+    // a pack's one-click release (the pharmacy's "Give all"): every request its form can answer as it stands, in one atomic set
+    const quick = seg !== 'done' ? g.rows.map((r) => ({ r, pf: replyFormFor(r.reply_type) })).filter(({ r, pf }) => pf?.quick && can(pf.action) && pf.toWrite(r, undefined)) : []
+    if (quick.length) steps.push(<Button key="quick" size="sm" disabled={quickBusy === g.patient.id} onClick={async () => {
+      const items: EntryIn[] = quick.flatMap(({ r, pf }) => { const w = pf!.toWrite(r, undefined); return w ? [{ id: newId(), type: w.type, patient_id: g.patient.id, department_id: departmentId, data: w.data,
+        ...(r.order.step_entry ? { refers_to: r.order.step_entry, relation: 'changes' as const } : { refers_to: r.order.latest_entry, relation: 'answers' as const }) }] : [] })
+      if (!items.length) return
+      setQuickBusy(g.patient.id)
+      try { await write(oneSet(items)); refresh(qc) } catch (x) { alert(x instanceof Error ? x.message : String(x)) } finally { setQuickBusy(null) }
+    }}>{quick[0].pf!.quick}{quick.length > 1 ? ` ${quick.length}` : ''}</Button>)
+    const where = <>{g.patient.here != null && <span className={g.patient.here ? 'font-medium text-teal-700' : 'text-neutral-400'}>{g.patient.here ? 'here' : 'gone'}</span>}{old && <span className="tnum">{shortDate(g.oldest)}</span>}</>
+    return <ListRow key={g.patient.id} number={g.patient.record_number} name={`${g.patient.given_name} ${g.patient.family_name}`} age={ageSex(g.patient)}
+      status={<>{g.priority !== 'routine' && <Tag tone="red">{g.priority}</Tag>}{seg === 'doing' && stepWords(g.rows).map((w) => <Tag key={w} tone={w === 'reopened' ? 'amber' : 'neutral'}>{w}</Tag>)}<span className="truncate">{testsLine(g.rows)}</span></>}
+      who={where} actions={steps.length ? <>{where}{steps}</> : undefined} minutes={g.since ? minutesSince(g.since) : null} muted={old}
+      selected={i === c && arrows} enter={i === c && !arrows && !!f} hover={!kbd} className={i === c ? 'bench-cursor' : undefined} onOpen={() => open(g.patient.id)} />
+  }
+
+  return <div className="mx-auto grid max-w-5xl gap-3 p-4">
+    <h1 className="flex items-center gap-2 text-lg font-semibold tracking-tight"><ClipboardList className="h-5 w-5 text-teal-700" />{name}</h1>
+    <div className="relative"><ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+      <Input ref={box} autoFocus value={find} onChange={(e) => { setFind(e.target.value); setCursor(0); setKbd(!!e.target.value); setArrows(false) }} onKeyDown={onKey} placeholder="Scan or type a record number or name" className="h-11 pl-9 text-base" />
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400"><Kbd>/</Kbd></span></div>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div role="tablist" className="inline-flex rounded-lg bg-neutral-100 p-0.5 text-sm">{segs.map(([k, l, m]) =>
+        <button key={k} role="tab" aria-selected={seg === k} onClick={() => pick(k)} className={cn('rounded-md px-3 py-1.5 font-medium transition-colors', seg === k ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800')}>
+          {l} <span className={cn('ml-0.5 tnum', seg === k ? 'text-neutral-500' : 'text-neutral-400')}>{m}</span></button>)}</div>
+      {(sections.length > 1 || section) && <div className="flex flex-wrap gap-1 text-xs">{sections.map((s) => <Chip key={s} on={section === s} onClick={() => { setSection(section === s ? null : s); setCursor(0) }}>{s}</Chip>)}</div>}
+      <span className="ml-auto hidden text-[11px] text-neutral-400 sm:block">↑↓ move · ↵ open · Esc clear</span>
     </div>
-
-    <Card className="p-3">
-      <div className="relative"><ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-        <Input ref={box} autoFocus value={find} onChange={(e) => { setFind(e.target.value); setCursor(0) }} placeholder="Scan or type a record number or name…" className="h-11 pl-9 text-base"
-          onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(Math.min(c + 1, groups.length - 1)) } else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(Math.max(c - 1, 0)) } else if (e.key === 'Enter' && groups[c]) { e.preventDefault(); open(groups[c].patient.id) } else if (e.key === 'Escape') setFind('') }} />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400"><Kbd>/</Kbd></span></div>
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs">
-        <Chip on={!section} onClick={() => setSection(null)}>All sections</Chip>{sections.map((s) => <Chip key={s} on={section === s} onClick={() => setSection(section === s ? null : s)}>{s} <span className="opacity-60">{rows.filter((r) => (r.section_name ?? 'Other') === s).length}</span></Chip>)}
-        <span className="mx-1 h-4 w-px bg-neutral-200" />
-        {stepsSeen.length > 1 && stepsSeen.map((s) => <Chip key={s} on={step === s} onClick={() => setStep(step === s ? null : s)}>{packSteps.find((p) => p.step === s)?.label ?? STEP_LABEL[s] ?? s}</Chip>)}
-        <span className="ml-auto flex gap-1"><Chip on={view === 'open'} onClick={() => setView('open')}>Open</Chip><Chip on={view === 'released'} onClick={() => setView('released')}>Released 24 h <span className="opacity-60">{recent.length}</span></Chip></span>
-      </div>
-    </Card>
-
-    {view === 'released' ? <Released rows={recent.filter((r) => !f || String(r.patient.record_number) === f.replace(/^#/, '') || `${r.patient.given_name} ${r.patient.family_name}`.toLowerCase().includes(f))} onCorrect={(id) => navigate(`/bench/correct/${id}`)} />
-    : q.isLoading ? <Spinner label="Loading requests" /> : groups.length === 0 ? <Card className="p-8 text-center text-sm text-neutral-400">{rows.length ? 'Nothing matches.' : 'No open requests.'}</Card> :
-      <Card><Heading count={groups.length} className="border-b border-neutral-100 px-4 py-2.5" right={<span className="text-[11px] text-neutral-400">↑↓ move · ↵ enter results · urgent first, then oldest</span>}>Patients</Heading>
-        <ul className="divide-y divide-neutral-100">{groups.map((g, i) => { const m = minutesSince(g.oldest); return <li key={g.patient.id} onMouseEnter={() => setCursor(i)}
-          className={cn('flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5', i === c && 'bg-teal-50/60', g.priority !== 'routine' && 'border-l-2 border-l-red-500')}>
-          <button onClick={() => open(g.patient.id)} className="flex min-w-0 flex-1 basis-80 flex-wrap items-center gap-x-4 gap-y-1 text-left">
-            <span className="w-14 shrink-0 font-mono text-xs text-neutral-500">#{g.patient.record_number}</span>
-            <span className="w-40 shrink-0 sm:w-52"><span className="block truncate text-[14px] font-medium">{g.patient.given_name} {g.patient.family_name}</span><span className="text-xs text-neutral-500 tnum">{ageOf(g.patient.born_on)} y · {g.patient.sex[0].toUpperCase()} · {g.from.join(', ')}</span></span>
-            <span className="flex min-w-0 flex-1 flex-wrap gap-1">{g.rows.map((r) => <Badge key={r.id} tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'} className={r.request?.priority !== 'routine' ? 'ring-red-300' : ''}>{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}{r.request?.priority !== 'routine' && <b className="ml-1 text-red-700">{r.request?.priority}</b>}</Badge>)}</span>
-          </button>
-          {g.priority !== 'routine' && <Badge tone="red">{g.priority.toUpperCase()}</Badge>}
-          <span className={cn('w-12 text-right text-xs tnum', m >= 120 ? 'font-semibold text-red-700' : m >= 60 ? 'text-amber-700' : 'text-neutral-400')}>{m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`}</span>
-          <span className="ml-auto flex justify-end gap-1.5">{packSteps.map((ps) => { const rs = g.rows.filter((r) => ps.from.includes(r.request?.step ?? 'sent')); return rs.length > 0 && <Button key={ps.step} size="sm" variant="outline" onClick={() => advance(rs, ps.step)} disabled={acts.step.isPending}>{ps.label} {rs.length}</Button> })}<Button size="sm" onClick={() => open(g.patient.id)}>Results →</Button></span>
-        </li> })}</ul></Card>}
+    {q.isLoading ? <Spinner label="Loading requests" /> : <Card><ul ref={list} onMouseMove={(e) => { if (kbd && movedMouse(e)) { setKbd(false); setArrows(false) } }}>
+      {lists ? <>
+        {lists.today.length ? lists.today.map((g, i) => row(g, i, false)) : f && lists.older.length ? null : none(seg === 'todo' ? `Nobody ${first.toLowerCase()} today.` : 'Nothing in progress today.')}
+        {lists.older.length > 0 && <ListSection title={seg === 'doing' ? 'In progress, older days' : words.todo || packSteps[0]?.label ? `${first}, older days` : 'Not collected, older days'}
+          count={lists.older.length} folded={!oldOpen} onToggle={f ? undefined : () => setShowOld(!showOld)}>{lists.older.map((g, j) => row(g, lists.today.length + j, true))}</ListSection>}
+      </> : done.length ? done.map((r, i) => <Released key={r.id} r={r} next={i === c && (kbd || !!f)} onCorrect={() => navigate(`/bench/correct/${r.id}`)} />)
+        : none('Nothing released in the last 24 hours.')}
+    </ul></Card>}
   </div>
+}
+/** an empty list; while scanning, where the patient is instead */
+function Nothing({ text, others, onPick }: { text: string; others: [Segment, string, number][]; onPick: (s: Segment) => void }) {
+  return <li className="px-4 py-6 text-center text-sm text-neutral-400">{text}
+    {others.length > 0 && <> Found in {others.map(([k, l, m], j) => <span key={k}>{j > 0 && ', '}<button onClick={() => onPick(k)} className="font-medium text-teal-700 hover:underline">{l} {m}</button></span>)}.</>}</li>
 }
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return <button onClick={onClick} className={cn('rounded-full px-2.5 py-1 ring-1 ring-inset transition-colors', on ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200 hover:ring-neutral-400')}>{children}</button>
 }
 
-/** the last day's released results, newest first; Correct replaces one (the record keeps both, the doctor is asked to look again) */
-function Released({ rows, onCorrect }: { rows: RecentRow[]; onCorrect: (requestId: string) => void }) {
-  if (!rows.length) return <Card className="p-8 text-center text-sm text-neutral-400">Nothing released in the last 24 hours.</Card>
-  return <Card><ul className="divide-y divide-neutral-100">{rows.map((r) => <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
-    <span className="w-14 shrink-0 font-mono text-xs text-neutral-500">#{r.patient.record_number}</span>
-    <span className="w-40 shrink-0 truncate text-[14px] font-medium sm:w-48">{r.patient.given_name} {r.patient.family_name}</span>
-    <span className="min-w-0 flex-1 basis-48 truncate text-[13px]"><span className={r.request?.reply_flag && r.request.reply_flag !== 'normal' ? 'text-amber-800' : 'text-neutral-700'}>{r.request?.reply_line ?? r.service_name}</span></span>
-    {r.request?.status === 'cancelled' && <Badge>not done</Badge>}
-    <span className="text-right text-xs text-neutral-500 tnum">{r.reply?.author_name} · {(r.reply ? hm(r.reply.recorded_at) : '')}</span>
-    <Button size="sm" variant="outline" onClick={() => onCorrect(r.id)} disabled={!r.reply}>Correct</Button>
-  </li>)}</ul></Card>
+/** one result released in the last day, newest first; Correct replaces it (the record keeps both, the doctor is asked to look again) */
+function Released({ r, next, onCorrect }: { r: RecentRow; next: boolean; onCorrect: () => void }) {
+  const flagged = !!r.request?.reply_flag && r.request.reply_flag !== 'normal'
+  return <ListRow number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(r.patient)} selected={next} className={next ? 'bench-cursor' : undefined}
+    status={<>{r.request?.status === 'cancelled' && <Tag>not done</Tag>}<span className={cn('truncate', flagged && 'text-amber-800')}>{r.request?.reply_line ?? r.service_name}</span></>}
+    actions={<><span className="tnum">{r.reply?.author_name}{r.reply && ` · ${hm(r.reply.recorded_at)}`}</span><Button size="sm" variant="outline" onClick={onCorrect} disabled={!r.reply}>Correct</Button></>} />
 }

@@ -1,4 +1,4 @@
-// The composer's pure half (spec 05): a /command or a preset's /shortcut expands to drafts, and the word being typed gets suggestions.
+// The composer's pure half (spec 05): a /command or a #preset expands to drafts, and the word being typed gets suggestions.
 import type { Template } from '../../db/types'
 import { suggestAllergens, suggestDrugs, suggestProblems } from './catalog'
 import { allowed, commandNamed, commandsFor } from './commands'
@@ -8,37 +8,55 @@ import { lineOf, parse, splitCommand, type Ctx, type Parsed, type Result } from 
 export interface Expanded { items: Parsed[]; errors: string[]; skipped?: string[]; drawer?: { kind: string; text: string }; label?: string }
 export interface Suggestion { key: string; label: string; detail?: string; insert: string }
 
+// note commands that became labels: a preset line saved as "/plan review" still reads as "plan: review"
+const WAS_NOTE: Record<string, string> = { hx: 'hx', ex: 'ex', exam: 'ex', plan: 'plan', proc: 'proc' }
 /** a preset line is a command even when written without its slash ("rx metformin 500 bd" in Settings is /rx) */
-export const presetLine = (l: string) => { const t = l.trim(); return t.startsWith('/') || !commandNamed(splitCommand(t)[0]) ? t : `/${t}` }
+export const presetLine = (l: string) => {
+  const t = l.trim(); const [w, rest] = splitCommand(t)
+  if (t.startsWith('/') && WAS_NOTE[w.toLowerCase()] && !commandNamed(w)) return `${WAS_NOTE[w.toLowerCase()]}: ${rest}`
+  return t.startsWith('/') || !commandNamed(w) ? t : `/${t}`
+}
+/** a preset of headings only ("S:", "O:", "A:", "P:") is a note to fill: it opens beside the record */
+const HEADING = /^[\p{L}/ ]{1,24}:\s*$/u
 export const readPresetLine = (l: string, ctx: Ctx): Result => { const line = presetLine(l); const r = parse(line, ctx)
   return r ?? (line.startsWith('/') ? { error: `${splitCommand(line)[0] ? `/${splitCommand(line)[0]}` : 'A command'} needs its text in a preset — e.g. ${commandNamed(splitCommand(line)[0])?.example ?? '/rx metformin 500 bd'}` } : null) }
 
-/** a line: note text, a /command (with text: filled; alone: an empty card or a note beside the record), or a preset's /shortcut */
+/** a line: note text, a /command (with text: filled; alone: an empty card or a note beside the record), or a #preset */
 export function expand(text: string, ctx: Ctx, presets: Template[]): Expanded | null {
   const s = text.trim(); if (!s) return null
   const wrap = (r: Result): Expanded | null => !r ? null : 'error' in r ? { items: [], errors: [r.error] } : { items: r.ok, errors: [] }
+  if (s.startsWith('#')) return preset(s.slice(1).trim().split(/\s+/)[0].toLowerCase(), ctx, presets)
   if (!s.startsWith('/')) return wrap(parse(s, ctx))
   const [word, rest] = splitCommand(s); if (!word) return null
-  const cmd = commandNamed(word)
+  const cmd = commandNamed(word, ctx)
+  if (!cmd && presets.some((x) => x.shortcut === word.toLowerCase())) return { items: [], errors: [`${word} is a preset — type #${word.toLowerCase()}`] }
   if (cmd) {
     if (!allowed(cmd, ctx)) return { items: [], errors: [`/${cmd.name} is not open to your role here`] }
     const r = rest ? cmd.parse(rest, ctx) : null
-    if (r) return wrap(r)
+    if (r) return wrap('ok' in r ? { ok: r.ok.map((p) => ({ action: cmd.action, ...p })) } : r)
     const e = cmd.empty?.(ctx)
     if (!e) return { items: [], errors: [], label: `Type what to write — ${cmd.example}` }
     if (!Array.isArray(e) && rest) return { items: [], errors: [], drawer: { ...e.drawer, text: e.drawer.text + rest }, label: cmd.label }   // /soap cough 3 days: the text goes in
     return Array.isArray(e) ? { items: e, errors: [], label: `${cmd.label} — fill the card, or type it: ${cmd.example}` } : { items: [], errors: [], drawer: e.drawer, label: cmd.label }
   }
-  const t = presets.find((x) => x.shortcut === word.toLowerCase())
-  if (!t) return { items: [], errors: [`No command /${word} — type / to see them`] }
+  return { items: [], errors: [`No command /${word} — type / to see the six`] }
+}
+
+/** a preset: its services as requests and its lines as drafts, or its headings as a note to fill */
+function preset(word: string, ctx: Ctx, presets: Template[]): Expanded | null {
+  if (!word) return null
+  const t = presets.find((x) => x.shortcut === word)
+  if (!t) return { items: [], errors: [`No preset #${word} — presets are made in Settings`] }
+  if (!t.items.length && t.lines.length && t.lines.every((l) => HEADING.test(l.trim())))
+    return { items: [], errors: [], drawer: { kind: /^history|^examination/i.test(t.lines[0]) ? 'history_physical' : ctx.noteKind ?? 'progress', text: t.lines.map((l) => `${l.trim()} `).join('\n') }, label: t.name }
   const items: Parsed[] = []; const skipped: string[] = []; let problems = ctx.problems
-  for (const i of t.items) { const svc = ctx.services.find((x) => x.id === i.service_id && x.department_id !== ctx.departmentId); if (svc) items.push({ function: 'write_request', kind: 'request', params: { service_id: svc.id, priority: 'routine' }, line: lineOf({ function: 'write_request', kind: 'request', params: { service_id: svc.id }, line: '' }, ctx) }) }
+  for (const i of t.items) { const svc = ctx.services.find((x) => x.id === i.service_id && x.department_id !== ctx.departmentId); if (svc) items.push({ function: 'order', kind: 'request', params: { service_id: svc.id, priority: 'routine' }, line: lineOf({ function: 'order', kind: 'request', params: { service_id: svc.id }, line: '' }, ctx) }) }
   for (const l of t.lines) {
     let r = readPresetLine(l, { ...ctx, problems })
     // "for dm" links to the patient's problem (or one this preset adds); without it the line still goes in, unlinked
     if (r && 'error' in r && /^No problem/.test(r.error)) r = readPresetLine(unlinked(l), { ...ctx, problems })
     if (r && 'ok' in r) for (const p of r.ok) {
-      if (p.function === 'write_problem') { p.id = crypto.randomUUID(); problems = [...problems, { id: p.id, name: String(p.params.name) }] }   // a later line can link to it
+      if (p.function === 'problem') { p.id = crypto.randomUUID(); problems = [...problems, { id: p.id, name: String(p.params.name) }] }   // a later line can link to it
       items.push(p)
     } else if (r) skipped.push(`“${l}”: ${r.error}`)
   }
@@ -51,20 +69,23 @@ const unlinked = (l: string) => { const [main, ...tail] = l.split(';'); const at
 /** what is being typed could be: a command or preset (after "/"), then a drug, a problem, an allergen, a service or a department */
 export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set<string>): { items: Suggestion[] } | null {
   const t = text.trimStart()
-  if (t.startsWith('/') && !/\s/.test(t)) {
+  if (t.startsWith('/') && !/\s/.test(t)) {                                 // "/": the commands only
     const w = t.slice(1).toLowerCase()
     const cmds = commandsFor(ctx).filter((c) => [c.name, ...(c.aliases ?? [])].some((n) => n.startsWith(w)))
-    const mine = presets.filter((p) => p.shortcut && p.shortcut.startsWith(w) && p.shortcut !== w)
-    const items: Suggestion[] = [...cmds.map((c) => ({ key: `c${c.name}`, label: `/${c.name}`, detail: `${c.label} · ${c.example}`, insert: `/${c.name} ` })),
-      ...mine.map((p) => ({ key: `p${p.id}`, label: `/${p.shortcut}`, detail: `${p.name} · ${p.items.length + p.lines.length} items`, insert: `/${p.shortcut}` }))]
-    return items.length ? { items } : null
+    return cmds.length ? { items: cmds.map((c) => ({ key: `c${c.name}`, label: `/${c.name}`, detail: `${c.label} · ${c.example}`, insert: `/${c.name} ` })) } : null
   }
+  if (t.startsWith('#') && !/\s/.test(t)) {                                 // "#": the presets only
+    const w = t.slice(1).toLowerCase()
+    const mine = presets.filter((p) => p.shortcut && p.shortcut.startsWith(w) && p.shortcut !== w)
+    return mine.length ? { items: mine.map((p) => ({ key: `p${p.id}`, label: `#${p.shortcut}`, detail: `${p.name} · ${p.items.length + p.lines.length} items`, insert: `#${p.shortcut}` })) } : null
+  }
+  if (t.startsWith('#')) return null
   if (!t.startsWith('/')) {                                                  // a command word without its slash is note text: offer the command
-    const [w, rest] = splitCommand(t); const c = w && /\s/.test(t) ? commandNamed(w) : undefined
+    const [w, rest] = splitCommand(t); const c = w && /\s/.test(t) ? commandNamed(w, ctx) : undefined
     return c && allowed(c, ctx) ? { items: [{ key: 'slash', label: `/${c.name} ${rest}`, detail: `${c.label} — without “/” this line is a note`, insert: `/${c.name} ${rest}` }] } : null
   }
   const m = t.match(/^(\S+)\s+([\s\S]*)$/); if (!m) return null
-  const cmd = commandNamed(m[1].slice(1))?.name; const rest = m[2]
+  const cmd = commandNamed(m[1].slice(1), ctx)?.name; const rest = m[2]
   if (cmd === 'rx') {
     if (rest.trim().length < 2 || /\s$/.test(rest) || rest.split(/\s+/).some((w) => /^\d/.test(w) || /^(od|bd|tds|qds|prn|po|iv|im|sc|for)$/i.test(w))) return null
     const hits = suggestDrugs(rest, 7).filter((d) => d.name.toLowerCase() !== rest.trim().toLowerCase())
@@ -86,11 +107,11 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
     if (/^(urgent|stat)$/i.test(partial)) return null
     const p = partial.toLowerCase()
     const hits = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!p || s.code.startsWith(p) || s.name.toLowerCase().includes(p))).slice(0, p ? 7 : 10)
-    return hits.length ? { items: hits.map((s) => ({ key: s.id, label: s.name, detail: `${s.code} · ${ctx.departments.find((d) => d.id === s.department_id)?.name ?? ''}`, insert: `${t.slice(0, t.length - partial.length)}${s.code}, ` })) } : null
-  }
-  if (cmd === 'ref' && !/\s/.test(rest)) {
-    const hits = ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().includes(rest.toLowerCase()))
-    return hits.length ? { items: hits.slice(0, 6).map((d) => ({ key: d.id, label: d.name, insert: `${m[1]} ${d.name} ` })) } : null
+    // a department is asked with a question: "/order cardiology: …" (only as the first thing ordered)
+    const depts = !/[,:]/.test(rest) && p ? ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().startsWith(p)).slice(0, 3) : []
+    const items = [...hits.map((s) => ({ key: s.id, label: s.name, detail: `${s.code} · ${ctx.departments.find((d) => d.id === s.department_id)?.name ?? ''}`, insert: `${t.slice(0, t.length - partial.length)}${s.code}, ` })),
+      ...depts.map((d) => ({ key: `d${d.id}`, label: `${d.name}: …`, detail: 'a consult — type the question', insert: `${m[1]} ${d.name}: ` }))]
+    return items.length ? { items } : null
   }
   return null
 }

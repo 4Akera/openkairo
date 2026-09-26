@@ -13,14 +13,20 @@ export interface BenchStep { step: string; label: string; from: string[] }
 const benchSteps = new Map<string, BenchStep[]>()
 export const registerBenchSteps = (departmentType: string, steps: BenchStep[]) => benchSteps.set(departmentType, steps)
 export const benchStepsFor = (departmentType: string) => benchSteps.get(departmentType) ?? []
+/** a pack's words for its bench: "To give" · "Given today" in place of "To collect" · "Done today" */
+export interface BenchWords { todo?: string; done?: string }
+const benchWords = new Map<string, BenchWords>()
+export const registerBenchWords = (departmentType: string, words: BenchWords) => benchWords.set(departmentType, words)
+export const benchWordsFor = (departmentType: string): BenchWords => benchWords.get(departmentType) ?? {}
 
-/** A pack's reply form for its reply type (spec 06): the bench shows it in place of core's value grid and releases what toWrite returns
- *  in the same atomic set as every other result. Core fills id, patient_id and department_id. */
+/** A pack's answer form for the answer type of a service (spec/openCare.md §5): the bench shows it in place of the value grid and writes
+ *  what toWrite returns in the same set as every other answer. The client fills the id, patient, department and the link to the order. */
 export interface ReplyForm<V = unknown> {
-  action: string                                                       // the action the writer needs, e.g. write:pharmacy_dispense
+  action: string                                                       // the action the writer needs, e.g. write:pharmacy.dispense
   Editor: ComponentType<{ request: RequestQueueRow; value: V | undefined; onChange: (v: V) => void }>
-  toWrite: (request: RequestQueueRow, value: V | undefined) => { function: string; params: Record<string, unknown> } | null
+  toWrite: (request: RequestQueueRow, value: V | undefined) => { type: string; data: Record<string, unknown> } | null
   automatic?: boolean                                                  // its requests come from another write (dispensing, from a prescription): not ordered by hand
+  quick?: string                                                       // a one-click release on the bench row ("Give all"): toWrite(request, undefined) for each
 }
 const replyForms = new Map<string, ReplyForm<never>>()
 export const registerReplyForm = <V,>(replyType: string, form: ReplyForm<V>) => { replyForms.set(replyType, form as unknown as ReplyForm<never>) }

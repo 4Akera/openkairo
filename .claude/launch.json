@@ -1,7 +1,66 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "opencare-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 },
-    { "name": "opencare-dev-3001", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "--port", "3001", "--strictPort"], "port": 3001 }
+    {
+      "name": "opencare-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "opencare-dev-3001",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3001",
+        "--strictPort"
+      ],
+      "port": 3001
+    },
+    {
+      "name": "opencare-dev-3002",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3002",
+        "--strictPort"
+      ],
+      "port": 3002
+    },
+    {
+      "name": "opencare-dev-3003",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3003",
+        "--strictPort"
+      ],
+      "port": 3003
+    },
+    {
+      "name": "opencare-dev-3004",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3004",
+        "--strictPort"
+      ],
+      "port": 3004
+    }
   ]
 }

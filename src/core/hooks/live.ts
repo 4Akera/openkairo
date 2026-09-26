@@ -1,4 +1,5 @@
-// Realtime is a hint (spec 05): any message on a channel refetches; the payload is never trusted.
+// Realtime is a hint (spec/openCare.md §3.9 step 10): any message on a channel refetches; it carries no content.
+// Channels: organization:<id> (queues, benches, the desk) and record:<patient> (a record read in the last 12 hours).
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { _db as db } from '../db/rpc'
