@@ -1,3 +1,17 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>openCare</title></head>
+<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#f3f5f5" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0e1212" media="(prefers-color-scheme: dark)" />
+<title>openCare</title>
+<script>
+  // before first paint: the saved choice (light · dark), else the system's; storage may be blocked (private window). src/core/ui/theme.ts
+  (function () {
+    var followOs = false;   // System stays light until every screen is on tokens (build plan 2.11 sets this and theme.ts FOLLOW_OS to true)
+    var p = 'system'; try { var v = localStorage.getItem('oc.theme'); if (v === 'light' || v === 'dark') p = v } catch (e) {}
+    var dark = p === 'dark' || (p === 'system' && followOs && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var d = document.documentElement; d.setAttribute('data-theme', dark ? 'dark' : 'light'); d.setAttribute('data-theme-pref', p);
+    if (p !== 'system' || !followOs) document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.content = dark ? '#0e1212' : '#f3f5f5' });
+  })();
+</script></head>
 <body><div id="root"></div><script type="module" src="/src/core/main.tsx"></script></body></html>

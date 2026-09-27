@@ -1,15 +1,176 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 
-@theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+/* openCare design system (design-system.md §2–3). The one place colours, sizes, radii, shadows and motion are defined.
+   Screens and packs use the utilities these produce (bg-surface, text-muted, border-line …) and the kit in src/core/ui.
+   Until the sweep is done the default palette still exists, so old and new classes both work; the four `initial` lines
+   (--color-*, --shadow-*, --text-*, --radius-*) go in when no screen uses a raw class any more (build plan 2.11). */
+
+/* dark: <html data-theme="dark">, set before first paint by the script in index.html; any subtree may carry its own data-theme */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ── 1. token values: light is the default, dark overrides ── */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --canvas: #f3f5f5;        /* the page */
+  --surface: #ffffff;       /* cards, panels, the banner */
+  --raised: #ffffff;        /* menus, the command palette, a card on a card (light: told apart by shadow) */
+  --sunken: #f6f8f8;        /* inputs, wells, table heads, the editor under a row */
+  --line: #e4e9e8;          /* hairlines: card borders, dividers */
+  --line-strong: #cdd5d4;   /* input borders, hover borders, the track of a switch */
+  --fg: #141a19;            /* text */
+  --fg-muted: #4b5655;      /* secondary text: hints, labels, ages */
+  --fg-faint: #636f6e;      /* tertiary text: times, record numbers, placeholders, empty states, quiet icons */
+  --accent: #0f766e;        /* teal: primary actions, links, selection, the brand */
+  --accent-hover: #0b5f58;
+  --accent-fg: #ffffff;     /* text and icons on an accent fill */
+  --accent-soft: #e7f5f3;   /* selected row, current nav item, "this visit" */
+  --accent-line: #9fd6ce;
+  --danger: #b42318;  --danger-fg: #ffffff; --danger-soft: #fdf0ef; --danger-line: #f4c4bf;
+  --warn: #8f5400;    --warn-fg: #ffffff;   --warn-soft: #fdf5e3;   --warn-line: #efd49b;
+  --ok: #18703d;      --ok-fg: #ffffff;     --ok-soft: #eaf6ef;     --ok-line: #b3dcc2;
+  --info: #0b659b;    --info-fg: #ffffff;   --info-soft: #e9f3fb;   --info-line: #b6d6ee;
+  --hover: rgb(20 26 25 / 0.045);   /* the row or button under the pointer */
+  --focus: #0f766e;
+  --selection: #c9ece6;
+  --overlay: rgb(16 24 23 / 0.32);
+  --band: #e3f1ee;          /* a chart's reference range */
+  --paper: #ffffff;         /* always white, both themes: QR codes, print previews */
+  --elev-xs: 0 1px 2px rgb(16 24 23 / 0.05);
+  --elev-sm: 0 1px 3px rgb(16 24 23 / 0.08), 0 1px 2px rgb(16 24 23 / 0.04);
+  --elev-md: 0 12px 32px -8px rgb(16 24 23 / 0.18), 0 2px 6px rgb(16 24 23 / 0.06);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #0e1212;
+  --surface: #151a1a;
+  --raised: #1c2322;
+  --sunken: #0b0f0f;
+  --line: #253130;
+  --line-strong: #3a4746;
+  --fg: #e6eceb;
+  --fg-muted: #a3b0ae;
+  --fg-faint: #8b9896;
+  --accent: #3cbfad;
+  --accent-hover: #5fd0c0;
+  --accent-fg: #04201c;
+  --accent-soft: #12302c;
+  --accent-line: #1f5a52;
+  --danger: #f2877c;  --danger-fg: #2a0906; --danger-soft: #361714; --danger-line: #6e2a24;
+  --warn: #e3ad4f;    --warn-fg: #2a1c02;   --warn-soft: #32260d;   --warn-line: #66501f;
+  --ok: #5cc987;      --ok-fg: #062012;     --ok-soft: #0f2a1a;     --ok-line: #25583a;
+  --info: #6cb3ea;    --info-fg: #04192a;   --info-soft: #0f2536;   --info-line: #22506f;
+  --hover: rgb(230 236 235 / 0.06);
+  --focus: #3cbfad;
+  --selection: #1f4d47;
+  --overlay: rgb(0 0 0 / 0.56);
+  --band: #16302c;
+  --paper: #ffffff;
+  --elev-xs: 0 1px 0 rgb(0 0 0 / 0.40);
+  --elev-sm: 0 1px 2px rgb(0 0 0 / 0.50), 0 0 0 1px rgb(255 255 255 / 0.03);
+  --elev-md: 0 16px 40px -8px rgb(0 0 0 / 0.70), 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+/* more contrast asked for by the system: input edges (line-strong) reach 3:1 (WCAG 1.4.11); card edges get darker too (≈2:1, not a control) */
+@media (prefers-contrast: more) {
+  :root, [data-theme="light"] { --line: #aeb8b7; --line-strong: #7a8685; --fg-faint: #4b5655; }
+  [data-theme="dark"] { --line: #4a5857; --line-strong: #6b7978; --fg-faint: #a3b0ae; }
 }
 
-html, body { background: #f5f6f6; color: #1c1f1f; }
-body { font-feature-settings: "cv11", "ss01", "ss03"; -webkit-font-smoothing: antialiased; }
+/* ── 2. utilities read the tokens (inline: a subtree's data-theme wins) ── */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-danger: var(--danger);   --color-danger-fg: var(--danger-fg); --color-danger-soft: var(--danger-soft); --color-danger-line: var(--danger-line);
+  --color-warn: var(--warn);       --color-warn-fg: var(--warn-fg);     --color-warn-soft: var(--warn-soft);     --color-warn-line: var(--warn-line);
+  --color-ok: var(--ok);           --color-ok-fg: var(--ok-fg);         --color-ok-soft: var(--ok-soft);         --color-ok-line: var(--ok-line);
+  --color-info: var(--info);       --color-info-fg: var(--info-fg);     --color-info-soft: var(--info-soft);     --color-info-line: var(--info-line);
+  --color-hover: var(--hover);
+  --color-focus: var(--focus);
+  --color-overlay: var(--overlay);
+  --color-band: var(--band);
+  --color-paper: var(--paper);
+
+  --shadow-xs: var(--elev-xs);
+  --shadow-sm: var(--elev-sm);
+  --shadow-md: var(--elev-md);
+}
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* the seven sizes, named by their pixels */
+  --text-11: 0.6875rem;  --text-11--line-height: 1rem;       /* overlines, tags, kbd, table heads */
+  --text-12: 0.75rem;    --text-12--line-height: 1rem;       /* meta: times, hints, secondary lines */
+  --text-13: 0.8125rem;  --text-13--line-height: 1.25rem;    /* dense: list rows, the record, tables */
+  --text-14: 0.875rem;   --text-14--line-height: 1.25rem;    /* body, inputs, buttons */
+  --text-16: 1rem;       --text-16--line-height: 1.5rem;     /* section titles, search, a result's name */
+  --text-18: 1.125rem;   --text-18--line-height: 1.625rem;   /* patient name, page titles */
+  --text-22: 1.375rem;   --text-22--line-height: 1.75rem;    /* stats, page heads */
+
+  --radius-sm: 0.25rem;   /* 4: tags, kbd, small chips */
+  --radius-md: 0.375rem;  /* 6: chips, icon buttons, menu items */
+  --radius-lg: 0.5rem;    /* 8: buttons, inputs, callouts */
+  --radius-xl: 0.75rem;   /* 12: cards, panels, the palette */
+
+  --breakpoint-split: 68.75rem;  /* 1100px: the chart's record panel sits beside the encounter from here up (split:) */
+  --container-split: 68.75rem;   /* the same, for a frame that answers to its own width (@split: / @max-split:, SplitPane) */
+  --container-page: 72rem;       /* settings, desk, bench, bed board (max-w-page) */
+  --container-chart: 96rem;      /* the patient chart frame (max-w-chart) */
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --default-transition-duration: var(--dur-fast);     /* so transition-colors follows reduced motion too */
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  --animate-pop: pop var(--dur-fast) cubic-bezier(0.2, 0, 0, 1);   /* an inline card appearing under the line, a menu opening */
+  @keyframes pop { from { opacity: 0; transform: translateY(-2px); } }
+}
+
+/* ── 3. motion, layers and the few utilities the kit shares ── */
+:root { --dur-fast: 120ms; --dur-base: 180ms; --dur-slow: 260ms; --z-raised: 10; --z-sticky: 30; --z-popover: 40; --z-overlay: 50; --z-toast: 60; }
+@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; } }
+@utility duration-fast { transition-duration: var(--dur-fast); }
+@utility duration-base { transition-duration: var(--dur-base); }
+@utility duration-slow { transition-duration: var(--dur-slow); }
+@utility z-raised { z-index: var(--z-raised); }
+@utility z-sticky { z-index: var(--z-sticky); }
+@utility z-popover { z-index: var(--z-popover); }
+@utility z-overlay { z-index: var(--z-overlay); }
+@utility z-toast { z-index: var(--z-toast); }
+/* the selected row's bar on its start edge (↑↓ in a list, the open patient). It goes through --tw-inset-shadow so it composes with
+   ring-* and shadow-* on the same element (a bare box-shadow would drop one of them; today's shadow-[inset…] composes). */
+@utility rail { --tw-inset-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
+  &:where([dir="rtl"] *) { --tw-inset-shadow: inset -3px 0 0 var(--accent); } }
+@utility rail-danger { --tw-inset-shadow: inset 3px 0 0 var(--danger);
+  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
+  &:where([dir="rtl"] *) { --tw-inset-shadow: inset -3px 0 0 var(--danger); } }
 /* numbers line up in queues, grids and value tables */
-.tnum, table, input[type="number"], .font-mono { font-variant-numeric: tabular-nums; }
-input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-input[type="number"] { -moz-appearance: textfield; }
-::selection { background: #ccfbf1; }
+@utility tnum { font-variant-numeric: tabular-nums; }
+/* the one focus look: a 2px accent ring outside the control */
+@utility focus-ring { &:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } }
+
+/* ── 4. base ── */
+@layer base {
+  html, body { background: var(--canvas); color: var(--fg); }
+  body { font-feature-settings: "cv11", "ss01", "ss03"; -webkit-font-smoothing: antialiased; }
+  *, ::before, ::after { border-color: var(--line); }                 /* a bare border / divide-y is a hairline */
+  ::placeholder { color: var(--fg-faint); }
+  ::selection { background: var(--selection); }
+  :focus-visible { outline-color: var(--focus); }
+  table, input[type="number"], .font-mono { font-variant-numeric: tabular-nums; }
+  input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; }
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+}
