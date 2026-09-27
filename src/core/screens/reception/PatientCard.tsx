@@ -91,30 +91,30 @@ export function PatientCard({ handle, p, clinics, usual, rows, canSend, canEdit,
       : `Waiting in ${clinic.name}${line >= 0 ? ` · ${nth(line + 1)} in line` : ''} · ${duration(minutesSince(open.arrived_at))}`
   } else if (p.open_visits.length) where = p.open_visits.map((v) => `${v.department_name} · ${v.present ? v.status.replace('_', ' ') : 'away'}`).join('; ')
 
-  return <div ref={box} data-card tabIndex={0} onKeyDown={onKey} aria-label={`${fullName(p)}: actions`} className="grid gap-3 rounded-xl border border-neutral-200/80 bg-white p-4 shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-teal-700/30">
+  return <div ref={box} data-card tabIndex={0} onKeyDown={onKey} aria-label={`${fullName(p)}: actions`} className="grid gap-3 rounded-xl border border-line bg-surface p-4 shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-accent/30">
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="text-lg font-semibold tracking-tight text-neutral-900">{fullName(p)}</span>
-      <span className="text-sm text-neutral-500 tnum">{ageSex(p.age, p.sex)} · #{p.record_number}{p.phone_text && ` · ${p.phone_text}`}{nationalId && ` · ID ${nationalId}`}</span>
+      <span className="text-18 font-semibold tracking-tight text-fg">{fullName(p)}</span>
+      <span className="text-14 text-faint tnum">{ageSex(p.age, p.sex)} · #{p.record_number}{p.phone_text && ` · ${p.phone_text}`}{nationalId && ` · ID ${nationalId}`}</span>
       {p.died_on && <Tag>deceased</Tag>}{row && row.priority !== 'routine' && <Tag tone="red">{row.priority}</Tag>}{row && row.missed_calls > 0 && <Tag tone="amber">not here ×{row.missed_calls}</Tag>}
     </div>
-    {where && <p className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 text-[14px] text-neutral-800"><MapPin className="h-4 w-4 text-neutral-400" />{where}</p>}
+    {where && <p className="flex items-center gap-2 rounded-lg bg-sunken px-3 py-2 text-14 text-fg"><MapPin className="h-4 w-4 text-faint" />{where}</p>}
 
     {editing ? <EditDetails p={p} orgId={orgId} onDone={(said) => { setEditing(false); onSaid(said) }} onCancel={() => setEditing(false)} />
       : <div className="flex flex-wrap items-center gap-1.5">
-        {away && clinic && canSend && <Button size="sm" disabled={busy} onClick={() => void send(clinic)}>Back → {clinic.name} <Kbd className="ml-1 border-white/40">↵</Kbd></Button>}
-        {target && <Button size="sm" disabled={busy} onClick={() => void send(target)}>Send to {target.name} <Kbd className="ml-1 border-white/40">↵</Kbd></Button>}
-        {others.map((c) => <Button key={c.id} size="sm" variant="outline" disabled={busy} onClick={() => void send(c)}>{c.name}{keys.get(c.id) && <Kbd className="ml-1">{keys.get(c.id)!.toUpperCase()}</Kbd>}</Button>)}
-        {target && <Button size="sm" variant="outline" className="text-red-700" disabled={busy} onClick={() => void send(target, true)}>Urgent → {target.name} <Kbd className="ml-1">⇧↵</Kbd></Button>}
-        {waitingUnseen && canSend && clinics.length > 1 && <Button size="sm" variant="outline" disabled={busy} onClick={doMove}>Move to… <Kbd className="ml-1">M</Kbd></Button>}
-        {row && canSend && <Button size="sm" variant="outline" disabled={busy} onClick={doUrgent}>{row.priority === 'routine' ? 'Urgent' : 'Not urgent'} <Kbd className="ml-1">U</Kbd></Button>}
-        {waitingUnseen && canSend && <Button size="sm" variant="outline" className="text-red-700" disabled={busy} onClick={doLeft}>Left <Kbd className="ml-1">L</Kbd></Button>}
-        {row?.status === 'pending' && open?.present && canSend && <Button size="sm" variant="outline" className="text-red-700" disabled={busy} onClick={doGone}>Gone <Kbd className="ml-1">G</Kbd></Button>}
-        {canEdit && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit details <Kbd className="ml-1">E</Kbd></Button>}
+        {away && clinic && canSend && <Button size="sm" disabled={busy} onClick={() => void send(clinic)}>Back → {clinic.name} <Kbd className="ms-1">↵</Kbd></Button>}
+        {target && <Button size="sm" disabled={busy} onClick={() => void send(target)}>Send to {target.name} <Kbd className="ms-1">↵</Kbd></Button>}
+        {others.map((c) => <Button key={c.id} size="sm" variant="outline" disabled={busy} onClick={() => void send(c)}>{c.name}{keys.get(c.id) && <Kbd className="ms-1">{keys.get(c.id)!.toUpperCase()}</Kbd>}</Button>)}
+        {target && <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={() => void send(target, true)}>Urgent → {target.name} <Kbd className="ms-1">⇧↵</Kbd></Button>}
+        {waitingUnseen && canSend && clinics.length > 1 && <Button size="sm" variant="outline" disabled={busy} onClick={doMove}>Move to… <Kbd className="ms-1">M</Kbd></Button>}
+        {row && canSend && <Button size="sm" variant="outline" disabled={busy} onClick={doUrgent}>{row.priority === 'routine' ? 'Urgent' : 'Not urgent'} <Kbd className="ms-1">U</Kbd></Button>}
+        {waitingUnseen && canSend && <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={doLeft}>Left <Kbd className="ms-1">L</Kbd></Button>}
+        {row?.status === 'pending' && open?.present && canSend && <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={doGone}>Gone <Kbd className="ms-1">G</Kbd></Button>}
+        {canEdit && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit details <Kbd className="ms-1">E</Kbd></Button>}
       </div>}
-    {moving && <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-neutral-50 p-2"><span className="text-xs text-neutral-500">Move to</span>
-      {clinics.filter((c) => c.id !== clinic?.id).map((c) => <Button key={c.id} size="sm" variant="outline" disabled={busy} onClick={() => void moveTo(c)}>{c.name}{keys.get(c.id) && <Kbd className="ml-1">{keys.get(c.id)!.toUpperCase()}</Kbd>}</Button>)}
+    {moving && <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-sunken p-2"><span className="text-12 text-faint">Move to</span>
+      {clinics.filter((c) => c.id !== clinic?.id).map((c) => <Button key={c.id} size="sm" variant="outline" disabled={busy} onClick={() => void moveTo(c)}>{c.name}{keys.get(c.id) && <Kbd className="ms-1">{keys.get(c.id)!.toUpperCase()}</Kbd>}</Button>)}
       <Button size="sm" variant="ghost" onClick={() => setMoving(false)}>Keep</Button></div>}
-    {(visits.open.error || visits.transfer.error || visits.priority.error || visits.present.error || visits.left.error) && <p className="text-sm text-red-700">{errorText(visits.open.error ?? visits.transfer.error ?? visits.priority.error ?? visits.present.error ?? visits.left.error)}</p>}
+    {(visits.open.error || visits.transfer.error || visits.priority.error || visits.present.error || visits.left.error) && <p className="text-14 text-danger">{errorText(visits.open.error ?? visits.transfer.error ?? visits.priority.error ?? visits.present.error ?? visits.left.error)}</p>}
   </div>
 }
 
@@ -131,8 +131,8 @@ function EditDetails({ p, orgId, onDone, onCancel }: { p: PatientHit; orgId: str
       identifiers: [...p.identifiers.filter((i) => i.system !== 'eg-national-id'), ...(nid.trim() ? [{ system: 'eg-national-id', value: nid.trim() }] : [])] } }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['patients'] }); qc.invalidateQueries({ queryKey: ['visit_queue'] }); onDone(`${given} ${family}: details saved`) },
   })
-  const field = 'h-8 text-sm'
-  return <form onSubmit={(e) => { e.preventDefault(); save.mutate() }} className="grid gap-2 rounded-lg bg-neutral-50 p-3">
+  const field = 'h-8 text-14'
+  return <form onSubmit={(e) => { e.preventDefault(); save.mutate() }} className="grid gap-2 rounded-lg bg-sunken p-3">
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       <Input aria-label="Given name" value={given} onChange={(e) => setGiven(e.target.value)} required className={field} autoFocus />
       <Input aria-label="Family name" value={family} onChange={(e) => setFamily(e.target.value)} required className={field} />
@@ -141,7 +141,7 @@ function EditDetails({ p, orgId, onDone, onCancel }: { p: PatientHit; orgId: str
       <Input aria-label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={field} placeholder="Phone" />
       <Input aria-label="National ID" value={nid} onChange={(e) => setNid(e.target.value)} className={cn(field, 'font-mono')} placeholder="National ID" />
     </div>
-    {save.error && <p className="text-sm text-red-700">{errorText(save.error)}</p>}
+    {save.error && <p className="text-14 text-danger">{errorText(save.error)}</p>}
     <div className="flex justify-end gap-2"><Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" size="sm" disabled={save.isPending}>Save</Button></div>
   </form>
 }

@@ -5,7 +5,7 @@ import { useDepartment } from '../hooks/organization'
 import { useVisitActions } from '../hooks/writes'
 import { rememberPatient } from '../hooks/recent'
 import type { PatientHit } from '../db/types'
-import { Card, Input, Kbd, cn, errorText, movedMouse } from '../ui'
+import { Callout, Card, Input, Kbd, cn, errorText, movedMouse } from '../ui'
 import { NewPatient } from '../shell/NewPatient'
 import { Clinics, LastSent, NeedsYou, Today } from './reception/Lists'
 import { PatientCard, type CardHandle } from './reception/PatientCard'
@@ -83,25 +83,25 @@ export function ReceptionScreen({ departmentId }: { departmentId: string }) {
   return (
     <div className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
       <div className="grid min-w-0 content-start gap-3">
-        {said && <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-900 ring-1 ring-teal-200" role="status">✓ {said}</p>}
+        {said && <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout>}
         {!creating && <Card className="p-3">
-          <div className="relative"><SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <div className="relative"><SearchIcon className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
             <Input ref={box} autoFocus value={q} onChange={(e) => { setQ(e.target.value); setCursor(0); setKbd(true) }} onKeyDown={onKey} aria-label="Find a patient"
-              placeholder="Name, phone, national ID or number" className="h-11 pl-9 text-[15px]" /></div>
+              placeholder="Name, phone, national ID or number" className="h-11 ps-9 text-16" /></div>
           {searching && <div className="mt-2 flex flex-wrap gap-1.5" role="listbox" aria-label="Patients found" onMouseMove={(e) => kbd && movedMouse(e) && setKbd(false)}>
             {list.map((p, i) => <button key={p.id} type="button" tabIndex={-1} role="option" aria-selected={i === c} onClick={() => { setCursor(i); card.current?.focus() }}
-              className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[13px] ring-1 transition-colors',
-                i === c ? 'bg-teal-50 text-teal-900 ring-teal-700' : cn('text-neutral-700 ring-neutral-200', !kbd && 'hover:ring-neutral-400'))}>
-              {fullName(p)}<span className="text-neutral-500">· {ageSex(p.age, p.sex)}</span>
-              {p.open_visits.some((v) => v.present) && <span className="h-1.5 w-1.5 rounded-full bg-teal-600" aria-label="here now" />}
-              {p.died_on && <span className="text-neutral-400">†</span>}</button>)}
+              className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-13 ring-1 transition-colors',
+                i === c ? 'bg-accent-soft text-accent ring-accent' : cn('text-muted ring-line', !kbd && 'hover:ring-line-strong'))}>
+              {fullName(p)}<span className="text-faint">· {ageSex(p.age, p.sex)}</span>
+              {p.open_visits.some((v) => v.present) && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="here now" />}
+              {p.died_on && <span className="text-faint">†</span>}</button>)}
             {canCreate && !q.trim().startsWith('#') && <button type="button" tabIndex={-1} onClick={() => setCreating(true)}
-              className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[13px] ring-1', nobody ? 'bg-teal-50 font-medium text-teal-900 ring-teal-700' : cn('text-teal-800 ring-neutral-200', !kbd && 'hover:ring-neutral-400'))}>
+              className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-13 ring-1', nobody ? 'bg-accent-soft font-medium text-accent ring-accent' : cn('text-accent ring-line', !kbd && 'hover:ring-line-strong'))}>
               + New patient “{q.trim()}”{nobody && <Kbd>↵</Kbd>}</button>}
           </div>}
-          {nobody && <p className="mt-2 px-1 text-sm text-neutral-500">Nobody found for “{d.trim()}”.</p>}
-          {hits.error && <p className="mt-2 px-1 text-sm text-red-700">{errorText(hits.error)}</p>}
-          {list.length > 0 && <p className="mt-2 flex flex-wrap items-center gap-1 px-1 text-[11px] text-neutral-400"><Kbd>↑</Kbd><Kbd>↓</Kbd> choose
+          {nobody && <p className="mt-2 px-1 text-14 text-faint">Nobody found for “{d.trim()}”.</p>}
+          {hits.error && <p className="mt-2 px-1 text-14 text-danger">{errorText(hits.error)}</p>}
+          {list.length > 0 && <p className="mt-2 flex flex-wrap items-center gap-1 px-1 text-11 text-faint"><Kbd>↑</Kbd><Kbd>↓</Kbd> choose
             {canSend && <> · <Kbd>↵</Kbd> send · <Kbd>⇧↵</Kbd> urgent</>} · <Kbd>Tab</Kbd> the card · <Kbd>Esc</Kbd> clear</p>}
         </Card>}
 
@@ -112,10 +112,10 @@ export function ReceptionScreen({ departmentId }: { departmentId: string }) {
           <NewPatient seed={q} orgId={orgId ?? ''} submitLabel={usual && canSend ? `Register and send to ${usual.name}` : 'Register'}
             onRegisterOnly={usual && canSend ? (p) => { setCreating(false); reset(); setSaid(`${fullName(p)} registered`) } : undefined}
             onCancel={() => setCreating(false)} onDone={(p) => void registered(p)} /></div>}
-        {visits.open.error && <p className="text-sm text-red-700">{errorText(visits.open.error)}</p>}
+        {visits.open.error && <p className="text-14 text-danger">{errorText(visits.open.error)}</p>}
 
         {!searching && !creating && <>
-          {usual && canSend && <p className="px-1 text-[12px] text-neutral-500">Type a name, phone, national ID or number; <Kbd>↵</Kbd> sends to <span className="font-medium text-neutral-700">{usual.name}</span>, the clinic this desk used last.</p>}
+          {usual && canSend && <p className="px-1 text-12 text-faint">Type a name, phone, national ID or number; <Kbd>↵</Kbd> sends to <span className="font-medium text-muted">{usual.name}</span>, the clinic this desk used last.</p>}
           <Today rows={rows} doneToday={doneToday} /></>}
       </div>
 
