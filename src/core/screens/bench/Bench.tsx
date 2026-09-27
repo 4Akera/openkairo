@@ -84,7 +84,7 @@ export function Bench({ departmentId, name, type }: { departmentId: string; name
     }}>{quick[0].pf!.quick}{quick.length > 1 ? ` ${quick.length}` : ''}</Button>)
     const where = <>{g.patient.here != null && <span className={g.patient.here ? 'font-medium text-accent' : 'text-faint'}>{g.patient.here ? 'here' : 'gone'}</span>}{old && <span className="tnum">{shortDate(g.oldest)}</span>}</>
     return <ListRow key={g.patient.id} number={g.patient.record_number} name={`${g.patient.given_name} ${g.patient.family_name}`} age={ageSex(g.patient)}
-      status={<>{g.priority !== 'routine' && <Tag tone="red">{g.priority}</Tag>}{seg === 'doing' && stepWords(g.rows).map((w) => <Tag key={w} tone={w === 'reopened' ? 'amber' : 'neutral'}>{w}</Tag>)}<span className="truncate">{testsLine(g.rows)}</span></>}
+      status={<>{g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{seg === 'doing' && stepWords(g.rows).map((w) => <Tag key={w} tone={w === 'reopened' ? 'warn' : 'neutral'}>{w}</Tag>)}<span className="truncate">{testsLine(g.rows)}</span></>}
       who={where} actions={steps.length ? <>{where}{steps}</> : undefined} minutes={g.since ? minutesSince(g.since) : null} muted={old}
       selected={i === c && arrows} enter={i === c && !arrows && !!f} hover={!kbd} className={i === c ? 'bench-cursor' : undefined} onOpen={() => open(g.patient.id)} />
   }

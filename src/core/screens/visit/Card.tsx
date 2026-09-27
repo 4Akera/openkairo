@@ -103,7 +103,7 @@ function Dx({ q, set }: { q: Q; set: (p: Q) => void }) {
   const term = q.action === 'add' ? findProblem(q.name ?? '') : null
   return <div className="grid gap-1.5">
     {q.action === 'add' && <FormRow inline label="Problem"><Input aria-label="Problem" list="oc-problems" value={q.name ?? ''} onChange={(e) => { const t = findProblem(e.target.value); set({ name: t?.name ?? e.target.value, code: t ? `icd10:${t.icd10}` : null }) }} className={cn(small, 'w-72')} />
-      {term ? <Badge tone="brand">ICD-10 {term.icd10}{term.chronic ? ' · chronic' : ''}</Badge> : q.name && <span className="text-11 text-faint">free text — no code</span>}</FormRow>}
+      {term ? <Badge tone="accent">ICD-10 {term.icd10}{term.chronic ? ' · chronic' : ''}</Badge> : q.name && <span className="text-11 text-faint">free text — no code</span>}</FormRow>}
     {q.action !== 'resolve' && <FormRow inline label="Certainty"><Segmented size="sm" aria-label="Certainty" value={q.certainty ?? 'confirmed'} onChange={(v) => set({ certainty: v })} options={[['confirmed', 'Confirmed'], ['suspected', 'Suspected']]} /><Since value={q.onset_on || null} set={(v) => set({ onset_on: v ?? (q.action === 'update' ? '' : null) })} /></FormRow>}
     <FormRow inline label="Note"><Input aria-label="Note" value={q.text ?? ''} onChange={(e) => set({ text: e.target.value || (q.action === 'update' ? '' : null) })} placeholder={q.action === 'resolve' ? 'How it resolved' : 'Control, complications, plan…'} className={cn(small, 'max-w-md flex-1')} /></FormRow>
   </div>
@@ -118,7 +118,7 @@ function Al({ q, set }: { q: Q; set: (p: Q) => void }) {
   const cls = q.substance?.class_code as string | undefined
   return <div className="grid gap-1.5">
     <FormRow inline label="Substance"><Input aria-label="Substance" list="oc-allergens" value={q.substance?.name ?? ''} onChange={(e) => { const a = findAllergen(e.target.value); const c = a?.allergy_class ?? classOfDrug(e.target.value); set({ substance: c ? { name: a?.name ?? e.target.value, class_code: c } : { name: e.target.value } }) }} className={cn(small, 'w-56')} />
-      {cls && <Badge tone="red">class: {cls.replace(/_/g, ' ')}</Badge>}<Segmented size="sm" aria-label="Allergy or intolerance" value={q.kind ?? 'allergy'} onChange={(v) => set({ kind: v })} options={[['allergy', 'Allergy'], ['intolerance', 'Intolerance']]} /></FormRow>
+      {cls && <Badge tone="danger">class: {cls.replace(/_/g, ' ')}</Badge>}<Segmented size="sm" aria-label="Allergy or intolerance" value={q.kind ?? 'allergy'} onChange={(v) => set({ kind: v })} options={[['allergy', 'Allergy'], ['intolerance', 'Intolerance']]} /></FormRow>
     <FormRow inline label="Reaction">{REACTIONS.map((r) => <Chip data-chip key={r} on={has(r)} onClick={() => toggle(r)}>{r}</Chip>)}</FormRow>
     <FormRow inline label=""><Input aria-label="Reaction" value={q.reactions_text ?? ''} onChange={(e) => set({ reactions_text: e.target.value || null })} placeholder="or type the reaction" className={cn(small, 'max-w-sm flex-1')} /></FormRow>
     <FormRow inline label="Severity"><Segmented size="sm" aria-label="Severity" value={q.severity} onChange={(v) => set({ severity: v })} options={[['mild', 'Mild'], ['moderate', 'Moderate'], ['severe', 'Severe']]} /></FormRow>

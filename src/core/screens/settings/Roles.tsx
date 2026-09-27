@@ -33,7 +33,7 @@ export function RolesPage({ org }: { org: Organization }) {
     return <div className="grid gap-3">{groups.filter(([, , xs]) => xs.length).map(([l, hint, xs]) => <div key={l}>
       <p className="mb-1.5 text-11 text-faint"><span className="font-medium text-muted">{l}</span> · {hint}</p>
       <div className="flex flex-wrap gap-1.5">{xs.map((a) => readOnly
-        ? d.actions.includes(a.key) && <Badge key={a.key} tone="brand">{actionLabel(a.key)}</Badge>
+        ? d.actions.includes(a.key) && <Badge key={a.key} tone="accent">{actionLabel(a.key)}</Badge>
         : <Chip variant="check" shape="pill" key={a.key} on={d.actions.includes(a.key)} onClick={() => flip(a.key)}>{actionLabel(a.key)}</Chip>)}</div></div>)}</div>
   }
   const editor = () => {
@@ -48,7 +48,7 @@ export function RolesPage({ org }: { org: Organization }) {
     </EditPanel>
   }
   const row = (r: Organization['roles'][number]) => { const n = holders(r.id).length
-    return <><span className="w-44 truncate font-medium">{r.name}</span><Badge>{r.every_action ? 'every action' : `${r.actions.length} actions`}</Badge>{n > 0 && <Badge tone="brand">{n} {n === 1 ? 'person' : 'people'}</Badge>}
+    return <><span className="w-44 truncate font-medium">{r.name}</span><Badge>{r.every_action ? 'every action' : `${r.actions.length} actions`}</Badge>{n > 0 && <Badge tone="accent">{n} {n === 1 ? 'person' : 'people'}</Badge>}
       <span className="min-w-0 flex-1 truncate text-12 text-faint">{r.actions.filter((a) => a.startsWith('write:')).map(actionLabel).join(' · ') || r.actions.slice(0, 4).map(actionLabel).join(' · ')}</span></> }
 
   return <div className="grid gap-4">

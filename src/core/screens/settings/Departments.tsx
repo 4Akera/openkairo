@@ -121,10 +121,10 @@ export function DepartmentsPage({ org }: { org: Organization }) {
           <span className="w-48 truncate font-medium">{d.name}</span>
           {d.site_name && <span className="text-12 text-faint">{d.site_name}</span>}
           {d.is_visited && <span className="flex flex-wrap gap-1">
-            <Badge>{d.patients_wait ? 'Patient waits' : 'Goes home'}</Badge><Badge>Review: {REVIEW.find(([k]) => k === d.review_results)?.[1].toLowerCase()}</Badge>{d.is_private && <Badge tone="amber">Private department</Badge>}
+            <Badge>{d.patients_wait ? 'Patient waits' : 'Goes home'}</Badge><Badge>Review: {REVIEW.find(([k]) => k === d.review_results)?.[1].toLowerCase()}</Badge>{d.is_private && <Badge tone="warn">Private department</Badge>}
             {d.encounter_class && d.encounter_class !== classFor(d.work) && <Badge>{CLASSES.find(([k]) => k === d.encounter_class)?.[1] ?? d.encounter_class}</Badge>}</span>}
           {d.after_done === 'queue' && d.work !== 'desk' && d.work !== 'outside' && <Badge>Then: queue</Badge>}
-          {d.screens.some((k) => k !== DEFAULT_SCREEN[d.work]) && <Badge tone="blue">{d.screens.map(screenName).join(' · ')}</Badge>}
+          {d.screens.some((k) => k !== DEFAULT_SCREEN[d.work]) && <Badge tone="info">{d.screens.map(screenName).join(' · ')}</Badge>}
           {(d.work === 'desk' || d.work === 'bench') && <span className="text-12 text-faint">{d.work === 'desk' ? 'checks in for' : 'works for'} {served(serves).map((x) => nameOf(x, d.work)).join(', ')}</span>}
           <PlacesCount places={org.places.filter((p) => p.department_id === d.id)} />
         </Row> })}</ul>

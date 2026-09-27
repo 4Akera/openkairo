@@ -95,7 +95,7 @@ export function PatientCard({ handle, p, clinics, usual, rows, canSend, canEdit,
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span className="text-18 font-semibold tracking-tight text-fg">{fullName(p)}</span>
       <span className="text-14 text-faint tnum">{ageSex(p.age, p.sex)} · #{p.record_number}{p.phone_text && ` · ${p.phone_text}`}{nationalId && ` · ID ${nationalId}`}</span>
-      {p.died_on && <Tag>deceased</Tag>}{row && row.priority !== 'routine' && <Tag tone="red">{row.priority}</Tag>}{row && row.missed_calls > 0 && <Tag tone="amber">not here ×{row.missed_calls}</Tag>}
+      {p.died_on && <Tag>deceased</Tag>}{row && row.priority !== 'routine' && <Tag tone="danger">{row.priority}</Tag>}{row && row.missed_calls > 0 && <Tag tone="warn">not here ×{row.missed_calls}</Tag>}
     </div>
     {where && <p className="flex items-center gap-2 rounded-lg bg-sunken px-3 py-2 text-14 text-fg"><MapPin className="h-4 w-4 text-faint" />{where}</p>}
 

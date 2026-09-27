@@ -4,7 +4,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ChevronDown, LogOut, Palette, Settings as Cog } from 'lucide-react'
 import { signOut, useAuth } from '../auth'
 import { useDepartment } from '../hooks/organization'
-import { Button, Centered, Kbd, Menu, MenuItem, Spinner, cn } from '../ui'
+import { Avatar, Button, Centered, Kbd, Menu, MenuItem, MenuLabel, MenuSeparator, Spinner, ThemeToggle, cn } from '../ui'
 import { Search } from './Search'
 
 const WORK: Record<string, string> = { desk: 'front desk', visits: 'clinic', stays: 'ward', bench: 'bench', outside: 'outside' }
@@ -21,6 +21,7 @@ export function Shell() {
   useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); if (onReception) window.dispatchEvent(new Event('opencare:search')); else setSearchOpen(true) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onReception])
   if (isLoading) return <Centered><Spinner /></Centered>
   if (error || !org) return <Centered><p className="text-14 text-danger">{String(error ?? 'no organization')}</p></Centered>
+  const { me } = org
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <header className="flex h-14 items-center gap-3 border-b border-line bg-surface px-4">
@@ -31,10 +32,15 @@ export function Shell() {
         </Menu>
         {!onReception && <button onClick={() => setSearchOpen(true)} className="ms-2 hidden h-9 w-80 items-center rounded-lg border border-line bg-sunken px-3 text-start text-14 text-faint transition-colors hover:border-line-strong hover:bg-surface focus-ring sm:flex">Search or add a patient… <Kbd className="ms-auto">⌘K</Kbd></button>}
         <div className="flex-1" />
-        <span className="text-12 text-faint">{email}</span>
-        <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => navigate('/design')} aria-label="Design system" title="Design system"><Palette className="h-4 w-4" /></Button>
-        {Object.values(PAGE_ACTION).some((x) => can(x)) && <Button variant="ghost" size="sm" onClick={() => navigate('/settings')} aria-label="Settings"><Cog className="h-4 w-4" /></Button>}
-        <Button variant="ghost" size="sm" onClick={() => { setDepartment(null); void signOut() }} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
+        {Object.values(PAGE_ACTION).some((x) => can(x)) && <Button variant="ghost" size="sm" onClick={() => navigate('/settings')} aria-label="Settings" title="Settings"><Cog className="h-4 w-4" /></Button>}
+        {/* the user menu (design-system.md §4.4): who is signed in, the theme for this browser, the style guide, sign out */}
+        <Menu align="end" trigger={<Button variant="ghost" size="sm" className="gap-2 ps-1" aria-label={`${me.name}: theme, design system, sign out`}>
+          <Avatar name={me.name} size="sm" /><span className="hidden max-w-40 truncate md:inline">{me.name}</span><ChevronDown className="h-3.5 w-3.5 text-faint" /></Button>}>
+          <div className="px-2 pb-1.5 pt-1"><p className="truncate font-medium">{me.name}</p>{email && <p className="truncate text-12 text-faint">{email}</p>}</div>
+          <MenuSeparator /><MenuLabel>Theme</MenuLabel><ThemeToggle variant="menu" /><MenuSeparator />
+          <MenuItem icon={Palette} hint="the tokens, the kit and its samples" onSelect={() => navigate('/design')}>Design system</MenuItem>
+          <MenuSeparator /><MenuItem icon={LogOut} tone="danger" onSelect={() => { setDepartment(null); void signOut() }}>Sign out</MenuItem>
+        </Menu>
       </header>
       <main className="flex-1">
         {dept || free || departments.length === 0 ? <Outlet /> : <Centered><div className="w-full max-w-sm"><h2 className="mb-3 text-14 font-medium">Where are you working today?</h2>

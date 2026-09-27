@@ -61,7 +61,7 @@ export function TemplatesPage({ org }: { org: Organization }) {
         <ul className="divide-y divide-line">{ts.map((t) => <Row key={t.id} open={e.id === t.id && !e.isNew} editor={editor}
           onToggle={() => open(t.id, { name: t.name, department_id: t.department_id ?? '', items: t.items.map((i) => i.service_id), shortcut: t.shortcut ?? '', lines: (t.lines ?? []).join('\n') })}>
           <span className="w-48 truncate font-medium">{t.name}{t.shortcut && <span className="ms-1.5 font-mono text-12 font-normal text-accent">#{t.shortcut}</span>}</span>
-          {t.items.length > 0 && <Badge>{t.items.length} services</Badge>}{(t.lines ?? []).length > 0 && <Badge tone="brand">{t.lines.length} lines</Badge>}
+          {t.items.length > 0 && <Badge>{t.items.length} services</Badge>}{(t.lines ?? []).length > 0 && <Badge tone="accent">{t.lines.length} lines</Badge>}
           <span className="min-w-0 flex-1 truncate text-12 text-faint">{[...t.items.map((i) => svc(i.service_id)?.name ?? '?'), ...(t.lines ?? [])].join(' · ')}</span>
         </Row>)}</ul>
       </Section> })}

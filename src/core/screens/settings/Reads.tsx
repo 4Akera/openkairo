@@ -28,7 +28,7 @@ export function ReadsPage({ orgId }: { orgId: string }) {
           <span className="w-32 text-12 text-faint tnum">{dateTime(r.at)}</span><span className="w-36 font-medium">{userName(org, r.user_id)}</span>
           <span className="text-12 text-faint">{nameOf(org, r.department_id) ?? ''}{r.reads > 1 ? ` · ${r.reads} reads` : ''}</span>
           {r.patient_id && <Button size="sm" variant="ghost" onClick={() => { setQ(''); setPid(r.patient_id) }}>Every read of this record</Button>}
-          <Badge tone={r.reason === 'Emergency' ? 'red' : 'neutral'} className="ms-auto">{r.reason ?? '—'}</Badge></li>)}</ul>}
+          <Badge tone={r.reason === 'Emergency' ? 'danger' : 'neutral'} className="ms-auto">{r.reason ?? '—'}</Badge></li>)}</ul>}
     </Section>
     <Section flush id="reads.who" title="Who read this record" summary="find a patient to see every read of their record">
       <div className="p-4">

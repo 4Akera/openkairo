@@ -77,7 +77,7 @@ export function PlacesEditor({ org, dept }: { org: Organization; dept: Departmen
               <span className="w-16 shrink-0 text-12 text-faint">{word(p.label)}</span>
               <span className={cn('truncate font-medium', p.closed && 'text-faint')}>{p.name}</span>
               {parent && <span className="text-12 text-faint">in {parent}</span>}
-              {p.closed && <Badge tone="amber">closed{p.closed_reason ? ` · ${p.closed_reason}` : ''}</Badge>}
+              {p.closed && <Badge tone="warn">closed{p.closed_reason ? ` · ${p.closed_reason}` : ''}</Badge>}
               <ChevronRight className={cn('ms-auto h-4 w-4 shrink-0 text-faint transition-transform group-hover:text-faint', on && 'rotate-90 text-accent')} />
             </button>
           </div>

@@ -55,7 +55,7 @@ export function Side({ r, patientId, departmentId, can }: { r: RecordView; patie
         {r.problems.map((p) => { const res = pending('problem', 'problem_id', p.id); const meds = medsFor(p.id); return <li key={p.id} className={cn('group py-2', res?.params.action === 'resolve' && 'opacity-50')}>
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <p className={cn('text-13 font-medium leading-snug text-fg', res?.params.action === 'resolve' && 'line-through')}>{p.name}{p.certainty === 'suspected' && <Badge tone="amber" className="ml-1.5 align-middle">suspected</Badge>}
+              <p className={cn('text-13 font-medium leading-snug text-fg', res?.params.action === 'resolve' && 'line-through')}>{p.name}{p.certainty === 'suspected' && <Badge tone="warn" className="ml-1.5 align-middle">suspected</Badge>}
                 {p.code?.startsWith('icd10:') && <span className="ml-1.5 font-mono text-11 font-normal text-faint">{p.code.slice(6)}</span>}{res?.params.action === 'update' && <b className="ml-1.5 text-12 font-medium text-accent">updating</b>}</p>
               {(p.onset_on || p.note_text) && <p className="mt-0.5 text-12 text-faint">{p.onset_on && <span className="tnum">since {p.onset_on} · {since(p.onset_on)}</span>}{p.onset_on && p.note_text && ' — '}{p.note_text}</p>}
               {meds.length > 0 && <p className="mt-0.5 text-12 text-accent">℞ {meds.join(', ')}</p>}
@@ -64,7 +64,7 @@ export function Side({ r, patientId, departmentId, can }: { r: RecordView; patie
               <IconButton title="Update — certainty, since, note" onClick={() => updateProblem(p)}><Pencil className="h-3.5 w-3.5" /></IconButton>
               <IconButton title="Resolve" onClick={() => add({ function: 'problem', params: { action: 'resolve', problem_id: p.id, name: p.name }, line: `Resolved: ${p.name}`, kind: 'problem' })}><Check className="h-3.5 w-3.5" /></IconButton></span>)}
           </div></li> })}
-        {newProblems.map((d) => <DraftRow key={d.id} onUndo={() => remove(d.id)}>{String(d.params.name)}{d.params.certainty === 'suspected' && <Badge tone="amber" className="ml-1.5">suspected</Badge>}
+        {newProblems.map((d) => <DraftRow key={d.id} onUndo={() => remove(d.id)}>{String(d.params.name)}{d.params.certainty === 'suspected' && <Badge tone="warn" className="ml-1.5">suspected</Badge>}
           {(d.params.onset_on || d.params.text) ? <span className="block text-12 font-normal text-faint">{d.params.onset_on ? `since ${d.params.onset_on}` : ''}{d.params.onset_on && d.params.text ? ' — ' : ''}{String(d.params.text ?? '')}</span> : null}
           {medsFor(d.id).length > 0 && <span className="block text-12 font-normal text-accent">℞ {medsFor(d.id).join(', ')}</span>}</DraftRow>)}
       </ul>
@@ -97,7 +97,7 @@ export function Side({ r, patientId, departmentId, can }: { r: RecordView; patie
       <ul className="divide-y divide-line">
         {activeAllergies.map((a) => { const p = pending('allergy', 'allergy_id', a.id); return <li key={a.id} className="group flex items-start gap-2 py-2">
           <div className={cn('min-w-0 flex-1', p && 'line-through opacity-50')}>
-            <p className="text-13 font-medium text-danger">{a.substance_name}{a.kind === 'intolerance' && <Badge className="ml-1.5">intolerance</Badge>}{a.severity && <Badge tone={a.severity === 'severe' ? 'red' : 'amber'} className="ml-1.5">{a.severity}</Badge>}</p>
+            <p className="text-13 font-medium text-danger">{a.substance_name}{a.kind === 'intolerance' && <Badge className="ml-1.5">intolerance</Badge>}{a.severity && <Badge tone={a.severity === 'severe' ? 'danger' : 'warn'} className="ml-1.5">{a.severity}</Badge>}</p>
             {(a.reactions_text || classOfAllergy(a)) && <p className="text-12 text-faint">{a.reactions_text}{a.reactions_text && classOfAllergy(a) && ' · '}{classOfAllergy(a) && <span className="text-faint">{classOfAllergy(a)!.replace(/_/g, ' ')} class</span>}</p>}
           </div>
           {can('write:allergy') && (p ? <IconButton title="Undo" onClick={() => remove(p.id)}><X className="h-3.5 w-3.5" /></IconButton> : <span className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"><IconButton title="Not an allergy (refute)" className="hover:text-danger" onClick={() => add({ function: 'allergy', params: { action: 'refute', allergy_id: a.id, substance: { name: a.substance_name } }, line: `Refuted: ${a.substance_name}`, kind: 'allergy' })}><X className="h-3.5 w-3.5" /></IconButton></span>)}

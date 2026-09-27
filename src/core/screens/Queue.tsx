@@ -92,8 +92,8 @@ function Status({ r }: { r: QueueRow }) {
   if (r.band === 'consult') return <span className="truncate">with {r.assignee_name ?? 'a doctor'}</span>
   if (r.band === 'pending') return <span className="truncate">{pendingWords(r.requests) || 'waiting for results'}</span>
   const words = [r.is_first && '1st visit', r.has_vitals && 'vitals taken', r.request_id && r.request_open && 'consult to answer'].filter(Boolean).join(' · ')
-  return <>{r.priority !== 'routine' && <Tag tone="red">{r.priority}</Tag>}{words && <span className="truncate">{words}</span>}
-    {r.missed_calls > 0 && <Tag tone="amber">not here ×{r.missed_calls}</Tag>}</>
+  return <>{r.priority !== 'routine' && <Tag tone="danger">{r.priority}</Tag>}{words && <span className="truncate">{words}</span>}
+    {r.missed_calls > 0 && <Tag tone="warn">not here ×{r.missed_calls}</Tag>}</>
 }
 
 /** Requests addressed to a clinic (consults): one row per request. Departments that offer services use the bench instead. */
@@ -105,7 +105,7 @@ export function RequestList({ departmentId }: { departmentId: string }) {
   if (!rows.length) return <Card className="p-6 text-center text-14 text-faint">No open requests.</Card>
   return <Card className="overflow-hidden"><ul>{rows.map((r) => { const p = r.request?.priority; const step = r.request?.step; return <ListRow key={r.id}
     number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(yearsOld(r.patient.born_on), r.patient.sex)}
-    status={<>{p && p !== 'routine' && <Tag tone="red">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-faint"> — “{r.question_text}”</span>}</span>
+    status={<>{p && p !== 'routine' && <Tag tone="danger">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-faint"> — “{r.question_text}”</span>}</span>
       {step && <span className="shrink-0 text-12 text-faint">{step}</span>}{r.patient.here && <Tag tone="ok">here</Tag>}</>}
     who={r.from_department_name} minutes={minutesSince(r.occurred_at)} onOpen={() => navigate(`/request/${r.id}`)} /> })}</ul></Card>
 }

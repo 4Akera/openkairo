@@ -154,10 +154,10 @@ function UsersPage({ org }: { org: Organization }) {
     onToggle={() => open(u.id, { name: u.name, title: u.title ?? '', kind: u.kind, roles: u.roles.map((r) => ({ role_id: r.role_id, department_id: r.department_id })), retired: !!u.retired_at })}>
     <Avatar name={u.name} muted={!!u.retired_at} />
     <span className="w-48 truncate"><span className="font-medium">{u.name}</span>{u.title && <span className="ms-1.5 text-12 text-faint">{u.title}</span>}</span>
-    {u.kind !== 'staff' && <Badge tone="blue">{u.kind}</Badge>}
-    <span className="flex flex-wrap gap-1">{u.roles.map((r, i) => <Badge key={i} tone="brand">{roleName(r.role_id)}{r.department_id && <span className="ms-1 font-normal opacity-70">· {deptName(r.department_id)}</span>}</Badge>)}
+    {u.kind !== 'staff' && <Badge tone="info">{u.kind}</Badge>}
+    <span className="flex flex-wrap gap-1">{u.roles.map((r, i) => <Badge key={i} tone="accent">{roleName(r.role_id)}{r.department_id && <span className="ms-1 font-normal opacity-70">· {deptName(r.department_id)}</span>}</Badge>)}
       {u.roles.length === 0 && <span className="text-12 text-faint">no roles</span>}</span>
-    {!u.retired_at && !u.accepted_at && <Badge tone="amber">not signed in yet</Badge>}
+    {!u.retired_at && !u.accepted_at && <Badge tone="warn">not signed in yet</Badge>}
   </Row>)}</ul>
   const active = shown.filter((u) => !u.retired_at); const retired = shown.filter((u) => u.retired_at)
 
@@ -185,7 +185,7 @@ function PacksPage({ org }: { org: Organization }) {
       {org.packs.length === 0 ? <Empty>No packs installed on this server yet.</Empty>
       : <ul className="divide-y divide-line">{org.packs.map((p) => <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-14">
           <span className="min-w-0 flex-1"><span className="font-medium">{p.name}</span> <span className="font-mono text-12 text-faint">{p.key}</span></span>
-          <Badge tone={p.enabled ? 'brand' : 'neutral'}>{p.enabled ? 'On' : 'Off'}</Badge>
+          <Badge tone={p.enabled ? 'accent' : 'neutral'}>{p.enabled ? 'On' : 'Off'}</Badge>
           <Switch checked={p.enabled} label={p.name} disabled={busy}
             onChange={() => p.enabled ? confirm(`Turn off ${p.name}? What it adds stops working here until it is turned on again.`) && off.mutate(p.key) : on.mutate(p.key)} />
         </li>)}</ul>}

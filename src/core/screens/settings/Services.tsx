@@ -90,7 +90,7 @@ export function ServicesPage({ org }: { org: Organization }) {
     {depts.map((d) => { const ds = shown.filter((s) => s.department_id === d.id); const secs = [...new Set(ds.map((s) => s.section_name ?? ''))].sort(); const k = d.id; return <Card key={d.id} className="overflow-hidden">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 border-b border-line bg-sunken px-4 py-2.5 text-start">{closed.has(k) ? <ChevronRight className="h-4 w-4 text-faint" /> : <ChevronDown className="h-4 w-4 text-faint" />}
         <span className="text-14 font-semibold">{d.name}</span><span className="text-12 text-faint">{ds.length} services</span>
-        <span className="ms-auto" onClick={(e) => { e.stopPropagation(); start(null, d.id) }}><Badge tone="brand" className="cursor-pointer">+ add here</Badge></span></button>
+        <span className="ms-auto" onClick={(e) => { e.stopPropagation(); start(null, d.id) }}><Badge tone="accent" className="cursor-pointer">+ add here</Badge></span></button>
       {!closed.has(k) && secs.map((sec) => <div key={sec}>
         {(secs.length > 1 || sec) && <div className="flex items-center gap-2 px-4 pb-1 pt-3"><span className="text-11 font-semibold uppercase tracking-wider text-faint">{sec || 'No section'}</span>
           <button onClick={() => start(null, d.id, sec)} className="text-11 text-accent hover:underline">+ add</button></div>}
@@ -98,7 +98,7 @@ export function ServicesPage({ org }: { org: Organization }) {
           {open?.id === s.id && !open.isNew ? editor(open) : <div className="group flex cursor-pointer items-center gap-3 px-4 py-2 hover:bg-hover" onClick={() => start(s)} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') start(s) }}>
             <span className="w-28 shrink-0 truncate font-mono text-12 text-faint" title={s.code}>{s.code}</span>
             <span className="w-52 shrink-0 text-13 font-medium">{s.name}</span>
-            <Badge tone={s.reply_type === 'result' ? 'blue' : s.reply_type === 'note' ? 'neutral' : 'amber'}>{s.reply_type}</Badge>
+            <Badge tone={s.reply_type === 'result' ? 'info' : s.reply_type === 'note' ? 'neutral' : 'warn'}>{s.reply_type}</Badge>
             {s.steps.length > 0 && <span className="shrink-0 text-12 text-faint" title="Steps">{s.steps.map((k) => k.replace(/_/g, ' ')).join(' → ')}</span>}
             <span className="min-w-0 flex-1 truncate text-12 text-faint">{s.fields.map((x) => `${x.name}${x.unit ? ` (${x.unit})` : ''}`).join(' · ')}</span>
             <span className="flex opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
@@ -137,11 +137,11 @@ function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave
     <div className="mt-2.5 flex items-center gap-2 text-12"><span className="text-faint">Reply</span>
       {replyTypes.map((t) => <Chip key={t.key} title={t.pack ? `from the ${t.pack} pack` : 'core'} on={d.reply_type === t.key} onClick={() => setD({ ...d, reply_type: t.key })}>{t.name}{t.pack && <span>· {t.pack}</span>}</Chip>)}
       <label className="ms-3 flex items-center gap-1.5 text-faint">Coded as<Input value={d.coding} onChange={(e) => setD({ ...d, coding: e.target.value })} placeholder="loinc:58410-2" className="h-7 w-36 font-mono text-12" /></label>
-      {!replyTypes.some((t) => t.key === d.reply_type) && <Badge tone="red">{d.reply_type}: no enabled pack answers this</Badge>}
+      {!replyTypes.some((t) => t.key === d.reply_type) && <Badge tone="danger">{d.reply_type}: no enabled pack answers this</Badge>}
       {d.reply_type === 'result' && <button onClick={() => { if (bulk) setD({ ...d, fields: parseFields(text, codes) }); else setText(toText(d.fields)); setBulk(!bulk) }} className="ms-auto text-accent hover:underline">{bulk ? 'Edit as a grid' : 'Type or paste as text'}</button>}
     </div>
     <div className="mt-2 flex items-center gap-2 text-12"><label className="flex items-center gap-1.5 text-faint">Steps<Input value={d.steps} onChange={(e) => setD({ ...d, steps: e.target.value })} placeholder="collected, received" className="h-7 w-72 text-12" /></label>
-      {twice || odd ? <Badge tone="red">{twice ? `${twice.replace(/_/g, ' ')} twice` : odd}</Badge>
+      {twice || odd ? <Badge tone="danger">{twice ? `${twice.replace(/_/g, ' ')} twice` : odd}</Badge>
         : <span className="text-11 text-faint">in order, comma-separated: the bench offers each order its next step</span>}
     </div>
     {d.reply_type === 'result' && (bulk ? <div className="mt-2"><textarea value={text} onChange={(e) => setText(e.target.value)} rows={Math.max(5, text.split('\n').length + 1)} autoFocus spellCheck={false}

@@ -217,7 +217,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     </div>
 
     {drafts.length > 0 && <div className="px-3 py-2">
-      <Heading count={drafts.length} tone="brand" className="mb-1">{r.visit?.kind === 'stay' ? 'This stay · signed on Sign' : 'This visit · signed on Done'}</Heading>
+      <Heading count={drafts.length} tone="accent" className="mb-1">{r.visit?.kind === 'stay' ? 'This stay · signed on Sign' : 'This visit · signed on Done'}</Heading>
       <ul>{drafts.map((d) => { const q = d.params as Q
         // a drafted prescription is checked again against allergies recorded after it
         const clash = d.function === 'medication' && q.action !== 'stop' && q.drug?.name ? drugWarnings(q.drug.name, allergies, [], null).find((w) => w.level === 'block') : undefined

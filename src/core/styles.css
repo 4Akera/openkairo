@@ -1,10 +1,11 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
+@source not "../../scripts";   /* the codemod's map names raw classes; they are not the app's */
 
 /* openCare design system (design-system.md §2–3). The one place colours, sizes, radii, shadows and motion are defined.
    Screens and packs use the utilities these produce (bg-surface, text-muted, border-line …) and the kit in src/core/ui.
-   Until the sweep is done the default palette still exists, so old and new classes both work; the four `initial` lines
-   (--color-*, --shadow-*, --text-*, --radius-*) go in when no screen uses a raw class any more (build plan 2.11). */
+   A raw palette class (bg-neutral-50, text-teal-800), a stock size (text-sm), radius (rounded-2xl) or shadow (shadow-lg) does not
+   exist here: the four `initial` lines below clear Tailwind's defaults (build plan 2.11), and the tokens-only rule warns. */
 
 /* dark: <html data-theme="dark">, set before first paint by the script in index.html; any subtree may carry its own data-theme */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
@@ -78,6 +79,7 @@
 
 /* ── 2. utilities read the tokens (inline: a subtree's data-theme wins) ── */
 @theme inline {
+  --color-*: initial;                          /* no raw palette: bg-neutral-50 and text-teal-800 stop existing */
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
@@ -102,6 +104,7 @@
   --color-band: var(--band);
   --color-paper: var(--paper);
 
+  --shadow-*: initial;
   --shadow-xs: var(--elev-xs);
   --shadow-sm: var(--elev-sm);
   --shadow-md: var(--elev-md);
@@ -110,7 +113,7 @@
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* the seven sizes, named by their pixels */
+  --text-*: initial;                           /* the seven sizes, named by their pixels */
   --text-11: 0.6875rem;  --text-11--line-height: 1rem;       /* overlines, tags, kbd, table heads */
   --text-12: 0.75rem;    --text-12--line-height: 1rem;       /* meta: times, hints, secondary lines */
   --text-13: 0.8125rem;  --text-13--line-height: 1.25rem;    /* dense: list rows, the record, tables */
@@ -119,6 +122,7 @@
   --text-18: 1.125rem;   --text-18--line-height: 1.625rem;   /* patient name, page titles */
   --text-22: 1.375rem;   --text-22--line-height: 1.75rem;    /* stats, page heads */
 
+  --radius-*: initial;
   --radius-sm: 0.25rem;   /* 4: tags, kbd, small chips */
   --radius-md: 0.375rem;  /* 6: chips, icon buttons, menu items */
   --radius-lg: 0.5rem;    /* 8: buttons, inputs, callouts */

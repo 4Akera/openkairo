@@ -178,9 +178,9 @@ function Banner({ r, visit, mine, stay, onBack, actions, strip }: { r: RecordVie
       <div className="min-w-0">
         <p className="flex items-baseline gap-2"><span className="text-18 font-semibold tracking-tight text-fg">{r.patient.given_name} {r.patient.family_name}</span><span className="text-14 text-muted tnum">{r.patient.age} y · {SEX[r.patient.sex] ?? ''}</span>{r.patient.died_on && <Badge tone="neutral">deceased</Badge>}</p>
         <p className="text-12 text-faint tnum">#{r.patient.record_number}{r.patient.phone_text && ` · ${r.patient.phone_text}`}{visit && (stay ? <> · <span className="text-accent">{stay}</span></>
-          : <> · <span className={mine ? 'text-accent' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>)}{visit?.priority && visit.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{visit.priority}</Badge>}</p>
+          : <> · <span className={mine ? 'text-accent' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>)}{visit?.priority && visit.priority !== 'routine' && <Badge tone="danger" className="ml-1.5">{visit.priority}</Badge>}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-1">{allergies.length ? allergies.map((a) => <Badge key={a.id} tone="red">⚠ {a.substance_name}</Badge>) : r.allergy_review ? <span className="text-12 text-faint">No known allergies</span> : <span className="text-12 text-warn">Allergies not asked</span>}</div>
+      <div className="flex flex-wrap items-center gap-1">{allergies.length ? allergies.map((a) => <Badge key={a.id} tone="danger">⚠ {a.substance_name}</Badge>) : r.allergy_review ? <span className="text-12 text-faint">No known allergies</span> : <span className="text-12 text-warn">Allergies not asked</span>}</div>
       {vit.length > 0 && <div className="flex items-baseline gap-3 text-12 text-faint tnum">{vit.map(([l, n, f]) => <span key={l}>{l} <b className={cn('font-semibold text-fg', f && f !== 'normal' && flagClass(f))}>{n}</b></span>)}</div>}
       <div className="ml-auto flex items-center gap-2">{actions}</div>
     </div>

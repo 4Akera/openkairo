@@ -7,7 +7,7 @@ import type { Department } from '../../db/types'
 import { Button, Card, Heading, Section, Tag, cn, errorText, minutesSince } from '../../ui'
 import { duration, fullName, rowWords, waited, type ClinicRow } from './words'
 
-const Urgent = ({ priority }: { priority: string }) => priority !== 'routine' ? <Tag tone="red">{priority}</Tag> : null
+const Urgent = ({ priority }: { priority: string }) => priority !== 'routine' ? <Tag tone="danger">{priority}</Tag> : null
 const Failed = ({ error }: { error: unknown }) => error ? <p className="px-3.5 py-1.5 text-12 text-danger">{errorText(error)}</p> : null
 
 /** one line of the right column: who, what, how long, and at most one action */
@@ -76,7 +76,7 @@ export function NeedsYou({ rows, onDone }: { rows: ClinicRow[]; onDone: (said: s
     {missed.map((r) => <Line key={r.id} minutes={waited(r)}
       action={can('write:left') && !r.seen_at ? <Button type="button" size="xs" variant="danger-ghost" title="He has gone: end the visit as left" disabled={visits.left.isPending} onClick={() => void left(r)}>Left</Button> : undefined}>
       <span className="text-12 text-faint tnum">#{r.patient.record_number}</span><span className="truncate">{fullName(r.patient)}</span>
-      <Tag tone="amber">not here ×{r.missed_calls}</Tag><span className="truncate text-12 text-faint">{r.clinic.name}</span></Line>)}
+      <Tag tone="warn">not here ×{r.missed_calls}</Tag><span className="truncate text-12 text-faint">{r.clinic.name}</span></Line>)}
     <Failed error={visits.left.error} />
   </Box>
 }

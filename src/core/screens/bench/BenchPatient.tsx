@@ -84,7 +84,7 @@ export function BenchPatient() {
       <IconButton size="md" onClick={() => navigate('/')} className="-ms-1" title="Back to the bench" aria-label="Back to the bench"><ArrowLeft className="rtl:-scale-x-100" /></IconButton>
       <div><p className="flex items-baseline gap-2"><span className="text-18 font-semibold tracking-tight">{g.patient.given_name} {g.patient.family_name}</span><span className="text-14 text-muted tnum">{ageOf(g.patient.born_on)} y · {g.patient.sex[0].toUpperCase()}</span></p>
         <p className="text-12 text-faint tnum">#{g.patient.record_number} · {g.rows.length} open · from {g.from.join(', ')}</p></div>
-      {g.priority !== 'routine' && <Badge tone="red">{g.priority.toUpperCase()}</Badge>}
+      {g.priority !== 'routine' && <Badge tone="danger">{g.priority.toUpperCase()}</Badge>}
       <div className="ms-auto flex items-center gap-2">
         {nextSteps(g.rows, org, can).map((s) => <Button key={`${s.type} ${s.key}`} variant="outline" onClick={() => void write(oneSet(s.rows.map((r) => stepEntry(r, dept.id, 'in-progress', undefined, s.key, s.type))))
           .then(() => refresh(qc), (x) => setErr(errorText(x)))}>{stepName(s.key)} {s.rows.length}</Button>)}
@@ -98,7 +98,7 @@ export function BenchPatient() {
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
             <span className="text-16 font-semibold">{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}</span>
             <Badge tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'}>{stepLabel(r.request?.step)}</Badge>
-            {r.request?.priority !== 'routine' && <Badge tone="red">{r.request?.priority}</Badge>}
+            {r.request?.priority !== 'routine' && <Badge tone="danger">{r.request?.priority}</Badge>}
             <span className="text-12 text-faint">{r.requester_name} · {r.from_department_name} · {hm(r.occurred_at)}</span>
             {!formOf(r) && <label className="ms-auto flex items-center gap-1.5 text-12 text-muted"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>}
           </div>

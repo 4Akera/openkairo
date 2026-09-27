@@ -5,7 +5,7 @@ import { useToReview, useVisitQueue } from '../../hooks/reads'
 import { useWrite } from '../../hooks/writes'
 import { oneSet, reviewed } from '../../db/entries'
 import type { Card as EntryCard, Department, Flag } from '../../db/types'
-import { Button, Card, ListSection, Tag, cn, flagClass, flagMark, shortDate } from '../../ui'
+import { Button, Card, ListSection, Tag, cn, flagClass, flagMark, shortDate, type Tone } from '../../ui'
 import { QueueList, RequestList } from '../Queue'
 
 /** A clinic's home (spec 05): one line of counts, "N to review" only when something waits, then the list. Departments
@@ -34,7 +34,7 @@ export function ClinicHome({ dept, offers }: { dept: Department; offers: boolean
   </div>
 }
 
-const REASON: Record<string, ['red' | 'amber' | 'blue' | 'neutral', string]> = { critical: ['red', 'critical'], abnormal: ['amber', 'abnormal'], not_seen: ['blue', 'patient not seen'], corrected: ['amber', 'corrected'], result: ['neutral', 'result'], rejected: ['amber', 'not done'], flag: ['amber', 'flagged'] }
+const REASON: Record<string, [Tone, string]> = { critical: ['danger', 'critical'], abnormal: ['warn', 'abnormal'], not_seen: ['info', 'patient not seen'], corrected: ['warn', 'corrected'], result: ['neutral', 'result'], rejected: ['warn', 'not done'], flag: ['warn', 'flagged'] }
 /** My results to review: the line opens the patient; Reviewed writes a reviewed entry about the result and the row closes */
 function ToReview({ cards, rule, departmentId }: { cards: EntryCard[]; rule: Department['review_results']; departmentId: string }) {
   const navigate = useNavigate(); const w = useWrite()

@@ -1,5 +1,6 @@
 import type { Organization, RequestQueueRow } from '../../db/types'
 import { ymd } from '../../ui'
+import type { Tone } from '../../ui/tone'
 // The bench works a department's request queue by patient: one sample, one person, many tests (spec 05, the request surface at volume).
 /** one patient's open requests; since = when the longest wait today began (null when every request is from an older day) */
 export interface PatientGroup { patient: RequestQueueRow['patient']; rows: RequestQueueRow[]; priority: 'stat' | 'urgent' | 'routine'; oldest: string; from: string[]; since: string | null }
@@ -23,7 +24,8 @@ export function groupByPatient(rows: RequestQueueRow[], today = todayYmd()): Pat
 export const ageOf = (born: string) => { const [y, m = 1, d = 1] = born.split('-').map(Number); const n = new Date(); return n.getFullYear() - y - (n.getMonth() + 1 < m || (n.getMonth() + 1 === m && n.getDate() < d) ? 1 : 0) }
 /** 34 F */
 export const ageSex = (p: { born_on: string; sex: string }) => `${ageOf(p.born_on)} ${p.sex?.[0]?.toUpperCase() ?? ''}`
-export const STEP_TONE: Record<string, 'amber' | 'blue' | 'neutral' | 'brand'> = { sent: 'amber', started: 'blue', held: 'neutral', replied: 'brand', reopened: 'amber' }
+/** a request step's tone: sent and reopened are warn (not started), started is info (in progress), replied accent (D3) */
+export const STEP_TONE: Record<string, Tone> = { sent: 'warn', started: 'info', held: 'neutral', replied: 'accent', reopened: 'warn' }
 /** a typed value's field by its flag: warn for low, high or abnormal, danger for critical (the glyph and the word stand beside it) */
 export const fieldTone = (f: string | null | undefined): 'default' | 'warn' | 'danger' => f === 'critical' ? 'danger' : f && f !== 'normal' ? 'warn' : 'default'
 const STEP_LABEL: Record<string, string> = { sent: 'new', started: 'in progress', held: 'held', replied: 'preliminary', reopened: 'reopened' }

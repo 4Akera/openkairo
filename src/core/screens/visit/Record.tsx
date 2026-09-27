@@ -88,7 +88,7 @@ function VisitCard({ v, patientId, startOpen, current, count, onOpen, between }:
       {v ? <>
         <span className="w-24 shrink-0 text-14 font-medium tnum">{day(v.arrived_at)}</span>
         <span className="flex items-center gap-1.5 text-14 font-medium">{v.is_hidden && <Lock className="h-3.5 w-3.5 text-faint" />}{v.department_name}</span>
-        {current && <Badge tone="brand">today</Badge>}
+        {current && <Badge tone="accent">today</Badge>}
         {v.assignee_name && <span className="min-w-0 truncate text-12 text-faint">{v.assignee_name}</span>}
         <span className="text-12 text-faint">{v.status.replace('_', ' ')}</span>
         <span className="ml-auto shrink-0 whitespace-nowrap text-12 text-faint">{counts}</span>
@@ -170,9 +170,9 @@ function EntryPanel({ id, onClose }: { id: string; onClose: () => void }) {
         {e.is_hidden ? <p className="flex items-center gap-2 text-14 text-faint"><Lock className="h-4 w-4" />A private note from {e.department_name ?? 'another department'}. Open it anyway from the record, with a reason.</p> : <>
           {e.can_mark_private && <NotePrivacy e={{ ...e, is_private: e.related.filter((x) => x.type === 'private' || x.type === 'not_private').sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0]?.type === 'private' }} />}
           <p className={cn('text-16 font-medium', e.replaced_by_id && 'line-through text-faint')}>{e.display_line}</p>
-          {e.replaced_by_id && <Badge tone="amber">replaced by a correction</Badge>}
+          {e.replaced_by_id && <Badge tone="warn">replaced by a correction</Badge>}
           <FallbackFull card={e} data={e.data} />
-          {e.request && <Section title="Request"><p className="text-14">To {e.request.to_department_name ?? 'outside'} · <b>{e.request.step}</b>{e.request.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{e.request.priority}</Badge>}</p></Section>}
+          {e.request && <Section title="Request"><p className="text-14">To {e.request.to_department_name ?? 'outside'} · <b>{e.request.step}</b>{e.request.priority !== 'routine' && <Badge tone="danger" className="ml-1.5">{e.request.priority}</Badge>}</p></Section>}
           {e.replies.length > 0 && <Section title="Replies">{e.replies.map((x) => <div key={x.id} className="rounded-lg bg-sunken p-2.5"><p className="mb-1 text-12 text-faint">{x.author_name} · {day(x.occurred_at)} {hm(x.occurred_at)}{!x.is_final && <b className="ml-1 text-warn">preliminary</b>}</p>
             {x.is_hidden ? <p className="text-14 italic text-faint">Private note</p> : <FallbackFull card={x} data={x.data} />}</div>)}</Section>}
           {e.steps.length > 0 && <Section title="Steps"><ol className="text-12 text-muted">{e.steps.map((s, i) => <li key={i} className="tnum">{dateTime(s.recorded_at)} · {s.step}{s.reason ? ` · ${s.reason}` : ''}</li>)}</ol></Section>}
