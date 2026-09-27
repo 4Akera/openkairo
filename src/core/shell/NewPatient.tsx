@@ -2,8 +2,7 @@ import { useRef, useState } from 'react'
 import { usePatientSearch } from '../hooks/reads'
 import { useRegister } from '../hooks/writes'
 import type { PatientHit } from '../db/types'
-import { Button, Callout, Input, Field, Select } from '../ui'
-import { PatientLine } from '../renderers/PatientLine'
+import { Button, Callout, Input, Field, PatientLine, Select } from '../ui'
 
 /** New patient: four fields and a phone (spec 03), with a live duplicate warning. Used by reception and ⌘K.
  *  `onRegisterOnly` adds a second button that registers without the submit label's next step (reception's send). */

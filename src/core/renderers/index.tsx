@@ -1,8 +1,9 @@
 // Every screen renders every type (spec 05): a card per entry from display_line, values and text; packs may register richer ones.
-import { Fragment, type ComponentType } from 'react'
+import type { ComponentType } from 'react'
 import type { Card, RequestQueueRow, Value } from '../db/types'
 import type { EntryBody } from '../db/rpc'
-import { flagClass, hm } from '../ui'
+import { useOrganization } from '../hooks/organization'
+import { AnalyteTable, KV, Tag, flagClass, hm } from '../ui'
 export interface Renderer { Card?: ComponentType<{ card: Card }>; Full?: ComponentType<{ card: Card; data: Record<string, unknown> }> }
 const registry = new Map<string, Renderer>()
 export const registerRenderer = (type: string, r: Renderer) => registry.set(type, r)
@@ -27,12 +28,9 @@ const replyForms = new Map<string, ReplyForm<never>>()
 export const registerReplyForm = <V,>(replyType: string, form: ReplyForm<V>) => { replyForms.set(replyType, form as unknown as ReplyForm<never>) }
 export const replyFormFor = (replyType: string | null | undefined): ReplyForm<unknown> | undefined => (replyType ? replyForms.get(replyType) as unknown as ReplyForm<unknown> : undefined)
 
-const arrow = (f: string | null | undefined) => f === 'low' ? ' ↓' : f === 'high' ? ' ↑' : f === 'critical' ? ' ‼' : f === 'abnormal' ? ' *' : ''
-export function ValuesTable({ values }: { values: Value[] }) {
-  return <table className="text-[12.5px]"><tbody>{values.map((v, i) => <tr key={i} className={flagClass(v.flag)}>
-    <td className="pr-3 text-neutral-600">{v.name}</td><td className="pr-1 text-right">{v.value_number ?? v.value_text ?? ''}{arrow(v.flag)}</td><td className="pr-3 text-neutral-400">{v.unit ?? ''}</td>
-    <td className="text-neutral-400">{v.reference_low != null || v.reference_high != null ? `${v.reference_low ?? ''}–${v.reference_high ?? ''}` : ''}</td></tr>)}</tbody></table>
-}
+/** a result's values: the kit's table, where a flag is never shown by colour alone (a glyph, and the word for screen readers) */
+export const ValuesTable = ({ values }: { values: Value[] }) => <AnalyteTable dense rows={values.map((v) => ({ name: v.name, value: v.value_number ?? v.value_text ?? '', unit: v.unit,
+  flag: v.flag, low: v.reference_low, high: v.reference_high }))} />
 const empty = (v: unknown) => v == null || v === '' || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0)
 /** any stored value as words: names of named things, lists joined, objects as "key value" */
 function show(v: unknown): string {
@@ -46,27 +44,27 @@ export function FallbackFull({ data }: { card: Card; data: Record<string, unknow
   const text = data.text as string | undefined
   const rest = Object.fromEntries(Object.entries(data).filter(([k, v]) => !['values', 'text', 'author_name', 'department_name', 'service', 'to_department_name', 'responsible_name', 'written_with_id'].includes(k) && !empty(v)))
   return <div className="grid gap-2">
-    {text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>}
+    {text && <p className="whitespace-pre-wrap text-14 leading-relaxed">{text}</p>}
     {values.length > 0 && <ValuesTable values={values} />}
-    {Object.keys(rest).length > 0 && <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-[13px]">{Object.entries(rest).map(([k, v]) => <Fragment key={k}>
-      <dt className="text-neutral-500">{k.replace(/_text$|_on$|_id$/, '').replace(/_/g, ' ')}</dt><dd className="text-neutral-800">{show(v)}</dd></Fragment>)}</dl>}
+    {Object.keys(rest).length > 0 && <KV items={Object.entries(rest).map(([k, v]) => [k.replace(/_text$|_on$|_id$/, '').replace(/_/g, ' '), show(v)])} />}
   </div>
 }
-const TYPE_TONE: Record<string, string> = { note: 'bg-neutral-100 text-neutral-700', vitals: 'bg-sky-50 text-sky-800', request: 'bg-amber-50 text-amber-800', result: 'bg-violet-50 text-violet-800',
-  prescription: 'bg-teal-50 text-teal-800', problem: 'bg-teal-50 text-teal-800', allergy: 'bg-red-50 text-red-700', list_review: 'bg-neutral-50 text-neutral-500', entered_in_error: 'bg-neutral-50 text-neutral-500' }
+// the type in the registry's plain words, on a neutral tag: a family is told by a word, colour is for state (build plan D4)
 export function CardLine({ card }: { card: Card }) {
+  const types = useOrganization().data?.types
   const R = rendererFor(card.type)?.Card
   if (R) return <R card={card} />
   const r = card.request
-  return <div className="flex items-start gap-3 text-[13.5px]">
-    <span className="w-10 shrink-0 pt-px text-xs text-neutral-400 tnum">{hm(card.occurred_at)}</span>
-    <span className={`w-[5.5rem] shrink-0 rounded-md px-1.5 py-px text-center text-[10.5px] font-medium ${TYPE_TONE[card.type] ?? 'bg-neutral-100 text-neutral-700'}`}>{card.type.replace(/_/g, ' ')}</span>
+  const label = types?.find((t) => t.key === card.type)?.labels.en ?? card.type.replace(/_/g, ' ')
+  return <div className="flex items-start gap-3 text-13">
+    <span className="w-10 shrink-0 pt-px text-12 text-faint tnum">{hm(card.occurred_at)}</span>
+    <Tag className="w-[5.5rem] justify-center">{label}</Tag>
     <span className="min-w-0 flex-1">
-      <span className={card.replaced_by_id ? 'text-neutral-400 line-through' : 'text-neutral-900'}>{card.display_line}</span>
-      {!card.is_final && <span className="ml-2 text-[10.5px] font-medium uppercase text-amber-700">preliminary</span>}
-      {r && <span className="ml-2 text-xs text-neutral-500">→ {r.to_department_name ?? 'outside'} · <span className={r.status === 'open' ? 'font-medium text-amber-700' : r.status === 'cancelled' ? 'text-neutral-400' : 'text-teal-700'}>{r.step}</span></span>}
-      {r?.reply_line && <span className={`mt-0.5 block text-xs tnum ${r.reply_flag && r.reply_flag !== 'normal' ? flagClass(r.reply_flag) : 'text-neutral-600'}`}>↳ {r.reply_line}</span>}
+      <span className={card.replaced_by_id ? 'text-faint line-through' : 'text-fg'}>{card.display_line}</span>
+      {!card.is_final && <span className="ms-2 text-11 font-medium uppercase text-warn">preliminary</span>}
+      {r && <span className="ms-2 text-12 text-faint">→ {r.to_department_name ?? 'outside'} · <span className={r.status === 'open' ? 'font-medium text-warn' : r.status === 'cancelled' ? 'text-faint' : 'text-accent'}>{r.step}</span></span>}
+      {r?.reply_line && <span className={`mt-0.5 block text-12 tnum ${r.reply_flag && r.reply_flag !== 'normal' ? flagClass(r.reply_flag) : 'text-muted'}`}>↳ {r.reply_line}</span>}
     </span>
-    <span className="shrink-0 text-[11px] text-neutral-400">{card.author_name}</span>
+    <span className="shrink-0 text-11 text-faint">{card.author_name}</span>
   </div>
 }
