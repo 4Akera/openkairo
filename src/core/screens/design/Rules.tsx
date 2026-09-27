@@ -20,7 +20,7 @@ export function Rules({ side }: { side: boolean }) { return <Columns side={side}
 
 function Body() {
   return <div className="grid gap-6">
-    <Group title="Tokens only" hint="opencare/tokens-only checks every string in src outside the kit: a warning while the screens move to tokens, then an error">
+    <Group title="Tokens only" hint="opencare/tokens-only checks every string in src outside the kit, core and packs alike: a raw colour is a lint error">
       <ul className="grid gap-4">{RULES.map(([what, why, bad, good]) => <li key={what} className="grid gap-1.5 text-13">
         <p><span className="font-medium text-fg">{what}</span><span className="text-muted">: {why}.</span></p>
         <p className="flex flex-wrap items-center gap-2"><Tag tone="danger">Wrong</Tag><Code>{bad}</Code></p>

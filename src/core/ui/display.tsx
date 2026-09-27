@@ -2,7 +2,7 @@
 // marks state, and a state never shows by colour alone (a glyph or a word goes with it).
 import { Fragment, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react'
 import { CircleAlert, CircleCheck, Info, TriangleAlert, type LucideIcon } from 'lucide-react'
-import { TONE, cn, flagMark, flagTone, flagWord, initials, interpMark, interpWord, toTone, trendMark, type Flag, type LegacyTone, type Tone } from './tone'
+import { TONE, cn, flagMark, flagTone, flagWord, initials, interpMark, interpWord, toTone, trendMark, type Flag, type Tone } from './tone'
 import { hm, shortDate, ymd } from './time'
 
 /** a panel: the one container every screen uses */
@@ -12,22 +12,22 @@ export function Card({ className, children, ...rest }: HTMLAttributes<HTMLDivEle
 
 /** a count beside a heading */
 export const Count = ({ children }: { children: ReactNode }) => <span className="shrink-0 rounded-full bg-sunken px-1.5 text-11 font-medium text-faint ring-1 ring-inset ring-line tnum">{children}</span>
-/** a small uppercase heading with an optional count and actions at the end (brand and alert are the old names of accent and danger) */
-export function Heading({ children, count, right, className, tone = 'muted' }: { children: ReactNode; count?: number | string; right?: ReactNode; className?: string; tone?: 'muted' | 'accent' | 'danger' | 'brand' | 'alert' }) {
+/** a small uppercase heading with an optional count and actions at the end */
+export function Heading({ children, count, right, className, tone = 'muted' }: { children: ReactNode; count?: number | string; right?: ReactNode; className?: string; tone?: 'muted' | 'accent' | 'danger' }) {
   return <div className={cn('flex items-center gap-2', className)}>
-    <h3 className={cn('text-11 font-semibold uppercase tracking-[0.08em]', tone === 'muted' && 'text-faint', (tone === 'accent' || tone === 'brand') && 'text-accent', (tone === 'danger' || tone === 'alert') && 'text-danger')}>{children}</h3>
+    <h3 className={cn('text-11 font-semibold uppercase tracking-[0.08em]', tone === 'muted' && 'text-faint', tone === 'accent' && 'text-accent', tone === 'danger' && 'text-danger')}>{children}</h3>
     {count !== undefined && <Count>{count}</Count>}
     {right && <div className="ms-auto flex items-center gap-1">{right}</div>}
   </div>
 }
 
 /** a status: a word in a ringed chip */
-export function Badge({ children, tone = 'neutral', icon: I, className }: { children: ReactNode; tone?: Tone | LegacyTone; icon?: LucideIcon; className?: string }) {
+export function Badge({ children, tone = 'neutral', icon: I, className }: { children: ReactNode; tone?: Tone; icon?: LucideIcon; className?: string }) {
   const t = TONE[toTone(tone)]
   return <span className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-px text-11 font-medium ring-1 ring-inset', t.soft, t.text, t.line, className)}>{I && <I aria-hidden className="size-3" />}{children}</span>
 }
 /** a small word on a row: back, urgent, sample taken (a Badge has a ring; a Tag has none) */
-export function Tag({ tone = 'neutral', children, icon: I, title, className }: { tone?: Tone | LegacyTone; children: ReactNode; icon?: LucideIcon; title?: string; className?: string }) {
+export function Tag({ tone = 'neutral', children, icon: I, title, className }: { tone?: Tone; children: ReactNode; icon?: LucideIcon; title?: string; className?: string }) {
   const t = TONE[toTone(tone)]
   return <span title={title} className={cn('inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-px text-11 font-medium', t.soft, t.text, className)}>{I && <I aria-hidden className="size-3" />}{children}</span>
 }

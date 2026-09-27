@@ -674,7 +674,8 @@ types, parked pack calls with per-call Retry, Postgres enums.
     overlapping `no-restricted-imports` had left only the db-client one in force); `scripts/codemod-tokens.mjs`. Every screen swept to
     tokens (the codemod one directory at a time, then hand fixes: the kit's `Menu`, `Callout`, `Chip`, `Switch`, `Avatar`, `NavItem`, `ListRow`), tone names
     (brand → accent, amber → warn, red → danger, blue → info; "here" ok, "back" accent), the raw palette cleared, the theme in the user
-    menu. The rule is still a warning (0 reported); it becomes an error with the shims' removal (build plan step 4).
+    menu. The rule became an error in step 4, when the re-export shims (`settings/parts.tsx`, `lists/ListRow.tsx`,
+    `renderers/PatientLine.tsx`) and the old tone names (`LegacyTone`, `Heading`'s `brand`/`alert`) went.
   - **The chart** replaces the visit screen (§4.6): `src/core/screens/chart/` — a pure model (items, the encounter, the record's lists,
     values, the Summary, the screen's decisions; `npm run test:chart`, 31 groups), the blocks (one design per entry type, a pack's
     `Block` inside the same shell), the record panel, the center, the banner and its actions, the glance. Moved and gone:

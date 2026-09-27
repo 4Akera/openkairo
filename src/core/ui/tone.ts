@@ -11,10 +11,8 @@ const merge = extendTailwindMerge<'rail'>({ extend: {
 export const cn = (...i: ClassValue[]) => merge(clsx(i))
 
 export type Tone = 'neutral' | 'accent' | 'danger' | 'warn' | 'ok' | 'info'
-/** @deprecated the old tone names; accepted until the sweep is done (build plan 2.10), then removed (step 4) */
-export type LegacyTone = 'brand' | 'red' | 'amber' | 'blue' | 'green'
-const LEGACY: Record<string, Tone> = { brand: 'accent', red: 'danger', amber: 'warn', blue: 'info', green: 'ok' }
-export const toTone = (t: Tone | LegacyTone | null | undefined): Tone => t ? LEGACY[t] ?? (t as Tone) : 'neutral'
+/** no tone is neutral (the old names brand, red, amber, blue and green are gone: build plan step 4) */
+export const toTone = (t: Tone | null | undefined): Tone => t ?? 'neutral'
 /** the classes of a tone, for a pack or a kit component that needs them in a map */
 export const TONE: Record<Tone, { text: string; soft: string; line: string; solid: string; onSolid: string }> = {
   neutral: { text: 'text-muted',  soft: 'bg-sunken',      line: 'ring-line',        solid: 'bg-line-strong', onSolid: 'text-fg' },

@@ -28,7 +28,7 @@ export default tseslint.config(
   { files: ['src/core/db/**/*.{ts,tsx}'], rules: guard(PACKS) },
   { files: ['src/core/main.tsx'], rules: guard(CLIENT) },                     // the one place core loads the packs: import '../packs'
   ...[1, 2, 3, 4].map((d) => ({ files: [`src/packs/*/${'*/'.repeat(d - 1)}*.{ts,tsx}`], rules: guard(OTHER_PACK, CLIENT, climbOut(d)) })),
-  // tokens only: a warning until the sweep and the chart are done (build plan 1.5), then an error (step 4); the kit owns the recipes
-  { files: ['src/**/*.{ts,tsx}'], plugins: { opencare: { rules: { 'tokens-only': tokensOnly } } }, rules: { 'opencare/tokens-only': 'warn' } },
+  // tokens only, core and packs alike: an error since the sweep and the chart are done (build plan step 4); the kit owns the recipes
+  { files: ['src/**/*.{ts,tsx}'], plugins: { opencare: { rules: { 'tokens-only': tokensOnly } } }, rules: { 'opencare/tokens-only': 'error' } },
   { files: ['src/core/ui/**'], rules: { 'opencare/tokens-only': 'off' } },
 )
