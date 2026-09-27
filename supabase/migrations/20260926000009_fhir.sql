@@ -388,7 +388,8 @@ create function base.encounter_fhir(p jsonb) returns jsonb language sql stable s
       'class', jsonb_build_object('system', 'http://terminology.hl7.org/CodeSystem/v3-ActCode', 'code', 'AMB'), 'subject', base.fhir_subject(p)))
   else jsonb_build_array(base.fhir_head(p, 'Encounter') || jsonb_strip_nulls(jsonb_build_object(
     'status', case when pr.state in ('done', 'discharged') then 'finished' when pr.state = 'left' and pr.seen_at is null then 'cancelled' when pr.state = 'left' then 'finished'
-                   when pr.state in ('with', 'called', 'admitted', 'back', 'pending') then case when pr.last_at < clock_timestamp() - interval '12 hours' then 'unknown' else 'in-progress' end
+                   when pr.state = 'admitted' then 'in-progress'   -- a stay's notes never move it: no 12-hour lapse in bed
+                   when pr.state in ('with', 'called', 'back', 'pending') then case when pr.last_at < clock_timestamp() - interval '12 hours' then 'unknown' else 'in-progress' end
                    else case when pr.last_at < clock_timestamp() - interval '12 hours' then 'unknown' else 'arrived' end end,
     'class', jsonb_build_object('system', 'http://terminology.hl7.org/CodeSystem/v3-ActCode', 'code',
       coalesce(core.setting_at((p ->> 'org')::uuid, 'department.encounter_class', pr.department_id) ->> 'class', case when pr.kind = 'stay' then 'IMP' else 'AMB' end)),

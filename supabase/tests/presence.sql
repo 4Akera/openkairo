@@ -103,6 +103,26 @@ select t.refused(t.w(t.e('admitted', '00000000-0000-0000-0000-0000000000f2', :'w
   '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b1')), 'bed_taken', 'bed 1 is taken');
 select t.refused(t.w(t.e('admitted', :'pt', :'ward', '{"admit_source":"outp"}', '00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-0000000000b2')), 'already_admitted');
 select t.landed(t.w(t.move('moved', '00000000-0000-0000-0000-0000000000b0', :'ward', '{"place_id":"00000000-0000-0000-0000-000000000002"}')), 'moved to bed 2');
+
+\echo '── a stay takes only its own moves: the ward nurse signs vitals and a note in it and it keeps its bed; the clinic''s moves are refused'
+select t.as('11111111-0000-0000-0000-0000000000b3');
+select t.landed(t.w(jsonb_build_array(
+  t.e('vitals', :'pt', :'ward', '{"hr":{"value":"96","unit":"bpm","ucum":"/min"},"temp":{"value":"38.1","unit":"°C","ucum":"Cel"}}', null, '00000000-0000-0000-0000-0000000000b0'),
+  t.e('note', :'pt', :'ward', '{"kind":"nurse","text":"Febrile overnight, settled with paracetamol."}', null, '00000000-0000-0000-0000-0000000000b0'))), 'the nurse signs vitals and a note in the stay');
+select t.ok(r ->> 'state' = 'admitted' and r ->> 'place_id' = '00000000-0000-0000-0000-000000000002' and (r ->> 'has_vitals')::boolean and r ->> 'seen_at' is null and r ->> 'ended_at' is null,
+  'still admitted in bed 2, nothing ended') from t.rows('base.presence', :'ward', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000b0')) r;
+select t.refused(t.w(t.move('done', '00000000-0000-0000-0000-0000000000b0', :'ward')), 'not_allowed', 'the nurse holds no Done');
+select t.landed(t.w(t.move('assigned', '00000000-0000-0000-0000-0000000000b0', :'ward', '{"user_id":"00000000-0000-0000-0000-0000000000b3"}')), 'the nurse takes the stay');
+select t.as(:'dr');
+select t.refused(t.w(t.move('done', '00000000-0000-0000-0000-0000000000b0', :'ward')), 'not_a_visit', 'Done on a stay');
+select t.refused(t.w(t.move('back_to_waiting', '00000000-0000-0000-0000-0000000000b0', :'ward', '{"reason":"other"}')), 'not_a_visit', 'back to waiting');
+select t.refused(t.w(t.move('called', '00000000-0000-0000-0000-0000000000b0', :'ward')), 'not_a_visit', 'called');
+select t.refused(t.w(t.move('seen', '00000000-0000-0000-0000-0000000000b0', :'ward')), 'not_a_visit', 'seen');
+select t.refused(t.w(t.move('left', '00000000-0000-0000-0000-0000000000b0', :'ward')), 'not_a_visit', 'left');
+select t.landed(t.w(t.move('urgent', '00000000-0000-0000-0000-0000000000b0', :'ward', '{"urgent":true}')), 'urgent is a stay''s move too');
+select t.flagged(t.w(t.move('done', '00000000-0000-0000-0000-0000000000b0', :'ward'), null, '{}', '{}', now() - interval '1 hour'), 'not_a_visit', 'a late Done lands flagged');
+select t.ok(r ->> 'state' = 'admitted' and r ->> 'place_id' = '00000000-0000-0000-0000-000000000002' and r ->> 'assigned_id' = '00000000-0000-0000-0000-0000000000b3' and (r ->> 'urgent')::boolean,
+  'and never ends the stay: admitted in bed 2, the nurse''s, urgent') from t.rows('base.presence', :'ward', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000b0')) r;
 select t.landed(t.w(t.e('admitted', '00000000-0000-0000-0000-0000000000f2', :'ward', '{"admit_source":"emd","place_id":"00000000-0000-0000-0000-000000000001"}',
   '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b1')), 'bed 1 is free again');
 select t.landed(t.w(t.move('discharged', '00000000-0000-0000-0000-0000000000b0', :'ward', '{"disposition":"home"}')), 'discharged home');

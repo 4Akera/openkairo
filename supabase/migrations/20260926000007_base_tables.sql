@@ -187,6 +187,8 @@ begin
     r.came_from := case when f.relation = 'about' then (select t.item from core.entries t where t.organization_id = p_org and t.id = f.refers_to) end;
     for v_e in select x.* from core.entries x where x.organization_id = p_org and x.item = k and x.item_version > 1 order by x.item_version loop
       b := core.base_of(v_e.type);
+      -- a stay counts only its own moves (§4.2): a clinic move landed late (flagged, not refused) never ends or unseats it
+      continue when r.kind = 'stay' and b not in ('moved', 'discharged', 'assigned', 'urgent');
       -- seen before this move: something clinical written in the visit after the call
       if r.called_at is not null and r.seen_at is null then
         select x.recorded_at, x.author_id into v_clin, v_clin_by from core.entries x join core.types t on t.key = x.type and t.version = x.type_version

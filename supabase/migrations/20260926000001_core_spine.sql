@@ -369,6 +369,7 @@ create table core.entries (
   check ((source_system is null) = (source_id is null))
 );
 create index entries_patient on core.entries (organization_id, patient_id, recorded_at desc);
+create index entries_recorded on core.entries (organization_id, recorded_at desc);   -- the latest entry of an organization (settings order after it)
 create index entries_item on core.entries (organization_id, item);
 create index entries_refers on core.entries (organization_id, refers_to) where refers_to is not null;
 create index entries_replaces on core.entries (organization_id, replaces) where replaces is not null;
@@ -406,6 +407,7 @@ create table core.settings (
 );
 create index settings_thing on core.settings (organization_id, key, thing_id, recorded_at desc);
 create index settings_owner on core.settings (organization_id, key, owner_id, recorded_at desc);
+create index settings_recorded on core.settings (organization_id, recorded_at desc);   -- the latest setting of an organization (entries order after it)
 
 -- ── counters and files (§3.6) ──
 create table core.counters (

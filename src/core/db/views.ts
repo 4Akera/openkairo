@@ -123,7 +123,8 @@ export function cards(es: ServerEntry[], o: Organization | undefined, orders: Or
 }
 
 // ── visits and the queue ──
-const STATUS: Record<string, VisitStatus> = { waiting: 'waiting', back: 'pending', called: 'in_consult', with: 'in_consult', pending: 'pending', done: 'done', left: 'left', admitted: 'in_consult', discharged: 'done' }
+// a stay keeps its own words (§4.2): it is never in consult, and its end is a discharge, not a Done
+const STATUS: Record<string, VisitStatus> = { waiting: 'waiting', back: 'pending', called: 'in_consult', with: 'in_consult', pending: 'pending', done: 'done', left: 'left', admitted: 'admitted', discharged: 'discharged' }
 export const isOpen = (p: Pick<PresenceRow, 'state'>) => !['done', 'left', 'discharged'].includes(p.state)
 export function visitRow(p: PresenceRow, earlier = 0): VisitRow {
   return { id: p.item, patient_id: p.patient_id, department_id: p.department_id, request_id: p.for_order, assignee_id: p.assigned_id ?? (p.state === 'called' || p.state === 'with' ? p.called_by : p.state === 'back' ? p.seen_by : null),
@@ -135,7 +136,7 @@ export const bandOf = (p: PresenceRow): QueueRow['band'] => p.state === 'called'
 export const presentNow = (p: PresenceRow, now = Date.now()) => p.here && !(p.away_since && now - Date.parse(p.away_since) > 30 * 60_000)
 export function queueRows(read: TableRead<PresenceRow>, o: Organization | undefined, orders: OrderRow[] = [], allergic: Set<string> = new Set(), history: Map<string, number> = new Map()): QueueRow[] {
   const order = { urgent: 0, routine: 1 } as const
-  return read.rows.filter(isOpen).map((p) => {
+  return read.rows.filter((p) => isOpen(p) && p.kind === 'visit').map((p) => {   // a stay is the bed board's, never a queue row
     const i = read.patients[p.patient_id]; const b = banner(i); const v = visitRow(p, history.get(`${p.patient_id}|${p.department_id}`) ?? 0)
     const reqs = orders.filter((x) => x.visit_id === p.item)
     return { id: p.item, patient: { id: p.patient_id, record_number: b.record_number, given_name: b.given_name, family_name: b.family_name, sex: b.sex, age: b.age, has_allergies: allergic.has(p.patient_id) },

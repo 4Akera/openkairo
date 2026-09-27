@@ -10,6 +10,11 @@ begin
   raise exception using message = code, detail = coalesce(detail, ''), errcode = 'P0001';
 end $$;
 
+-- "now" for a live check: never behind the transaction's own start, though the clock may step back (§3.1)
+create function core.now_safe() returns timestamptz language sql volatile as $$
+  select greatest(now(), clock_timestamp())
+$$;
+
 -- uuid v7 (time-ordered), for ids the server mints
 create function core.uuid7() returns uuid language sql volatile as $$
   select encode(set_bit(set_bit(overlay(uuid_send(gen_random_uuid()) placing
@@ -59,11 +64,12 @@ begin
   return u;
 end $$;
 
--- ── settings (§3.4): the row of a thing as it stood at a moment ──
+-- ── settings (§3.4): the row of a thing as it stood at a moment. Settings are insert-only and never dated ahead, so as of now
+-- (no moment) is every committed row: the clock may step back past one written a moment ago. A moment keeps the filter. ──
 create function core.setting_at(p_org uuid, p_key text, p_thing uuid, p_at timestamptz default null) returns jsonb
 language sql stable security definer set search_path = '' as $$
   select case when s.retired then null else s.data end from core.settings s
-   where s.organization_id = p_org and s.key = p_key and s.thing_id = p_thing and s.recorded_at <= coalesce(p_at, clock_timestamp())
+   where s.organization_id = p_org and s.key = p_key and s.thing_id = p_thing and (p_at is null or s.recorded_at <= p_at)
    order by s.recorded_at desc, s.id desc limit 1
 $$;
 create function core.settings_at(p_org uuid, p_key text, p_at timestamptz default null)
@@ -71,7 +77,7 @@ returns table (thing_id uuid, owner_id uuid, data jsonb, recorded_at timestamptz
 language sql stable security definer set search_path = '' as $$
   select x.thing_id, x.owner_id, x.data, x.recorded_at from (
     select distinct on (s.thing_id) s.thing_id, s.owner_id, s.data, s.recorded_at, s.retired from core.settings s
-     where s.organization_id = p_org and s.key = p_key and s.recorded_at <= coalesce(p_at, clock_timestamp())
+     where s.organization_id = p_org and s.key = p_key and (p_at is null or s.recorded_at <= p_at)
      order by s.thing_id, s.recorded_at desc, s.id desc) x
   where not x.retired
 $$;
@@ -84,7 +90,9 @@ create function core.layer_on(p_org uuid, p_layer text) returns boolean language
   select p_layer in ('core', 'base') or p_layer = any (core.packs_used(p_org))
 $$;
 
--- ── may (§3.1): a null department matches only roles held everywhere ──
+-- ── may (§3.1): a null department matches only roles held everywhere. A holding dated no later than its grant counts once
+-- committed, one dated later from core.now_safe(); an end is dated by its own insert (a planned end is valid_until), so it counts
+-- once committed, as the doors read it. A clock stepping back never undoes a grant or an end of a moment ago. ──
 create function core.may(p_user uuid, p_action text, p_department uuid) returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from core.users u
@@ -93,8 +101,8 @@ create function core.may(p_user uuid, p_action text, p_department uuid) returns 
       join core.actions a on a.key = p_action
       left join core.role_actions ra on ra.role_id = r.id and ra.action = p_action
      where u.id = p_user and u.retired_at is null
-       and h.valid_from <= clock_timestamp() and (h.valid_until is null or h.valid_until > clock_timestamp())
-       and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id and x.ended_at <= clock_timestamp())
+       and h.valid_from <= greatest(h.recorded_at, core.now_safe()) and (h.valid_until is null or h.valid_until > core.now_safe())
+       and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id)
        and (h.department_id is null or h.department_id = p_department)
        and (ra.action is not null or r.every_action)
        and core.layer_on(u.organization_id, a.layer))
@@ -107,17 +115,17 @@ create function core.may_somewhere(p_user uuid, p_action text) returns boolean l
       join core.actions a on a.key = p_action
       left join core.role_actions ra on ra.role_id = r.id and ra.action = p_action
      where u.id = p_user and u.retired_at is null
-       and h.valid_from <= clock_timestamp() and (h.valid_until is null or h.valid_until > clock_timestamp())
-       and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id and x.ended_at <= clock_timestamp())
+       and h.valid_from <= greatest(h.recorded_at, core.now_safe()) and (h.valid_until is null or h.valid_until > core.now_safe())
+       and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id)
        and (ra.action is not null or r.every_action)
        and core.layer_on(u.organization_id, a.layer))
 $$;
--- the live holdings of a user (who holds what where): used by the base's privacy rule and by settings
+-- the live holdings of a user (who holds what where), live as in may: used by the base's privacy rule and by settings
 create function core.live_holdings(p_org uuid) returns table (user_id uuid, role_id uuid, department_id uuid)
 language sql stable security definer set search_path = '' as $$
   select h.user_id, h.role_id, h.department_id from core.holdings h join core.roles r on r.id = h.role_id and r.retired_at is null
-   where h.organization_id = p_org and h.valid_from <= clock_timestamp() and (h.valid_until is null or h.valid_until > clock_timestamp())
-     and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id and x.ended_at <= clock_timestamp())
+   where h.organization_id = p_org and h.valid_from <= greatest(h.recorded_at, core.now_safe()) and (h.valid_until is null or h.valid_until > core.now_safe())
+     and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id)
 $$;
 -- the actions a role gives (every action of the organization's layers, for the Owner)
 create function core.role_actions_of(p_org uuid, p_role uuid) returns setof text language sql stable security definer set search_path = '' as $$

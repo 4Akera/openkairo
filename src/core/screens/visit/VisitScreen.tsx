@@ -12,20 +12,24 @@ import { rememberPatient } from '../../hooks/recent'
 import { read, write, WriteWarned, words, type EntryBody, type EntryIn, type Finding } from '../../db/rpc'
 import { draftEntries, move, oneSet } from '../../db/entries'
 import type { PresenceRow, QueueRow, RecordView, TableRead, VisitRow } from '../../db/types'
-import { Badge, Button, Centered, Kbd, Spinner, cn, errorText, flagClass, minutesSince } from '../../ui'
+import type { EntryData } from '../../db/shapes.generated'
+import { Badge, Button, Centered, Kbd, Spinner, cn, errorText, flagClass, minutesSince, shortDate, ymd } from '../../ui'
 import { RecordViews } from './Record'
 import { nextPatient } from '../clinic/words'
 import { Side } from './Side'
 import { Composer, type ComposerHandle } from './Composer'
 import { QueueStrip } from './QueueStrip'
+import { Choose } from '../ward/BedBoard'
+import { DISPOSITION } from '../ward/words'
 
 /** The visit (spec/openCare.md §4.7), built for typing: banner with Done always in reach, the lists on the left, the composer on the right.
- *  Done is one set: every draft's entries, then seen (when nobody saw the patient yet) and done, each changing the visit's latest version. */
+ *  Done is one set: every draft's entries, then seen (when nobody saw the patient yet) and done, each changing the visit's latest version.
+ *  A stay (§4.2) has no Done: Sign writes the drafts into the stay as one set and moves nothing; Discharge ends it. */
 export function VisitScreen() {
   const { visitId, patientId: paramPatient } = useParams()
   const { dept, can, org } = useDepartment()
   const navigate = useNavigate(); const qc = useQueryClient()
-  const queue = useVisitQueue(dept?.is_visited ? dept.id : null)
+  const queue = useVisitQueue(dept?.work === 'visits' ? dept.id : null)   // a ward has beds, not a queue
   const fromQueue = queue.data?.rows.find((r) => r.id === visitId)
   // a visit opened from elsewhere (the desk, a link): whose it is comes from who-is-where
   const where = useQuery({ queryKey: ['visit_patient', visitId, dept?.id], enabled: !!visitId && !paramPatient && !fromQueue && !!dept && !queue.isLoading,
@@ -36,11 +40,14 @@ export function VisitScreen() {
   const drafts = useDraftsFor(patientId)
   const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   const [warn, setWarn] = useState<{ findings: Finding[]; retry: (confirmed: string[]) => void } | null>(null)
+  const [discharging, setDischarging] = useState(false)
   const today = useRef<ComposerHandle>(null)
   const visit = rec.data?.visit ?? null
+  // a stay takes only its own moves (§4.2): it is never called, seen or Done here, and is nobody's in the clinic's sense
+  const stay = visit?.kind === 'stay'; const admitted = stay && visit.presence.state === 'admitted'
   // this department's visit, and this clinician's patient: another doctor's patient is theirs to finish
   const meId = org?.me.id
-  const mine = !!visit && visit.department_id === dept?.id && (visit.status !== 'in_consult' || !visit.assignee_id || visit.assignee_id === meId)
+  const mine = !!visit && !stay && visit.department_id === dept?.id && (visit.status !== 'in_consult' || !visit.assignee_id || visit.assignee_id === meId)
   const withOther = !!visit && visit.department_id === dept?.id && visit.status === 'in_consult' && !!visit.assignee_id && visit.assignee_id !== meId
   useEffect(() => { if (rec.data) rememberPatient({ ...rec.data.patient }) }, [rec.data?.patient.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // opening a waiting patient from the queue calls him (calling is not seeing)
@@ -66,9 +73,10 @@ export function VisitScreen() {
     catch (e) { if (e instanceof WriteWarned) setWarn({ findings: e.outcome.findings, retry: (c) => void send(es, after, [...confirmed, ...c]) }); else setErr(errorText(e)) }
     finally { setBusy(false) }
   }
-  function sign() { if (!flushed() || !patientId) return; void send(entries(false), () => undefined) }
+  /** the drafts alone, no move: in a stay they are written into it, and the patient stays open */
+  function sign() { if (!flushed() || !patientId) return; void send(entries(admitted), () => undefined) }
   function done(andNext: boolean, wait?: boolean) {
-    if (!patientId || !visit || !flushed()) return
+    if (!patientId || !visit || stay || !flushed()) return
     void send([...entries(true), ...moves(visit, { type: 'done', data: wait === undefined ? {} : { wait } })], () => navigate(andNext && next ? `/visit/${next.id}` : '/', { replace: andNext && !!next }))
   }
   /** another patient from the list: what is typed stays a draft; a patient only called, with nothing written, goes back to his place */
@@ -82,14 +90,20 @@ export function VisitScreen() {
   }
   /** the patient steps out (an ECG, paying): what is written is signed now; the visit stays open */
   function backToWaiting() {
-    if (!patientId || !visit || !flushed()) return
+    if (!patientId || !visit || stay || !flushed()) return
     void send([...entries(true), ...moves(visit, { type: 'back_to_waiting', data: { reason: 'sent_out' } })], () => navigate('/'))
   }
-  // the keyboard: / the composer · Alt+P/M/A start a problem, medication, allergy in it · ⌘↵ Done
+  /** a stay ends from its own screen too: what is written goes with the discharge; the ward's beds come next */
+  function discharge(disposition: EntryData['discharged']['disposition']) {
+    if (!patientId || !visit || !admitted || !flushed()) return
+    void send([...entries(true), move('discharged', visit, dept!.id, { disposition })], () => navigate('/'))
+  }
+  // the keyboard: / the composer · Alt+P/M/A start a problem, medication, allergy in it · ⌘↵ Done (Sign in a stay)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const typing = /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && visit?.status === 'in_consult' && mine) { e.preventDefault(); done(dept?.after_done !== 'queue') }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && stay) { e.preventDefault(); sign() }
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && visit?.status === 'in_consult' && mine) { e.preventDefault(); done(dept?.after_done !== 'queue') }
       else if (e.key === '/' && !typing) { e.preventDefault(); today.current?.slash() }
       else if (e.altKey && !e.metaKey && !e.ctrlKey) {
         const line = ({ KeyP: '/dx ', KeyM: '/rx ', KeyA: '/al ', p: '/dx ', m: '/rx ', a: '/al ' } as Record<string, string>)[e.code || e.key.toLowerCase()]
@@ -105,11 +119,14 @@ export function VisitScreen() {
   if (rec.error || !rec.data) return <Centered><p className="text-sm text-red-700">{rec.error?.message ?? 'no record'}</p></Centered>
   const r = rec.data
   const canWrite = can('write:note') || can('write:vitals') || can('write:order')
-  const strip = dept.is_visited && !!queue.data   // the clinic's line above the banner: the lists below stick lower
+  const strip = dept.work === 'visits' && !stay && !!queue.data   // the clinic's line above the banner: the lists below stick lower
   return <div className="pb-10">
-    <Banner r={r} visit={visit} mine={mine} onBack={() => navigate('/')}
+    <Banner r={r} visit={visit} mine={mine} onBack={() => navigate('/')} stay={stay && visit ? stayWords(visit, org?.places.find((p) => p.id === visit.place_id)?.name) : null}
       strip={strip ? <QueueStrip rows={queue.data.rows.filter((x) => x.id !== visitId)} next={next} me={meId} onOpen={(x) => void openOther(x)} /> : null}
-      actions={mine && visit?.status === 'in_consult' ? <>
+      actions={stay && visit ? <>
+        {admitted && visit.department_id === dept.id && can('write:discharged') && !discharging && <Button variant="outline" onClick={() => setDischarging(true)} disabled={busy}>Discharge</Button>}
+        <Button onClick={sign} disabled={busy}>Sign{drafts.length ? ` ${drafts.length}` : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button></>
+      : mine && visit?.status === 'in_consult' ? <>
         <Button onClick={() => done(dept.after_done !== 'queue')} disabled={busy}>{drafts.length ? `Sign ${drafts.length} · ` : ''}Done{dept.after_done !== 'queue' && next ? ` → ${next.patient.given_name}` : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
         <Menu.Root><Menu.Trigger asChild><Button variant="outline" size="md" aria-label="More"><ChevronDown className="h-4 w-4" /></Button></Menu.Trigger>
           <Menu.Portal><Menu.Content align="end" sideOffset={6} className="z-50 min-w-60 rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg">
@@ -127,6 +144,9 @@ export function VisitScreen() {
     {warn && <div className="mx-auto mt-3 grid max-w-7xl gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200" role="alert">
       {warn.findings.map((f, i) => <p key={i}><b className="font-medium">{words(f.code)}</b>{f.detail ? ` — ${f.detail}` : ''}</p>)}
       <div className="flex gap-2"><Button size="sm" onClick={() => warn.retry(warn.findings.map((f) => f.code))} disabled={busy}>Sign anyway</Button><Button size="sm" variant="ghost" onClick={() => setWarn(null)}>Change it</Button></div></div>}
+    {discharging && admitted && <div className="mx-auto mt-3 flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-neutral-50 px-3 py-2 ring-1 ring-neutral-200">
+      <span className="text-sm font-medium">Discharge{drafts.length ? ` — signs the ${drafts.length} written` : ''}</span>
+      <Choose label="To" options={DISPOSITION} go="Discharge" busy={busy} onCancel={() => setDischarging(false)} onGo={discharge} /></div>}
     <div className="mx-auto mt-4 grid max-w-7xl gap-4 px-4 lg:grid-cols-[340px_minmax(0,1fr)]">
       {/* the lists stay in view while the record scrolls */}
       <div className={cn('lg:sticky lg:self-start lg:overflow-y-auto', strip ? 'lg:top-[6.6rem] lg:max-h-[calc(100vh-7.6rem)]' : 'lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)]')}>
@@ -141,7 +161,12 @@ export function VisitScreen() {
 }
 
 const SEX: Record<string, string> = { male: 'M', female: 'F', other: 'X' }
-function Banner({ r, visit, mine, onBack, actions, strip }: { r: RecordView; visit: VisitRow | null; mine: boolean; onBack: () => void; actions: React.ReactNode; strip?: React.ReactNode }) {
+/** "Admitted · Bed 3 · day 2": day 1 is the day of admission, in the clinic's time zone; a stay that ended, its last day */
+const stayWords = (v: VisitRow, bed: string | null | undefined) => {
+  const day = Math.round((Date.parse(ymd(v.ended_at ?? new Date().toISOString())) - Date.parse(ymd(v.arrived_at))) / 86_400_000) + 1
+  return v.presence.state === 'admitted' ? `Admitted · ${bed ?? 'no bed'} · day ${day}` : `Discharged ${shortDate(v.ended_at ?? v.presence.last_at)} · ${day} day${day > 1 ? 's' : ''}`
+}
+function Banner({ r, visit, mine, stay, onBack, actions, strip }: { r: RecordView; visit: VisitRow | null; mine: boolean; stay: string | null; onBack: () => void; actions: React.ReactNode; strip?: React.ReactNode }) {
   const v = r.latest_vitals ?? []; const pick = (c: string) => v.find((x) => x.code === c || x.code === `loinc:${c}`)   // values carry 'loinc:' codes
   const allergies = r.allergies.filter((a) => a.status === 'active')
   const vit = [pick('8480-6') && pick('8462-4') ? ['BP', `${pick('8480-6')!.value_number}/${pick('8462-4')!.value_number}`, pick('8480-6')!.flag] : null, pick('8867-4') ? ['P', pick('8867-4')!.value_number, pick('8867-4')!.flag] : null,
@@ -149,10 +174,11 @@ function Banner({ r, visit, mine, onBack, actions, strip }: { r: RecordView; vis
   return <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur">
     {strip}
     <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
-      <button onClick={onBack} className="-ml-1 rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800" title="Back to the queue"><ArrowLeft className="h-4 w-4" /></button>
+      <button onClick={onBack} className="-ml-1 rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800" title={stay ? 'Back to the beds' : 'Back to the queue'}><ArrowLeft className="h-4 w-4" /></button>
       <div className="min-w-0">
         <p className="flex items-baseline gap-2"><span className="text-lg font-semibold tracking-tight text-neutral-900">{r.patient.given_name} {r.patient.family_name}</span><span className="text-sm text-neutral-600 tnum">{r.patient.age} y · {SEX[r.patient.sex] ?? ''}</span>{r.patient.died_on && <Badge tone="neutral">deceased</Badge>}</p>
-        <p className="text-xs text-neutral-500 tnum">#{r.patient.record_number}{r.patient.phone_text && ` · ${r.patient.phone_text}`}{visit && <> · <span className={mine ? 'text-teal-800' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.kind === 'stay' ? 'admitted' : visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>}{visit?.priority && visit.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{visit.priority}</Badge>}</p>
+        <p className="text-xs text-neutral-500 tnum">#{r.patient.record_number}{r.patient.phone_text && ` · ${r.patient.phone_text}`}{visit && (stay ? <> · <span className="text-teal-800">{stay}</span></>
+          : <> · <span className={mine ? 'text-teal-800' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>)}{visit?.priority && visit.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{visit.priority}</Badge>}</p>
       </div>
       <div className="flex flex-wrap items-center gap-1">{allergies.length ? allergies.map((a) => <Badge key={a.id} tone="red">⚠ {a.substance_name}</Badge>) : r.allergy_review ? <span className="text-xs text-neutral-500">No known allergies</span> : <span className="text-xs text-amber-700">Allergies not asked</span>}</div>
       {vit.length > 0 && <div className="flex items-baseline gap-3 text-xs text-neutral-500 tnum">{vit.map(([l, n, f]) => <span key={l}>{l} <b className={cn('font-semibold text-neutral-800', f && f !== 'normal' && flagClass(f))}>{n}</b></span>)}</div>}

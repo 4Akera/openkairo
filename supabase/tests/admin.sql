@@ -106,6 +106,47 @@ select t.ok(r -> 'retired_at' is not null and (r ->> 'retired_at')::date = '2026
 select public.save('site', '{"id":"00000000-0000-0000-0000-0000000005a1","name":"Old annex"}') ->> 'id' as back;
 select t.ok(r ->> 'retired_at' is null, 'brought back') from jsonb_array_elements(public.read('{"shape":"me"}') -> 'sites') r where r ->> 'id' = '00000000-0000-0000-0000-0000000005a1';
 
+\echo '── the clock steps back: a grant, an end or a setting of a moment ago counts at once, a change right after it is the latest; a holding from the next hour waits'
+-- rows dated a second ahead of the clock, as a transaction that began before the clock stepped back dates them (§3.1, §3.4)
+reset role;
+insert into core.holdings (organization_id, id, user_id, role_id, department_id, valid_from, recorded_at) values ('00000000-0000-0000-0000-0000000000a1',
+  '00000000-0000-0000-0000-0000000001e1', '00000000-0000-0000-0000-0000000000b5', '00000000-0000-0000-0000-00000000c002', :'im', clock_timestamp() + interval '1 second', clock_timestamp() + interval '1 second');
+insert into core.holdings (organization_id, user_id, role_id, department_id, valid_from) values ('00000000-0000-0000-0000-0000000000a1',
+  '00000000-0000-0000-0000-0000000000b5', '00000000-0000-0000-0000-00000000c005', :'labd', clock_timestamp() + interval '1 hour');
+select t.ok(core.may('00000000-0000-0000-0000-0000000000b5', 'write:note', :'im') and core.may_somewhere('00000000-0000-0000-0000-0000000000b5', 'write:vitals')
+  and exists (select 1 from core.live_holdings('00000000-0000-0000-0000-0000000000a1') h where h.user_id = '00000000-0000-0000-0000-0000000000b5' and h.department_id = :'im'),
+  'a holding granted a moment ago is live');
+select t.ok(not core.may('00000000-0000-0000-0000-0000000000b5', 'write:result', :'labd'), 'a holding from the next hour is not live yet');
+insert into core.settings (organization_id, key, owner_id, thing_id, data, recorded_at)
+  values ('00000000-0000-0000-0000-0000000000a1', 'department.after_done', :'im', :'im', '{"after":"next"}', clock_timestamp() + interval '1 second');
+select t.ok(core.setting_at('00000000-0000-0000-0000-0000000000a1', 'department.after_done', :'im') ->> 'after' = 'next'
+  and exists (select 1 from core.settings_at('00000000-0000-0000-0000-0000000000a1', 'department.after_done') s where s.thing_id = :'im' and s.data ->> 'after' = 'next'),
+  'a setting written a moment ago reads as of now');
+select t.ok(coalesce(core.setting_at('00000000-0000-0000-0000-0000000000a1', 'department.after_done', :'im', clock_timestamp()) ->> 'after', '') <> 'next',
+  'as of a time before it (an entry''s), it is not there yet');
+insert into core.holding_ends (organization_id, holding_id, ended_at) select h.organization_id, h.id, clock_timestamp() + interval '1 second' from core.holdings h
+ where h.user_id = '00000000-0000-0000-0000-0000000000b5' and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id);
+select t.ok(not core.may('00000000-0000-0000-0000-0000000000b5', 'manage:users', null) and not core.may('00000000-0000-0000-0000-0000000000b5', 'write:note', :'im'),
+  'holdings ended a moment ago are over');
+set role authenticated;
+select public.write_setting(jsonb_build_object('key', 'department.after_done', 'owner_id', :'im', 'data', jsonb_build_object('after', 'queue'))) ->> 'key' as after_done;
+reset role;
+select t.ok(core.setting_at('00000000-0000-0000-0000-0000000000a1', 'department.after_done', :'im') ->> 'after' = 'queue', 'a change right after it is the latest');
+-- entries and settings keep one order (§3.4): a note after that change is later than it, and a setting after the note later than the note
+set role authenticated;
+select t.as(:'dr');
+select t.landed(t.w(t.e('note', :'pt', :'im', '{"kind":"progress","text":"after the change"}', '00000000-0000-0000-0000-0000000001e2')), 'a note right after the change');
+reset role;
+select t.ok((select recorded_at from core.entries where id = '00000000-0000-0000-0000-0000000001e2')
+  > (select max(recorded_at) from core.settings where organization_id = '00000000-0000-0000-0000-0000000000a1'), 'the note is later than the organization''s latest setting');
+set role authenticated;
+select t.as(:'ow');
+select public.write_setting(jsonb_build_object('key', 'department.patients_wait', 'owner_id', :'im', 'data', jsonb_build_object('wait', false))) ->> 'key' as patients_wait;
+reset role;
+select t.ok((select max(recorded_at) from core.settings where key = 'department.patients_wait' and owner_id = :'im')
+  > (select recorded_at from core.entries where id = '00000000-0000-0000-0000-0000000001e2'), 'and a setting right after the note is later than the note');
+set role authenticated;
+
 \echo '── a clinic with a login in two organizations: the session chooses'
 reset role;
 insert into core.users (organization_id, id, login_id, kind, name) values ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000c9', :'dr', 'staff', 'Dr Ali at Other');

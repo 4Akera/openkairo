@@ -142,7 +142,8 @@ select t.landed(t.w(t.e('result', :'pt', :'psy', '{"status":"final","code":{"tex
   '00000000-0000-0000-0000-0000000000f8')), 'an outside lithium level, recorded in Psychiatry');
 select t.as(:'ow');
 select t.ok(not exists (select 1 from jsonb_array_elements(t.record(:'pt', :'im') -> 'tables' -> 'base.values' -> 'rows') v where v ->> 'value' = '9.9'), 'not in the owner''s trend');
-select t.ok(not (t.record(:'pt', :'im')::text like '%9.9%'), 'nowhere in the owner''s record');
+-- the value 9.9 itself, never the digits of a time (a time such as …:29.912345 would match a plain like now and then)
+select t.ok(not (t.record(:'pt', :'im')::text ~ '(^|[^0-9.:])9\.9([^0-9]|$)'), 'nowhere in the owner''s record');
 select t.as(:'ps');
 select t.ok(exists (select 1 from jsonb_array_elements(t.record(:'pt', :'psy') -> 'tables' -> 'base.values' -> 'rows') v where v ->> 'value' = '9.9'), 'the psychiatrist sees the value');
 
@@ -201,6 +202,26 @@ select t.refuses($q$select public.save('user', '{"id":"00000000-0000-0000-0000-0
 select t.ok(jsonb_array_length(public.read('{"shape":"patients","q":"ahmed"}') -> 'patients') = 0, 'their search finds none of ours');
 reset role;
 select t.ok((core.setting_at('00000000-0000-0000-0000-0000000000a1', 'department.private', :'psy') ->> 'private')::boolean and (select name from core.departments where id = :'psy') = 'Psychiatry', 'Psychiatry is unchanged');
+
+\echo '── another department cannot claim the visit: its moves are refused live, and one sent late makes nobody responsible'
+-- a patient of her own, so no earlier read or opening counts
+select t.as(:'rc');
+select public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', '00000000-0000-0000-0000-0000000005f2',
+  'given', jsonb_build_array('Salma'), 'family', 'Nabil', 'gender', 'female', 'birth_date', '1990-05-02'))) -> 'patient' ->> 'id' as registered;
+select t.landed(t.check_in('00000000-0000-0000-0000-0000000005a2', '00000000-0000-0000-0000-0000000005f2', :'desk', :'psy'), 'into Psychiatry');
+select t.as(:'ps');
+select t.landed(t.w(jsonb_build_array(t.move('called', '00000000-0000-0000-0000-0000000005a2', :'psy'),
+  t.e('note', '00000000-0000-0000-0000-0000000005f2', :'psy', '{"kind":"progress","text":"her story"}', '00000000-0000-0000-0000-0000000005e1', '00000000-0000-0000-0000-0000000005a2'))), 'called, and a note');
+create or replace function pg_temp.salma(p_login uuid) returns jsonb language sql as $$
+  select t.as(p_login); select e from jsonb_array_elements(t.record('00000000-0000-0000-0000-0000000005f2', '00000000-0000-0000-0000-0000000000d1', '{"limit":50}') -> 'entries') e
+   where (e ->> 'id')::uuid = '00000000-0000-0000-0000-0000000005e1'
+$$;
+select t.ok(e ->> 'line' = 'Private note', 'an internist sees "Private note"') from pg_temp.salma('11111111-0000-0000-0000-0000000000bf') e;
+select t.as('11111111-0000-0000-0000-0000000000bf');
+select t.refused(t.w(t.move('called', '00000000-0000-0000-0000-0000000005a2', :'im')), 'other_department', 'he calls her from Internal Medicine');
+select t.refused(t.w(t.move('assigned', '00000000-0000-0000-0000-0000000005a2', :'im', '{"user_id":"00000000-0000-0000-0000-0000000000bf"}')), 'other_department', 'or takes her on');
+select t.landed(t.w(t.move('done', '00000000-0000-0000-0000-0000000005a2', :'im'), null, '{}', '{}', clock_timestamp() - interval '1 hour'), 'his Done sent late lands, flagged');
+select t.ok(e ->> 'line' = 'Private note', 'and he still does not read her note') from pg_temp.salma('11111111-0000-0000-0000-0000000000bf') e;
 
 \echo '── erasing a patient with private notes and consult replies works and leaves nothing'
 update core.server_settings set value = 'off' where key = 'require_mfa';

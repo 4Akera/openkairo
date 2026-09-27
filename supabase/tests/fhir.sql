@@ -84,6 +84,14 @@ select t.ok(count(*) = 2 and bool_or(r -> 'priorPrescription' is not null) and b
 select t.ok(r ->> 'status' = 'finished' and r -> 'class' ->> 'code' = 'AMB', 'the visit: a finished ambulatory Encounter') from res where r ->> 'resourceType' = 'Encounter' and r ->> 'id' = '00000000-0000-0000-0000-0000000000a1';
 select t.ok(r -> 'class' ->> 'code' = 'IMP' and r -> 'hospitalization' -> 'admitSource' -> 'coding' -> 0 ->> 'code' = 'outp' and r -> 'partOf' ->> 'reference' = 'Encounter/00000000-0000-0000-0000-0000000000a1',
   'the stay: IMP, admit source, part of the visit') from res where r ->> 'resourceType' = 'Encounter' and r ->> 'id' = '00000000-0000-0000-0000-0000000000b0';
+-- a stay's notes never move it: 13 hours after its last move it is still in bed, in progress
+update base.presence set last_at = clock_timestamp() - interval '13 hours' where item = '00000000-0000-0000-0000-0000000000b0';
+set role authenticated;
+select t.as('11111111-0000-0000-0000-0000000000b1');
+select t.ok(e -> 'resource' ->> 'status' = 'in-progress', 'a stay 13 hours after its last move is in progress')
+  from jsonb_array_elements(public.read(jsonb_build_object('shape', 'fhir', 'patient_id', :'pt', 'department_id', :'im')) -> 'entry') e
+ where e -> 'resource' ->> 'resourceType' = 'Encounter' and e -> 'resource' ->> 'id' = '00000000-0000-0000-0000-0000000000b0';
+reset role;
 select t.ok(r ->> 'status' = 'entered-in-error', 'a crossed-out note is entered-in-error') from res where r ->> 'id' = '00000000-0000-0000-0000-0000000000e8';
 select t.ok(bool_and(r -> 'meta' -> 'security' -> 0 ->> 'code' = 'N'), 'nothing here is private: security N') from res where r ? 'meta' and r -> 'meta' ? 'security';
 select t.ok(count(*) >= 5, 'Observations for the vitals keys and the analyte') from res where r ->> 'resourceType' = 'Observation';

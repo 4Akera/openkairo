@@ -58,7 +58,7 @@ export interface ServerMe {
 // ── the screens' view models (built in views.ts) ──
 export type Flag = 'normal' | 'low' | 'high' | 'abnormal' | 'critical'
 export type RequestStep = string
-export type VisitStatus = 'waiting' | 'in_consult' | 'pending' | 'done' | 'left' | 'lapsed' | 'cancelled'
+export type VisitStatus = 'waiting' | 'in_consult' | 'pending' | 'done' | 'left' | 'lapsed' | 'cancelled' | 'admitted' | 'discharged'   // the last two: a stay's
 export type Priority = 'stat' | 'urgent' | 'routine' | 'asap'
 /** an entry as a line of the record */
 export interface Card {

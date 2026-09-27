@@ -68,7 +68,7 @@ $$;
 
 -- ── the fixture organization (ids end in the same letters as the old suites) ──
 --   a1 Demo · d4 Front desk (desk) · d1 Internal Medicine (visits) · d2 Lab (bench) · d3 Pharmacy (bench) · d5 Psychiatry (visits, private)
---   · d6 Ward (stays, beds p1–p4) · b9 owner · b1 Dr Ali (doctor, IM) · b3 Nurse Sara (nurse, IM) · b4 reception (desk) · b2 lab tech (lab)
+--   · d6 Ward (stays, beds p1–p4) · b9 owner · b1 Dr Ali (doctor, IM) · b3 Nurse Sara (nurse, IM and ward) · b4 reception (desk) · b2 lab tech (lab)
 --   · b6 pharmacist · b8 Dr Salma (doctor, psychiatry) · b7 clerk (reception, psychiatry) · bm analyser (machine, doctor in psychiatry)
 --   · services c1 CBC (result; steps collected, received), c2 chest X-ray (note), c3 dispensing (pharmacy; step prepared) · f1 Ahmed Hassan
 --   · logins are 11111111-…-<user>
@@ -103,7 +103,8 @@ begin
     jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c002', 'department_id', o || 'd1'),
     jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c002', 'department_id', o || 'd6'))));
   perform public.save('user', jsonb_build_object('id', o || 'b3', 'name', 'Nurse Sara', 'login_id', l || 'b3', 'holdings', jsonb_build_array(
-    jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c003', 'department_id', o || 'd1'))));
+    jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c003', 'department_id', o || 'd1'),
+    jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c003', 'department_id', o || 'd6'))));
   perform public.save('user', jsonb_build_object('id', o || 'b4', 'name', 'Reception', 'login_id', l || 'b4', 'holdings', jsonb_build_array(
     jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c004', 'department_id', o || 'd4'))));
   perform public.save('user', jsonb_build_object('id', o || 'b2', 'name', 'Lab Tech', 'login_id', l || 'b2', 'holdings', jsonb_build_array(

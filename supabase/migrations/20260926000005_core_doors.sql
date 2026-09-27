@@ -394,8 +394,12 @@ begin
     end if;
   end if;
   v_on_before := core.packs_used(v_org);
-  insert into core.settings (organization_id, key, owner_id, thing_id, data, retired, author_id)
-  values (v_org, k.key, v_owner, v_thing, case when v_retired then coalesce(before -> 'data', '{}') else v_data end, v_retired, me.id) returning id into v_id;
+  -- after a clock step back, still after the thing's row before (the latest row is the last one written) and after the organization's
+  -- latest entry, so entries and settings keep one order: a change never reaches back over an entry written before it (§3.4)
+  insert into core.settings (organization_id, key, owner_id, thing_id, data, retired, author_id, recorded_at)
+  values (v_org, k.key, v_owner, v_thing, case when v_retired then coalesce(before -> 'data', '{}') else v_data end, v_retired, me.id,
+          greatest(clock_timestamp(), (before ->> 'recorded_at')::timestamptz + interval '1 microsecond',
+                   (select e.recorded_at from core.entries e where e.organization_id = v_org order by e.recorded_at desc limit 1) + interval '1 microsecond')) returning id into v_id;
   perform core.audit(me, case when v_retired then 'retire' when before is null then 'create' else 'change' end, 'setting:' || k.key, v_thing, before -> 'data', v_data);
   -- a pack turned on: its tables and listeners catch up for the organization before its screens show (§5)
   if k.key = 'organization.packs_used' then

@@ -198,10 +198,20 @@ begin
   if v_visit is null or p_entry ->> 'relation' is distinct from 'changes' or t.id is null or t.item <> v_visit then
     return jsonb_build_array(base.find('bad_visit', 'refuse', 'a move changes the visit'));
   end if;
+  -- a stay takes only its own moves (§4.2): a bed, a discharge, who has it, urgency. Calling, seeing, Done, back to waiting, here,
+  -- away, left and sending on are a clinic visit's; another ward with its bed is a later round
+  if core.base_of((base.entry(v_org, v_visit, p_set)).type) = 'admitted' and v_type not in ('moved', 'discharged', 'assigned', 'urgent') then
+    return jsonb_build_array(base.find('not_a_visit'));
+  end if;
   select * into pr from base.presence p where p.organization_id = v_org and p.item = v_visit;
   v_in_set := pr.item is null;
   if v_in_set then pr.state := case when exists (select 1 from jsonb_array_elements(p_set) x where (x ->> 'id')::uuid = v_visit and x ->> 'type' = 'admitted') then 'admitted' else 'waiting' end; end if;
   if pr.state in ('done', 'left', 'discharged') and v_type not in ('crossed_out') then return jsonb_build_array(base.find('visit_closed')); end if;
+  -- a clinician's moves come from where the patient is: being assigned, seeing or Done makes one responsible for reading a private
+  -- department's notes (§4.3), so another department cannot claim the visit by writing them
+  if v_type in ('called', 'seen', 'done', 'assigned') and not v_in_set and (p_entry ->> 'department_id')::uuid is distinct from pr.department_id then
+    return jsonb_build_array(base.find('other_department'));
+  end if;
   case v_type
     when 'called' then
       if pr.state in ('called', 'with') then return jsonb_build_array(base.find('already_called')); end if;
@@ -431,8 +441,11 @@ begin
     continue when me.kind = 'staff' and me.retired_at is null and (
          p_reader in (select core.holders_in(e.organization_id, 'read:record', v_dept))
       or exists (select 1 from core.entries a where a.organization_id = e.organization_id and a.item = e.item and a.author_id = p_reader and a.type <> 'crossed_out')
+      -- the visit's responsible clinician (§4.3): assigned to them, or seen or Done by them; calling is not seeing, and a move that only
+      -- landed late and flagged (a refused move sent late) makes nobody responsible
       or (f.visit_id is not null and exists (select 1 from core.entries v where v.organization_id = e.organization_id and v.item = f.visit_id
-            and ((v.type = 'assigned' and (v.data ->> 'user_id')::uuid = p_reader) or (v.type in ('seen', 'called', 'done') and v.author_id = p_reader))))
+            and not v.findings @> '[{"late": true}]'
+            and ((v.type = 'assigned' and (v.data ->> 'user_id')::uuid = p_reader) or (v.type in ('seen', 'done') and v.author_id = p_reader))))
       or (f.relation = 'answers' and exists (select 1 from core.entries o where o.organization_id = e.organization_id and o.id = f.refers_to
             and (o.author_id = p_reader or p_reader in (select core.holders_in(e.organization_id, 'read:record', o.department_id)))))
       or exists (select 1 from core.entries a where a.organization_id = e.organization_id and a.type = 'opened_anyway' and a.author_id = p_reader

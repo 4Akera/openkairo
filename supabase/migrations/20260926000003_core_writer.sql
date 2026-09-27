@@ -138,7 +138,12 @@ begin
     exit when not exists (select 1 from unnest(rows) x where not ('patient:' || core.survivor(v_org, x.patient_id)) = any (v_locked));
   end loop;
   perform set_config('lock_timeout', v_timeout, true);
-  v_now := clock_timestamp();
+  -- after a clock step back, still after the last set of every family here (under their locks): (recorded_at, id) is the write order;
+  -- and after the organization's latest setting, so a check or refresh as of this entry sees a setting written before it (§3.4)
+  select greatest(clock_timestamp(), max(l.recorded_at) + interval '1 microsecond',
+                  (select s.recorded_at from core.settings s where s.organization_id = v_org order by s.recorded_at desc limit 1) + interval '1 microsecond') into v_now
+    from (select distinct unnest(core.family(v_org, x.patient_id)) p from unnest(rows) x) f,
+    lateral (select y.recorded_at from core.entries y where y.organization_id = v_org and y.patient_id = f.p order by y.recorded_at desc limit 1) l;
 
   -- 5. generic checks (always refuse) and 6. items and versions
   for i in 1 .. n loop
@@ -178,7 +183,8 @@ begin
       end if;
       if not found_tgt then return core.refused(v_set_id, 'not_found', r.id, 'target'); end if;
       if not (tgt.patient_id = any (v_fam)) and not t.other_patient then return core.refused(v_set_id, 'wrong_patient', r.id, 'target'); end if;
-      if tgt.recorded_at is not null and tgt.recorded_at < v_now and (core.hidden(v_org, me.id, array[tgt.id]) @> array[tgt.id]) then
+      -- a stored target is known by its set, not its time (the clock may step back)
+      if tgt.set_id <> v_set_id and (core.hidden(v_org, me.id, array[tgt.id]) @> array[tgt.id]) then
         return core.refused(v_set_id, 'not_found', r.id, 'target');
       end if;
       select x.* into tgt_type from core.types x where x.key = tgt.type and x.version = tgt.type_version;

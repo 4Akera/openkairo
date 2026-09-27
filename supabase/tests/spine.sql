@@ -105,3 +105,17 @@ select t.warned(t.w(t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug
 select t.ok(r ->> 'outcome' = 'landed' and exists (select 1 from jsonb_array_elements(r -> 'findings') f where f ->> 'code' = 'allergy_clash' and (f ->> 'confirmed')::boolean), 'confirmed, it lands with the warning kept')
   from t.w(t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug":{"text":"Amoxicillin","codings":[{"system":"atc","code":"J01CA04"}]},"status":"active"}', '00000000-0000-0000-0000-0000000000ea'),
     '00000000-0000-0000-0000-00000000aa0c', array['allergy_clash']) r;
+
+\echo '── 12. the clock steps back: a set still records after the family''s set before it'
+-- a set of the second patient dated a second ahead of the clock, as one that landed just before the clock stepped back (§2)
+reset role;
+insert into core.entries (organization_id, id, patient_id, type, type_version, item, item_version, data, author_id, source, department_id, occurred_at, recorded_at, set_id)
+  values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000ee', '00000000-0000-0000-0000-0000000000f2', 'note', core.type_latest('note'),
+    '00000000-0000-0000-0000-0000000000ee', 1, '{"text":"before the step"}', '00000000-0000-0000-0000-0000000000b1', 'staff', :'im', clock_timestamp(), clock_timestamp() + interval '1 second', gen_random_uuid());
+set role authenticated;
+select t.as(:'dr');
+select t.landed(t.w(t.e('note', '00000000-0000-0000-0000-0000000000f2', :'im', '{"text":"after the step"}', '00000000-0000-0000-0000-0000000000ef')), 'a note after the step');
+reset role;
+select t.ok((select array_agg(id order by recorded_at, id) from core.entries where organization_id = '00000000-0000-0000-0000-0000000000a1' and patient_id = '00000000-0000-0000-0000-0000000000f2')
+  = array['00000000-0000-0000-0000-0000000000ee', '00000000-0000-0000-0000-0000000000ef']::uuid[], '(recorded_at, id) is still the order the sets landed');
+set role authenticated;

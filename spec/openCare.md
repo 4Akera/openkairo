@@ -86,7 +86,8 @@ entries. Everything that happens is an entry, including "made private", "called"
   `choose_user`, which binds the choice to the JWT's `session_id`. Nothing is ever shown across organizations.
 - **roles**: bundles of declared actions. Built-in roles belong to a layer (organization null) and are read-only; a clinic copies one
   to make its own. **holdings** are insert-only rows with a validity period, held everywhere (department null) or in one department.
-  Ending a holding inserts a row into `core.holding_ends`.
+  Ending a holding inserts a row into `core.holding_ends`. The clock may step back: a holding dated no later than its grant, and
+  every end, count once committed; one dated later is live from the later of the transaction's start and the clock.
 - `core.may(user, action, department)` → yes/no. **A null department matches only roles held everywhere.** `core.may_somewhere(user,
   action)` answers "in any department". A pack's actions need the pack in the organization's `packs_used` setting. Retired users and
   machine users hold nothing that opens a private item (§5.3).
@@ -117,9 +118,11 @@ encounter class, after Done, works for, review rule) are settings.
 `core.settings (organization_id, id, key, owner_id, thing_id, data, retired, author_id, recorded_at)`: insert-only, so the history is
 free. `thing_id` is the setting's own id over time (a service's id; the owner's id for a one-per-owner key). Each key is declared in
 the registry with an owner kind (`organization` · `department` · `place`), a JSON schema and an optional check function.
-`core.setting_at(organization, key, thing, at)` returns the setting as it stood at a moment. **Checks and refreshes read settings as of
-each entry's `recorded_at`**, so a later range change never alters an old flag and a rebuild stays identical. Services, presets,
-department rules, the packs used here and the Screens line are all settings rows; packs need no configuration tables of their own.
+`core.setting_at(organization, key, thing, at)` returns the setting as it stood at a moment; with no moment, the latest committed
+row (settings are never dated ahead, and the clock may step back), and a row records after the thing's row before it. **Checks and
+refreshes read settings as of each entry's `recorded_at`**, so a later range change never alters an old flag and a rebuild stays
+identical. Services, presets, department rules, the packs used here and the Screens line are all settings rows; packs need no
+configuration tables of their own.
 Written only by `public.write_setting`, which checks `may(user, 'manage:settings', owner department)` (or held everywhere for an
 organization key), the shape and the key's check; every change is an AuditEvent.
 
@@ -208,7 +211,7 @@ The writer:
    running checks again; with a different hash it is refused `set_changed`.
 4. **Locks**: advisory transaction locks on every patient family in the set plus every claim, in sorted order, with `lock_timeout` 3 s
    (a timeout returns outcome `busy`, which the client retries). It works out each survivor again after locking. Then
-   `recorded_at = clock_timestamp()`.
+   `recorded_at` = the clock, or 1 µs after the latest entry of those families when the clock has stepped back.
 5. **Generic checks**, which always refuse: the type exists and is on (its pack used here); the shape; `may(user, 'write:<type>',
    the entry's department)`; the department and visit belong to the organization; one patient family per set unless the type declares
    `other_patient`; `replaces` and `refers_to` targets exist in the family and are visible to the writer; the same-resource item rule;
@@ -333,6 +336,11 @@ an `order` that `changes` the order. The performer's "not done" is a `step`. Pre
 missed calls, seen at, times. Time-based states are worked out when reading, never by a timer that writes: away for more than 30
 minutes shows as not here; a visit with no move for 12 hours shows as left on screens; an opened anyway lasts 12 hours.
 
+**A stay takes only its own moves**: `admitted`, `moved`, `discharged`, `assigned`, `urgent` (and a `crossed_out`). A visit's moves on
+a stay (`called`, `seen`, `back_to_waiting`, `done`, `left`, `here`, `not_here`, `away`, `transferred`; another ward with the bed is a
+later round) are refused `not_a_visit`, and one that lands late never moves it. Entries written in the stay land and move nothing, so
+the patient screen on a stay has no Done: Sign writes the drafts as one set and the patient keeps the bed ("Admitted · Bed 3 · day 2").
+
 **The review of results while the patient waits.** A `done` with `wait` and orders out leaves the visit `pending`; when every order
 from it has an answer it is `back`, and the clinician sees the patient again. A result that arrives while the patient still waits in
 the visit is seen there; it needs a review row only when critical, when the patient left or was marked not here before being seen
@@ -345,8 +353,9 @@ again, or when it was corrected after being seen.
   `private` setting as of the item's first `recorded_at`. A correction shares the item, so it shares the privacy, and an earlier version
   never shows what the item hides.
 - Who reads a private item: holders of a live role with `read:record` in its department (a role held everywhere does not count; a
-  machine, importer or retired user never counts); an author of any of its versions; the visit's responsible clinician (`assigned` or
-  `seen` in that visit); for an answer to an order, the order's author and holders of `read:record` in the ordering department; anyone
+  machine, importer or retired user never counts); an author of any of its versions; the visit's responsible clinician (`assigned` to
+  them, or `seen` or `done` by them in that visit; calling is not seeing; these moves come only from the visit's own department,
+  refused `other_department` otherwise, and one that landed late and flagged makes nobody responsible); for an answer to an order, the order's author and holders of `read:record` in the ordering department; anyone
   with an `opened_anyway` for this patient and department in the last 12 h.
 - `private` / `not_private` are written by an author of the item or a holder of `read:record` in its department; `not_private` needs a
   reason. A striker (the author of a `crossed_out`) is not an author of the item.
@@ -358,8 +367,8 @@ again, or when it was corrected after being seen.
 - **Claims**: `admitted` and `moved` claim `place:<id>`, so two patients cannot both pass "the bed is free". `base.presence` has no unique
   index on beds: a late conflict lands and shows on the bed board as a conflict.
 - **Presence**: `called` needs a waiting visit, and a second `called` for the same version is `already_called`; `discharged` needs an
-  admitted stay; `checked_in` refuses a second open visit of the patient in the same department (`already_here`, and the client reuses
-  the open visit); `transferred` needs an open visit and another department.
+  admitted stay, and a stay refuses a visit's moves (`not_a_visit`, §4.2); `checked_in` refuses a second open visit of the patient in
+  the same department (`already_here`, and the client reuses the open visit); `transferred` needs an open visit and another department.
 - **Orders**: a service must belong to the target department; the target must work for the ordering department (`not_served`); a
   `result` may answer only an order whose service answers with results, and a note only a note-answered one (`wrong_answer`); a step
   (and a pack type extending it) that names a step key names one of the `steps` of its order's service as the service stands now, or
@@ -599,7 +608,24 @@ types, parked pack calls with per-call Retry, Postgres enums.
     kind of encounter only when chosen; Settings waits for the directory after a save (no double Add, no stale reorder); a blood
     pressure needs both sides at Done; the data-key scan also reads `select … into`, coalesce defaults and setting_at arguments.
     16 suites, 453 checks.
-- **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built. The Docker VM's
-  clock can step back a little, so a holding or setting written a moment ago may read as not yet valid (`valid_from`/`recorded_at`
-  against `clock_timestamp()`); a test run then fails about once in 25 — to settle before production. On a stay, the visit screen's
-  Done ends the stay (a stay mode is to be designed).
+- 2026-09-27 (later): the fix round.
+  - **Stay mode** (§4.2, §4.4): a stay takes only its own moves; `called`, `seen`, `back_to_waiting`, `done`, `left`, `here`,
+    `not_here`, `away` and `transferred` on it are refused `not_a_visit`, and the presence refresh ignores one that lands late, so a
+    note or vitals saved in a stay no longer ends it or frees its bed. The patient screen on a stay reads "Admitted · Bed 3 · day 2";
+    Sign (⌘↵) writes the drafts into the stay with no move and stays on the patient; Discharge sits inline for whoever may write it;
+    no Done, Next, Return to waiting or clinic line. A stay's status is `admitted` · `discharged` (never in consult, never a queue
+    row). The fixture's nurse also works in the ward: she signs vitals and a note in a stay (still admitted, same bed) and the visit
+    moves are refused. 16 suites, 465 checks.
+  - **The clock steps back** (§3.1, §3.4, §3.9): the Docker VM's clock (or an NTP step) made a holding or setting written a moment
+    ago read as not yet valid (a test run failed about once in 25), an ended holding read as live, and could record a later set
+    before an earlier one. As of now, a setting counts once committed (a moment keeps the filter); a holding dated no later than its
+    grant and every end count once committed, a holding dated later from `core.now_safe()` (the later of the transaction's start and
+    the clock); the writer records after the latest entry of the set's families (under their locks) and `write_setting` after the
+    thing's row before; the writer's hidden-target check knows a stored target by its set, not its time. The admin and spine suites
+    date rows a second ahead to stand for the step. The privacy suite's "nowhere in the record" check matched `9.9` inside a time
+    (…:29.9…) now and then; it matches the value only. 16 suites, 473 checks.
+  - **Reviewed** (find, then an adversarial check): another department can no longer claim a visit by a move (`other_department`),
+    calling no longer counts as seeing for private notes, and a refused move sent late makes nobody responsible; entries and settings
+    keep one order across a clock step (each is dated after the organization's latest other); a stay in bed exports as in progress
+    however long since its last move.
+- **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
