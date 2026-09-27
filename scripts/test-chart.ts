@@ -8,6 +8,7 @@ import { alertsOf, allergiesOf, changeText, historyOf, medLine, medicinesOf, pro
 import { keyResults, resultsByKind, vitalsNow } from '../src/core/screens/chart/model/values'
 import { summaryOf } from '../src/core/screens/chart/model/summary'
 import { fieldLabel, noteKind, sections, typeLabel } from '../src/core/screens/chart/model/labels'
+import { atOf, atParam, sameAt, withAt } from '../src/core/screens/chart/model/at'
 import type { ServerEntry } from '../src/core/db/types'
 import { E, T0, analyte, ctx, listRow, med, next, orderRow, org, presence, problem, record, result, reviewRow, table, types, val } from './chart-fixtures'
 
@@ -216,5 +217,16 @@ test('words: note kinds, sections, labels', () => {
   assert.deepEqual(sections('hx: thirst 3 months\nworse at night\nex: BMI 31\nplan: HbA1c'), [{ label: 'History', text: 'thirst 3 months\nworse at night' }, { label: 'Examination', text: 'BMI 31' }, { label: 'Plan', text: 'HbA1c' }])
   assert.deepEqual(sections('Seen today.\nS: cough'), [{ label: null, text: 'Seen today.' }, { label: 'Subjective', text: 'cough' }])
   assert.equal(typeLabel('pharmacy.dispense', types), 'Dispense'); assert.equal(typeLabel('pharmacy.dispense'), 'Dispense'); assert.equal(fieldLabel('reason_text'), 'Reason')
+})
+test('the center\'s scope in the URL: at=, and the old entry= and view=results still land', () => {
+  const q = (s: string) => new URLSearchParams(s)
+  assert.deepEqual(atOf(q('')), { scope: 'encounter' }); assert.deepEqual(atOf(q('at=visit:v1')), { scope: 'visit', id: 'v1' })
+  assert.deepEqual(atOf(q('at=outside')), { scope: 'outside' }); assert.deepEqual(atOf(q('at=nonsense')), { scope: 'encounter' })
+  assert.deepEqual(atOf(q('entry=e1')), { scope: 'entry', id: 'e1' }); assert.deepEqual(atOf(q('view=results')), { scope: 'results' })
+  assert.deepEqual(atOf(q('at=record&entry=e1')), { scope: 'record' })
+  assert.equal(atParam({ scope: 'encounter' }), null); assert.equal(atParam({ scope: 'entry', id: 'e1' }), 'entry:e1')
+  assert.equal(withAt(q('entry=e1&kind=notes'), { scope: 'visit', id: 'v2' }).toString(), 'kind=notes&at=visit%3Av2')
+  assert.equal(withAt(q('at=record&tab=record'), { scope: 'encounter' }).toString(), 'tab=record')
+  assert.ok(sameAt({ scope: 'visit', id: 'a' }, atOf(q('at=visit:a')))); assert.ok(!sameAt({ scope: 'visit', id: 'a' }, { scope: 'visit', id: 'b' }))
 })
 console.log(`chart: ${n} groups passed`)
