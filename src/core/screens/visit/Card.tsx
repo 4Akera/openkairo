@@ -143,7 +143,7 @@ function Note({ q, set, onLong }: { q: Q; set: (p: Q) => void; onLong?: (kind: s
   return <div className="grid gap-1.5">
     <Textarea dense aria-label="Note" value={q.text ?? ''} onChange={(e) => set({ text: e.target.value })} rows={Math.min(8, Math.max(2, String(q.text ?? '').split('\n').length))} className="min-h-0" />
     <FormRow inline><Select aria-label="Note kind" value={q.kind ?? 'progress'} onChange={(e) => set({ kind: e.target.value })} className={cn(small, 'w-52')}>{NOTE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
-      {onLong && <button type="button" onClick={() => onLong(q.kind ?? 'progress', q.text ?? '')} className="rounded-sm text-12 text-accent hover:underline focus-ring">Longer? open it beside the record</button>}
+      {onLong && <button type="button" onClick={() => onLong(q.kind ?? 'progress', q.text ?? '')} className="rounded-sm text-12 text-accent hover:underline focus-ring">Longer? open it under the line</button>}
       <span className="ms-auto text-11 text-faint">shift ↵ new line</span></FormRow>
   </div>
 }

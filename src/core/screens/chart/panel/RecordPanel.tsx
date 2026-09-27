@@ -2,7 +2,7 @@
 // Summary, Problems, Medicines, Allergies & alerts, History, Results, Documents, Visits & stays — from the one record read and the
 // facts page. The section chips at the top jump to a section and open it (←/→ between them; Alt+R lands here); ↑/↓ move between the
 // folding section heads, ↵ or Space folds one; folds are remembered in this browser. A list action seeds the composer and says so
-// (onCompose), so under 1100 px the chart can show the encounter. A fact, a visit or a result opens in the center (onOpen), never
+// (onCompose), so under 640 px the chart can show the encounter. A fact, a visit or a result opens in the center (onOpen), never
 // over the record.
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { RecordView, ServerEntry } from '../../../db/types'
@@ -48,7 +48,7 @@ export function RecordPanel(props: PanelProps) {
   const jump = useCallback((k: SectionKey) => {
     const el = root.current?.querySelector<HTMLElement>(`[data-section="${k}"]`); if (!el) return
     const head = headOf(el); if (head?.getAttribute('aria-expanded') === 'false') head.click()
-    el.scrollIntoView({ block: 'start', behavior: smooth() }); (head ?? el).focus({ preventScroll: true })
+    el.scrollIntoView({ block: 'start', inline: 'nearest', behavior: smooth() }); (head ?? el).focus({ preventScroll: true })
   }, [])
   const open = useCallback((id: string) => onOpen({ scope: 'entry', id }), [onOpen])
   const p: Panel = { ...props, rec: r.server, ctx, visitId: r.visit?.id ?? null, writes: (a) => !readOnly && can(a), jump, open }
@@ -62,7 +62,7 @@ export function RecordPanel(props: PanelProps) {
     e.preventDefault(); hs[(i + (e.key === 'ArrowDown' ? 1 : -1) + hs.length) % hs.length].focus()
   }
   return <BlockContext.Provider value={env}>
-    <div ref={root} onKeyDown={heads} className="grid content-start gap-3">
+    <div ref={root} onKeyDown={heads} className="grid grid-cols-1 content-start gap-3">
       <Chips jump={jump} />
       <PrivateNotes hidden={hidden} patientId={patientId} />
       <Part k="summary"><Summary p={p} /></Part>
@@ -77,7 +77,7 @@ export function RecordPanel(props: PanelProps) {
   </BlockContext.Provider>
 }
 
-/** a section's place: what the chips jump to (clear of the sticky banner and, under 1100 px, the tab row) */
+/** a section's place: what the chips jump to (clear of the sticky banner and, under 640 px, the tab row) */
 function Part({ k, fold, children }: { k: SectionKey; fold?: boolean; children: ReactNode }) {
   return <div data-section={k} data-fold={fold || undefined} tabIndex={-1} className="scroll-mt-[calc(var(--chart-top,0px)+3.5rem)] rounded-xl outline-none @split:scroll-mt-2">{children}</div>
 }

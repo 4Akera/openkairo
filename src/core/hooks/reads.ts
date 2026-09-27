@@ -56,7 +56,7 @@ export function useStays(departmentId: string | null) {
     queryKey: ['visit_queue', 'stays', departmentId],
     enabled: !!departmentId && !!org,
     refetchInterval: 30_000,
-    queryFn: () => table<PresenceRow>('base.presence', departmentId!, { department_id: departmentId, state: 'admitted' }, { entries: false }),
+    queryFn: () => table<PresenceRow>('base.presence', departmentId!, { department_id: departmentId, state: 'admitted' }),   // entries: each stay's opening one dates it
   })
 }
 

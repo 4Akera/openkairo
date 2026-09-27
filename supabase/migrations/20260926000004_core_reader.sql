@@ -289,7 +289,7 @@ begin
      or not exists (select 1 from core.file_uses f where f.organization_id = e.organization_id and f.entry_id = e.id and f.sha256 = q ->> 'sha256') then
     perform core.refuse('not_found', 'file');
   end if;
-  perform core.log_read(me, v_dept, e.patient_id, coalesce(q ->> 'purpose', 'TREAT'), null, jsonb_build_object('file', q ->> 'sha256', 'entry', e.id), 0);
+  perform core.log_read(me, v_dept, e.patient_id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('file', q ->> 'sha256', 'entry', e.id), 0);
   return jsonb_build_object('bucket', 'files', 'path', e.organization_id || '/' || e.patient_id || '/' || (q ->> 'sha256'));
 end $$;
 

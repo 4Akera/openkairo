@@ -150,7 +150,7 @@ create function pg_temp.w(p_entries jsonb) returns jsonb language plpgsql as $$
 declare r jsonb := public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', p_entries,
   'confirmed', '["allergy_clash","allergy_caution","duplicate_medication","duplicate_class","already_on_list"]'::jsonb));
 begin
-  if r ->> 'outcome' <> 'landed' then raise notice 'full chart: a % set did not land: %', p_entries -> 0 ->> 'type', r; end if;
+  if r ->> 'outcome' <> 'landed' then raise exception 'full chart: a % set did not land: %', p_entries -> 0 ->> 'type', r; end if;
   return r;
 end $$;
 create function pg_temp.q(v numeric, unit text, ucum text) returns jsonb language sql as $$ select jsonb_build_object('value', v::text, 'unit', unit, 'ucum', ucum) $$;

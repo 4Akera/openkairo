@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import { setClinicTimeZone } from '../src/core/ui/time'
 import type { Department, PresenceRow, QueueRow, VisitRow } from '../src/core/db/types'
-import { afterDone, barOf, callsOnOpen, cmdEnter, doneChoices, doneLabel, roleOf, sendsBack, stayWords, visitMoves } from '../src/core/screens/chart/model/visit'
+import { afterDone, barOf, callsOnOpen, cmdEnter, doneChoices, doneLabel, roleOf, stayWords, visitMoves } from '../src/core/screens/chart/model/visit'
 import { byDate, bySet, byVisit, filterSets } from '../src/core/screens/chart/model/encounter'
 import { itemsOf } from '../src/core/screens/chart/model/items'
 import { E, T0, presence, types } from './chart-fixtures'
@@ -61,8 +61,6 @@ test('Done writes seen (unseen, something written) then done, each changing the 
 test('Done goes to the next patient in place of this one, else the queue; another from the strip sends back one only called', () => {
   assert.deepEqual(afterDone(true, omar), { to: '/visit/v2', replace: true }); assert.deepEqual(afterDone(true, null), { to: '/', replace: false })
   assert.deepEqual(afterDone(false, omar), { to: '/', replace: false })
-  const called = visit(); const r = roleOf(called, 'gp', 'dr')
-  assert.ok(sendsBack(called, r, 0)); assert.ok(!sendsBack(called, r, 1)); assert.ok(!sendsBack(visit({ seen_at: T0 }), r, 0)); assert.ok(!sendsBack(null, r, 0))
 })
 test('Done\'s label and its other choices (D5: in a strip, by department.patients_wait and after_done; Not here before seen)', () => {
   assert.equal(doneLabel(2, dept(), omar), 'Sign 2 · Done → Omar'); assert.equal(doneLabel(0, dept({ after_done: 'queue' }), omar), 'Done')

@@ -18,12 +18,12 @@ export function EncounterPane({ composer }: { composer: RefObject<ComposerHandle
   const c = useChart(); const { org } = useDepartment(); const at = c.at
   const env = useMemo<BlockEnv>(() => ({ org, me: c.me, departmentId: c.departmentId, can: c.can, tables: c.r.server.tables,
     startOpen: at.scope === 'entry' ? [at.id] : undefined, onOpen: (id) => c.open({ scope: 'entry', id }) }), [org, c, at])
-  return <BlockContext.Provider value={env}><div className="grid content-start gap-3">
+  return <BlockContext.Provider value={env}><div className="grid grid-cols-1 content-start gap-3">
     <Notices />
     {c.writer && <Composer key={c.patientId} ref={composer} r={c.r} patientId={c.patientId} departmentId={c.departmentId} can={c.can} />}
     <LongNote key={`note:${c.patientId}`} onClose={() => composer.current?.focus()} />
     <DraftBlocks />
-    <div id="chart-scope" className="mt-1 grid scroll-mt-[calc(var(--chart-top,0px)+1rem)] content-start gap-3">
+    <div id="chart-scope" className="mt-1 grid scroll-mt-[calc(var(--chart-top,0px)+3.5rem)] content-start gap-3 @split:scroll-mt-[calc(var(--chart-top,0px)+1rem)]">
       {at.scope === 'encounter' ? (c.encounter ? <VisitTimeline key={c.encounter.id} id={c.encounter.id} current /> : <WholeRecord />)
         : at.scope === 'visit' ? <VisitTimeline key={at.id} id={at.id} current={at.id === c.encounter?.id} />
         : at.scope === 'outside' ? <OutsideList />

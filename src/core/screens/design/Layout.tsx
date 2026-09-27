@@ -1,5 +1,5 @@
 // /design · Components, the frames: sections (open, folded, compact, needing attention, a list), the page head, toolbars, tabs,
-// side-navigation links, the chart's split (in a box narrower than 1100 px, so its tabs show) and the header menu.
+// side-navigation links, the chart's split (in a box narrower than 640 px, so its tabs show) and the header menu.
 import { useState } from 'react'
 import { Activity, Check, ChevronDown, FileText, LogOut, Palette, Settings } from 'lucide-react'
 import { Button, Menu, MenuItem, MenuLabel, MenuSeparator, NavItem, PageHead, Section, SplitPane, Stat, Tabs, ThemeToggle, Toolbar } from '../../ui'
@@ -39,7 +39,7 @@ export function Layout() {
         <NavItem to="/design/components" icon={Palette}>Components</NavItem><NavItem to="/design/charts" icon={Activity} count={3}>Charts</NavItem>
       </Sample>
     </Group>
-    <Group title="The chart's split" hint="SplitPane answers to its own width: under 1100 px it shows two tabs, and both panes stay mounted">
+    <Group title="The chart's split" hint="SplitPane answers to its own width: under 640 px it shows two tabs, and both panes stay mounted">
       <div className="max-w-[900px] rounded-lg bg-canvas py-3 ring-1 ring-inset ring-line">
         <SplitPane mainTab="This visit · 2 drafts" asideTab="Record · 1 to review"
           main={<Section variant="compact" title="This visit"><p className="text-13 text-fg">Progress note · cough for three days, chest clear.</p><p className="text-13 text-muted">Draft: paracetamol 1 g when needed.</p></Section>}

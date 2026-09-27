@@ -70,7 +70,7 @@ export function Summary({ p }: { p: Panel }) {
         </> : <p className="text-faint">No vitals recorded</p>}
       </Item>
       {s.results.show && <Item label="Key results">
-        {s.results.rows.length ? <ul className="grid gap-0.5">{s.results.rows.map((k) => <li key={k.code}><KeyRow k={k} onOpen={() => p.open(k.entry_id)} /></li>)}</ul>
+        {s.results.rows.length ? <ul className="grid grid-cols-1 gap-0.5">{s.results.rows.map((k) => <li key={k.code}><KeyRow k={k} onOpen={() => p.open(k.entry_id)} /></li>)}</ul>
           : <p className="text-faint">None of the key tests yet — <Fact onOpen={() => p.jump('results')} className="text-accent">all results below</Fact></p>}
       </Item>}
       <Item label="Last visits">
@@ -88,7 +88,7 @@ export function Summary({ p }: { p: Panel }) {
 }
 
 function Item({ label, id, children }: { label: string; id?: string; children: ReactNode }) {
-  return <div id={id} className="grid scroll-mt-2 gap-0.5 @md:grid-cols-[7.5rem_minmax(0,1fr)] @md:gap-3">
+  return <div id={id} className="grid scroll-mt-2 grid-cols-1 gap-0.5 @md:grid-cols-[7.5rem_minmax(0,1fr)] @md:gap-3">
     <dt className="text-12 text-faint @md:pt-px">{label}</dt><dd className="min-w-0 text-13 text-fg">{children}</dd>
   </div>
 }

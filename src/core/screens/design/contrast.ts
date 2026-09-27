@@ -37,7 +37,7 @@ export const ON: Record<string, [string, number][]> = {
   'info-soft': [['faint', 4.5], ['info', 4.5]],
   accent: [['accent-fg', 4.5]], 'accent-hover': [['accent-fg', 4.5]],
   danger: [['danger-fg', 4.5]], warn: [['warn-fg', 4.5]], ok: [['ok-fg', 4.5]], info: [['info-fg', 4.5]],
-  band: [['accent', 4.5]],
+  band: [['accent', 4.5], ['muted', 4.5]],
   selection: [['fg', 4.5]],
 }
 export const PAIRS = Object.entries(ON).flatMap(([bg, on]) => on.map(([fg, min]) => ({ fg, bg, min })))

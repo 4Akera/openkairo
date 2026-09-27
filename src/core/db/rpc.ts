@@ -84,8 +84,8 @@ export const myUsers = () => call<{ id: string; organization_id: string; organiz
 export const chooseUser = (userId: string) => call<{ user_id: string; organization_id: string }>('choose_user', { p_user_id: userId })
 export const erasePatient = (p: { patient_id: string; reason: string }) => call('erase_patient', { p: p as unknown as Json })
 /** a file of an entry: read() says where it is (the reader may see the entry; the read is logged), then a link that lasts two minutes */
-export async function fileLink(entryId: string, sha256: string, departmentId: string): Promise<string> {
-  const f = await read<{ bucket: string; path: string }>({ shape: 'file', entry_id: entryId, sha256, department_id: departmentId })
+export async function fileLink(entryId: string, sha256: string, departmentId: string, purpose: { purpose: string; reason?: string } = { purpose: 'TREAT' }): Promise<string> {
+  const f = await read<{ bucket: string; path: string }>({ shape: 'file', entry_id: entryId, sha256, department_id: departmentId, ...purpose })
   const { data, error } = await db.storage.from(f.bucket).createSignedUrl(f.path, 120)
   if (error || !data?.signedUrl) throw new Refusal('file_missing')
   return data.signedUrl

@@ -31,7 +31,7 @@ function List({ p }: { p: Panel }) {
       return <li key={e.id} className="py-1.5 text-13">
         <p className="flex flex-wrap items-baseline gap-x-2"><Fact onOpen={() => p.open(e.id)} className="font-medium text-fg">{what}</Fact>
           {by && <span className="text-12 text-faint">{by}</span>}<span className="ms-auto text-12 text-faint tnum">{shortDate(e.occurred_at)}</span></p>
-        <Files entryId={e.id} files={e.data?.attachments as Attachment[] | undefined} />
+        <Files entryId={e.id} patientId={e.patient_id} files={e.data?.attachments as Attachment[] | undefined} />
       </li> })}</ul>
     {q.hasNextPage && <Button size="xs" variant="ghost" className="mt-1" loading={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>Earlier</Button>}
   </>

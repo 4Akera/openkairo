@@ -62,7 +62,7 @@ function Body() {
     </div>
     <Group title="Breakpoints and frames" hint="Tailwind's sm md lg xl 2xl stay; one is added">
       <div className="grid gap-1 text-12 text-muted">
-        <p><span className="font-mono text-11 text-fg">split: · @split:</span> 1100 px: the record panel sits beside the encounter (SplitPane answers to its own width)</p>
+        <p><span className="font-mono text-11 text-fg">split: · @split:</span> 640 px: from a phone's width up, the record panel sits beside the encounter (SplitPane answers to its own width)</p>
         <p><span className="font-mono text-11 text-fg">max-w-page</span> 72 rem: settings, the desk, a bench, the bed board · <span className="font-mono text-11 text-fg">max-w-chart</span> 96 rem: the patient chart</p></div>
     </Group>
   </div>

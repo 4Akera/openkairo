@@ -28,17 +28,16 @@ export function Banner({ name, sub, context, flags, vitals, back, actions, strip
     put(); const ro = new ResizeObserver(put); ro.observe(el)
     return () => { ro.disconnect(); root.style.removeProperty('--chart-top') }
   }, [stuck])
-  const who = <div className="min-w-0">
-    <p className="flex flex-wrap items-baseline gap-x-2"><span className={cn('font-semibold tracking-tight text-fg', full ? 'text-18' : 'text-16')}>{name}</span><span className="text-13 text-muted tnum">{sub}</span></p>
-    {context && <p className="text-12 text-faint tnum">{context}</p>}
-  </div>
+  // one line: the name, who they are, and where the visit stands (the context follows the sub, never a second row)
+  const who = <p className="flex min-w-0 flex-wrap items-baseline gap-x-2"><span className={cn('font-semibold tracking-tight text-fg', full ? 'text-18' : 'text-16')}>{name}</span>
+    <span className="text-13 text-muted tnum">{sub}</span>{context && <span className="text-12 text-faint tnum">· {context}</span>}</p>
   const backButton = back && <IconButton size="md" title={back.label} aria-label={back.label} onClick={back.onClick} className="-ms-1"><ArrowLeft className="rtl:-scale-x-100" /></IconButton>
   if (!full) return <Card className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3', className)}>
     {backButton}{who}{flags && <div className="flex flex-wrap items-center gap-1">{flags}</div>}{actions && <div className="ms-auto flex items-center gap-2">{actions}</div>}
   </Card>
   return <div ref={ref} className={cn('border-b border-line bg-surface/95 backdrop-blur', stuck && 'sticky top-0 z-sticky', className)}>
     {strip}
-    <div className="mx-auto flex max-w-chart flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
+    <div className="mx-auto flex max-w-chart flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2">
       {backButton}{who}
       {flags && <div className="flex flex-wrap items-center gap-1">{flags}</div>}
       {vitals && vitals.length > 0 && <div className="flex flex-wrap items-baseline gap-3 text-12 text-faint tnum">{vitals.map((v) => { const f = v.flag && v.flag !== 'normal' ? v.flag : null
@@ -61,11 +60,11 @@ export function ListRow({ number, name, age, status, who, minutes, next, selecte
 }) {
   return <li aria-selected={selected || undefined} className={cn('group border-t border-line first:border-t-0', next && 'bg-accent-soft/70', selected && 'rail', selected && !next && 'bg-hover', className)}>
     <div role={onOpen ? 'button' : undefined} tabIndex={onOpen ? -1 : undefined} onClick={onOpen}
-      className={cn('grid grid-cols-[3rem_minmax(8rem,11rem)_3.5rem_minmax(0,1fr)_auto_3rem] items-center gap-2 px-4 py-2 text-13', onOpen && 'cursor-pointer', onOpen && hover && (next ? 'hover:bg-accent-soft' : 'hover:bg-hover'), muted && 'text-faint')}>
+      className={cn('grid grid-cols-[3rem_minmax(8rem,11rem)_3.5rem_minmax(0,1fr)_auto_3rem] items-center gap-2 px-4 py-2 text-13 max-sm:flex max-sm:flex-wrap max-sm:items-baseline max-sm:gap-x-2 max-sm:gap-y-0.5', onOpen && 'cursor-pointer', onOpen && hover && (next ? 'hover:bg-accent-soft' : 'hover:bg-hover'), muted && 'text-faint')}>
       <span className="font-mono text-12 text-faint tnum">{number}</span>
-      <span className={cn('truncate', next ? 'font-semibold text-fg' : 'font-medium')}>{name}{enter && <Kbd className="ms-1.5 align-[1px] text-accent">↵</Kbd>}</span>
+      <span className={cn('truncate max-sm:min-w-0 max-sm:flex-1', next ? 'font-semibold text-fg' : 'font-medium')}>{name}{enter && <Kbd className="ms-1.5 align-[1px] text-accent">↵</Kbd>}</span>
       <span className="text-12 text-muted tnum">{age}</span>
-      <span className={cn('flex min-w-0 items-center gap-1.5 truncate text-13', muted ? 'text-faint' : 'text-fg')}>{status}</span>
+      <span className={cn('flex min-w-0 items-center gap-1.5 truncate text-13 max-sm:order-last max-sm:basis-full max-sm:ps-[3.5rem]', muted ? 'text-faint' : 'text-fg')}>{status}</span>
       <span className="flex items-center justify-end gap-2 text-12 text-faint" onClick={(e) => actions && e.stopPropagation()}>{actions ?? who}</span>
       <span className={cn('text-end text-12 tnum', minutes == null ? '' : minutes >= 60 ? 'font-medium text-danger' : minutes >= 30 ? 'text-warn' : 'text-faint')}>{minutes == null ? '' : waitWords(minutes)}</span>
     </div>

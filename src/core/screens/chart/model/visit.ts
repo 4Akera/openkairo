@@ -51,8 +51,6 @@ export function visitMoves(v: Pick<VisitRow, 'id' | 'patient_id' | 'latest_entry
 export const doneNext = (dept: Pick<Department, 'after_done'>) => dept.after_done !== 'queue'
 /** where Done lands: the next patient in place of this one, else the queue */
 export const afterDone = (andNext: boolean, next: Pick<QueueRow, 'id'> | null) => andNext && next ? { to: `/visit/${next.id}`, replace: true } : { to: '/', replace: false }
-/** another patient from the strip: one only called, with nothing written, goes back to his place */
-export const sendsBack = (v: VisitRow | null, role: Role, written: number) => !!v && role.mine && v.status === 'in_consult' && !v.seen_at && !written
 /** the Done button: "Sign 3 · Done → Omar" */
 export const doneLabel = (drafts: number, dept: Pick<Department, 'after_done'>, next: QueueRow | null) =>
   `${drafts ? `Sign ${drafts} · ` : ''}Done${doneNext(dept) && next ? ` → ${next.patient.given_name}` : ''}`

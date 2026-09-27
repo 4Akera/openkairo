@@ -128,8 +128,8 @@
   --radius-lg: 0.5rem;    /* 8: buttons, inputs, callouts */
   --radius-xl: 0.75rem;   /* 12: cards, panels, the palette */
 
-  --breakpoint-split: 68.75rem;  /* 1100px: the chart's record panel sits beside the encounter from here up (split:) */
-  --container-split: 68.75rem;   /* the same, for a frame that answers to its own width (@split: / @max-split:, SplitPane) */
+  --breakpoint-split: 40rem;     /* 640px: from a phone's width up, the chart's record panel sits beside the encounter (split:) */
+  --container-split: 40rem;      /* the same, for a frame that answers to its own width (@split: / @max-split:, SplitPane) */
   --container-page: 72rem;       /* settings, desk, bench, bed board (max-w-page) */
   --container-chart: 96rem;      /* the patient chart frame (max-w-chart) */
 

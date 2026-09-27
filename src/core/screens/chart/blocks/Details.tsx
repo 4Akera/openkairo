@@ -25,7 +25,7 @@ export function Details({ item, onClose, inset }: { item: ChartItem; onClose: ()
   // the order itself) joined with the read
   const held = [...item.versions, item.entry, ...item.later, ...(item.order ? [...item.order.steps, ...item.order.answers] : [])]
   const all = local ? held : q.data && [...new Map([...held, ...q.data].map((e) => [e.id, e])).values()]
-  return <div role="region" aria-label="Details" className={cn('grid gap-2 bg-sunken text-13', inset ? 'mt-2 rounded-lg p-3' : 'border-t border-line px-4 py-3 sm:ps-[4.75rem]')}>
+  return <div role="region" aria-label="Details" className={cn('grid gap-2 bg-sunken text-13', inset ? 'mt-2 rounded-lg p-3' : 'border-t border-line px-4 py-3')}>
     <div className="flex items-center gap-2"><p className="text-11 font-semibold uppercase tracking-[0.08em] text-faint">Details</p>
       <Button size="xs" variant="ghost" className="ms-auto" onClick={onClose}>Close <Kbd>esc</Kbd><X aria-hidden /></Button></div>
     {item.draft ? <KV dense items={[['Not signed', 'Written with the others when you sign'], ['As typed', item.draft.line || '—']]} />

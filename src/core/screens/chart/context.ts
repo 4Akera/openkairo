@@ -19,7 +19,7 @@ export interface Chart {
   can: (action: string) => boolean; writer: boolean   // writer: may write a note, vitals or an order here (the composer shows)
   at: At; open: (at: At) => void               // what the center shows
   kind: KindOrAll; setKind: (k: KindOrAll) => void; showKinds: (ks: KindOrAll[]) => void   // the kind filter's chips, for [ and ]
-  tab: 'main' | 'aside'; setTab: (t: 'main' | 'aside') => void   // under 1100 px: Encounter · Record
+  tab: 'main' | 'aside'; setTab: (t: 'main' | 'aside') => void   // under 640 px (a phone): Encounter · Record
   actions: ChartActions
 }
 export const ChartContext = createContext<Chart | null>(null)

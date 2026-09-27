@@ -92,7 +92,7 @@ export function LineChart({ points, unit, band, critical, height = 160, label, o
       : <div ref={box} className="relative">
         {w > 0 && n > 0 && <svg width={w} height={height} role="img" aria-roledescription="chart" aria-label={`${label}: ${points.map(said).join('; ')}`} tabIndex={0} className="block overflow-visible rounded-md focus-ring"
           onPointerMove={near} onPointerLeave={() => { if (!focused) setAt(null) }} onClick={() => open(at)} onKeyDown={keys} onFocus={() => { setFocused(true); setAt((a) => a ?? n - 1) }} onBlur={() => { setFocused(false); setAt(null) }}>
-          {hasBand && b1 > b0 && <><rect x={L} width={w - L - R} y={b0} height={b1 - b0} fill="var(--band)" /><text x={w - R} y={bandY} textAnchor="end" className="fill-faint text-11">normal {range(band)}</text></>}
+          {hasBand && b1 > b0 && <><rect x={L} width={w - L - R} y={b0} height={b1 - b0} fill="var(--band)" /><text x={w - R} y={bandY} textAnchor="end" className="fill-muted text-11">normal {range(band)}</text></>}
           {ticks.map((v) => <g key={v}><line x1={L} x2={w - R} y1={s.y(v)} y2={s.y(v)} stroke="var(--line)" /><text x={L - 6} y={s.y(v) + 4} textAnchor="end" className="fill-faint text-11 tnum">{fmt(v, step)}</text></g>)}
           {[critical?.low, critical?.high].map((v, i) => v != null && v >= s.lo && v <= s.hi && <line key={i} x1={L} x2={w - R} y1={s.y(v)} y2={s.y(v)} stroke="var(--danger-line)" />)}
           {dates.map((i, k) => <text key={i} x={s.x(i)} y={height - 4} textAnchor={k === 0 && dates.length > 1 ? 'start' : k === dates.length - 1 && dates.length > 1 ? 'end' : 'middle'} className="fill-faint text-11 tnum">{shortDate(points[i].at)}</text>)}

@@ -1,10 +1,11 @@
-// The block's shell (design-system.md §4.5): a set's head (when, who, where, the presence moves), a block's row (the time gutter, the
-// family's icon and plain label, the tags, the body), and the parts bodies share: labelled paragraphs and file chips. Tokens only;
+// The block's shell (design-system.md §4.5): a set's head (when, who, where, the presence moves), a block's row (the family's icon and
+// plain label, its own time when it differs from the set's, the tags, the body), and the parts bodies share: labelled paragraphs and file chips. Tokens only;
 // colour marks state, the family is told by the icon and the word.
 import { useState, type HTMLAttributes, type ReactNode } from 'react'
 import { Paperclip, type LucideIcon } from 'lucide-react'
 import type { Attachment } from '../../../db/shapes.generated'
 import { fileLink } from '../../../db/rpc'
+import { purposeFor } from '../../../hooks/reads'
 import { cn, errorText, hm } from '../../../ui'
 import type { SetGroup } from '../model/encounter'
 import { baseOf } from '../model/items'
@@ -12,18 +13,16 @@ import { MOVE_WORD, sections, words } from '../model/labels'
 import { personName, placeName, useBlockEnv, when } from './env'
 
 type RowProps = Omit<HTMLAttributes<HTMLDivElement>, 'title'> & { time?: string | null; icon: LucideIcon; label?: ReactNode; tags?: ReactNode; bare?: boolean }
-/** a block's row: the time gutter, then the meta line (icon, plain label, tags at the end) and the body; bare puts a one-line body in
- *  the meta line itself (a list review) */
+/** a block's row, full width: the meta line (icon, plain label, its own time only when it differs from the set's, tags at the end)
+ *  and the body; bare puts a one-line body in the meta line itself (a list review). No gutter: an empty time column wasted the width */
 export function Shell({ time, icon: I, label, tags, bare, className, children, ...rest }: RowProps) {
-  return <div className={cn('grid grid-cols-[3rem_minmax(0,1fr)] gap-x-3 px-4 py-3 transition-colors hover:bg-hover', className)} {...rest}>
-    <span className="pt-px text-end text-12 text-faint tnum">{time}</span>
-    <div className="min-w-0">
-      <div className={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-12 text-faint', !bare && 'mb-1')}>
-        <I aria-hidden className="size-3.5 shrink-0" />{bare ? children : <span className="min-w-0">{label}</span>}
-        {tags && <span className="ms-auto flex flex-wrap items-center justify-end gap-1">{tags}</span>}
-      </div>
-      {!bare && children}
+  return <div className={cn('min-w-0 px-4 py-3 transition-colors hover:bg-hover', className)} {...rest}>
+    <div className={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-12 text-faint', !bare && 'mb-1')}>
+      <I aria-hidden className="size-3.5 shrink-0" />{bare ? children : <span className="min-w-0">{label}</span>}
+      {time && <span className="tnum">· {time}</span>}
+      {tags && <span className="ms-auto flex flex-wrap items-center justify-end gap-1">{tags}</span>}
     </div>
+    {!bare && children}
   </div>
 }
 
@@ -57,13 +56,13 @@ export function Paragraphs({ text, className }: { text: string | null | undefine
 
 const size = (n: number) => n >= 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`
 /** a note's or a result's files: chips that open a short-lived link (the server checks the reader may see the entry) */
-export function Files({ entryId, files }: { entryId: string; files: Attachment[] | undefined }) {
+export function Files({ entryId, patientId, files }: { entryId: string; patientId: string; files: Attachment[] | undefined }) {
   const env = useBlockEnv(); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState<string | null>(null)
   if (!files?.length) return null
   const open = async (f: Attachment) => {
     if (env.sample || !env.departmentId) { env.onSample?.(`open ${f.name ?? 'the file'}`); return }
     setErr(null); setBusy(f.sha256)
-    try { window.open(await fileLink(entryId, f.sha256, env.departmentId), '_blank', 'noopener') } catch (e) { setErr(errorText(e)) } finally { setBusy(null) }
+    try { window.open(await fileLink(entryId, f.sha256, env.departmentId, purposeFor(patientId)), '_blank', 'noopener') } catch (e) { setErr(errorText(e)) } finally { setBusy(null) }
   }
   return <div className="mt-2 grid gap-1">
     <div className="flex flex-wrap gap-1.5">{files.map((f) => <button key={f.sha256} type="button" onClick={() => void open(f)} aria-busy={busy === f.sha256 || undefined}

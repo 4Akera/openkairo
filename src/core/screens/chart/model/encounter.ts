@@ -31,7 +31,7 @@ export function encounterItems(page: ServerEntry[], rec: Tables, visitId: string
 /** the visit's or stay's own entries (base.presence: presence types are not in the record, so the page never has them), oldest first */
 export function movesOf(rec: Tables, visitId: string): ServerEntry[] {
   const p = rec.tables['base.presence']; const row = p?.rows.find((r) => r.item === visitId)
-  return (row?.source_entries ?? []).map((id) => p!.entries[id]).filter((e): e is ServerEntry => !!e).sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
+  return (row?.source_entries ?? []).map((id) => p!.entries[id]).filter((e): e is ServerEntry => !!e).sort((a, b) => a.recorded_at.localeCompare(b.recorded_at) || a.item_version - b.item_version)
 }
 /** when a visit or stay began, in clinical time: its opening entry's occurred_at (an admission written late keeps its day), else the
  *  check-in's recorded time */
@@ -51,7 +51,11 @@ export function bySet(items: ChartItem[], moves: ServerEntry[] = [], types?: Ite
     department_id: e.department_id, items: [], groups: [], moves: [] }).get(e.set_id)!
   for (const i of items) { const s = set(i.entry); s.items.push(i); if (i.at < s.occurred_at) s.occurred_at = i.at }
   for (const m of moves) if (isMove(m.type, types) && (sets.has(m.set_id) || SHOWN.has(baseOf(m.type, types)))) set(m).moves.push(m)
-  for (const s of sets.values()) s.groups = groupBlocks(s.items)
+  for (const s of sets.values()) {
+    s.groups = groupBlocks(s.items)
+    // a set that holds a private item it hides names nobody: the reader stripped that author, and a visible sibling must not name him
+    s.author_id = s.items.some((i) => i.entry.hidden) ? null : (s.items.find((i) => !i.entry.hidden)?.entry.author_id ?? s.author_id)
+  }
   return [...sets.values()].sort((a, b) => b.at.localeCompare(a.at) || b.set_id.localeCompare(a.set_id))
 }
 /** a stay's days, newest first, every day from admission to today (or the discharge) — an empty day says so; a set lands on its clinical day */

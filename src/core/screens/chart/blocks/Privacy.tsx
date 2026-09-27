@@ -43,7 +43,7 @@ export function PrivateBlock({ item, time, inline }: { item: ChartItem; time?: s
     <p className="flex flex-wrap items-center gap-1.5 text-13 text-faint"><Lock aria-hidden className="size-3.5" />{words}<span className="ms-auto">{button}</span></p>{under}</div>
   return <div id={`entry-${item.entry.id}`}>
     <Shell bare time={time} icon={Lock} className="py-2.5" tags={button}>{words}</Shell>
-    {under && <div className="px-4 pb-3 sm:ps-[4.75rem]">{under}</div>}
+    {under && <div className="px-4 pb-3">{under}</div>}
   </div>
 }
 

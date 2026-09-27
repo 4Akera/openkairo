@@ -9,23 +9,26 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useDepartment } from '../../hooks/organization'
 import { refresh, useVisitActions } from '../../hooks/writes'
 import { useDrafts } from '../../hooks/drafts'
+import { useComposer } from '../../hooks/composer'
 import { write, WriteWarned, type EntryIn, type Finding } from '../../db/rpc'
 import { draftEntries, move, oneSet } from '../../db/entries'
 import type { QueueRow, RecordView, VisitRow } from '../../db/types'
 import type { EntryData } from '../../db/shapes.generated'
 import { errorText } from '../../ui'
 import type { ComposerHandle } from '../visit/Composer'
-import { afterDone, callsOnOpen, sendsBack, visitMoves, type Role } from './model/visit'
+import { afterDone, callsOnOpen, visitMoves, type Role } from './model/visit'
 
 export interface ChartActions {
   busy: boolean; err: string | null; warn: { findings: Finding[]; retry: (confirmed: string[]) => void } | null; clearWarn: () => void
   discharging: boolean; setDischarging: (on: boolean) => void; more: boolean; setMore: (on: boolean) => void
   sign: () => void; done: (andNext: boolean, wait?: boolean) => void; backToWaiting: () => void; notHere: () => void
-  openOther: (to: QueueRow) => void; discharge: (d: EntryData['discharged']['disposition']) => void; startVisit: () => void
+  discharge: (d: EntryData['discharged']['disposition']) => void; startVisit: () => void
 }
-interface Args { r: RecordView | undefined; visit: VisitRow | null; role: Role; patientId: string | null; visitId: string | null; next: QueueRow | null; composer: RefObject<ComposerHandle | null> }
+interface Args { r: RecordView | undefined; visit: VisitRow | null; role: Role; patientId: string | null; visitId: string | null; next: QueueRow | null; composer: RefObject<ComposerHandle | null>
+  /** an action waits (the line cannot be added, or a long note is open): bring the encounter forward, so the reason shows */
+  onHeld?: () => void }
 
-export function useChartActions({ r, visit, role, patientId, visitId, next, composer }: Args): ChartActions {
+export function useChartActions({ r, visit, role, patientId, visitId, next, composer, onHeld }: Args): ChartActions {
   const { dept, org, can } = useDepartment(); const navigate = useNavigate(); const qc = useQueryClient(); const visits = useVisitActions()
   const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   const [warn, setWarn] = useState<ChartActions['warn']>(null); const [discharging, setDischarging] = useState(false); const [more, setMore] = useState(false)
@@ -34,9 +37,21 @@ export function useChartActions({ r, visit, role, patientId, visitId, next, comp
   useEffect(() => {
     if (visit && called.current !== visit.id && callsOnOpen(visit, role, can('write:called'), !!visitId)) { called.current = visit.id; visits.call.mutate({ visit }) }
   }, [visit?.id, visit?.presence.state]) // eslint-disable-line react-hooks/exhaustive-deps
+  // another patient's chart starts clean: a warning card, an error, the More strip or the discharge chooser belong to the one before
+  // (reset while rendering, React's way to adjust state when a prop changes)
+  const [of, setOf] = useState(patientId)
+  if (of !== patientId) { setOf(patientId); setWarn(null); setErr(null); setMore(false); setDischarging(false) }
   const drafts = () => useDrafts.getState().byPatient[patientId ?? ''] ?? []
-  /** the composer's line goes first; if it cannot be added (a warning to confirm, a field missing) the action waits and the card says why */
-  const flushed = () => composer.current ? composer.current.flush() : true
+  /** the composer's line goes first; if it cannot be added (a warning to confirm, a field missing) the action waits and the card says
+   *  why. An open long note is not signed until it is added: the action waits there too, and the note gets the focus */
+  const flushed = () => {
+    if (useComposer.getState().longNote) {
+      onHeld?.(); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="The note"]')?.focus()); return false
+    }
+    const ok = composer.current ? composer.current.flush() : true
+    if (!ok) { onHeld?.(); requestAnimationFrame(() => composer.current?.focus()) }
+    return ok
+  }
   /** the drafts as entries (a medication sent to the pharmacy is two), in the visit or outside any */
   const entries = (withVisit: boolean): EntryIn[] => drafts().flatMap((d) =>
     draftEntries(d, { patientId: patientId!, departmentId: dept!.id, visitId: withVisit && visit ? visit.id : null, record: r, org }))
@@ -65,13 +80,6 @@ export function useChartActions({ r, visit, role, patientId, visitId, next, comp
     },
     /** called but not here: he keeps his place, and the desk sees the missed call */
     notHere: () => { if (visit) visits.back.mutate({ visit, reason: 'not_here' }, { onSuccess: () => navigate('/'), onError: (e) => setErr(errorText(e)) }) },
-    /** another patient from the strip: what is typed stays a draft; one only called, with nothing written, goes back to his place */
-    openOther: (to) => {
-      if (!flushed()) return
-      setErr(null)
-      const back = sendsBack(visit, role, drafts().length) ? visits.back.mutateAsync({ visit: visit!, reason: 'other' }) : Promise.resolve()
-      back.then(() => navigate(`/visit/${to.id}`), (e) => setErr(errorText(e)))
-    },
     /** a stay ends from its own screen too: what is written goes with the discharge; the ward's beds come next */
     discharge: (disposition) => {
       if (!patientId || !visit || !role.admitted || !dept || !flushed()) return

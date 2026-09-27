@@ -44,7 +44,7 @@ export function Result({ item, data, compact }: BlockProps) {
     {rows.length > 0 && <div className="-mx-1 overflow-x-auto"><AnalyteTable dense={compact} showPrevious={!compact} rows={rows} /></div>}
     {open && <Trend analyte={open} points={series(open)} onOpen={env.onOpen} />}
     {d.conclusion && <div>{unlabelled && <p className="text-11 font-semibold uppercase tracking-[0.08em] text-faint">{rows.length ? 'Impression' : 'Report'}</p>}<Paragraphs text={d.conclusion} /></div>}
-    <Files entryId={item.entry.id} files={d.attachments} />
+    <Files entryId={item.entry.id} patientId={item.entry.patient_id} files={d.attachments} />
   </div>
 }
 

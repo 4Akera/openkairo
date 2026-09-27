@@ -10,6 +10,6 @@ export function Note({ item, data, compact }: BlockProps) {
   return <div>
     {d.heading && <p className="mb-1 text-14 font-medium text-fg">{d.heading}</p>}
     <Paragraphs text={d.text} className={cn(compact && 'line-clamp-4')} />
-    <Files entryId={item.entry.id} files={d.attachments} />
+    <Files entryId={item.entry.id} patientId={item.entry.patient_id} files={d.attachments} />
   </div>
 }

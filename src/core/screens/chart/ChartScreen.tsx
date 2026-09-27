@@ -1,6 +1,6 @@
 // The patient screen (spec/openCare.md §4.6, chart-plan.md): the clinic visit (/visit/:id), the ward stay (/visit/:id of a stay) and
 // the record with no encounter (/patient/:id). The banner with Done or Sign always in reach; the encounter in the center — the
-// composer, the drafts drawn as blocks, what was signed — and the record on the right, a stack of sections; under 1100 px the two are
+// composer, the drafts drawn as blocks, what was signed — and the record on the right, a stack of sections; under 640 px (a phone) the two are
 // tabs. Whose visit it is: the queue row, else who-is-where (base.presence), else the patient of /patient/:id. A reader who may not
 // read the record here gets the glance. Every kept behaviour of the old visit screen is in useChartActions and model/visit.ts.
 import { useCallback, useEffect, useMemo, useRef } from 'react'
@@ -51,20 +51,20 @@ export function ChartScreen() {
   useEffect(() => { if (rec.data) rememberPatient({ ...rec.data.patient }) }, [rec.data?.patient.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // the next patient by the list's own rule: my Back patient (or an unclaimed one) first, else the first waiting
   const next = useMemo(() => nextPatient((queue.data?.rows ?? []).filter((r) => r.id !== visitId), me), [queue.data, visitId, me])
-  const actions = useChartActions({ r: rec.data, visit, role, patientId, visitId, next, composer })
-  // what the center shows, the kind filter and the tab (under 1100 px) live in the URL
+  // what the center shows, the kind filter and the tab (under 640 px) live in the URL
   const at = atOf(params); const kind = kindOf(params.get('kind')); const tab = params.get('tab') === 'record' ? 'aside' : 'main'
   // each change starts from the address as it is now (two quick changes both count), and replaces it: Esc is the way back
   const set = useCallback((f: (q: URLSearchParams) => URLSearchParams) => setParams(() => f(new URLSearchParams(window.location.search)), { replace: true }), [setParams])
   const setTab = useCallback((t: 'main' | 'aside') => set((q) => { if (t === 'aside') q.set('tab', 'record'); else q.delete('tab'); return q }), [set])
-  // what the record opens shows in the center, brought into view (under 1100 px its tab comes forward)
+  const actions = useChartActions({ r: rec.data, visit, role, patientId, visitId, next, composer, onHeld: () => setTab('main') })
+  // what the record opens shows in the center, brought into view (under 640 px its tab comes forward)
   const open = useCallback((a: At) => { set((q) => { const n = withAt(q, a); n.delete('tab'); return n })
     requestAnimationFrame(() => { const el = document.getElementById('chart-scope'); if (!el) return
       const top = el.getBoundingClientRect().top; const head = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chart-top')) || 0
-      if (top < head || top > innerHeight - 96) el.scrollIntoView({ block: 'start' }) }) }, [set])
+      if (top < head || top > innerHeight - 96) el.scrollIntoView({ block: 'start', inline: 'nearest' }) }) }, [set])
   const setKind = useCallback((k: KindOrAll) => set((q) => { if (k === 'all') q.delete('kind'); else q.set('kind', k); return q }), [set])
   const kinds = useRef<KindOrAll[]>(['all']); const showKinds = useCallback((ks: KindOrAll[]) => { kinds.current = ks }, [])
-  // a notice (an error, warnings to confirm, the discharge chooser) is in the center: under 1100 px its tab comes forward
+  // a notice (an error, warnings to confirm, the discharge chooser) is in the center: under 640 px its tab comes forward
   useEffect(() => { if (actions.err || actions.warn || actions.discharging) setTab('main') }, [actions.err, actions.warn, actions.discharging]) // eslint-disable-line react-hooks/exhaustive-deps
   // the keys, one listener (chart-plan.md §5.2): ⌘↵ Done (Sign in a stay; Sign N for someone else's patient) · / the composer ·
   // Alt+P/M/A start /dx /rx /al · Alt+R the record's sections and back · [ ] the kind filter · Esc back to this visit
@@ -98,10 +98,9 @@ export function ChartScreen() {
   if (rec.error || !rec.data) return <Centered><p role="alert" className="text-14 text-danger">{rec.error ? errorText(rec.error) : 'No record'}</p></Centered>
   const chart: Chart = { r: rec.data, facts: facts.data, patientId, departmentId: dept.id, encounter: visit, mode: role.stay ? 'stay' : visit ? 'visit' : 'record', role, me, can,
     writer: can('write:note') || can('write:vitals') || can('write:order'), at, open, kind, setKind, showKinds, tab, setTab, actions }
-  const strip = dept.work === 'visits' && !role.stay && queue.data ? queue.data.rows.filter((x) => x.id !== visitId) : null   // the clinic's line above the banner
   const review = rec.data.reviews.filter((x) => isForMe(x, me, dept.id)).length   // results waiting for my review
   return <ChartContext.Provider value={chart}><div className="pb-10">
-    <ChartBanner strip={strip} next={next} assignee={fromQueue?.assignee_name ?? null} onOther={actions.openOther} />
+    <ChartBanner next={next} assignee={fromQueue?.assignee_name ?? null} />
     <DoneChoices next={next} />
     <SplitPane className="mt-4" tab={tab} onTab={setTab} mainTab={<>Encounter{drafts > 0 && <span className="text-accent tnum">· {drafts}</span>}</>}
       asideTab={<>Record{review > 0 && <span className="text-warn tnum">· {review}</span>}</>}

@@ -412,10 +412,10 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   patient's chart, composer, settings, the style guide (`/design`). All of them write and read through the same two doors.
 - **The chart** is the patient screen: the clinic visit and the ward stay (`/visit/:id`) and the record with no encounter
   (`/patient/:id`). Whose visit it is: the queue row, else who-is-where (`base.presence`), else the patient of the link.
-  - *Banner* (sticky; the clinic's queue strip above it, not in a stay): name, age, sex, number, phone, deceased; the encounter in words
-    (in consult · follow-up · 12 min, or Admitted · Bed 3 · day 4, day 1 the admission's clinical day); active alerts, then allergies or
-    No known allergies / Allergies not asked; the last vitals (unflagged: vitals carry no interpretation); "1 critical to review" when
-    results wait for the reader. Actions: a clinic visit of mine in consult, **Done** (Sign N · Done → next, ⌘↵) and **More**, whose
+  - *Banner* (sticky, one row; no queue line above it: the queue is the clinic's home): name, age, sex, number, phone, deceased; the
+    encounter in words (in consult · follow-up · 12 min, or Admitted · Bed 3 · day 4, day 1 the admission's clinical day); active
+    alerts, then allergies or No known allergies / Allergies not asked; "1 critical to review" when results wait for the reader. No
+    vitals: the Summary shows them with their trend. Actions: a clinic visit of mine in consult, **Done** (Sign N · Done → next, ⌘↵) and **More**, whose
     choices (goes home / waits, → next or back to the queue, Not here, Return to waiting) open in a strip under the banner, never a menu
     over the record; a stay, **Sign** (into the stay, no move) and **Discharge** (inline chooser); otherwise "with Dr. X — theirs to
     finish", **Sign N** (outside any visit) and **Start visit**.
@@ -425,7 +425,7 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
     yesterday**, **Since Done** for a clinic patient back with results; an older visit (read-only, Esc back), Outside a visit, the
     **Whole record** (by visit or by day per `organization.record_view`, paged), results over time, one entry with its Details under
     it. A kind filter (`?kind=`, `[` `]`) narrows each. Nothing opens over the record.
-  - *Record panel* (right; tabs under 1100 px): the **Summary** — active problems, current medicines, allergies and alerts, last
+  - *Record panel* (right; tabs under 640 px, on a phone): the **Summary** — active problems, current medicines, allergies and alerts, last
     vitals, key results, last visits, still waiting, each with its limit and empty state — then Problems, Medicines, Allergies &
     alerts, History, Results, Documents, Visits & stays; list actions seed the composer; a fact opens its entry in the center.
   - *Glance*: the Summary's first five items at half their limits and the visits, read-only — beside the bench grid for a reader
@@ -438,7 +438,7 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
 #### Design system
 One system for core and packs (`src/core/ui`, imported as `@core/ui`): **tokens** in `src/core/styles.css`, a light and a dark value
 each (canvas, surface, raised, sunken, paper; fg, muted, faint; line, line-strong, hover, focus, selection, overlay, band; accent and danger, warn, ok,
-info, each with `-soft`, `-line` and `-fg`; text 11–22, radii sm–xl, shadows xs–md, the layers, `split` 1100 px); the theme is the
+info, each with `-soft`, `-line` and `-fg`; text 11–22, radii sm–xl, shadows xs–md, the layers, `split` 640 px); the theme is the
 user's choice (System, Light, Dark; per browser, no flash). **The kit** builds every screen: buttons, fields, chips, tags and badges,
 callouts, sections, tabs, rows, the banner, the split frame, KV, the analyte table, steps, stat, sparkline and line chart. **The rule**
 `opencare/tokens-only` (ESLint) refuses raw palette classes, literal colours, off-scale sizes and `dark:` anywhere outside the kit;

@@ -5,7 +5,8 @@ import { usePatientSearch, useStays } from '../../hooks/reads'
 import { newId, useWrite } from '../../hooks/writes'
 import { move, oneSet } from '../../db/entries'
 import { banner } from '../../db/views'
-import type { Department, Identity, Place, PresenceRow } from '../../db/types'
+import type { Department, Identity, Place, PresenceRow, TableRead } from '../../db/types'
+import { startOf } from '../chart/model/encounter'
 import { Badge, Button, Card, Input, Select, Spinner, cn, errorText, shortDate } from '../../ui'
 import { DISPOSITION } from './words'
 
@@ -36,7 +37,7 @@ export function BedBoard({ dept }: { dept: Department }) {
       return <Card key={b.id} className={cn('grid gap-2 p-3', b.closed && 'opacity-60')}>
         <div className="flex items-center gap-2"><span className="text-14 font-semibold">{b.name}</span>{b.closed && <Badge>closed</Badge>}
           {!r && !b.closed && may && !here && <Button size="sm" variant="outline" className="ml-auto" onClick={() => setOpen({ bed: b.id, what: 'admit' })}>Admit</Button>}</div>
-        {r && <Occupant row={r} patients={stays.data!.patients} />}
+        {r && <Occupant row={r} read={stays.data!} />}
         {r && !here && may && <div className="flex gap-1.5">
           <Button size="sm" variant="ghost" onClick={() => setOpen({ bed: b.id, what: 'move' })} disabled={!free.length}>Move</Button>
           <Button size="sm" variant="ghost" onClick={() => setOpen({ bed: b.id, what: 'discharge' })}>Discharge</Button></div>}
@@ -47,15 +48,16 @@ export function BedBoard({ dept }: { dept: Department }) {
         {here === 'discharge' && r && <Choose label="To" options={DISPOSITION} go="Discharge" busy={w.isPending} onCancel={() => setOpen(null)}
           onGo={(disposition) => w.mutate(oneSet([move('discharged', { id: r.item, patient_id: r.patient_id, latest_entry: r.latest_entry }, dept.id, { disposition })]), done)} />}
       </Card> })}</div>}
-    {noBed.length > 0 && <Card className="grid gap-2 p-3"><p className="text-12 font-medium text-faint">Admitted, no bed here</p>{noBed.map((r) => <Occupant key={r.item} row={r} patients={stays.data!.patients} />)}</Card>}
+    {noBed.length > 0 && <Card className="grid gap-2 p-3"><p className="text-12 font-medium text-faint">Admitted, no bed here</p>{noBed.map((r) => <Occupant key={r.item} row={r} read={stays.data!} />)}</Card>}
   </div>
 }
 
-function Occupant({ row, patients }: { row: PresenceRow; patients: Record<string, Identity> }) {
-  const navigate = useNavigate(); const i = patients[row.patient_id]; const p = i ? banner(i) : null
+/** who is in the bed, since the stay's clinical start (the admission as it happened, as the chart dates it) */
+function Occupant({ row, read }: { row: PresenceRow; read: TableRead<PresenceRow> }) {
+  const navigate = useNavigate(); const i: Identity | undefined = read.patients[row.patient_id]; const p = i ? banner(i) : null
   return <button type="button" onClick={() => navigate(`/visit/${row.item}`)} className="grid text-left hover:underline">
     <span className="text-13 font-medium">{p ? `${p.given_name} ${p.family_name}` : 'Patient'}{p && <span className="ml-1.5 text-12 font-normal text-faint">{p.sex[0]?.toUpperCase()} {p.age}</span>}</span>
-    <span className="text-12 text-faint">since {shortDate(row.checked_in_at)}{row.reason ? ` · ${row.reason}` : ''}{row.urgent ? ' · urgent' : ''}</span></button>
+    <span className="text-12 text-faint">since {shortDate(startOf(row, read))}{row.reason ? ` · ${row.reason}` : ''}{row.urgent ? ' · urgent' : ''}</span></button>
 }
 
 /** admit to this bed: find the patient, a reason if one is known */
