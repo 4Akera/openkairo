@@ -1,18 +1,13 @@
 // Every screen renders every type (spec 05): a card per entry from display_line, values and text; packs may register richer ones.
 import { Fragment, type ComponentType } from 'react'
 import type { Card, RequestQueueRow, Value } from '../db/types'
+import type { EntryBody } from '../db/rpc'
 import { flagClass, hm } from '../ui'
 export interface Renderer { Card?: ComponentType<{ card: Card }>; Full?: ComponentType<{ card: Card; data: Record<string, unknown> }> }
 const registry = new Map<string, Renderer>()
 export const registerRenderer = (type: string, r: Renderer) => registry.set(type, r)
 export const rendererFor = (type: string) => registry.get(type)
 
-/** Request steps belong to packs (spec 06, amendments 2026-09-23 · 4): a pack registers the step buttons its departments show on the bench.
- *  Core registers none — a request goes from new to released. A step never closes a request; only a reply or a cancel does. */
-export interface BenchStep { step: string; label: string; from: string[] }
-const benchSteps = new Map<string, BenchStep[]>()
-export const registerBenchSteps = (departmentType: string, steps: BenchStep[]) => benchSteps.set(departmentType, steps)
-export const benchStepsFor = (departmentType: string) => benchSteps.get(departmentType) ?? []
 /** a pack's words for its bench: "To give" · "Given today" in place of "To collect" · "Done today" */
 export interface BenchWords { todo?: string; done?: string }
 const benchWords = new Map<string, BenchWords>()
@@ -24,7 +19,7 @@ export const benchWordsFor = (departmentType: string): BenchWords => benchWords.
 export interface ReplyForm<V = unknown> {
   action: string                                                       // the action the writer needs, e.g. write:pharmacy.dispense
   Editor: ComponentType<{ request: RequestQueueRow; value: V | undefined; onChange: (v: V) => void }>
-  toWrite: (request: RequestQueueRow, value: V | undefined) => { type: string; data: Record<string, unknown> } | null
+  toWrite: (request: RequestQueueRow, value: V | undefined) => EntryBody | null   // a type and its data, in that type's declared shape
   automatic?: boolean                                                  // its requests come from another write (dispensing, from a prescription): not ordered by hand
   quick?: string                                                       // a one-click release on the bench row ("Give all"): toWrite(request, undefined) for each
 }

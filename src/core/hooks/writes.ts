@@ -28,9 +28,9 @@ export function useVisitActions() {
       const e = checkIn(a.patient_id, at(), a.department_id, { priority: a.priority && a.priority !== 'routine' ? 'urgent' : undefined, reason: a.reason })
       await write(oneSet([e])); return { id: e.id }
     }, onSuccess: () => refresh(qc) }),
-    present: useMove((a: { visit: VisitRow; is_present: boolean }) => oneSet([move(a.is_present ? 'here' : 'not_here', a.visit, at())])),
+    present: useMove((a: { visit: VisitRow; is_present: boolean }) => oneSet([move(a.is_present ? 'here' : 'not_here', a.visit, at(), {})])),
     priority: useMove((a: { visit: VisitRow; priority: 'routine' | 'urgent' | 'stat' }) => oneSet([move('urgent', a.visit, at(), { urgent: a.priority !== 'routine' })])),
-    call: useMove((a: { visit: VisitRow }) => oneSet([move('called', a.visit, at())])),
+    call: useMove((a: { visit: VisitRow }) => oneSet([move('called', a.visit, at(), {})])),
     back: useMove((a: { visit: VisitRow; reason: 'not_here' | 'sent_out' | 'other' }) => oneSet([move('back_to_waiting', a.visit, at(), { reason: a.reason })])),
     left: useMove((a: { visit: VisitRow; reason?: string }) => oneSet([move('left', a.visit, at(), a.reason ? { reason: a.reason } : {})])),
     transfer: useMove((a: { visit: VisitRow; to: string }) => oneSet([move('transferred', a.visit, at(), { to_department_id: a.to })])),

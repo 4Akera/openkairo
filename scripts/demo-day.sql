@@ -1,6 +1,7 @@
 -- A realistic clinic morning for the Demo Clinic, written through the doors as real users (never into tables):
 -- reception registers and checks in :n patients to General Practice; the doctor sees most of them (vitals, a problem, a medicine, labs for
--- every third, a medicine sent to the pharmacy for every fourth); the lab answers; the pharmacy dispenses; two are admitted to the ward;
+-- every third, a medicine sent to the pharmacy for every fourth); the lab collects, receives and answers; the pharmacy prepares and
+-- dispenses; two are admitted to the ward;
 -- one is seen in Psychiatry (a private note).
 -- Run:  npm run db:demo      (after npm run db:reset)
 \set n 30
@@ -64,9 +65,18 @@ begin
             'data', jsonb_build_object('wait', i % 6 = 0))),
       'confirmed', '["allergy_clash","allergy_caution","duplicate_medication","duplicate_class","already_on_list"]'::jsonb));
     if r ->> 'outcome' <> 'landed' then raise notice 'visit % did not land: %', i, r; end if;
-    -- the lab answers the CBCs (and every other order) with a first value
+    -- the lab walks each order through its service's steps (collected, received) and answers with a first value; the last sample
+    -- is still on its way, so its patient waits
     if i % 3 = 0 then
       perform set_config('request.jwt.claim.sub', tech, true);
+      st := gen_random_uuid();
+      r := public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', jsonb_build_array(jsonb_build_object('id', st, 'type', 'step', 'patient_id', pid,
+        'department_id', lab, 'refers_to', ord, 'relation', 'answers', 'data', jsonb_build_object('status', 'in-progress', 'step', 'collected', 'specimen', 'L-' || i)))));
+      if r ->> 'outcome' <> 'landed' then raise notice 'collected % did not land: %', i, r; end if;
+      continue when i = 18;
+      r := public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'type', 'step', 'patient_id', pid,
+        'department_id', lab, 'refers_to', st, 'relation', 'changes', 'data', jsonb_build_object('status', 'in-progress', 'step', 'received', 'specimen', 'L-' || i)))));
+      if r ->> 'outcome' <> 'landed' then raise notice 'received % did not land: %', i, r; end if;
       hb := case when i % 12 = 0 then 6.8 else 11 + (i % 7) end;
       r := public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'type', 'result', 'patient_id', pid,
         'department_id', lab, 'refers_to', ord, 'relation', 'answers', 'data', jsonb_build_object('status', 'final',
@@ -90,13 +100,18 @@ declare org uuid := '00000000-0000-0000-0000-00000000a001'; pharm uuid := '00000
         desk uuid := '00000000-0000-0000-0000-00000000d001'; psy uuid := '00000000-0000-0000-0000-00000000d005';
         o record; r jsonb; pid uuid; vid uuid; called uuid; bed int := 0; w record;
 begin
-  -- the pharmacist dispenses half of what was sent
+  -- the pharmacist dispenses half of what was sent, prepares the next one (the dispensing service's step) and leaves the last to give
   perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000109', true);
-  for o in select item, patient_id from base.orders where organization_id = org and to_department_id = pharm and status = 'active' order by ordered_at limit 4 loop
+  for o in select item, patient_id from base.orders where organization_id = org and to_department_id = pharm and status = 'active' order by ordered_at limit 3 loop
     r := public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'type', 'pharmacy.dispense',
       'patient_id', o.patient_id, 'department_id', pharm, 'refers_to', o.item, 'relation', 'answers', 'data', jsonb_build_object('status', 'completed',
         'pharmacy', jsonb_build_object('items', jsonb_build_array(jsonb_build_object('drug', jsonb_build_object('text', 'as prescribed'),
           'quantity', jsonb_build_object('value', '30', 'unit', 'tablets', 'ucum', '{tbl}')))))))));
+  end loop;
+  for o in select item, patient_id from base.orders where organization_id = org and to_department_id = pharm and status = 'active' order by ordered_at limit 1 loop
+    r := public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'type', 'pharmacy.dispense',
+      'patient_id', o.patient_id, 'department_id', pharm, 'refers_to', o.item, 'relation', 'answers', 'data', '{"status":"in-progress","step":"prepared"}'::jsonb))));
+    if r ->> 'outcome' <> 'landed' then raise notice 'prepared did not land: %', r; end if;
   end loop;
   -- two admissions to the ward, from waiting patients
   perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000102', true);

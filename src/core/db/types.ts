@@ -1,6 +1,8 @@
 // Two kinds of shape. The server's: what read() returns (spec/openCare.md §3.10) — entries, derived rows, identities, the
 // directory. The screens': view models built from those in views.ts, under the names the screens already use.
-// Hand-written on purpose: every read returns jsonb, which has no generated type.
+// Hand-written on purpose: every read returns jsonb, which has no generated type. An entry's data is typed by its shape where a
+// view model keeps it (shapes.generated.ts; views.ts dataOf).
+import type { EntryData, SettingData } from './shapes.generated'
 
 // ── the server's shapes ──
 export interface ServerEntry {
@@ -40,7 +42,7 @@ export interface ServerMe {
   me: { id: string; name: string; title: string | null; kind: string; organization_id: string; holdings: { department_id: string | null; role_id: string; actions: string[] }[] }
   users_of_login: { id: string; organization_id: string; organization: string; name: string }[]
   organization: { id: string; name: string; time_zone: string; packs_used: string[] }
-  sites: { id: string; name: string }[]
+  sites: { id: string; name: string; retired_at: string | null }[]
   departments: { id: string; name: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; site_id: string | null; position: number; retired_at: string | null }[]
   places: { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; retired_at: string | null }[]
   users: { id: string; name: string; title: string | null; kind: string; retired_at: string | null; signed_in_at: string | null; has_login: boolean }[]
@@ -68,9 +70,9 @@ export interface Card {
     priority: Priority; due_at: string; reply_line: string | null; reply_flag: Flag | null; replied_at: string | null; review_needed_at: string | null; review_reason?: string | null; order?: OrderRow }
 }
 export interface PatientBanner { id: string; record_number: number; given_name: string; middle_name: string | null; family_name: string; sex: string; born_on: string; age: number; died_on: string | null; merged_into_id: string | null; phone_text: string | null }
-export interface Medication { id: string; entry_id?: string; version?: number; drug_code: string | null; drug_name: string; dose_number: number | null; dose_unit: string | null; route: string | null; frequency: string | null; prn: boolean; prn_reason_text?: string | null; problem_id: string | null; status: string; started_on: string; instructions_text?: string | null; basis?: string; duration_days?: number | null; data?: Record<string, unknown> }
-export interface Problem { id: string; entry_id?: string; version?: number; code: string | null; name: string; status: string; onset_on: string | null; note_text: string | null; certainty: 'confirmed' | 'suspected'; data?: Record<string, unknown> }
-export interface Allergy { id: string; entry_id?: string; version?: number; substance_name: string; class_code: string | null; kind: string; reactions_text: string | null; severity: string | null; status: string; certainty?: string | null; data?: Record<string, unknown> }
+export interface Medication { id: string; entry_id?: string; version?: number; drug_code: string | null; drug_name: string; dose_number: number | null; dose_unit: string | null; route: string | null; frequency: string | null; prn: boolean; prn_reason_text?: string | null; problem_id: string | null; status: string; started_on: string; instructions_text?: string | null; basis?: string; duration_days?: number | null; data?: EntryData['medication'] }
+export interface Problem { id: string; entry_id?: string; version?: number; code: string | null; name: string; status: string; onset_on: string | null; note_text: string | null; certainty: 'confirmed' | 'suspected'; data?: EntryData['problem'] }
+export interface Allergy { id: string; entry_id?: string; version?: number; substance_name: string; class_code: string | null; kind: string; reactions_text: string | null; severity: string | null; status: string; certainty?: string | null; data?: EntryData['allergy'] }
 export interface ListReview { list: string; reviewed_at: string; reviewed_by_id: string; outcome: string }
 export interface Value { code: string; name: string; value_number?: number; value_text?: string; unit?: string; flag?: Flag | null; reference_low?: number; reference_high?: number }
 export interface VisitRow {
@@ -109,19 +111,20 @@ export interface PatientHit extends PatientBanner {
   open_visits: { id: string; department_id: string; department_name: string; status: VisitStatus; present: boolean; arrived_at: string; assignee_id: string | null; row: PresenceRow }[]
 }
 export interface Department {
-  id: string; name: string; type: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; is_visited: boolean; is_outside?: boolean; site_name: string | null; position: number
+  id: string; name: string; type: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; is_visited: boolean; is_outside?: boolean; site_id: string | null; site_name: string | null; position: number
   serves: (string | null)[]; checks_in_for: (string | null)[]; patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; is_private: boolean; after_done: 'next' | 'queue'
-  pack_cards: boolean; screens: string[]; opens: string | null; encounter_class: string | null
+  pack_cards: boolean; screens: string[]; opens: string | null; encounter_class: SettingData['department.encounter_class']['class'] | null
 }
-export interface ServiceField { position: number; key: string; code: string; name: string; kind: string; unit: string | null; ucum: string | null; choices: string[] | null
+export interface ServiceField { position: number; key: string; code: string; name: string; kind: 'number' | 'text' | 'choice'; unit: string | null; ucum: string | null; choices: string[] | null
   reference_low: number | null; reference_high: number | null; critical_low: number | null; critical_high: number | null; ranges: FieldRange[] }
-export interface Service { id: string; department_id: string | null; section_name: string | null; code: string; name: string; reply_type: string; coding: { system: string; code: string } | null; fields: ServiceField[] }
+export interface Service { id: string; department_id: string | null; section_name: string | null; code: string; name: string; reply_type: string; coding: { system: string; code: string } | null; fields: ServiceField[]
+  steps: string[] }   // its steps in order, as keys (collected, received)
 export interface Template { id: string; department_id: string | null; name: string; items: { service_id: string }[]; shortcut: string | null; lines: string[] }
-export interface Place { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; closed: boolean }
+export interface Place { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; closed: boolean; closed_reason: string | null }
 export interface Organization {
   organization: { id: string; name: string; time_zone: string; record_view: 'visits' | 'entries' }
   me: { id: string; name: string; kind: string; departments: Department[]; actions: string[]; works_in: string[]; holdings: ServerMe['me']['holdings'] }
-  departments: Department[]; allDepartments: Department[]; services: Service[]; templates: Template[]; places: Place[]
+  departments: Department[]; allDepartments: Department[]; services: Service[]; templates: Template[]; places: Place[]; sites: ServerMe['sites']
   packs: { key: string; name: string; enabled: boolean; stale: number }[]
   users: { id: string; name: string; kind: string; title: string | null; retired_at: string | null; accepted_at: string | null; has_login: boolean; roles: { role_id: string; role_key: string; department_id: string | null }[] }[]
   roles: { id: string; key: string; name: string; is_builtin: boolean; actions: string[]; every_action: boolean }[]

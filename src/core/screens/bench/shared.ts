@@ -1,5 +1,4 @@
-import type { RequestQueueRow } from '../../db/types'
-import type { BenchStep } from '../../renderers'
+import type { Organization, RequestQueueRow } from '../../db/types'
 import { ymd } from '../../ui'
 // The bench works a department's request queue by patient: one sample, one person, many tests (spec 05, the request surface at volume).
 /** one patient's open requests; since = when the longest wait today began (null when every request is from an older day) */
@@ -25,21 +24,30 @@ export const ageOf = (born: string) => { const [y, m = 1, d = 1] = born.split('-
 /** 34 F */
 export const ageSex = (p: { born_on: string; sex: string }) => `${ageOf(p.born_on)} ${p.sex?.[0]?.toUpperCase() ?? ''}`
 export const STEP_TONE: Record<string, 'amber' | 'blue' | 'neutral' | 'brand'> = { sent: 'amber', started: 'blue', held: 'neutral', replied: 'brand', reopened: 'amber' }
-export const STEP_LABEL: Record<string, string> = { sent: 'new', started: 'in progress', held: 'held', replied: 'preliminary', reopened: 'reopened' }
+const STEP_LABEL: Record<string, string> = { sent: 'new', started: 'in progress', held: 'held', replied: 'preliminary', reopened: 'reopened' }
+/** a step in the bench's words: new, in progress, held, preliminary, or a step of the service (sample_sent → sample sent) */
+export const stepLabel = (s = 'sent') => STEP_LABEL[s] ?? s.replace(/_/g, ' ')
+/** a step key as a button: collected → Collected */
+export const stepName = (key: string) => key[0].toUpperCase() + key.slice(1).replace(/_/g, ' ')
 
-/** where an open request stands: not started yet (the first segment, "To collect") or being worked ("In progress").
- *  Sent, and any step a pack lists before its first working step, is not started; held, started, a preliminary reply,
- *  a pack's own step (prepared, collected, received) and anything else is being worked. */
+/** where an open request stands: nothing done yet (sent: the first segment, "To collect") or being worked ("In progress":
+ *  started, held, a preliminary reply, a step of its service such as collected or prepared) */
 export type Phase = 'todo' | 'doing'
-const WORKING = new Set(['held', 'started', 'replied', 'reopened'])
-export function phaseOf(step: string | undefined, packSteps: BenchStep[]): Phase {
-  const s = step ?? 'sent'
-  if (s === 'sent') return 'todo'
-  if (WORKING.has(s) || packSteps.some((p) => p.step === s)) return 'doing'
-  return packSteps[0]?.from.includes(s) ? 'todo' : 'doing'
+export const phaseOf = (step: string | undefined): Phase => (step ?? 'sent') === 'sent' ? 'todo' : 'doing'
+/** each order's next step, one button per step: the service's first step after the one it reached, the first when none yet
+ *  (spec/openCare.md §4.4). A service answered by a pack type that extends step (pharmacy.dispense) takes its steps in that type. */
+export function nextSteps(rows: RequestQueueRow[], o: Organization | undefined, may: (action: string) => boolean) {
+  const by = new Map<string, { key: string; type: string; rows: RequestQueueRow[] }>()
+  for (const r of rows) {
+    const steps = o?.services.find((s) => s.id === r.service_id)?.steps ?? []
+    const key = steps[r.order.step_key ? steps.indexOf(r.order.step_key) + 1 : 0]
+    const type = r.reply_type && o?.types.find((t) => t.key === r.reply_type)?.base_type === 'step' ? r.reply_type : 'step'
+    if (!key || !may(`write:${type}`)) continue
+    const g = by.get(`${type} ${key}`) ?? { key, type, rows: [] }
+    g.rows.push(r); by.set(`${type} ${key}`, g)
+  }
+  return [...by.values()]
 }
-/** the first segment's name: the department's first bench step ("Prepare" → "To prepare"), else "To collect" */
-export const firstStepName = (packSteps: BenchStep[]) => packSteps[0]?.label ? `To ${packSteps[0].label.toLowerCase()}` : 'To collect'
 /** the clinic's today, 2026-09-24 */
 export const todayYmd = () => ymd(new Date().toISOString())
 /** a request is today's when it was made or falls due on the clinic's today */
@@ -56,8 +64,8 @@ export function testsLine(rows: RequestQueueRow[], shown = 3) {
   const names = [...new Set(rows.map(testName))]
   return names.slice(0, shown).join(', ') + (names.length > shown ? ` +${names.length - shown}` : '')
 }
-/** the steps worth a word on an in-progress row: held, preliminary, a pack's own step (prepared) */
-export const stepWords = (rows: RequestQueueRow[]) => [...new Set(rows.map((r) => r.request?.step ?? 'sent'))].filter((s) => s !== 'sent' && s !== 'started').map((s) => STEP_LABEL[s] ?? s)
+/** the steps worth a word on an in-progress row: held, preliminary, a step of its service (collected, prepared) */
+export const stepWords = (rows: RequestQueueRow[]) => [...new Set(rows.map((r) => r.request?.step ?? 'sent'))].filter((s) => s !== 'sent' && s !== 'started').map((s) => stepLabel(s))
 /** the scan box: a record number (with or without #) exactly, or part of the name */
 export const matches = (p: { record_number: number; given_name: string; family_name: string }, f: string) =>
   !f || String(p.record_number) === f.replace(/^#/, '') || `${p.given_name} ${p.family_name}`.toLowerCase().includes(f)

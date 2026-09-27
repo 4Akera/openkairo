@@ -9,7 +9,7 @@ import { refresh, useVisitActions } from '../../hooks/writes'
 import { useDrafts, useDraftsFor } from '../../hooks/drafts'
 import { compose } from '../../hooks/composer'
 import { rememberPatient } from '../../hooks/recent'
-import { read, write, WriteWarned, words, type EntryIn, type Finding } from '../../db/rpc'
+import { read, write, WriteWarned, words, type EntryBody, type EntryIn, type Finding } from '../../db/rpc'
 import { draftEntries, move, oneSet } from '../../db/entries'
 import type { PresenceRow, QueueRow, RecordView, TableRead, VisitRow } from '../../db/types'
 import { Badge, Button, Centered, Kbd, Spinner, cn, errorText, flagClass, minutesSince } from '../../ui'
@@ -54,9 +54,9 @@ export function VisitScreen() {
   const entries = (withVisit: boolean): EntryIn[] => (useDrafts.getState().byPatient[patientId ?? ''] ?? []).flatMap((d) =>
     draftEntries(d, { patientId: patientId!, departmentId: dept!.id, visitId: withVisit && visit ? visit.id : null, record: rec.data, org }))
   /** the visit's moves after the drafts: seen when nobody saw him yet, then the move asked for; each changes the one before */
-  const moves = (v: VisitRow, last: { type: string; data?: Record<string, unknown> }): EntryIn[] => {
-    const seen = !v.seen_at && ['done', 'back_to_waiting'].includes(last.type) && entries(true).length ? [move('seen', v, dept!.id)] : []
-    return [...seen, move(last.type, v, dept!.id, last.data ?? {}, seen[0]?.id)]
+  const moves = (v: VisitRow, last: EntryBody<'done' | 'back_to_waiting'>): EntryIn[] => {
+    const seen = !v.seen_at && entries(true).length ? [move('seen', v, dept!.id, {})] : []
+    return [...seen, last.type === 'done' ? move('done', v, dept!.id, last.data, seen[0]?.id) : move('back_to_waiting', v, dept!.id, last.data, seen[0]?.id)]
   }
   /** one set: landed → cleared; warnings → inline cards, Sign anyway resends with them confirmed */
   async function send(es: EntryIn[], after: () => void, confirmed: string[] = []) {

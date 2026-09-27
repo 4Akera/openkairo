@@ -5,6 +5,7 @@ import { writeSetting } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
 import { ucumOf } from '../../db/entries'
 import type { FieldRange, Organization, Service, ServiceField } from '../../db/types'
+import type { SettingData } from '../../db/shapes.generated'
 import { replyFormFor } from '../../renderers'
 import { Badge, Button, Card, IconButton, Input, Kbd, Select, cn, errorText } from '../../ui'
 import { PageHead } from './parts'
@@ -14,21 +15,32 @@ interface Code { code: string; name: string; unit: string | null }
 interface ReplyType { key: string; name: string; pack: string | null }
 type Band = FieldRange
 type EField = ServiceField
-type Draft = { id: string; department_id: string; section_name: string; code: string; name: string; reply_type: string; coding: string; fields: EField[]; isNew: boolean }
+const KINDS: EField['kind'][] = ['number', 'text', 'choice']   // the kind select offers only these, so its value is one of them
+type Draft = { id: string; department_id: string; section_name: string; code: string; name: string; reply_type: string; coding: string; fields: EField[]; steps: string; isNew: boolean }
 const blankField = (): ServiceField => ({ position: 0, key: '', code: '', name: '', kind: 'number', unit: null, ucum: null, choices: null, reference_low: null, reference_high: null, critical_low: null, critical_high: null, ranges: [] })
 const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+// the steps as typed, comma-separated and in order → keys (Sample sent → sample_sent)
+const stepKeys = (t: string) => t.split(',').map(slug).filter(Boolean)
+// the bench's own words for an order's state: a step named like one would read as that state
+const RESERVED = new Set(['sent', 'started', 'held', 'replied', 'reopened'])
+/** why a typed step cannot be a key: letters other than a–z (Arabic, accents) would vanish in the key, a key starts with a letter,
+ *  and a bench word is taken */
+const stepProblem = (part: string) => { const k = slug(part)
+  return !/^[A-Za-z0-9 _-]+$/.test(part) ? `${part}: letters a–z only` : !/^[a-z]/.test(k) ? `${part}: start with a letter` : RESERVED.has(k) ? `${part}: a word the bench uses — name it otherwise` : null }
 const coding = (c: string) => { const i = c.indexOf(':'); return i > 0 ? { system: c.slice(0, i).trim(), code: c.slice(i + 1).trim() } : undefined }
-const drop = <T extends Record<string, unknown>>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length)))
+// drop<Data>({…}): the type argument checks the literal against the service's shape (a null stands for "not set"); the empties go
+type Data = SettingData['service']; type FieldData = NonNullable<Data['fields']>[number]; type RangeData = NonNullable<FieldData['ranges']>[number]
+const drop = <T extends object>(o: { [K in keyof T]: T[K] | null }): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))) as T
 /** the service as its setting's data (spec/openCare.md §4.6): each field keeps a stable key, so results over time stay one line */
-function serviceData(x: Draft) {
+function serviceData(x: Draft): Data {
   const used = new Set<string>()
   const fields = x.reply_type !== 'result' ? [] : x.fields.filter((y) => y.name.trim()).map((y) => {
     let key = y.key || slug(y.name) || 'field'; while (used.has(key)) key = `${key}_`; used.add(key)
-    return drop({ key, name: y.name.trim(), coding: coding(y.code), kind: y.kind, unit: y.kind === 'number' ? y.unit : null, ucum: y.kind === 'number' ? y.ucum ?? ucumOf(y.unit) : null,
+    return drop<FieldData>({ key, name: y.name.trim(), coding: coding(y.code), kind: y.kind, unit: y.kind === 'number' ? y.unit : null, ucum: y.kind === 'number' ? y.ucum ?? ucumOf(y.unit) : null,
       choices: y.kind === 'choice' ? (y.choices ?? []).map((c) => c.trim()).filter(Boolean) : null, low: y.reference_low, high: y.reference_high, critical_low: y.critical_low, critical_high: y.critical_high,
-      ranges: y.kind === 'number' ? y.ranges.map((r) => drop({ ...r })) : null })
+      ranges: y.kind === 'number' ? y.ranges.map((r) => drop<RangeData>({ ...r })) : null })
   })
-  return drop({ code: x.code.trim(), name: x.name.trim(), section: x.section_name.trim(), coding: coding(x.coding), answer: x.reply_type, fields })
+  return drop<Data>({ code: x.code.trim(), name: x.name.trim(), section: x.section_name.trim(), coding: coding(x.coding), answer: x.reply_type, steps: stepKeys(x.steps), fields })
 }
 const num = (s: string | undefined) => { const t = (s ?? '').trim().replace(',', '.'); return t === '' || Number.isNaN(Number(t)) ? null : Number(t) }
 const range = (s: string | undefined): [number | null, number | null] => { const t = (s ?? '').trim(); if (!t) return [null, null]; const m = t.match(/^(-?[\d.,]*)\s*[-–]\s*(-?[\d.,]*)$/); if (m) return [num(m[1]), num(m[2])]; if (t.startsWith('<')) return [null, num(t.slice(1))]; if (t.startsWith('>')) return [num(t.slice(1)), null]; return [null, null] }
@@ -65,8 +77,8 @@ export function ServicesPage({ org }: { org: Organization }) {
   const shown = org.services.filter((s) => !f || s.name.toLowerCase().includes(f) || s.code.includes(f) || (s.section_name ?? '').toLowerCase().includes(f) || s.fields.some((x) => x.name.toLowerCase().includes(f)))
   const depts = org.departments.filter((d) => shown.some((s) => s.department_id === d.id) || (!f && org.services.some((s) => s.department_id === d.id)))
   const sections = useMemo(() => [...new Set(org.services.map((s) => s.section_name).filter(Boolean) as string[])].sort(), [org.services])
-  const start = (s: Service | null, dept?: string, section?: string, copy = false) => setOpen(s ? { id: copy ? newId() : s.id, department_id: s.department_id ?? '', section_name: s.section_name ?? '', code: copy ? `${s.code}_copy` : s.code, name: copy ? `${s.name} (copy)` : s.name, reply_type: s.reply_type, coding: s.coding ? `${s.coding.system}:${s.coding.code}` : '', fields: s.fields.map((x) => ({ ...x })), isNew: copy }
-    : { id: newId(), department_id: dept ?? org.departments.find((d) => d.work === 'bench')?.id ?? org.departments[0]?.id ?? '', section_name: section ?? '', code: '', name: '', reply_type: 'result', coding: '', fields: [blankField()], isNew: true })
+  const start = (s: Service | null, dept?: string, section?: string, copy = false) => setOpen(s ? { id: copy ? newId() : s.id, department_id: s.department_id ?? '', section_name: s.section_name ?? '', code: copy ? `${s.code}_copy` : s.code, name: copy ? `${s.name} (copy)` : s.name, reply_type: s.reply_type, coding: s.coding ? `${s.coding.system}:${s.coding.code}` : '', fields: s.fields.map((x) => ({ ...x })), steps: s.steps.join(', '), isNew: copy }
+    : { id: newId(), department_id: dept ?? org.departments.find((d) => d.work === 'bench')?.id ?? org.departments[0]?.id ?? '', section_name: section ?? '', code: '', name: '', reply_type: 'result', coding: '', fields: [blankField()], steps: '', isNew: true })
   const toggle = (k: string) => setClosed((c) => { const n = new Set(c); if (n.has(k)) n.delete(k); else n.add(k); return n })
   const editor = (d: Draft) => <Editor key={d.id} draft={d} codes={codes.data} replyTypes={replyTypes} sections={sections} org={org} saving={save.isPending} error={save.error}
     onSave={(x) => save.mutate(x, { onSuccess: () => setOpen(null) })} onClose={() => { save.reset(); setOpen(null) }} />
@@ -88,6 +100,7 @@ export function ServicesPage({ org }: { org: Organization }) {
             <span className="w-28 shrink-0 truncate font-mono text-xs text-neutral-500" title={s.code}>{s.code}</span>
             <span className="w-52 shrink-0 text-[13.5px] font-medium">{s.name}</span>
             <Badge tone={s.reply_type === 'result' ? 'blue' : s.reply_type === 'note' ? 'neutral' : 'amber'}>{s.reply_type}</Badge>
+            {s.steps.length > 0 && <span className="shrink-0 text-xs text-neutral-500" title="Steps">{s.steps.map((k) => k.replace(/_/g, ' ')).join(' → ')}</span>}
             <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">{s.fields.map((x) => `${x.name}${x.unit ? ` (${x.unit})` : ''}`).join(' · ')}</span>
             <span className="flex opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
               <IconButton title="Duplicate" onClick={() => start(s, undefined, undefined, true)}><Copy className="h-3.5 w-3.5" /></IconButton>
@@ -109,7 +122,10 @@ function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave
   const codeFor = (name: string) => codes.find((k) => k.name.toLowerCase() === name.trim().toLowerCase())
   // text mode has no ranges by sex/age: a field keeps its bands by name
   const fields: EField[] = bulk ? parseFields(text, codes).map((x) => { const was = d.fields.find((y) => y.name.trim().toLowerCase() === x.name.trim().toLowerCase()); return { ...x, key: was?.key ?? '', ranges: was?.ranges ?? [] } }) : d.fields
-  const ok = d.name.trim() && d.code.trim() && d.department_id && (d.reply_type !== 'result' || fields.some((x) => x.name.trim()))
+  // a step is a key that starts with a letter, listed once
+  const steps = stepKeys(d.steps); const twice = steps.find((k, i) => steps.indexOf(k) !== i)
+  const odd = d.steps.split(',').map((x) => x.trim()).filter(Boolean).map(stepProblem).find(Boolean)
+  const ok = d.name.trim() && d.code.trim() && d.department_id && (d.reply_type !== 'result' || fields.some((x) => x.name.trim())) && !twice && !odd
   const submit = () => { if (!ok) return; onSave({ ...d, fields }) }
   const cell = 'h-7 rounded-md px-2 text-xs'
   return <div className="border-y border-teal-200 bg-teal-50/30 px-4 py-3" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'Enter')) { e.preventDefault(); submit() } else if (e.key === 'Escape') { e.preventDefault(); onClose() } }}>
@@ -125,6 +141,10 @@ function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave
       {!replyTypes.some((t) => t.key === d.reply_type) && <Badge tone="red">{d.reply_type}: no enabled pack answers this</Badge>}
       {d.reply_type === 'result' && <button onClick={() => { if (bulk) setD({ ...d, fields: parseFields(text, codes) }); else setText(toText(d.fields)); setBulk(!bulk) }} className="ml-auto text-teal-700 hover:underline">{bulk ? 'Edit as a grid' : 'Type or paste as text'}</button>}
     </div>
+    <div className="mt-2 flex items-center gap-2 text-xs"><label className="flex items-center gap-1.5 text-neutral-500">Steps<Input value={d.steps} onChange={(e) => setD({ ...d, steps: e.target.value })} placeholder="collected, received" className="h-7 w-72 text-xs" /></label>
+      {twice || odd ? <Badge tone="red">{twice ? `${twice.replace(/_/g, ' ')} twice` : odd}</Badge>
+        : <span className="text-[11px] text-neutral-400">in order, comma-separated: the bench offers each order its next step</span>}
+    </div>
     {d.reply_type === 'result' && (bulk ? <div className="mt-2"><textarea value={text} onChange={(e) => setText(e.target.value)} rows={Math.max(5, text.split('\n').length + 1)} autoFocus spellCheck={false}
         placeholder={'Haemoglobin | g/dL | 12-16 | 7-20\nWBC | 10^9/L | 4-11 | 1-30\nBlood group | [A/B/AB/O]'} className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 font-mono text-xs focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20" />
       <p className="mt-1 text-[11px] text-neutral-500">One field per line: <span className="font-mono">name | unit | normal low-high | critical low-high | system:code</span>. Tabs work too, so a range pasted from a spreadsheet drops straight in. <span className="font-mono">[a/b/c]</span> in the unit makes a choice list. A name already used here gets its code.</p>
@@ -138,7 +158,7 @@ function Editor({ draft, codes, replyTypes, sections, org, saving, error, onSave
         <td className="p-0.5">{x.kind === 'choice' ? <Input value={(x.choices ?? []).join('/')} onChange={(e) => setF(i, { choices: e.target.value.split('/') })} placeholder="neg/trace/+/++" className={cell} /> : <RangeInput lo={x.reference_low} hi={x.reference_high} onChange={(lo, hi) => setF(i, { reference_low: lo, reference_high: hi })} className={cell} />}</td>
         <td className="p-0.5">{x.kind !== 'choice' && <RangeInput lo={x.critical_low} hi={x.critical_high} onChange={(lo, hi) => setF(i, { critical_low: lo, critical_high: hi })} className={cell}
           onEnter={() => { if (i === d.fields.length - 1) setD((y) => ({ ...y, fields: [...y.fields, blankField()] })) }} />}</td>
-        <td className="p-0.5"><Select value={x.kind} onChange={(e) => setF(i, { kind: e.target.value, choices: e.target.value === 'choice' ? x.choices ?? [] : null })} className={cn(cell, 'h-7')}>{['number', 'text', 'choice'].map((k) => <option key={k}>{k}</option>)}</Select></td>
+        <td className="p-0.5"><Select value={x.kind} onChange={(e) => setF(i, { kind: e.target.value as EField['kind'], choices: e.target.value === 'choice' ? x.choices ?? [] : null })} className={cn(cell, 'h-7')}>{KINDS.map((k) => <option key={k}>{k}</option>)}</Select></td>
         <td className="p-0.5"><Input value={x.code} onChange={(e) => setF(i, { code: e.target.value.trim() })} placeholder={known ? known.code : 'loinc:718-7'} title="system:code — optional" className={cn(cell, 'font-mono text-[10.5px]')} /></td>
         <td className="whitespace-nowrap">{x.kind === 'number' && <button title="Ranges by sex and age" onClick={() => setOpenBands(openBands === i ? null : i)} className={cn('mr-1 rounded px-1 text-[10.5px]', x.ranges.length > 0 ? 'bg-teal-50 font-medium text-teal-800' : 'text-neutral-400 hover:text-neutral-700')}>♀♂{x.ranges.length ? ` ${x.ranges.length}` : ''}</button>}
           <IconButton title="Remove field" className="hover:text-red-700" onClick={() => setD({ ...d, fields: d.fields.filter((_, j) => j !== i) })}><Trash2 className="h-3 w-3" /></IconButton></td>

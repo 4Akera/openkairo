@@ -12,6 +12,8 @@ export const useMfaNeeded = create<{ needed: boolean; set: (v: boolean) => void 
 export function useSave<A>(fn: (a: A) => Promise<unknown>) {
   const qc = useQueryClient()
   return useMutation({ mutationFn: fn,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization'] }); qc.invalidateQueries({ queryKey: ['settings_changes'] }) },
+    // the save is pending until the directory is read again, so a form never works from the old rows (a second Add, a next move);
+    // a failed one is read again too, so a half-done reorder shows as it landed
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ['organization'] }), qc.invalidateQueries({ queryKey: ['settings_changes'] })]),
     onError: (e) => { if (e instanceof Refusal && e.code === 'mfa_required') useMfaNeeded.getState().set(true) } })
 }

@@ -6,9 +6,10 @@ import { newId, useWrite } from '../../hooks/writes'
 import { move, oneSet } from '../../db/entries'
 import { banner } from '../../db/views'
 import type { Department, Identity, Place, PresenceRow } from '../../db/types'
+import type { EntryData } from '../../db/shapes.generated'
 import { Badge, Button, Card, Input, Select, Spinner, cn, errorText, shortDate } from '../../ui'
 
-const DISPOSITION: [string, string][] = [['home', 'Home'], ['other-hcf', 'Another facility'], ['hosp', 'Hospice'], ['aadvice', 'Left against advice'], ['exp', 'Died'], ['oth', 'Other']]
+const DISPOSITION: [EntryData['discharged']['disposition'], string][] = [['home', 'Home'], ['other-hcf', 'Another facility'], ['hosp', 'Hospice'], ['aadvice', 'Left against advice'], ['exp', 'Died'], ['oth', 'Other']]
 type Open = { bed: string; what: 'admit' | 'move' | 'discharge' } | null
 
 /** A ward's home (spec/openCare.md §4.2): its beds, who is in each since when; admit to a free bed, move, discharge — each one entry
@@ -71,9 +72,9 @@ function Admit({ bed, busy, onAdmit, onCancel }: { bed: Place; busy: boolean; on
   </div>
 }
 
-function Choose({ label, options, go, busy, onGo, onCancel }: { label: string; options: [string, string][]; go: string; busy: boolean; onGo: (v: string) => void; onCancel: () => void }) {
-  const [v, setV] = useState(options[0]?.[0] ?? '')
+function Choose<V extends string>({ label, options, go, busy, onGo, onCancel }: { label: string; options: [V, string][]; go: string; busy: boolean; onGo: (v: V) => void; onCancel: () => void }) {
+  const [v, setV] = useState<V | ''>(options[0]?.[0] ?? '')   // the select offers only the options: its value is one of them
   return <div className="flex flex-wrap items-center gap-1.5 text-sm"><span className="text-xs text-neutral-500">{label}</span>
-    <Select value={v} onChange={(e) => setV(e.target.value)} className="h-8 w-40">{options.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
-    <Button size="sm" disabled={!v || busy} onClick={() => onGo(v)}>{go}</Button><Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button></div>
+    <Select value={v} onChange={(e) => setV(e.target.value as V)} className="h-8 w-40">{options.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
+    <Button size="sm" disabled={!v || busy} onClick={() => v && onGo(v)}>{go}</Button><Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button></div>
 }

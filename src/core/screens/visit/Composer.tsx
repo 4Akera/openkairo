@@ -77,7 +77,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   const missing = (p: Parsed): string | null => {
     const q = p.params as Q
     switch (p.function) {
-      case 'vitals': return Object.values(q).some((v) => v != null) ? null : 'Type at least one vital'
+      case 'vitals': return (q.systolic != null) !== (q.diastolic != null) ? 'Type both sides of the blood pressure' : Object.values(q).some((v) => v != null) ? null : 'Type at least one vital'
       case 'medication':
         if (q.action === 'stop') return null
         if (q.action === 'start' && !String(q.drug?.name ?? '').trim()) return 'Name the drug'

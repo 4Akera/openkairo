@@ -69,4 +69,6 @@ for t in "${suites[@]}"; do
     echo "✓ $t ($note)"
   fi
 done
+# the client's entry and setting types are generated from the declared shapes (spec §8): a stale file fails the run
+npm run -s gen:shapes -- --check || fail=1
 exit $fail

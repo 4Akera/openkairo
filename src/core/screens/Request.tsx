@@ -7,6 +7,7 @@ import { fitField } from '../hooks/ranges'
 import { oneSet, resultEntry, stepEntry } from '../db/entries'
 import { ageOf } from '../db/views'
 import type { Entry, ServiceField } from '../db/types'
+import type { EntryData } from '../db/shapes.generated'
 import { Button, Centered, Input, Spinner, Select, flagClass, dateTime } from '../ui'
 import { FallbackFull } from '../renderers'
 
@@ -29,7 +30,7 @@ function RequestBody({ requestId }: { requestId?: string }) {
   const mine = !!row
   const open = req?.status === 'open'
   const next = queue.data?.requests.find((r) => r.id !== requestId) ?? null
-  const step = (status: string, why?: string, key?: string) => row && dept && w.mutate(oneSet([stepEntry(row, dept.id, status, why, key)]), { onError: (x) => setErr(x.message) })
+  const step = (status: EntryData['step']['status'], why?: string) => row && dept && w.mutate(oneSet([stepEntry(row, dept.id, status, why)]), { onError: (x) => setErr(x.message) })
   async function release(andNext: boolean) {
     if (!row || !dept) return; setErr(null)
     try {
@@ -37,7 +38,7 @@ function RequestBody({ requestId }: { requestId?: string }) {
       if (andNext && next) navigate(`/request/${next.id}`, { replace: true }); else navigate('/')
     } catch (x) { setErr(x instanceof Error ? x.message : String(x)) }
   }
-  useEffect(() => { const k = (ev: KeyboardEvent) => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter' && open && mine) { ev.preventDefault(); void release(true) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const k = (ev: KeyboardEvent) => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter' && open && mine) { ev.preventDefault(); void release(true) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) })
   if (e.isLoading || !dept) return <Centered><Spinner label="Opening the request" /></Centered>
   if (e.error || !e.data) return <Centered><p className="text-sm text-red-700">{e.error?.message ?? 'not found'}</p></Centered>
   const d = e.data.data
@@ -71,7 +72,7 @@ function RequestBody({ requestId }: { requestId?: string }) {
       </div>
     </section>}
     {canStep && req && <div className="flex flex-wrap items-center gap-2 text-xs">
-      {req.order?.status === 'active' && <Button size="sm" variant="outline" onClick={() => step('in-progress', undefined, 'started')}>Start</Button>}
+      {req.order?.status === 'active' && <Button size="sm" variant="outline" onClick={() => step('in-progress')}>Start</Button>}
       {!held && <Button size="sm" variant="ghost" onClick={() => step('on-hold', 'held')}>Hold</Button>}
       {held && <Button size="sm" variant="outline" onClick={() => step('in-progress')}>Resume</Button>}
       <CancelButton onCancel={(why) => step('rejected', why)} />

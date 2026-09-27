@@ -2,6 +2,7 @@
 // write() returns an outcome, never rows: a refusal or a warning arrives as findings, which the screens put words on.
 import { db } from './client'
 import type { Json } from './types.generated'
+import type { EntryData, SettingData } from './shapes.generated'
 
 // the words for refusal and finding codes (the codes are the API; the client only says them)
 const WORDS: Record<string, string> = {
@@ -14,7 +15,7 @@ const WORDS: Record<string, string> = {
   already_here: 'Already here: the open visit is used', already_called: 'Someone called this patient first', visit_closed: 'This visit has ended', not_admitted: 'Not admitted',
   already_admitted: 'Already admitted', bed_taken: 'That bed is taken', wrong_work: 'Patients are not checked in there', not_served: 'That department does not work for this one',
   same_department: 'Already there', bad_visit: 'Not a move of this visit', unknown_service: 'That service is not offered any more', wrong_department: 'Another department answers it',
-  order_closed: 'That order is closed', wrong_answer: 'This order is answered another way', has_answers: 'It has answers already: it stays', already_crossed_out: 'Already crossed out',
+  order_closed: 'That order is closed', wrong_answer: 'This order is answered another way', unknown_step: 'Not a step of this service', reserved_step: 'The bench uses that word for an order — name the step otherwise', has_answers: 'It has answers already: it stays', already_crossed_out: 'Already crossed out',
   never_private: 'Only notes and results can be private', reason_missing: 'A reason is needed', bad_target: 'That cannot be pointed at', nothing_dispensed: 'Say what was given',
   last_administrator: 'Someone must keep the right to manage people and roles everywhere', self_change: 'You cannot change your own roles or a role you hold',
   cannot_grant: 'You cannot give a right you do not hold everywhere', builtin_role: 'Built-in roles are read-only — copy one to change it', unknown_action: 'Unknown action',
@@ -27,7 +28,7 @@ export const words = (code: string) => WORDS[code] ?? code.replace(/_/g, ' ')
 
 export class Refusal extends Error {
   constructor(public code: string, public detail?: string) {
-    super(`${words(code)}${code === 'in_use' && detail ? ` (${USED[detail] ?? detail})` : detail && /^(cannot_grant|pack_off|unknown_action|not_allowed)$/.test(code) ? `: ${detail}` : ''}`)
+    super(`${words(code)}${code === 'in_use' && detail ? ` (${USED[detail] ?? detail})` : detail && /^(cannot_grant|pack_off|unknown_action|not_allowed|unknown_step|reserved_step)$/.test(code) ? `: ${detail}` : ''}`)
   }
 }
 
@@ -46,8 +47,16 @@ async function call<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 /** one read through the one door out; every read is logged by the server */
 export const read = <T = unknown>(query: Record<string, unknown>) => call<T>('read', { p_query: query as Json })
 
-export interface EntryIn { id: string; type: string; type_version?: number; patient_id: string; department_id: string; visit_id?: string | null; occurred_at?: string; precision?: string
-  data: Record<string, unknown>; replaces?: string | null; refers_to?: string | null; relation?: 'answers' | 'changes' | 'about' | null }
+// An entry's data is its type's declared shape (shapes.generated.ts, from the registry, spec §3.8): a key the shape does not name, or
+// a value outside an enum, is a compile error here rather than bad_shape at Done.
+/** a type and its data, before the entry around it is known (a pack's answer, a visit's move); one member per type */
+export type EntryBody<K extends keyof EntryData = keyof EntryData> = K extends keyof EntryData ? { type: K; data: EntryData[K] } : never
+interface EntryHead { id: string; type_version?: number; patient_id: string; department_id: string; visit_id?: string | null; occurred_at?: string; precision?: string
+  replaces?: string | null; refers_to?: string | null; relation?: 'answers' | 'changes' | 'about' | null }
+/** one entry of a set: a union over the types, so a set of several types still checks each entry's data against its own shape */
+export type EntryIn<K extends keyof EntryData = keyof EntryData> = EntryHead & EntryBody<K>
+/** one entry of a type a builder takes as a parameter (move('called', …)); assignable to EntryIn once the type is known */
+export type EntryOf<K extends keyof EntryData> = EntryHead & { type: K; data: EntryData[K] }
 export interface SetIn { set_id: string; made_at?: string; entries: EntryIn[]; confirmed?: string[]; seen?: Record<string, number> }
 /** one Done through the one door in: landed, or a refusal (WriteRefused), warnings to confirm (WriteWarned), or busy (retried here) */
 export async function write(set: SetIn): Promise<Outcome> {
@@ -66,7 +75,9 @@ export const save = (what: 'organization' | 'site' | 'department' | 'place' | 'u
 export const remove = (what: 'department' | 'place' | 'user' | 'role', id: string) => call<{ deleted: string }>('remove', { p_what: what, p_id: id })
 export const savePatient = (p: Record<string, unknown>) => call<{ patient: unknown; findings: Finding[]; created: boolean }>('save_patient', { p: p as Json })
 export const mergePatients = (p: Record<string, unknown>) => call<{ survivor: string }>('merge_patients', { p: p as Json })
-export const writeSetting = (p: { key: string; owner_id?: string | null; thing_id?: string | null; data?: unknown; retired?: boolean }) => call<{ id: string; thing_id: string }>('write_setting', { p: p as unknown as Json })
+/** a setting's data is its key's declared shape (shapes.generated.ts) */
+export const writeSetting = <K extends keyof SettingData>(p: { key: K; owner_id?: string | null; thing_id?: string | null; data?: SettingData[K]; retired?: boolean }) =>
+  call<{ id: string; thing_id: string }>('write_setting', { p: p as unknown as Json })
 export const myUsers = () => call<{ id: string; organization_id: string; organization: string; name: string }[]>('my_users', {})
 export const chooseUser = (userId: string) => call<{ user_id: string; organization_id: string }>('choose_user', { p_user_id: userId })
 export const erasePatient = (p: { patient_id: string; reason: string }) => call('erase_patient', { p: p as unknown as Json })

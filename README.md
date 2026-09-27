@@ -15,6 +15,7 @@ npm run db:reset                # migrations → auth users, codes, the demo cli
 npm run db:test                 # every SQL suite (16), each in its own rolled-back transaction
 npm run db:demo                 # optional: a clinic day written through write() — check-ins, orders, results, dispensing, two stays
 npm run test:composer           # the composer's typed lines and drafts → entries (no browser, no database)
+npm run gen:shapes              # the client's entry and setting types from the declared shapes (db:test fails when they are stale)
 npm install && npm run dev      # the client on http://localhost:3000 (copy .env.example to .env.local first)
 ```
 

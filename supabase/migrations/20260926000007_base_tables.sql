@@ -51,7 +51,7 @@ create table base.orders (
   priority      text not null default 'routine',
   status        text not null,             -- active · on-hold · in-progress · completed · revoked · rejected · cancelled
   step          text,                      -- the latest step's status
-  step_key      text,                      -- a pack's own step (prepared)
+  step_key      text,                      -- the latest of the service's steps it reached (collected, prepared)
   step_item     uuid,
   step_entry    uuid,                      -- the step item's latest entry: a later step changes it
   answers       uuid[] not null default '{}',   -- the latest entry of each answer item
@@ -71,7 +71,7 @@ create index orders_patient on base.orders (organization_id, patient_id);
 create index orders_visit on base.orders (organization_id, visit_id);
 
 create function base.orders_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
-declare k uuid; o1 core.entries; ol core.entries; st core.entries; ans uuid[]; fin boolean; v_answered timestamptz; v_status text; src uuid[]; keys uuid[];
+declare k uuid; o1 core.entries; ol core.entries; st core.entries; ans uuid[]; fin boolean; v_answered timestamptz; v_status text; src uuid[]; keys uuid[]; v_key text;
 begin
   keys := base.orders_of(p_org, p_items);
   delete from base.orders where organization_id = p_org and item = any (keys);
@@ -84,6 +84,13 @@ begin
      where a.organization_id = p_org and a.relation = 'answers' and a.item_version = 1 and a.type = any (core.kinds('step'))
        and a.refers_to in (select x.id from core.entries x where x.organization_id = p_org and x.item = k) and not base.gone(p_org, l)
      order by l.recorded_at desc limit 1;
+    -- the latest step key any of its step items carried: a status-only step after it (held, resumed, or one answering it anew from a
+    -- bench that had not seen the first) keeps it
+    v_key := (select x.data ->> 'step' from core.entries a join core.entries x on x.organization_id = a.organization_id and x.item = a.item
+               where a.organization_id = p_org and a.relation = 'answers' and a.item_version = 1 and a.type = any (core.kinds('step'))
+                 and a.refers_to in (select y.id from core.entries y where y.organization_id = p_org and y.item = k)
+                 and not base.gone(p_org, base.latest(p_org, a.item)) and x.data ? 'step'
+               order by x.recorded_at desc, x.item_version desc limit 1);
     -- results and notes answering it: the latest version of each, unless crossed out
     select coalesce(array_agg(l.id order by l.recorded_at), '{}'), coalesce(bool_or(coalesce(l.data ->> 'status', 'final') in ('final', 'corrected', 'amended')), false),
            min(case when coalesce(l.data ->> 'status', 'final') in ('final', 'corrected', 'amended') then f.recorded_at end)
@@ -105,7 +112,7 @@ begin
                                        and a.refers_to in (select y.id from core.entries y where y.organization_id = p_org and y.item = k)));
     insert into base.orders values (p_org, k, core.survivor(p_org, o1.patient_id), o1.visit_id, o1.author_id, o1.department_id,
       coalesce(ol.data ->> 'department_id', o1.data ->> 'department_id')::uuid, (ol.data -> 'service' ->> 'id')::uuid, ol.data -> 'service' ->> 'code',
-      ol.data -> 'service' ->> 'name', coalesce(ol.data ->> 'priority', 'routine'), v_status, st.data ->> 'status', st.data ->> 'step', st.item, st.id, ans, v_answered, fin,
+      ol.data -> 'service' ->> 'name', coalesce(ol.data ->> 'priority', 'routine'), v_status, st.data ->> 'status', v_key, st.item, st.id, ans, v_answered, fin,
       case when o1.relation = 'about' then (select t.item from core.entries t where t.organization_id = p_org and t.id = o1.refers_to) end,
       o1.recorded_at, greatest(ol.recorded_at, coalesce(st.recorded_at, ol.recorded_at)), (o1.recorded_at at time zone base.tz(p_org))::date, ol.id, ol.item_version, src);
   end loop;

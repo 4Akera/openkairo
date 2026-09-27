@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { writeSetting } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
 import type { Organization } from '../../db/types'
+import type { SettingData } from '../../db/shapes.generated'
 import { Badge, Button, Card, Input, Select, cn } from '../../ui'
 import { readPresetLine } from '../visit/expand'
 import { replyFormFor } from '../../renderers'
@@ -14,7 +15,7 @@ import { useSave } from './save'
 type PresetDraft = { name: string; department_id: string; items: string[]; shortcut: string; lines: string }
 /** Presets (spec/openCare.md §4.6): what is often written together, run in the visit by its #shortcut; each a preset setting */
 export function TemplatesPage({ org }: { org: Organization }) {
-  const save = useSave((a: { id: string; data: Record<string, unknown> }) => writeSetting({ key: 'preset', thing_id: a.id, data: a.data }))
+  const save = useSave((a: { id: string; data: SettingData['preset'] }) => writeSetting({ key: 'preset', thing_id: a.id, data: a.data }))
   const retire = useSave((id: string) => writeSetting({ key: 'preset', thing_id: id, retired: true })); const e = useDraft<PresetDraft>(); const [pq, setPq] = useState('')
   const svc = (id: string) => org.services.find((s) => s.id === id)
   const open = (id: string, d: PresetDraft, isNew = false) => { save.reset(); retire.reset(); setPq(''); e.toggle(id, d, isNew) }

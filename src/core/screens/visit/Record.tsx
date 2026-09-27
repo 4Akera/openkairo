@@ -8,6 +8,7 @@ import { useEntries, useEntry, useOpened, useResultsTable } from '../../hooks/re
 import { useDepartment } from '../../hooks/organization'
 import { refresh } from '../../hooks/writes'
 import type { Card as EntryCard, Entry, RecordView, ResultRow, Value, VisitCardRow } from '../../db/types'
+import type { EntryData } from '../../db/shapes.generated'
 import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Spinner, cn, errorText, flagClass, hm, ymd, dateTime, longDate } from '../../ui'
 import { CardLine, FallbackFull } from '../../renderers'
 import { KEY_TESTS } from './kinds'
@@ -185,7 +186,7 @@ function EntryPanel({ id, onClose }: { id: string; onClose: () => void }) {
 const Section = ({ title, children }: { title: string; children: ReactNode }) => <div><Heading className="mb-1.5">{title}</Heading><div className="grid gap-2">{children}</div></div>
 
 const REASONS = ['Direct care', 'Emergency', 'Admin', 'Other']
-const REASON_CODE: Record<string, string> = { 'Direct care': 'TREAT', Emergency: 'ETREAT', Admin: 'PATADMIN', Other: 'other' }
+const REASON_CODE: Record<string, EntryData['opened_anyway']['reason']> = { 'Direct care': 'TREAT', Emergency: 'ETREAT', Admin: 'PATADMIN', Other: 'other' }
 
 /** private notes hidden from me, one line per department, on top of the record (spec 07) */
 function PrivateNotes({ r, patientId, departmentId }: { r: RecordView; patientId: string; departmentId: string }) {
@@ -224,8 +225,9 @@ function OpenAnyway({ patientId, departmentId, openDepartmentId, onDone }: { pat
 /** a note's privacy, for its author and the people who work in its department: Private, or Not private with a reason (logged) */
 function NotePrivacy({ e }: { e: Entry }) {
   const qc = useQueryClient(); const [asking, setAsking] = useState(false); const [reason, setReason] = useState(''); const { dept } = useDepartment()
-  const set = useMutation({ mutationFn: (a: { is_private: boolean; reason?: string }) => write(oneSet([{ id: newId(), type: a.is_private ? 'private' : 'not_private', patient_id: e.patient_id,
-      department_id: dept!.id, refers_to: e.id, relation: 'about', data: a.is_private ? {} : { reason: a.reason } }])),
+  // not private needs its reason (the shape requires it), so the argument cannot leave it out
+  const set = useMutation({ mutationFn: (a: { is_private: true } | { is_private: false; reason: string }) => { const at = { id: newId(), patient_id: e.patient_id, department_id: dept!.id, refers_to: e.id, relation: 'about' as const }
+      return write(oneSet([a.is_private ? { ...at, type: 'private', data: {} } : { ...at, type: 'not_private', data: { reason: a.reason } }])) },
     onSuccess: () => { setAsking(false); setReason(''); refresh(qc) } })
   return <div className="flex flex-wrap items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
     <Lock className="h-3.5 w-3.5 text-neutral-400" />{e.is_private ? 'Private note: only its department reads it.' : 'Not private.'}

@@ -92,6 +92,20 @@ select t.ok(exists (select 1 from jsonb_array_elements(t.record(:'pt', :'im') ->
 select t.refused(t.w(t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'cbc', 'code', 'cbc', 'name', 'CBC'), 'department_id', :'labd', 'priority', 'routine', 'status', 'active'))),
   'unknown_service', 'a retired service cannot be ordered');
 
+\echo '── sites: retired, a rename keeps it retired from the day it was; a save without retired brings it back'
+select t.as(:'ow');
+select public.save('site', '{"id":"00000000-0000-0000-0000-0000000005a1","name":"Annex"}') ->> 'id' as site;
+select public.save('site', '{"id":"00000000-0000-0000-0000-0000000005a1","name":"Annex","retired":true}') ->> 'id' as retired;
+reset role;
+update core.sites set retired_at = '2026-01-01' where id = '00000000-0000-0000-0000-0000000005a1';
+set role authenticated;
+select t.as(:'ow');
+select public.save('site', '{"id":"00000000-0000-0000-0000-0000000005a1","name":"Old annex","retired":true}') ->> 'id' as renamed;
+select t.ok(r -> 'retired_at' is not null and (r ->> 'retired_at')::date = '2026-01-01' and r ->> 'name' = 'Old annex', 'renamed, still retired since 2026-01-01')
+  from jsonb_array_elements(public.read('{"shape":"me"}') -> 'sites') r where r ->> 'id' = '00000000-0000-0000-0000-0000000005a1';
+select public.save('site', '{"id":"00000000-0000-0000-0000-0000000005a1","name":"Old annex"}') ->> 'id' as back;
+select t.ok(r ->> 'retired_at' is null, 'brought back') from jsonb_array_elements(public.read('{"shape":"me"}') -> 'sites') r where r ->> 'id' = '00000000-0000-0000-0000-0000000005a1';
+
 \echo '── a clinic with a login in two organizations: the session chooses'
 reset role;
 insert into core.users (organization_id, id, login_id, kind, name) values ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000c9', :'dr', 'staff', 'Dr Ali at Other');

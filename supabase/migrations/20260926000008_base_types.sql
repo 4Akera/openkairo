@@ -254,15 +254,28 @@ begin
   return '[]';
 end $$;
 
--- a step, a result or a note answering an order: the right department, the right answer, an order still open
+-- a step's key is one of the steps of the order's service as the service stands (§4.4), in any order and again if need be; a step
+-- with no key (a status only: in progress, held, not done) names none
+create function base.step_listed(p_org uuid, p_order core.entries, p_key text) returns jsonb language sql stable security definer set search_path = '' as $$
+  select case when p_key is null or coalesce(core.setting_at(p_org, 'service', (p_order.data -> 'service' ->> 'id')::uuid) -> 'steps', '[]') ? p_key then '[]'::jsonb
+              else jsonb_build_array(base.find('unknown_step', 'refuse', p_key)) end
+$$;
+
+-- a step, a result or a note answering an order: the right department, the right answer, an order still open, a listed step
 create function base.answer_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_org uuid := (p_entry ->> 'organization_id')::uuid; v_type text := core.base_of(p_entry ->> 'type'); t core.entries; o base.orders; v_answer text;
-        f jsonb := base.same_kind(p_entry, p_set);
+        f jsonb := base.same_kind(p_entry, p_set); v_key text := p_entry -> 'data' ->> 'step'; v_first core.entries;
 begin
   if jsonb_array_length(f) > 0 then return f; end if;
   if p_entry ->> 'relation' is distinct from 'answers' then
     if v_type = 'step' and p_entry ->> 'relation' is distinct from 'changes' then return jsonb_build_array(base.find('bad_target', 'refuse', 'a step answers an order')); end if;
-    return '[]';
+    if v_type <> 'step' or v_key is null then return '[]'; end if;
+    -- a later step changes an earlier one: its order is the one the step item's first entry answers
+    v_first := base.target(p_entry, p_set);
+    while v_first.id is not null and v_first.relation is distinct from 'answers' loop
+      v_first := base.entry(v_org, coalesce(v_first.replaces, v_first.refers_to), p_set);
+    end loop;
+    return base.step_listed(v_org, base.entry(v_org, v_first.refers_to, p_set), v_key);
   end if;
   t := base.target(p_entry, p_set);
   if t.id is null or core.base_of(t.type) <> 'order' then return jsonb_build_array(base.find('bad_target')); end if;
@@ -277,6 +290,7 @@ begin
   if v_type = 'step' and v_answer not in ('result', 'note') and v_answer <> p_entry ->> 'type' and (p_entry -> 'data' ->> 'status') = 'completed' then
     return jsonb_build_array(base.find('wrong_answer', 'refuse', 'this service is answered by ' || v_answer));
   end if;
+  if v_type = 'step' then return base.step_listed(v_org, t, v_key); end if;
   return '[]';
 end $$;
 
@@ -441,6 +455,14 @@ begin
   if exists (select 1 from core.settings_at(v_org, 'service') s where s.owner_id = (p_where ->> 'owner_id')::uuid and s.thing_id <> (p_where ->> 'thing_id')::uuid
                and lower(s.data ->> 'code') = lower(p_data ->> 'code')) then
     return jsonb_build_array(base.find('duplicate', 'refuse', 'code'));
+  end if;
+  -- its steps, in order: each key once, and none a word the bench uses for an order's state (sent, started, held, replied, reopened)
+  if (select count(*) <> count(distinct x) from jsonb_array_elements_text(coalesce(p_data -> 'steps', '[]')) x) then
+    return jsonb_build_array(base.find('duplicate', 'refuse', 'step'));
+  end if;
+  if exists (select 1 from jsonb_array_elements_text(coalesce(p_data -> 'steps', '[]')) x where x in ('sent', 'started', 'held', 'replied', 'reopened')) then
+    return jsonb_build_array(base.find('reserved_step', 'refuse',
+      (select x from jsonb_array_elements_text(p_data -> 'steps') x where x in ('sent', 'started', 'held', 'replied', 'reopened') limit 1)));
   end if;
   return '[]';
 end $$;
@@ -618,7 +640,7 @@ select core.declare_setting('department.screens', 'base', 'department',
   '{"type":"object","additionalProperties":false,"required":["screens"],"properties":{"screens":{"type":"array","items":{"type":"string"}},"opens":{"type":"string"}}}', labels => '{"en":"Screens"}');
 select core.declare_setting('service', 'base', 'department', '{"type":"object","additionalProperties":false,"required":["code","name"],
   "properties":{"code":{"type":"string","minLength":1},"name":{"type":"string","minLength":1},"section":{"type":"string"},"coding":{"$ref":"#/$defs/coding"},
-    "answer":{"type":"string"},"autoverify":{"type":"boolean"},"steps":{"type":"array","items":{"type":"string"}},
+    "answer":{"type":"string"},"autoverify":{"type":"boolean"},"steps":{"type":"array","items":{"type":"string","pattern":"^[a-z][a-z0-9_]*$"}},
     "fields":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["key","name"],
       "properties":{"key":{"type":"string"},"name":{"type":"string"},"coding":{"$ref":"#/$defs/coding"},"kind":{"enum":["number","text","choice"]},
         "unit":{"type":"string"},"ucum":{"type":"string"},"choices":{"type":"array","items":{"type":"string"}},

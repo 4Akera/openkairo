@@ -5,13 +5,13 @@ import { ArrowLeft } from 'lucide-react'
 import { write, type EntryIn } from '../../db/rpc'
 import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue } from '../../hooks/reads'
-import { newId, refresh } from '../../hooks/writes'
+import { refresh } from '../../hooks/writes'
 import { fitField } from '../../hooks/ranges'
-import { oneSet, resultEntry, stepEntry } from '../../db/entries'
-import { benchStepsFor, replyFormFor } from '../../renderers'
+import { answerEntry, oneSet, resultEntry, stepEntry } from '../../db/entries'
+import { replyFormFor } from '../../renderers'
 import type { RequestQueueRow, ServiceField } from '../../db/types'
 import { Badge, Button, Card, Centered, Heading, Input, Kbd, Select, Spinner, cn, errorText, flagClass, hm } from '../../ui'
-import { ageOf, groupByPatient, STEP_LABEL, STEP_TONE } from './shared'
+import { ageOf, groupByPatient, nextSteps, STEP_TONE, stepLabel, stepName } from './shared'
 
 interface Entry { vals: Record<string, string>; text: string; notDone: boolean; reason: string }
 const blank = (): Entry => ({ vals: {}, text: '', notDone: false, reason: '' })
@@ -58,8 +58,7 @@ export function BenchPatient() {
     try {
       // every answer for this patient in one set: a result (or a report) answering its order, a step when not done, a pack's own answer
       const items: EntryIn[] = ready.map((r) => { const pf = formOf(r)
-        if (pf) { const w = pf.toWrite(r, packVals[r.id])!; return { id: newId(), type: w.type, patient_id: g.patient.id, department_id: dept.id, data: w.data,
-          ...(r.order.step_entry ? { refers_to: r.order.step_entry, relation: 'changes' as const } : { refers_to: r.order.latest_entry, relation: 'answers' as const }) } }
+        if (pf) return answerEntry(r, dept.id, pf.toWrite(r, packVals[r.id])!)
         const x = e(r.id)
         return x.notDone ? stepEntry(r, dept.id, 'failed', x.reason.trim()) : resultEntry(r, dept.id, fieldsOf(r), x.vals, x.text, !prelim) })
       await write(oneSet(items))
@@ -79,7 +78,6 @@ export function BenchPatient() {
   useEffect(() => { root.current?.querySelector<HTMLInputElement>('input[data-v]')?.focus() }, [patientId, g?.rows.length])
   if (!dept || q.isLoading) return <Centered><Spinner label="Opening" /></Centered>
   if (!g) return <Centered><div className="text-center text-sm text-neutral-500"><p>No open requests for this patient.</p><Button className="mt-3" variant="outline" onClick={() => navigate('/')}>Back to the bench</Button></div></Centered>
-  const packSteps = benchStepsFor(dept.type)
   const bySection = [...new Set(g.rows.map((r) => r.section_name ?? 'Other'))]
   return <div ref={root} onKeyDown={onKey} className="pb-24">
     <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
@@ -88,7 +86,8 @@ export function BenchPatient() {
         <p className="text-xs text-neutral-500 tnum">#{g.patient.record_number} · {g.rows.length} open · from {g.from.join(', ')}</p></div>
       {g.priority !== 'routine' && <Badge tone="red">{g.priority.toUpperCase()}</Badge>}
       <div className="ml-auto flex items-center gap-2">
-        {packSteps.map((ps) => { const rs = g.rows.filter((r) => ps.from.includes(r.request?.step ?? 'sent')); return rs.length > 0 && <Button key={ps.step} variant="outline" onClick={() => void write(oneSet(rs.map((r) => stepEntry(r, dept.id, 'in-progress', undefined, ps.step)))).then(() => refresh(qc))}>{ps.label} {rs.length}</Button> })}
+        {nextSteps(g.rows, org, can).map((s) => <Button key={`${s.type} ${s.key}`} variant="outline" onClick={() => void write(oneSet(s.rows.map((r) => stepEntry(r, dept.id, 'in-progress', undefined, s.key, s.type))))
+          .then(() => refresh(qc), (x) => setErr(errorText(x)))}>{stepName(s.key)} {s.rows.length}</Button>)}
         {next && <Button variant="ghost" onClick={() => navigate(`/bench/${next.patient.id}`)}>Skip →</Button>}
       </div>
     </div></div>
@@ -98,7 +97,7 @@ export function BenchPatient() {
         {g.rows.filter((r) => (r.section_name ?? 'Other') === sec).map((r) => { const x = e(r.id); const fields = fieldsOf(r); return <Card key={r.id} className={cn('p-4', x.notDone && 'bg-neutral-50')}>
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
             <span className="text-[15px] font-semibold">{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}</span>
-            <Badge tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'}>{STEP_LABEL[r.request?.step ?? 'sent'] ?? r.request?.step}</Badge>
+            <Badge tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'}>{stepLabel(r.request?.step)}</Badge>
             {r.request?.priority !== 'routine' && <Badge tone="red">{r.request?.priority}</Badge>}
             <span className="text-xs text-neutral-500">{r.requester_name} · {r.from_department_name} · {hm(r.occurred_at)}</span>
             {!formOf(r) && <label className="ml-auto flex items-center gap-1.5 text-xs text-neutral-600"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>}

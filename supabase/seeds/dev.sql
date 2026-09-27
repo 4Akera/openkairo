@@ -25,21 +25,21 @@ select public.write_setting('{"key":"department.screens","owner_id":"00000000-00
 select public.save('place', jsonb_build_object('id', ('00000000-0000-0000-0000-0000000b0' || lpad(n::text, 3, '0'))::uuid, 'department_id', '00000000-0000-0000-0000-00000000d006',
   'label', 'bed', 'name', 'Bed ' || n, 'position', n)) from generate_series(1, 8) n;
 
--- services (settings rows owned by the performing department): LOINC codings, UCUM units, ranges
+-- services (settings rows owned by the performing department): LOINC codings, UCUM units, ranges, the steps the bench walks
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d003","thing_id":"00000000-0000-0000-0000-00000000c001","data":{
-  "code":"cbc","name":"Complete blood count","section":"Haematology","coding":{"system":"loinc","code":"58410-2"},"answer":"result","fields":[
+  "code":"cbc","name":"Complete blood count","section":"Haematology","coding":{"system":"loinc","code":"58410-2"},"answer":"result","steps":["collected","received"],"fields":[
   {"key":"hb","name":"Haemoglobin","coding":{"system":"loinc","code":"718-7"},"kind":"number","unit":"g/dL","ucum":"g/dL","low":12,"high":16,"critical_low":7,"critical_high":20,
    "ranges":[{"gender":"female","low":12,"high":15.5},{"gender":"male","low":13.5,"high":17.5}]},
   {"key":"wbc","name":"WBC","coding":{"system":"loinc","code":"6690-2"},"kind":"number","unit":"10^9/L","ucum":"10*3/uL","low":4,"high":11,"critical_low":1,"critical_high":30},
   {"key":"plt","name":"Platelets","coding":{"system":"loinc","code":"777-3"},"kind":"number","unit":"10^9/L","ucum":"10*3/uL","low":150,"high":400,"critical_low":50}]}}$j$);
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d003","thing_id":"00000000-0000-0000-0000-00000000c002","data":{
-  "code":"hba1c","name":"HbA1c","section":"Chemistry","coding":{"system":"loinc","code":"4548-4"},"answer":"result","fields":[
+  "code":"hba1c","name":"HbA1c","section":"Chemistry","coding":{"system":"loinc","code":"4548-4"},"answer":"result","steps":["collected","received"],"fields":[
   {"key":"hba1c","name":"HbA1c","coding":{"system":"loinc","code":"4548-4"},"kind":"number","unit":"%","ucum":"%","low":4,"high":5.6}]}}$j$);
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d003","thing_id":"00000000-0000-0000-0000-00000000c003","data":{
-  "code":"creat","name":"Creatinine","section":"Chemistry","coding":{"system":"loinc","code":"2160-0"},"answer":"result","fields":[
+  "code":"creat","name":"Creatinine","section":"Chemistry","coding":{"system":"loinc","code":"2160-0"},"answer":"result","steps":["collected","received"],"fields":[
   {"key":"creat","name":"Creatinine","coding":{"system":"loinc","code":"2160-0"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","low":0.6,"high":1.2,"critical_high":5}]}}$j$);
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d003","thing_id":"00000000-0000-0000-0000-00000000c004","data":{
-  "code":"lipids","name":"Lipid panel","section":"Chemistry","coding":{"system":"loinc","code":"57698-3"},"answer":"result","fields":[
+  "code":"lipids","name":"Lipid panel","section":"Chemistry","coding":{"system":"loinc","code":"57698-3"},"answer":"result","steps":["collected","received"],"fields":[
   {"key":"chol","name":"Total cholesterol","coding":{"system":"loinc","code":"2093-3"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","high":200},
   {"key":"ldl","name":"LDL","coding":{"system":"loinc","code":"2089-1"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","high":100},
   {"key":"hdl","name":"HDL","coding":{"system":"loinc","code":"2085-9"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","low":40},
@@ -47,10 +47,10 @@ select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d003","thing_id":"00000000-0000-0000-0000-00000000c005","data":{
   "code":"cxr","name":"Chest X-ray","section":"Imaging","coding":{"system":"loinc","code":"36643-5"},"answer":"note"}}$j$);
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d003","thing_id":"00000000-0000-0000-0000-00000000c006","data":{
-  "code":"lithium","name":"Lithium level","section":"Chemistry","coding":{"system":"loinc","code":"14334-7"},"answer":"result","fields":[
+  "code":"lithium","name":"Lithium level","section":"Chemistry","coding":{"system":"loinc","code":"14334-7"},"answer":"result","steps":["collected","received"],"fields":[
   {"key":"li","name":"Lithium","coding":{"system":"loinc","code":"14334-7"},"kind":"number","unit":"mmol/L","ucum":"mmol/L","low":0.6,"high":1.2,"critical_high":2}]}}$j$);
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d004","thing_id":"00000000-0000-0000-0000-00000000c007","data":{
-  "code":"dispense","name":"Dispensing","answer":"pharmacy.dispense"}}$j$);
+  "code":"dispense","name":"Dispensing","answer":"pharmacy.dispense","steps":["prepared"]}}$j$);
 select public.write_setting($j${"key":"service","owner_id":"00000000-0000-0000-0000-00000000d005","thing_id":"00000000-0000-0000-0000-00000000c008","data":{
   "code":"psych","name":"Psychiatry consult","answer":"note"}}$j$);
 

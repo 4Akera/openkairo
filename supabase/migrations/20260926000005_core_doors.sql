@@ -172,7 +172,8 @@ begin
     select to_jsonb(s) into before from core.sites s where s.organization_id = v_org and s.id = v_id;
     if before is null and exists (select 1 from core.sites s where s.id = v_id) then perform core.refuse('not_found', 'site'); end if;
     insert into core.sites (organization_id, id, name, address, retired_at) values (v_org, v_id, r ->> 'name', r -> 'address', v_retired)
-    on conflict (organization_id, id) do update set name = coalesce(excluded.name, core.sites.name), address = coalesce(excluded.address, core.sites.address), retired_at = excluded.retired_at;
+    on conflict (organization_id, id) do update set name = coalesce(excluded.name, core.sites.name), address = coalesce(excluded.address, core.sites.address),
+       retired_at = case when excluded.retired_at is not null then coalesce(core.sites.retired_at, excluded.retired_at) end;
   elsif p_what = 'department' then
     select to_jsonb(d) into before from core.departments d where d.organization_id = v_org and d.id = v_id;
     if before is null and exists (select 1 from core.departments d where d.id = v_id) then perform core.refuse('not_found', 'department'); end if;
@@ -185,7 +186,8 @@ begin
     values (v_org, v_id, (r ->> 'site_id')::uuid, coalesce(r ->> 'name', before ->> 'name'), coalesce(r ->> 'work', before ->> 'work', 'visits'),
             coalesce((r ->> 'position')::int, (before ->> 'position')::int, 0), v_retired)
     on conflict (organization_id, id) do update set name = excluded.name, work = excluded.work, position = excluded.position,
-       site_id = case when r ? 'site_id' then excluded.site_id else core.departments.site_id end, retired_at = excluded.retired_at;
+       site_id = case when r ? 'site_id' then excluded.site_id else core.departments.site_id end,
+       retired_at = case when excluded.retired_at is not null then coalesce(core.departments.retired_at, excluded.retired_at) end;
   elsif p_what = 'place' then
     select to_jsonb(p) into before from core.places p where p.organization_id = v_org and p.id = v_id;
     if before is null and exists (select 1 from core.places p where p.id = v_id) then perform core.refuse('not_found', 'place'); end if;
@@ -193,7 +195,8 @@ begin
     values (v_org, v_id, coalesce((r ->> 'department_id')::uuid, (before ->> 'department_id')::uuid), coalesce((r ->> 'parent_id')::uuid, (before ->> 'parent_id')::uuid),
             coalesce(r ->> 'label', before ->> 'label', 'bed'), coalesce(r ->> 'name', before ->> 'name'), coalesce((r ->> 'position')::int, (before ->> 'position')::int, 0), v_retired)
     on conflict (organization_id, id) do update set department_id = excluded.department_id, parent_id = excluded.parent_id, label = excluded.label,
-       name = excluded.name, position = excluded.position, retired_at = excluded.retired_at;
+       name = excluded.name, position = excluded.position,
+       retired_at = case when excluded.retired_at is not null then coalesce(core.places.retired_at, excluded.retired_at) end;
   end if;
   perform core.audit(me, case when before is null then 'create' else 'change' end, p_what, v_id, before, r);
   return jsonb_build_object('id', v_id);

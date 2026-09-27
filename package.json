@@ -12,6 +12,7 @@
     "db:test": "bash scripts/db-test.sh",
     "test:composer": "npx --yes tsx scripts/test-composer.ts",
     "gen:types": "supabase gen types typescript --local --schema public > src/core/db/types.generated.ts",
+    "gen:shapes": "npx --yes tsx scripts/gen-shapes.ts",
     "db:demo": "docker exec -i $(docker ps --format '{{.Names}}' | grep -E '^supabase_db_' | head -1) psql -U postgres -q -v ON_ERROR_STOP=1 < scripts/demo-day.sql",
     "db:import-codes": "bash scripts/import-codes.sh"
   },

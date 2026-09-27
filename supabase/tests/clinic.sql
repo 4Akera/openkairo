@@ -6,6 +6,7 @@
 \set dr   '11111111-0000-0000-0000-0000000000b1'
 \set rn   '11111111-0000-0000-0000-0000000000b3'
 \set lt   '11111111-0000-0000-0000-0000000000b2'
+\set ow   '11111111-0000-0000-0000-0000000000b9'
 select t.fixture();
 set role authenticated;
 
@@ -36,15 +37,34 @@ reset role;
 select t.ok(not exists (select 1 from core.entries where id = '00000000-0000-0000-0000-0000000000e7'), 'the note of the refused set was not written');
 set role authenticated;
 
-\echo '── the lab: its bench, a step, a critical haemoglobin'
+\echo '── the lab: its bench, the service''s steps, a critical haemoglobin'
 select t.as(:'lt');
 select t.ok(count(*) = 1 and min(r ->> 'service_name') = 'Complete blood count', 'the bench shows the CBC') from t.rows('base.orders', :'labd', jsonb_build_object('to_department_id', :'labd', 'status', jsonb_build_array('active', 'in-progress'))) r;
-select t.landed(t.w(t.e('step', :'pt', :'labd', '{"status":"in-progress","specimen":"L-1"}', '00000000-0000-0000-0000-0000000000e9', null, '00000000-0000-0000-0000-0000000000e4', 'answers')), 'started');
+select t.refused(t.w(t.e('step', :'pt', :'labd', '{"status":"in-progress","step":"spun"}', null, null, '00000000-0000-0000-0000-0000000000e4', 'answers')), 'unknown_step', 'a first step the CBC does not list');
+select t.landed(t.w(t.e('step', :'pt', :'labd', '{"status":"in-progress","specimen":"L-1"}', '00000000-0000-0000-0000-0000000000e9', null, '00000000-0000-0000-0000-0000000000e4', 'answers')), 'started (a status only)');
 select t.ok(r ->> 'status' = 'in-progress' and r ->> 'step' = 'in-progress', 'in progress') from t.rows('base.orders', :'labd', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e4')) r;
+select t.landed(t.w(t.e('step', :'pt', :'labd', '{"status":"in-progress","step":"collected","specimen":"L-1"}', '00000000-0000-0000-0000-0000000000eb', null, '00000000-0000-0000-0000-0000000000e9', 'changes')), 'collected (listed)');
+select t.refused(t.w(t.e('step', :'pt', :'labd', '{"status":"in-progress","step":"spun"}', null, null, '00000000-0000-0000-0000-0000000000eb', 'changes')), 'unknown_step', 'a later step the CBC does not list');
+select t.landed(t.w(t.e('step', :'pt', :'labd', '{"status":"on-hold","reason":"clotted, recollect"}', '00000000-0000-0000-0000-0000000000ec', null, '00000000-0000-0000-0000-0000000000eb', 'changes')), 'held (a status only)');
+select t.ok(r ->> 'status' = 'on-hold' and r ->> 'step_key' = 'collected', 'held, and still collected') from t.rows('base.orders', :'labd', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e4')) r;
+select t.landed(t.w(t.e('step', :'pt', :'labd', '{"status":"in-progress","step":"collected","specimen":"L-2"}', '00000000-0000-0000-0000-0000000000ed', null, '00000000-0000-0000-0000-0000000000ec', 'changes')), 'collected again (a key may repeat)');
+select t.landed(t.w(t.e('step', :'pt', :'labd', '{"status":"in-progress","step":"received"}', null, null, '00000000-0000-0000-0000-0000000000ed', 'changes')), 'received');
+select t.ok(r ->> 'status' = 'in-progress' and r ->> 'step_key' = 'received', 'in progress, received') from t.rows('base.orders', :'labd', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e4')) r;
+select t.landed(t.w(t.e('step', :'pt', :'labd', '{"status":"on-hold","reason":"a second bench, on an old screen"}', null, null, '00000000-0000-0000-0000-0000000000e4', 'answers')), 'a status-only step answering it anew');
+select t.ok(r ->> 'status' = 'on-hold' and r ->> 'step_key' = 'received', 'held, and still received: the key outlives a new step item') from t.rows('base.orders', :'labd', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e4')) r;
 select t.landed(t.w(t.e('result', :'pt', :'labd', jsonb_build_object('status', 'final', 'service', jsonb_build_object('id', :'cbc', 'name', 'CBC'), 'analytes', jsonb_build_array(
   jsonb_build_object('key', 'hb', 'name', 'Hb', 'code', jsonb_build_object('system', 'loinc', 'code', '718-7'), 'value', jsonb_build_object('value', '6.4', 'unit', 'g/dL', 'ucum', 'g/dL'), 'interpretation', 'LL'))),
   '00000000-0000-0000-0000-0000000000ea', null, '00000000-0000-0000-0000-0000000000e4', 'answers')), 'a critical Hb');
 select t.ok(r ->> 'status' = 'completed', 'the order is completed') from t.rows('base.orders', :'labd', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e4')) r;
+
+\echo '── a service lists its steps in order: each a key, each once'
+select t.as(:'ow');
+select t.refuses($q$select public.write_setting('{"key":"service","owner_id":"00000000-0000-0000-0000-0000000000d2","thing_id":"00000000-0000-0000-0000-0000000000c1",
+  "data":{"code":"cbc","name":"Complete blood count","steps":["collected","received","collected"]}}')$q$, 'duplicate');
+select t.refuses($q$select public.write_setting('{"key":"service","owner_id":"00000000-0000-0000-0000-0000000000d2","thing_id":"00000000-0000-0000-0000-0000000000c1",
+  "data":{"code":"cbc","name":"Complete blood count","steps":["Sample collected"]}}')$q$, 'bad_shape');
+select t.refuses($q$select public.write_setting('{"key":"service","owner_id":"00000000-0000-0000-0000-0000000000d2","thing_id":"00000000-0000-0000-0000-0000000000c1",
+  "data":{"code":"cbc","name":"Complete blood count","steps":["collected","sent"]}}')$q$, 'reserved_step');
 
 \echo '── the doctor: my results, critical first; reviewed clears it; the record'
 select t.as(:'dr');

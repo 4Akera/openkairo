@@ -5,14 +5,15 @@ import { Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Plus, P
 import { read, remove, save as saveRow, writeSetting } from '../db/rpc'
 import { useDepartment } from '../hooks/organization'
 import { newId } from '../hooks/writes'
-import type { Department, Organization } from '../db/types'
-import { Badge, Button, Card, Centered, IconButton, Input, Select, Spinner, cn, dateTime, errorText } from '../ui'
+import type { Organization } from '../db/types'
+import { Badge, Button, Centered, IconButton, Input, Select, Spinner, cn, dateTime, errorText } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
 import { PAGE_ACTION, useMfaNeeded, useSave } from './settings/save'
 import { RolesPage } from './settings/Roles'
-import { DeleteButton, NewCard, RetireButton, EditPanel, Empty, Filter, Group, Labeled, Line, PageHead, Pick, Row, Saved, Section, Segmented, Unsaved, useDraft } from './settings/parts'
+import { DeleteButton, NewCard, EditPanel, Empty, Filter, Group, Labeled, Line, PageHead, Row, Saved, Section, Segmented, Unsaved, useDraft } from './settings/parts'
 import { ReadsPage } from './settings/Reads'
+import { DepartmentsPage } from './settings/Departments'
 import { TemplatesPage } from './settings/Presets'
 
 const PAGES = [['organization', 'Organization', Building2], ['departments', 'Departments', LayoutGrid], ['services', 'Services', FlaskConical], ['users', 'Users', Users],
@@ -59,7 +60,7 @@ function OrganizationPage({ org }: { org: Organization }) {
   const tiles: [string, string, number][] = [['departments', 'Departments', org.departments.length], ['services', 'Services', org.services.length],
     ['users', 'Users', org.users.filter((u) => !u.retired_at).length], ['packs', 'Packs on', org.packs.filter((p) => p.enabled).length]]
   // ids read as the names of what they point at
-  const names = useMemo(() => new Map<string, string>([...org.roles, ...org.users, ...org.allDepartments, ...org.places, ...org.templates, ...org.services].map((x) => [x.id, x.name])), [org])
+  const names = useMemo(() => new Map<string, string>([...org.roles, ...org.users, ...org.allDepartments, ...org.places, ...org.sites, ...org.templates, ...org.services].map((x) => [x.id, x.name])), [org])
   const val = (v: unknown) => { const s = (v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v).replace(/[{}"[\]]/g, '').replace(/,/g, ', ').replace(/:/g, ': ').replace(/_id\b/g, '') : String(v))
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, (id) => names.get(id) ?? `${id.slice(0, 8)}…`); return s.length > 60 ? `${s.slice(0, 60)}…` : s || '—' }
   return <div className="grid gap-4">
@@ -97,7 +98,7 @@ function ClinicZone({ org }: { org: Organization }) {
 
 /** how every department's staff see the record: by visit, or every entry newest first (one choice for the organization) */
 function RecordViewSetting({ org }: { org: Organization }) {
-  const save = useSave((view: string) => writeSetting({ key: 'organization.record_view', data: { view } })); const saved = org.organization.record_view ?? 'visits'; const [v, setV] = useState(saved)
+  const save = useSave((view: Organization['organization']['record_view']) => writeSetting({ key: 'organization.record_view', data: { view } })); const saved = org.organization.record_view ?? 'visits'; const [v, setV] = useState(saved)
   return <Line label="The record shows" changed={v !== saved}
     hint={`For everyone in ${org.organization.name}. By visit groups the record into visits, newest activity first; all entries lists every entry newest first.`}>
     <div className="flex flex-wrap items-center gap-2">
@@ -112,91 +113,6 @@ function SaveUndo({ dirty, save, onSave, onUndo }: { dirty: boolean; save: { err
   if (save.error) return <span className="text-sm text-red-700">{errorText(save.error)}</span>
   if (!dirty) return save.isSuccess ? <Saved /> : null
   return <><Button size="sm" onClick={onSave} disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save'}</Button><Button size="sm" variant="ghost" onClick={onUndo}>Undo</Button><Unsaved /></>
-}
-
-// ── Departments ──
-const WORKS: [Department['work'], string, string][] = [['visits', 'Clinics', 'Patients are seen here in visits.'], ['stays', 'Wards', 'Patients stay here, in beds.'],
-  ['desk', 'Front desks', 'Checks patients in for the clinics it serves.'], ['bench', 'Benches', 'Does work others order: a lab, imaging, a pharmacy.'],
-  ['outside', 'Outside', 'Somewhere outside the organization that orders go to.']]
-const REVIEW: [Department['review_results'], string][] = [['critical', 'Critical only'], ['abnormal', 'Critical and abnormal'], ['all', 'Every result']]
-type DeptDraft = { name: string; work: Department['work']; serves: (string | null)[]; patients_wait: boolean; review_results: Department['review_results']; is_private: boolean; after_done: Department['after_done'] }
-const everyOrSome = (ids: (string | null)[]) => !ids.length || ids.includes(null) ? { all: true } : { departments: ids as string[] }
-
-/** a department is a row (save) and its rules are department.* settings (write_setting), each written only when it changed */
-async function saveDepartment(a: { id: string; d: DeptDraft; was: Department | undefined }) {
-  const { id, d, was } = a
-  if (!was || was.name !== d.name || was.work !== d.work) await saveRow('department', { id, name: d.name.trim(), work: d.work })
-  const one = (key: string, data: unknown, same: boolean) => !was || !same ? writeSetting({ key, owner_id: id, data }) : Promise.resolve()
-  const same = (x: (string | null)[], y: (string | null)[]) => JSON.stringify(everyOrSome(x)) === JSON.stringify(everyOrSome(y))
-  if (d.work === 'desk') await one('department.checks_in_for', everyOrSome(d.serves), !!was && same(was.checks_in_for, d.serves))
-  if (d.work === 'bench') await one('department.works_for', everyOrSome(d.serves), !!was && same(was.serves, d.serves))
-  if (d.work !== 'desk' && d.work !== 'outside') await one('department.after_done', { after: d.after_done }, was?.after_done === d.after_done)
-  if (d.work === 'visits' || d.work === 'stays') {
-    await one('department.patients_wait', { wait: d.patients_wait }, was?.patients_wait === d.patients_wait)
-    await one('department.review_results', { level: d.review_results }, was?.review_results === d.review_results)
-    await one('department.private', { private: d.is_private }, was?.is_private === d.is_private)
-  }
-}
-
-function DepartmentsPage({ org }: { org: Organization }) {
-  const save = useSave(saveDepartment); const retire = useSave((id: string) => saveRow('department', { id, retired: true })); const del = useSave((id: string) => remove('department', id)); const e = useDraft<DeptDraft>()
-  // whom a desk checks in for, and whom a bench works for: every department, or the ones named
-  const served = (ids: (string | null)[] | undefined) => !ids?.length || ids.includes(null) ? [null] : ids
-  const every = (w: string) => w === 'desk' ? 'every clinic' : 'every department'
-  const nameOf = (id: string | null, w: string) => id === null ? every(w) : org.departments.find((x) => x.id === id)?.name ?? '?'
-  const open = (id: string, d: DeptDraft, isNew = false) => { save.reset(); retire.reset(); e.toggle(id, d, isNew) }
-  const add = (work: Department['work'] = 'visits') => open(newId(), { name: '', work, serves: [null], patients_wait: true, review_results: 'critical', is_private: false, after_done: 'next' }, true)
-
-  const editor = () => { const d = e.draft!; const rules = d.work === 'visits' || d.work === 'stays'; const flow = d.work !== 'desk' && d.work !== 'outside'; const existing = org.departments.find((x) => x.id === e.id)
-    const clients = org.departments.filter((x) => x.is_visited && x.id !== e.id)   // where patients are seen and orders written
-    return <EditPanel dirty={e.dirty} saving={save.isPending} error={save.error ?? retire.error ?? del.error} canSave={!!d.name.trim()} onCancel={e.cancel}
-      onSave={() => save.mutate({ id: e.id!, d, was: existing }, { onSuccess: e.done })}
-      aside={existing && <><RetireButton what={existing.name} onRetire={() => retire.mutate(existing.id, { onSuccess: e.done })} /><DeleteButton what={existing.name} onDelete={() => del.mutate(existing.id, { onSuccess: e.done })} /></>}>
-      <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
-        <Labeled label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Cardiology" required autoFocus /></Labeled>
-        <Labeled label="Work" changed={e.changed('work')} hint={WORKS.find(([k]) => k === d.work)?.[2]}><Select value={d.work} onChange={(x) => e.set({ work: x.target.value as Department['work'] })}>{WORKS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Labeled>
-      </div>
-      {(d.work === 'desk' || d.work === 'bench') && <Group title="Serves">
-        <Line label={d.work === 'desk' ? 'Checks in for' : 'Works for'} changed={e.changed('serves')}
-          hint={d.work === 'desk' ? 'Its desk sends patients to these and sees their queues.' : 'Only these send it orders (and prescriptions, for a pharmacy); others are refused. With two labs, each works for its own.'}>
-          <div className="flex flex-wrap gap-1.5">
-            <Pick on={d.serves.includes(null)} onClick={() => e.set({ serves: [null] })}>{every(d.work)[0].toUpperCase() + every(d.work).slice(1)}</Pick>
-            {clients.map((v) => { const on = d.serves.includes(v.id); const rest = d.serves.filter((x): x is string => !!x && x !== v.id)
-              return <Pick key={v.id} on={on} onClick={() => e.set({ serves: on ? served(rest) : [...rest, v.id] })}>{v.name}</Pick> })}
-            {clients.length === 0 && <span className="text-xs text-neutral-400">No clinics or wards yet.</span>}</div>
-        </Line></Group>}
-      {flow && <Group title="Rules">
-        <Line label="After Done" changed={e.changed('after_done')} hint="Where Done (or Release on a bench) takes you.">
-          <Segmented value={d.after_done} onChange={(v) => e.set({ after_done: v })} options={[['next', 'Next patient'], ['queue', 'Back to the queue']]} /></Line>
-        {rules && <>
-        <Line label="When results are still out at Done" changed={e.changed('patients_wait')} hint="Whether the patient stays for them or is sent home and called back.">
-          <Segmented value={d.patients_wait ? 'wait' : 'home'} onChange={(v) => e.set({ patients_wait: v === 'wait' })} options={[['wait', 'Patient waits'], ['home', 'Patient goes home']]} /></Line>
-        <Line label="Results to review" changed={e.changed('review_results')} hint="Results for a patient who left before being seen again, and corrected results, always go to review.">
-          <Segmented value={d.review_results} onChange={(v) => e.set({ review_results: v })} options={REVIEW} /></Line>
-        <Line label="Notes" changed={e.changed('is_private')} hint={'In a private department every note is private: only the people who work here read it, and others see "Private note". Its medicines, results, problems, orders and its name stay visible to everyone who may read the record.'}>
-          <Segmented value={d.is_private ? 'private' : 'shared'} onChange={(v) => e.set({ is_private: v === 'private' })} options={[['shared', 'Shared'], ['private', 'Private department']]} /></Line></>}
-      </Group>}
-    </EditPanel> }
-
-  return <div className="grid gap-4">
-    <PageHead title="Departments" hint="Where patients are seen and where work is done. Open one to rename it or change its rules." right={<Button size="sm" onClick={() => add()}><Plus className="h-3.5 w-3.5" />Department</Button>} />
-    {e.isNew && <NewCard title="New department">{editor()}</NewCard>}
-    {WORKS.map(([w, label]) => { const ds = org.departments.filter((d) => d.work === w); if (!ds.length) return null
-      return <Section key={w} id={`dept.${w}`} title={label} count={ds.length} summary={ds.map((d) => d.name).join(', ')}
-        right={w !== 'outside' && <IconButton title={`Add to ${label.toLowerCase()}`} onClick={() => add(w)}><Plus className="h-3.5 w-3.5" /></IconButton>}>
-        <ul className="divide-y divide-neutral-100">{ds.map((d) => { const serves = d.work === 'desk' ? d.checks_in_for : d.serves
-          return <Row key={d.id} open={e.id === d.id && !e.isNew} editor={editor}
-          onToggle={() => open(d.id, { name: d.name, work: d.work, serves: served(serves), patients_wait: d.patients_wait, review_results: d.review_results, is_private: d.is_private, after_done: d.after_done ?? 'next' })}>
-          <span className="w-48 truncate font-medium">{d.name}</span>
-          {d.site_name && <span className="text-xs text-neutral-400">{d.site_name}</span>}
-          {d.is_visited && <span className="flex flex-wrap gap-1">
-            <Badge>{d.patients_wait ? 'Patient waits' : 'Goes home'}</Badge><Badge>Review: {REVIEW.find(([k]) => k === d.review_results)?.[1].toLowerCase()}</Badge>{d.is_private && <Badge tone="amber">Private department</Badge>}</span>}
-          {d.after_done === 'queue' && d.work !== 'desk' && d.work !== 'outside' && <Badge>Then: queue</Badge>}
-          {(d.work === 'desk' || d.work === 'bench') && <span className="text-xs text-neutral-500">{d.work === 'desk' ? 'checks in for' : 'works for'} {served(serves).map((x) => nameOf(x, d.work)).join(', ')}</span>}
-        </Row> })}</ul>
-      </Section> })}
-    {org.departments.length === 0 && <Card><Empty>No departments yet. Add the first one.</Empty></Card>}
-  </div>
 }
 
 // ── Users ──

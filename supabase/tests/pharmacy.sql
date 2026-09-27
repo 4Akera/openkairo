@@ -1,5 +1,6 @@
 -- the pharmacy pack (spec §5), ported: a medication sent is an order to the pharmacy; the queue (a pack table, fed after commit by a
--- listener); prepared; a result cannot answer it; the dispense closes it; the pack off refuses new dispenses and the record still reads
+-- listener); prepared, the one step its service lists; a result cannot answer it; the dispense closes it; the pack off refuses new
+-- dispenses and the record still reads
 \set im   '00000000-0000-0000-0000-0000000000d1'
 \set ph   '00000000-0000-0000-0000-0000000000d3'
 \set pt   '00000000-0000-0000-0000-0000000000f1'
@@ -31,7 +32,8 @@ select t.as(:'pm');
 select t.ok(r ->> 'drug' = 'Lithium' and (r ->> 'duration_days')::int = 30 and r ->> 'status' = 'to_prepare' and r ->> 'dose' = '400 mg', 'the queue carries what to give')
   from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
 
-\echo '── the pharmacist: prepared (a pack step); a result cannot answer it; the dispense closes it'
+\echo '── the pharmacist: prepared (the dispensing service''s step); a result cannot answer it; the dispense closes it'
+select t.refused(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","step":"counted"}', null, null, '00000000-0000-0000-0000-0000000000e2', 'answers')), 'unknown_step', 'a step dispensing does not list');
 select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","step":"prepared"}', '00000000-0000-0000-0000-0000000000e3', null, '00000000-0000-0000-0000-0000000000e2', 'answers')), 'prepared');
 select t.ok(r ->> 'status' = 'prepared', 'the queue: prepared (inline, its own type)') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e2')) r;
 select t.ok(r ->> 'status' = 'in-progress' and r ->> 'step_key' = 'prepared', 'the base order: in progress, step prepared') from t.rows('base.orders', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-0000000000e2')) r;

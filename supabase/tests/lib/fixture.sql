@@ -70,7 +70,8 @@ $$;
 --   a1 Demo · d4 Front desk (desk) · d1 Internal Medicine (visits) · d2 Lab (bench) · d3 Pharmacy (bench) · d5 Psychiatry (visits, private)
 --   · d6 Ward (stays, beds p1–p4) · b9 owner · b1 Dr Ali (doctor, IM) · b3 Nurse Sara (nurse, IM) · b4 reception (desk) · b2 lab tech (lab)
 --   · b6 pharmacist · b8 Dr Salma (doctor, psychiatry) · b7 clerk (reception, psychiatry) · bm analyser (machine, doctor in psychiatry)
---   · services c1 CBC (result), c2 chest X-ray (note), c3 dispensing (pharmacy) · f1 Ahmed Hassan · logins are 11111111-…-<user>
+--   · services c1 CBC (result; steps collected, received), c2 chest X-ray (note), c3 dispensing (pharmacy; step prepared) · f1 Ahmed Hassan
+--   · logins are 11111111-…-<user>
 create or replace function t.fixture(p_patients boolean default true) returns void language plpgsql as $$
 declare o text := '00000000-0000-0000-0000-0000000000'; l text := '11111111-0000-0000-0000-0000000000';
 begin
@@ -89,12 +90,13 @@ begin
     from generate_series(1, 4) n;
   perform public.write_setting(jsonb_build_object('key', 'service', 'owner_id', o || 'd2', 'thing_id', o || 'c1', 'data', jsonb_build_object(
     'code', 'cbc', 'name', 'Complete blood count', 'section', 'Haematology', 'answer', 'result', 'coding', jsonb_build_object('system', 'loinc', 'code', '58410-2'),
+    'steps', jsonb_build_array('collected', 'received'),
     'fields', jsonb_build_array(jsonb_build_object('key', 'hb', 'name', 'Haemoglobin', 'coding', jsonb_build_object('system', 'loinc', 'code', '718-7'), 'kind', 'number',
       'unit', 'g/dL', 'ucum', 'g/dL', 'low', 12, 'high', 16, 'critical_low', 7, 'critical_high', 20)))));
   perform public.write_setting(jsonb_build_object('key', 'service', 'owner_id', o || 'd2', 'thing_id', o || 'c2', 'data', jsonb_build_object(
     'code', 'cxr', 'name', 'Chest X-ray', 'answer', 'note')));
   perform public.write_setting(jsonb_build_object('key', 'service', 'owner_id', o || 'd3', 'thing_id', o || 'c3', 'data', jsonb_build_object(
-    'code', 'dispense', 'name', 'Dispensing', 'answer', 'pharmacy.dispense')));
+    'code', 'dispense', 'name', 'Dispensing', 'answer', 'pharmacy.dispense', 'steps', jsonb_build_array('prepared'))));
   perform public.write_setting(jsonb_build_object('key', 'service', 'owner_id', o || 'd5', 'thing_id', o || 'c5', 'data', jsonb_build_object(
     'code', 'psych', 'name', 'Psychiatry consult', 'answer', 'note')));
   perform public.save('user', jsonb_build_object('id', o || 'b1', 'name', 'Dr Ali', 'login_id', l || 'b1', 'holdings', jsonb_build_array(

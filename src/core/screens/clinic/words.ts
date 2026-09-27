@@ -24,7 +24,7 @@ export const backIn = (reqs: Req[]) => sentence([...new Set(reqs.filter((x) => x
 const STEP: Record<string, string> = { sent: 'sent', started: 'sample taken', held: 'held' }
 /** what a patient waiting for results waits for: "HbA1c sample taken · chest X-ray sent". An open prescription never holds a
  *  visit (core.holds), so it is not something the patient waits for here. */
-export const pendingWords = (reqs: Req[]) => sentence(reqs.filter((x) => x.is_holding && x.type !== 'prescription').map((x) => `${reqName(x)} ${STEP[x.step] ?? x.step}`)).join(' · ')
+export const pendingWords = (reqs: Req[]) => sentence(reqs.filter((x) => x.is_holding && x.type !== 'prescription').map((x) => `${reqName(x)} ${STEP[x.step] ?? x.step.replace(/_/g, ' ')}`)).join(' · ')
 
 /** since when the row has been waiting: arrival, back since present, with a doctor since called */
 export const since = (r: QueueRow) => r.band === 'waiting' ? r.arrived_at

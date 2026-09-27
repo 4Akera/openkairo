@@ -297,7 +297,7 @@ FHIR's own code wherever the meaning matches, so the mapping is identity and the
 | `given` | a dose given or not · what (→ medication item or a concept), dose, route, site, lot, status completed · not-done + reason | MedicationAdministration (a vaccine pack type maps to Immunization) | EDA, ATC, CVX |
 | `list_review` | "reviewed" or "none known" for problems, medications or allergies (`/nka`) | List.emptyReason; IPS absent-unknown | IPS absent-unknown |
 | `order` | one service asked of one department · service (id, code, name as it stood), target department, priority (routine · urgent · asap · stat), status (active · on-hold · revoked · completed), question, reason, answers | ServiceRequest (requisition = set) | organization service codes + LOINC |
-| `step` | the performing department's progress on an order · status (received · accepted · rejected · in-progress · on-hold · completed · cancelled), step key, reason, specimen number. The first step `answers` the order; later steps `change` it | Task (fulfil) | HL7 task status |
+| `step` | the performing department's progress on an order · status (received · accepted · rejected · in-progress · on-hold · completed · cancelled · failed), step key (one of the service's steps), reason, specimen number. The first step `answers` the order; later steps `change` it | Task (fulfil); the key is businessStatus | HL7 task status |
 | `result` | an answer to an order, or an outside result · code, status (preliminary · final · corrected · amended), analytes[{key, code, name, value, text, interpretation, reference range copied at write, critical range}], conclusion, attachments | DiagnosticReport + Observation per analyte, id `{item}-{key}` | LOINC, UCUM, v3 ObservationInterpretation |
 | `procedure` | something done · code, status, performed time, body site, outcome, reason | Procedure | local |
 | `reviewed` | the requester saw an answer (`about` → result or step) | Task (review), completed | — |
@@ -362,7 +362,10 @@ again, or when it was corrected after being seen.
   the open visit); `transferred` needs an open visit and another department.
 - **Orders**: a service must belong to the target department; the target must work for the ordering department (`not_served`); a
   `result` may answer only an order whose service answers with results, and a note only a note-answered one (`wrong_answer`); a step
-  follows the service's steps.
+  (and a pack type extending it) that names a step key names one of the `steps` of its order's service as the service stands now, or
+  it is refused `unknown_step` (the first step finds the order it answers; a later one, through the step it changes); keys come in any
+  order and may repeat (a sample collected again); a step with a status only (in progress, held, not done) names none. A service
+  without steps or retired, or an order with no service id, lists none; a service lists each key once (`duplicate`).
 - **Warnings** (inline cards): allergy clash and duplicate therapy (by ATC ingredient and class), a dose above the usual, a problem
   already on the list.
 - **Flags**: an unknown code, a unit that is not UCUM, a late conflict, a stale correction, a critical result (LL, HH, AA).
@@ -390,8 +393,8 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   `department.review_results`, `department.works_for` (a bench: department ids, or all), `department.checks_in_for` (a desk: the
   clinics it checks in for, or all), `department.screens` (the Screens line: the default
   screen or a pack screen, and which opens first), `service` (owner = the performing department: code, name, section, LOINC coding,
-  answer type, fields with LOINC, UCUM units, ranges by sex and age, critical ranges, choices), `preset` (name, shortcut, lines,
-  services, department or all), `place.closed`.
+  answer type, steps (in order; keys such as `collected`, `received`), fields with LOINC, UCUM units, ranges by sex and age, critical
+  ranges, choices), `preset` (name, shortcut, lines, services, department or all), `place.closed`.
 - Actions: `write:<type>` for every type; `read:patients`, `read:record`, `read:queue`, `read:bench`, `read:review`, `read:log`,
   `export:fhir`, `manage:patients`, `manage:settings`, `manage:users`, `manage:roles`, `manage:places`, `erase:patient`.
 - Built-in roles (fixed ids): Owner `…c001` (every action, held everywhere), Doctor `…c002`, Nurse `…c003`, Reception `…c004`, Lab
@@ -503,11 +506,16 @@ Addresses: governorate as ISO 3166-2:EG (EG-C, EG-GZ, EG-ALX), country EG. Phone
    read them; the marker never appears.
 4. **Concurrency**: two sessions call one visit, admit two patients to one bed, correct one item: one of each wins; a late copy lands
    flagged.
-5. **Registry integrity**: OIDs, owners, volatility, prefixes, may_be_private against the resource, prosrc hashes.
+5. **Registry integrity**: OIDs, owners, volatility, prefixes, may_be_private against the resource, prosrc hashes; every key a core, base or
+   pack function reads from entry or setting data (`-> 'data'`, `x.data`, `core.setting_at(…)` and what holds them) is a property some
+   declared shape names, and a line or to_fhir reads only keys of the types it serves.
 6. **FHIR**: the demo patients export as an R4 Bundle and an IPS whose resources pass the structural checks; every coding resolves;
    every unit is UCUM.
 7. **Tenancy matrix**: every read and write across organizations sees nothing.
 8. **Pack contract**: one suite for every pack (prefix, grants, refresh = rebuild, canary on its types, off and on).
+
+The client's entry and setting types (`src/core/db/shapes.generated.ts`) are generated from the declared shapes by `npm run gen:shapes`;
+the test run ends with `gen:shapes --check` and fails when they are stale.
 
 `scripts/db-test.sh` runs every `supabase/tests/*.sql` (one rolled-back transaction each; `-- needs: reset` suites commit;
 `-- expects:` counts expected errors). **Acceptance**: every check of the suites before the rebuild has a green counterpart or is
@@ -571,5 +579,27 @@ types, parked pack calls with per-call Retry, Postgres enums.
   - **Found in the browser pass and fixed**: the outbox job ran as two statements and never committed (now a lone `CALL`, with a guard
     check in the pack contract suite); drained batches now send hints; a department's reads check rights where the read is made, not
     where the screen stands; the pharmacy's answer waits until its own table names the drug.
-- **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built; Settings has no
-  editor yet for sites, places (beds), `department.encounter_class` and `department.screens` (the seed and the `save` door set them).
+- 2026-09-27: the core round after v3.
+  - **Order steps are real** (§4.4): a service lists its steps; the writer refuses a key its order's service does not list
+    (`unknown_step`); `base.orders.step_key` keeps the latest key through status-only steps; the bench offers each order its service's
+    next step (the client step registry is gone) and Settings → Services edits them. 16 suites, 441 checks.
+  - **Data keys checked** (§8 test 5): the registry suite scans every core, base and pack body for the keys it reads from entry or
+    setting data and fails on one no shape declares (a `dosge` probe is caught); none was found. 16 suites, 447 checks.
+  - **Client types from the shapes** (§3.7–§3.8, §8): `scripts/gen-shapes.ts` reads `core.types` and `core.setting_keys` and writes one
+    type per datatype, entry type (the latest version) and setting, with `EntryData` and `SettingData`; `EntryIn`, `writeSetting`, the
+    builders, a pack's answer (`toWrite`) and the screens' inline sets are checked against them, and `views.ts` reads entry data through
+    `dataOf` and settings by key. The compile found writes the shapes refuse, fixed in the client (no shape changed): a stopped
+    medication or a refuted allergy not at hand lost its required drug or concept, a note answer could go without text, a blood pressure
+    with one side blank. `db-test.sh` ends with `gen:shapes --check`. 16 suites, 447 checks.
+  - **Settings editors**: sites (with the departments, behind `manage:places`); a department's site, kind of encounter and Screens
+    line; its places inline (bed, room, chair, cubicle: add, rename, reorder, close with a reason, delete what nothing used, else retire).
+  - **Reviewed** (find, then an adversarial check of each finding): a preliminary answer shows before the step reached; the step key
+    outlives a new step item; a step may not take a bench word (`reserved_step`) and the Services editor refuses what a key cannot
+    hold (Arabic, accents); a save keeps a retired site, department or place retired from the day it was; a new department stores its
+    kind of encounter only when chosen; Settings waits for the directory after a save (no double Add, no stale reorder); a blood
+    pressure needs both sides at Done; the data-key scan also reads `select … into`, coalesce defaults and setting_at arguments.
+    16 suites, 453 checks.
+- **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built. The Docker VM's
+  clock can step back a little, so a holding or setting written a moment ago may read as not yet valid (`valid_from`/`recorded_at`
+  against `clock_timestamp()`); a test run then fails about once in 25 — to settle before production. On a stay, the visit screen's
+  Done ends the stay (a stay mode is to be designed).
