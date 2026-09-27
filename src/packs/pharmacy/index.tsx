@@ -3,7 +3,7 @@
 // extends the base's step — straight from the medication. Not given takes a one-word reason.
 import { registerBenchWords, registerRenderer, registerReplyForm } from '@core/renderers'
 import type { RequestQueueRow } from '@core/db/types'
-import { Input, cn } from '@core/ui'
+import { Chip, Field, Input, KV, Tag } from '@core/ui'
 
 interface Dispense { given: boolean; reason: string }
 const PER_DAY: Record<string, number> = { OD: 1, BD: 2, TDS: 3, QDS: 4, q4h: 6, q6h: 4, q8h: 3, q12h: 2, once: 1, stat: 1 }
@@ -19,17 +19,17 @@ function asGiven(r: RequestQueueRow) {
   return { drug: { text: d.drug.name }, ...(dose ? { dose: { value: dose, unit: unit || undefined } } : {}), quantity: { value: String(quantity ?? 1), unit: 'tablets', ucum: '{tbl}' } }
 }
 
+/** given, or not and why: the kit's chips (solid, one choice) and a field for a reason of its own (design-system.md §6.2) */
 function GivenOrNot({ request, value, onChange }: { request: RequestQueueRow; value: Dispense | undefined; onChange: (v: Dispense) => void }) {
   const v = value ?? { given: true, reason: '' }
-  const chip = (on: boolean) => cn('rounded-md px-2.5 py-1 text-xs ring-1 ring-inset', on ? 'bg-teal-800 text-white ring-teal-800' : 'bg-white text-neutral-600 ring-neutral-200 hover:ring-neutral-400')
   return <div className="grid gap-2">
-    <p className="text-sm"><b className="font-medium text-neutral-900">{request.display_line}</b></p>
+    <p className="text-14 font-medium text-fg">{request.display_line}</p>
     <div className="flex flex-wrap items-center gap-1.5">
-      <button type="button" className={chip(v.given)} onClick={() => onChange({ given: true, reason: '' })}>Given</button>
-      <button type="button" className={chip(!v.given)} onClick={() => onChange({ given: false, reason: v.reason })}>Not given</button>
-      {!v.given && WHY_NOT.map((w) => <button type="button" key={w} className={chip(v.reason === w)} onClick={() => onChange({ given: false, reason: w })}>{w}</button>)}
+      <Chip on={v.given} onClick={() => onChange({ given: true, reason: '' })}>Given</Chip>
+      <Chip on={!v.given} onClick={() => onChange({ given: false, reason: v.reason })}>Not given</Chip>
+      {!v.given && WHY_NOT.map((w) => <Chip key={w} on={v.reason === w} onClick={() => onChange({ given: false, reason: w })}>{w}</Chip>)}
     </div>
-    {!v.given && <Input data-v value={v.reason} onChange={(e) => onChange({ given: false, reason: e.target.value })} placeholder="Or say why" className="h-8 max-w-sm" />}
+    {!v.given && <Field label="Or say why" className="max-w-sm"><Input data-v dense value={v.reason} onChange={(e) => onChange({ given: false, reason: e.target.value })} /></Field>}
   </div>
 }
 
@@ -46,9 +46,13 @@ registerReplyForm<Dispense>('pharmacy.dispense', {
   },
 })
 registerBenchWords('pharmacy', { todo: 'To give', done: 'Given today' })
+type Given = { drug: { text: string }; dose?: { value: string; unit?: string }; quantity?: { value: string } }
+const amount = (i: Given) => [`${i.dose?.value ?? ''}${i.dose?.unit ? ` ${i.dose.unit}` : ''}`.trim(), i.quantity && `× ${i.quantity.value}`].filter(Boolean).join(' ')
+// the dispense in the record, with no colour of its own: a word for the state (Given ok, Not given warn), the lines as label and value
 registerRenderer('pharmacy.dispense', {
-  Full: ({ data }) => { const items = ((data.pharmacy as { items?: { drug: { text: string }; dose?: { value: string; unit?: string }; quantity?: { value: string } }[] } | undefined)?.items) ?? []
-    return <div className="grid gap-1 text-sm">{data.status === 'cancelled' ? <p>Not given — {String(data.reason ?? '')}</p> : items.map((i, k) => <p key={k}>Given: {i.drug.text} {i.dose?.value ?? ''}{i.dose?.unit ? ` ${i.dose.unit}` : ''}{i.quantity ? ` × ${i.quantity.value}` : ''}</p>)}
-      {typeof data.note === 'string' && data.note && <p className="text-neutral-600">{data.note}</p>}</div> },
+  Full: ({ data }) => { const items = ((data.pharmacy as { items?: Given[] } | undefined)?.items) ?? []
+    return <div className="grid gap-1.5 text-13">{data.status === 'cancelled' ? <p><Tag tone="warn">Not given</Tag> <span className="text-muted">{String(data.reason ?? '')}</span></p>
+      : <><p><Tag tone="ok">Given</Tag></p><KV dense items={items.map((i) => [i.drug.text, amount(i)])} /></>}
+      {typeof data.note === 'string' && data.note && <p className="text-muted">{data.note}</p>}</div> },
 })
 export const key = 'pharmacy'
