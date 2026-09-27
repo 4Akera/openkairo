@@ -1,18 +1,19 @@
 // /design (design-system.md §7, build plan 1.4): the living style guide. Every token with its live value and contrast, the type
 // and space scales, every kit component and state, the charts, and the rules, in the app's theme or light and dark side by side.
 // Anyone signed in may open it (the shell asks for no department here): it reads nothing, and all it shows is fixtures.ts.
-// The record blocks gallery joins it with the chart's blocks (build plan 3.4).
+// Record blocks is the chart's own blocks on a made-up record (build plan 3.4).
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { BookCheck, ChartLine, Component, Palette, Ruler } from 'lucide-react'
+import { BookCheck, ChartLine, Component, Palette, Rows3, Ruler } from 'lucide-react'
 import { NavItem, PageHead, Segmented, ThemeToggle, useFold } from '../../ui'
 import { Tokens } from './Tokens'
 import { TypeSpace } from './Type'
 import { Components } from './Components'
+import { Blocks } from './Blocks'
 import { Charts } from './Charts'
 import { Rules } from './Rules'
 
 const PAGES = [['tokens', 'Tokens', Palette, Tokens], ['type', 'Type & space', Ruler, TypeSpace], ['components', 'Components', Component, Components],
-  ['charts', 'Charts', ChartLine, Charts], ['rules', 'Rules', BookCheck, Rules]] as const
+  ['blocks', 'Record blocks', Rows3, Blocks], ['charts', 'Charts', ChartLine, Charts], ['rules', 'Rules', BookCheck, Rules]] as const
 
 export function DesignScreen() {
   const [side, setSide] = useFold('design.side', false)   // a remembered on/off, like a fold: one theme, or both side by side

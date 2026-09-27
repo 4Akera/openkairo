@@ -87,6 +87,34 @@ export const SHORT: Record<string, string> = { 'loinc:4548-4': 'HbA1c', 'loinc:2
 export const FAMILY_HISTORY = new Set(['loinc:10157-6'])
 export const SOCIAL_HISTORY = new Set(['loinc:72166-2', 'loinc:11331-6', 'loinc:11341-5', 'loinc:71802-3'])
 
+// ── values in words (the Fallback block, Details) ──
+const blank = (v: unknown) => v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v as object).length)
+/** any stored value as words: a concept's text, a quantity with its unit, lists joined, an object as "Label value" pairs */
+export function valueWords(v: unknown): string {
+  if (blank(v)) return ''
+  if (Array.isArray(v)) return v.map(valueWords).filter(Boolean).join(', ')
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+  if (typeof v !== 'object') return String(v)
+  const o = v as Record<string, unknown>
+  if (typeof o.text === 'string') return o.text
+  if (typeof o.value === 'string' || typeof o.value === 'number') return `${o.comparator ?? ''}${o.value}${o.unit ?? o.ucum ? ` ${o.unit ?? o.ucum}` : ''}`
+  if (typeof o.name === 'string' || typeof o.display === 'string') return String(o.name ?? o.display)
+  return Object.entries(o).filter(([, x]) => !blank(x)).map(([k, x]) => `${fieldLabel(k)} ${valueWords(x)}`).join(' · ')
+}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** a partial date as written (2019 · Mar 2019 · 12 Mar 2019): a date, not an instant, so no time zone moves it; an instant keeps its day */
+export function partialWords(p: { value: string; precision?: string | null; text?: string } | null | undefined, zoneDay?: (iso: string) => string) {
+  if (!p?.value) return p?.text ?? null
+  const day = p.value.length > 10 && zoneDay ? zoneDay(p.value) : p.value.slice(0, 10)
+  const [y, m, d] = day.split('-')
+  const prec = p.precision ?? (p.value.length === 4 ? 'year' : p.value.length === 7 ? 'month' : 'day')
+  return prec === 'year' || !m ? y : prec === 'month' || !d ? `${MONTHS[Number(m) - 1]} ${y}` : `${Number(d)} ${MONTHS[Number(m) - 1]} ${y}`
+}
+/** a block group's name: the paper form it stands for */
+export const GROUP_WORD = { rx: 'Prescription', reported: 'Reported medicines', problems: 'Diagnoses & problems', allergies: 'Allergies', orders: 'Orders', order: 'Order' }
+/** the last step of a service, by what answers it */
+export const FINAL_STEP: Record<string, string> = { result: 'Resulted', note: 'Replied', 'pharmacy.dispense': 'Dispensed' }
+
 /** how long ago a partial date was: 6 y · 4 mo · this month (moved from Side.tsx's since) */
 export function sinceWords(on: string | null | undefined, now = new Date()) {
   if (!on) return null

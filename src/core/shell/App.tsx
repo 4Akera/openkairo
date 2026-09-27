@@ -16,6 +16,8 @@ import { BenchCorrect, BenchPatient } from '../screens/bench/BenchPatient'
 
 // the style guide is loaded when it is opened: no one needs it for a day's work
 const DesignScreen = lazy(() => import('../screens/design/DesignScreen').then((m) => ({ default: m.DesignScreen })))
+// the chart's parts on real reads while they are built (build plan 3.4–3.9): development only, gone at the switch (3.10)
+const DevChart = import.meta.env.DEV ? lazy(() => import('../screens/chart/dev/DevChart').then((m) => ({ default: m.DevChart }))) : null
 
 function RequireAuth() {
   const status = useAuth((s) => s.status)
@@ -65,6 +67,7 @@ export function App() {
           <Route path="bench/:patientId" element={<BenchPatient />} />
           <Route path="settings/*" element={<SettingsScreen />} />
           <Route path="design/*" element={<Suspense fallback={<Centered><Spinner /></Centered>}><DesignScreen /></Suspense>} />
+          {DevChart && <Route path="dev/chart/:patientId" element={<Suspense fallback={<Centered><Spinner /></Centered>}><DevChart /></Suspense>} />}
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

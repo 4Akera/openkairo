@@ -50,6 +50,16 @@ export function useDocuments(patientId: string | null, enabled: boolean) {
   })
 }
 
+/** one item as the item shape returns it: every version, and every entry that refers to one (steps, answers, reviews, privacy marks);
+ *  a block's Details reads it once, when opened */
+export function useItem(entryId: string | null, patientId: string | null) {
+  const { dept, org } = useDepartment()
+  return useQuery({
+    queryKey: ['record', patientId, 'item', entryId, dept?.id], enabled: !!entryId && !!dept && !!org,
+    queryFn: async () => (await read<{ entries: ServerEntry[] }>({ shape: 'item', item: entryId, department_id: dept!.id, ...(patientId ? purposeFor(patientId) : {}) })).entries,
+  })
+}
+
 /** who the patient is and where they have been, for a reader without read:record (the desk, a bench): identity, visits and stays,
  *  deceased — each table only where the reader holds its action in this department */
 export interface Glance { patient: Identity; tables: { 'base.presence'?: TableRead<PresenceRow>; 'base.deceased'?: TableRead<DeceasedRow> } }

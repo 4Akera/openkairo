@@ -3,8 +3,14 @@ import type { ComponentType } from 'react'
 import type { Card, RequestQueueRow, Value } from '../db/types'
 import type { EntryBody } from '../db/rpc'
 import { useOrganization } from '../hooks/organization'
+import type { ChartItem } from '../screens/chart/model/items'
 import { AnalyteTable, KV, Tag, flagClass, hm } from '../ui'
-export interface Renderer { Card?: ComponentType<{ card: Card }>; Full?: ComponentType<{ card: Card; data: Record<string, unknown> }> }
+/** what a block's body receives (chart-plan.md §1.3): the item with its states (the chart's EntryBlock draws the shell, the time, the
+ *  label and every state around it), the data of the version drawn, and compact in the glance. A pack draws its body with kit parts. */
+export interface BlockProps { item: ChartItem; data: Record<string, unknown>; compact?: boolean }
+/** a type's own look: Block in the chart (inside the shell), Card and Full on the screens that still draw cards; a Full with no Block
+ *  is drawn inside the chart's shell too */
+export interface Renderer { Block?: ComponentType<BlockProps>; Card?: ComponentType<{ card: Card }>; Full?: ComponentType<{ card: Card; data: Record<string, unknown> }> }
 const registry = new Map<string, Renderer>()
 export const registerRenderer = (type: string, r: Renderer) => registry.set(type, r)
 export const rendererFor = (type: string) => registry.get(type)
