@@ -6,8 +6,7 @@ import { useDepartment } from '../../hooks/organization'
 import { useVisitActions } from '../../hooks/writes'
 import { rememberPatient } from '../../hooks/recent'
 import type { Department, PatientHit } from '../../db/types'
-import { Button, Input, Kbd, Select, cn, errorText, minutesSince } from '../../ui'
-import { Tag } from '../lists/ListRow'
+import { Button, Input, Kbd, Select, Tag, cn, errorText, minutesSince } from '../../ui'
 import { ageSex, duration, fullName, type ClinicRow } from './words'
 
 /** a key for each clinic: its first free letter ("P" Psychiatry); M U L G E ↵ are the card's own */

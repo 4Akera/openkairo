@@ -4,8 +4,7 @@ import { useVisitQueue } from '../../hooks/reads'
 import { useDepartment } from '../../hooks/organization'
 import { useVisitActions } from '../../hooks/writes'
 import type { Department } from '../../db/types'
-import { Card, Heading, cn, errorText, minutesSince } from '../../ui'
-import { Tag } from '../lists/ListRow'
+import { Card, Heading, Tag, cn, errorText, minutesSince } from '../../ui'
 import { duration, fullName, rowWords, waited, type ClinicRow } from './words'
 
 /** a small word-button on a row: Undo, Left, Gone */

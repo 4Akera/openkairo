@@ -5,8 +5,7 @@ import { useRequestQueue, useVisitQueue } from '../hooks/reads'
 import { useVisitActions } from '../hooks/writes'
 import { useDepartment } from '../hooks/organization'
 import type { QueueRow } from '../db/types'
-import { Card, Input, Spinner, minutesSince, movedMouse } from '../ui'
-import { ListRow, ListSection, Tag } from './lists/ListRow'
+import { Card, Input, ListRow, ListSection, Spinner, Tag, minutesSince, movedMouse } from '../ui'
 import { ageSex, backIn, matches, nextPatient, pendingWords, since, yearsOld } from './clinic/words'
 
 
@@ -64,31 +63,32 @@ export function QueueList({ departmentId, compact = false, keys = false }: { dep
   })
 
   if (q.isLoading) return <Spinner label="Loading queue" />
-  if (q.error) return <p className="text-sm text-red-700">{q.error.message}</p>
-  if (compact && !all.length) return <Card className="p-6 text-center text-sm text-neutral-400">Nobody here yet.</Card>
+  if (q.error) return <p className="text-14 text-danger">{q.error.message}</p>
+  if (compact && !all.length) return <Card className="p-6 text-center text-14 text-faint">Nobody here yet.</Card>
   const row = (r: QueueRow, isNext: boolean) => { const n = at.get(r.id) ?? -1; return <ListRow key={r.id} number={r.patient.record_number}
-    name={<>{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ml-1.5 inline h-3.5 w-3.5 text-red-600" aria-label="allergies" />}</>}
+    name={<>{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ms-1.5 inline h-3.5 w-3.5 text-danger" aria-label="allergies" />}</>}
     age={ageSex(r.patient.age, r.patient.sex)} status={<Status r={r} />} who={r.band === 'back' || r.band === 'consult' ? r.assignee_name : null}
     minutes={minutesSince(since(r))} next={isNext} muted={r.band === 'pending'} onOpen={() => open(r)} selected={keys && n === c && arrows} enter={keys && n === c && !arrows && !!f} hover={!kbd}
     actions={r.band === 'pending' && can('write:not_here') ? <button type="button" disabled={visits.present.isPending} title="The patient left: results go to the doctor's review list"
       onClick={() => visits.present.mutate({ visit: r.visit, is_present: false })}
-      className="rounded-md px-2 py-0.5 text-[11px] text-neutral-500 ring-1 ring-neutral-200 hover:bg-white hover:text-red-700 hover:ring-red-300">Gone</button> : undefined} /> }
+      className="rounded-md px-2 py-0.5 text-11 text-faint ring-1 ring-line hover:bg-surface hover:text-danger hover:ring-danger-line">Gone</button> : undefined} /> }
   return <div className="grid gap-2">
     {!compact && <Input ref={input} value={filter} onChange={(e) => setText(e.target.value)} onKeyDown={onInputKey} aria-label="Filter the list"
       placeholder="Type a name or number — ↵ takes the next patient" />}
     <Card className="overflow-hidden"><ul ref={list} onMouseMove={(e) => { if (kbd && movedMouse(e)) { setKbd(false); setArrows(false) } }}>
       {sections.map((s) => s.rows.length > 0 && <ListSection key={s.key} title={s.title} count={s.key === 'next' ? undefined : s.rows.length}
         folded={s.fold ? folded : undefined} onToggle={s.fold ? () => setShowPending(!showPending) : undefined}>{s.rows.map((r) => row(r, s.key === 'next'))}</ListSection>)}
-      {!all.length && <li className="px-4 py-5 text-center text-sm text-neutral-400">Nobody waiting.</li>}
-      {all.length > 0 && f && !sections.some((s) => s.rows.length) && <li className="px-4 py-5 text-center text-sm text-neutral-400">No one matches “{f}”.</li>}
+      {!all.length && <li className="px-4 py-5 text-center text-14 text-faint">Nobody waiting.</li>}
+      {all.length > 0 && f && !sections.some((s) => s.rows.length) && <li className="px-4 py-5 text-center text-14 text-faint">No one matches “{f}”.</li>}
       {!compact && !f && <ListSection title="Done today" count={q.data?.done_today ?? 0} />}
     </ul></Card>
   </div>
 }
 
-/** what is happening, in words: back with what came in; urgent, 1st visit, vitals taken, not here; with whom; waiting for what */
+/** what is happening, in words: back with what came in; urgent, 1st visit, vitals taken, not here; with whom; waiting for what.
+ *  "back" keeps its teal (accent, the list's call-next colour) and a request's "here" is ok (owner decision D2). */
 function Status({ r }: { r: QueueRow }) {
-  if (r.band === 'back') { const back = backIn(r.requests); return <><Tag tone="green">back</Tag><span className="truncate">{back ? `${back} in` : 'came back'}</span></> }
+  if (r.band === 'back') { const back = backIn(r.requests); return <><Tag tone="accent">back</Tag><span className="truncate">{back ? `${back} in` : 'came back'}</span></> }
   if (r.band === 'consult') return <span className="truncate">with {r.assignee_name ?? 'a doctor'}</span>
   if (r.band === 'pending') return <span className="truncate">{pendingWords(r.requests) || 'waiting for results'}</span>
   const words = [r.is_first && '1st visit', r.has_vitals && 'vitals taken', r.request_id && r.request_open && 'consult to answer'].filter(Boolean).join(' · ')
@@ -100,12 +100,12 @@ function Status({ r }: { r: QueueRow }) {
 export function RequestList({ departmentId }: { departmentId: string }) {
   const q = useRequestQueue(departmentId); const navigate = useNavigate()
   if (q.isLoading) return <Spinner label="Loading requests" />
-  if (q.error) return <p className="text-sm text-red-700">{q.error.message}</p>
+  if (q.error) return <p className="text-14 text-danger">{q.error.message}</p>
   const rows = q.data?.requests ?? []
-  if (!rows.length) return <Card className="p-6 text-center text-sm text-neutral-400">No open requests.</Card>
+  if (!rows.length) return <Card className="p-6 text-center text-14 text-faint">No open requests.</Card>
   return <Card className="overflow-hidden"><ul>{rows.map((r) => { const p = r.request?.priority; const step = r.request?.step; return <ListRow key={r.id}
     number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(yearsOld(r.patient.born_on), r.patient.sex)}
-    status={<>{p && p !== 'routine' && <Tag tone="red">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-neutral-500"> — “{r.question_text}”</span>}</span>
-      {step && <span className="shrink-0 text-xs text-neutral-500">{step}</span>}{r.patient.here && <Tag tone="green">here</Tag>}</>}
+    status={<>{p && p !== 'routine' && <Tag tone="red">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-faint"> — “{r.question_text}”</span>}</span>
+      {step && <span className="shrink-0 text-12 text-faint">{step}</span>}{r.patient.here && <Tag tone="ok">here</Tag>}</>}
     who={r.from_department_name} minutes={minutesSince(r.occurred_at)} onOpen={() => navigate(`/request/${r.id}`)} /> })}</ul></Card>
 }
