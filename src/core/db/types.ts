@@ -85,9 +85,6 @@ export interface RecordView {
   allergies: Allergy[]; allergy_review: ListReview | null; problems: Problem[]; problem_review: ListReview | null; medications: Medication[]; medication_review: ListReview | null
   open_requests: Card[]; entries: Card[]; latest_vitals: Value[] | null; visits: VisitRow[]; values: ValueRow[]; orders: OrderRow[]; reviews: ReviewRow[]; server: ServerRecord
 }
-export interface VisitCardRow { id: string; is_hidden: boolean; department_id: string | null; department_name: string; assignee_name: string | null; status: VisitStatus; is_first: boolean; arrived_at: string; seen_at: string | null; ended_at: string | null; last_activity_at: string; counts: Record<string, number>; first_line: string | null }
-export interface VisitList { visits: VisitCardRow[]; between: number }
-export interface ResultRow { code: string; name: string; unit: string | null; points: { at: string; value_number: number | null; value_text: string | null; flag: Flag | null; entry_id: string; corrected: boolean }[] }
 export interface RecordRead { read_at: string; user_name: string; user_kind: string; department_name: string | null; basis: string | null; reason_text: string | null; opened_department: string | null; purpose: string }
 export interface QueueRow {
   id: string; patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; age: number; has_allergies: boolean }

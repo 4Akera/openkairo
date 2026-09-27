@@ -19,7 +19,7 @@ export interface Command {
   writes?: string[]                 // the write functions its drafts call: a department's version must call the same
   /** the text after the command → drafts (null: nothing typed yet) */
   parse: (rest: string, ctx: Ctx) => Result
-  /** the command alone: an empty card to fill field by field, or a note beside the record */
+  /** the command alone: an empty card to fill field by field, or the long note under the line */
   empty?: (ctx: Ctx) => Parsed[] | { drawer: { kind: string; text: string } }
 }
 /** a pack's version of a command in its own department type: its label, parser and empty card */

@@ -3,7 +3,7 @@
 import type { OrderRow, PresenceRow, ServerEntry, ServerRecord, TableRead } from '../../../db/types'
 import { flagOfResult } from '../../../db/views'
 import { ymd } from '../../../ui/time'
-import { baseOf, countKinds, groupBlocks, inRecord, isMove, itemsOf, type BlockGroup, type ChartItem, type ItemCtx, type Kind } from './items'
+import { baseOf, countKinds, filterKind, groupBlocks, inRecord, isMove, itemsOf, type BlockGroup, type ChartItem, type ItemCtx, type Kind } from './items'
 
 type Tables = Pick<ServerRecord, 'tables'>
 export interface SetGroup {
@@ -84,4 +84,27 @@ export function outsideOf(entries: ServerEntry[], rec: Tables, types?: ItemCtx['
   const o: TableRead<OrderRow> | undefined = rec.tables['base.orders']
   const inVisit = new Set((o?.rows ?? []).filter((r) => r.visit_id).flatMap((r) => r.source_entries))
   return entries.filter((e) => !e.visit_id && inRecord(e.type, types) && !inVisit.has(e.id) && baseOf(e.type, types) !== 'step')
+}
+
+// ── the kind filter over sets, and the Whole record's two views (organization.record_view) ──
+/** the sets with only the items of a kind, regrouped; a set left empty goes, and with a filter on the moves say nothing */
+export function filterSets(sets: SetGroup[], kind: Kind | 'all' | null | undefined): SetGroup[] {
+  if (!kind || kind === 'all') return sets
+  return sets.map((s) => { const items = filterKind(s.items, kind); return { ...s, items, groups: groupBlocks(items), moves: [] } }).filter((s) => s.items.length)
+}
+export interface VisitGroup { visit_id: string | null; at: string; sets: SetGroup[] }
+/** by visit (a set is signed in one visit; an answer written with none goes with its order's visit, through base.orders): the newest
+ *  activity first, the sets outside any visit last */
+export function byVisit(sets: SetGroup[], orders?: Pick<OrderRow, 'item' | 'visit_id'>[]): VisitGroup[] {
+  const by = new Map<string | null, VisitGroup>(); const ordered = new Map((orders ?? []).map((o) => [o.item, o.visit_id]))
+  const visitOf = (i: ChartItem) => i.visit_id ?? (i.answers_order ? ordered.get(i.answers_order) ?? null : null)
+  for (const s of sets) { const v = s.items.map(visitOf).find(Boolean) ?? null; const g = by.get(v) ?? by.set(v, { visit_id: v, at: s.at, sets: [] }).get(v)!
+    g.sets.push(s); if (s.at > g.at) g.at = s.at }
+  return [...by.values()].sort((a, b) => Number(a.visit_id === null) - Number(b.visit_id === null) || b.at.localeCompare(a.at))
+}
+/** by the clinic's day each set happened on, the newest first */
+export function byDate(sets: SetGroup[]): { day: string; sets: SetGroup[] }[] {
+  const by = new Map<string, SetGroup[]>()
+  for (const s of sets) { const d = ymd(s.occurred_at); by.set(d, [...(by.get(d) ?? []), s]) }
+  return [...by.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([day, ss]) => ({ day, sets: ss }))
 }

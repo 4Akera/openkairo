@@ -5,7 +5,7 @@
 //   /dx type 2 diabetes since 2019 ; poorly controlled   problem ("?" = suspected; since 2019 · 2019-03 · 3y · 6m)
 //   /al penicillin: rash severe · /al none   allergy · no known allergies
 //   /order hba1c, lipid · /order cardiology: chest pain on effort   services, or a department and its question (a consult)
-//   /note                                the long note beside the record
+//   /note                                the long note, inline under the line
 //   hx: … · ex: … · plan: … · proc: …    a note line under that heading; anything else is today's progress note
 
 export interface Ctx {
@@ -267,5 +267,5 @@ registerCommand({ name: 'order', label: 'Request — a service, or a department 
     if (r && 'error' in r) { const c = consult(rest, ctx); if (c && 'ok' in c) return c }  // "cardiology chest pain": no such test, but a department
     return r
   } })
-registerCommand({ name: 'note', label: 'Long note beside the record', example: '/note · or just type: hx: … · ex: … · plan: …', action: 'write:note', writes: ['note'],
+registerCommand({ name: 'note', label: 'Long note under the line', example: '/note · or just type: hx: … · ex: … · plan: …', action: 'write:note', writes: ['note'],
   parse: (rest, ctx) => rest ? { ok: [noteLine(rest, ctx)] } : null, empty: (ctx) => ({ drawer: { kind: ctx.noteKind ?? 'progress', text: '' } }) })

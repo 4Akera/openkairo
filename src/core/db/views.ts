@@ -1,7 +1,7 @@
 // The screens' view models, built from what read() returns (spec/openCare.md §3.10). Pure: no fetching here.
 import type {
   Allergy, Card, DeceasedRow, Department, Flag, Identity, ListReview, ListRowData, Medication, OrderRow, Organization, PatientBanner, PatientHit, Place, PresenceRow, Problem,
-  QueueRow, RecentRow, RecordView, RequestQueueRow, ResultRow, ServerEntry, ServerMe, ServerRecord, Service, ServiceField, SettingRow, TableRead, Template, Value, ValueRow, VisitRow, VisitStatus,
+  QueueRow, RecentRow, RecordView, RequestQueueRow, ServerEntry, ServerMe, ServerRecord, Service, ServiceField, SettingRow, TableRead, Template, Value, ValueRow, VisitRow, VisitStatus,
 } from './types'
 import type { EntryData, SettingData } from './shapes.generated'
 
@@ -222,18 +222,6 @@ export function recordView(r: ServerRecord, o: Organization | undefined, departm
   }
 }
 export const interp = (i: string | null | undefined): Flag | null => !i ? null : i === 'N' || i === 'NEG' ? 'normal' : i === 'L' ? 'low' : i === 'H' ? 'high' : i === 'LL' || i === 'HH' || i === 'AA' ? 'critical' : 'abnormal'
-/** results over time: one row per test (LOINC code, else the key), newest point first */
-export function resultsTable(values: ValueRow[]): ResultRow[] {
-  const by = new Map<string, ResultRow>()
-  for (const v of values) {
-    const k = v.code ?? v.key
-    const row = by.get(k) ?? { code: k, name: v.name ?? v.key, unit: v.unit ?? v.ucum, points: [] }
-    row.points.push({ at: v.at, value_number: v.value, value_text: null, flag: interp(v.interpretation), entry_id: v.entry_id, corrected: false })
-    by.set(k, row)
-  }
-  for (const r of by.values()) r.points.sort((a, b) => b.at.localeCompare(a.at))
-  return [...by.values()]
-}
 /** a search hit: the identity and where the patient is now */
 export function hit(i: Identity, presence: PresenceRow[], o: Organization | undefined): PatientHit {
   return { ...banner(i), identifiers: i.identifiers.map((x) => ({ system: x.system, value: x.value })), identity: i,

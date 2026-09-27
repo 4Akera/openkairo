@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ChevronRight } from 'lucide-react'
 import { write, type EntryIn } from '../../db/rpc'
 import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue } from '../../hooks/reads'
@@ -12,6 +12,7 @@ import { replyFormFor } from '../../renderers'
 import type { RequestQueueRow, ServiceField } from '../../db/types'
 import { Badge, Button, Callout, Card, Centered, Heading, IconButton, Input, Kbd, Select, Spinner, Toolbar, cn, errorText, flagClass, hm } from '../../ui'
 import { ageOf, fieldTone, groupByPatient, nextSteps, STEP_TONE, stepLabel, stepName } from './shared'
+import { ChartGlance } from '../chart/glance/ChartGlance'
 
 interface Entry { vals: Record<string, string>; text: string; notDone: boolean; reason: string }
 const blank = (): Entry => ({ vals: {}, text: '', notDone: false, reason: '' })
@@ -32,7 +33,17 @@ export function flagOf(f: ServiceField, raw: string) {
   return f.reference_low != null || f.reference_high != null ? 'normal' : null
 }
 
-/** All of one patient's open tests for this department on one screen; Enter walks every field; ⌘↵ releases them together. */
+/** ≥ 1280 px: the glance stands beside the grid; narrower, it folds under the header */
+function useWide() {
+  const q = '(min-width: 80rem)'
+  const [wide, setWide] = useState(() => { try { return matchMedia(q).matches } catch { return true } })
+  useEffect(() => { const m = matchMedia(q); const f = () => setWide(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f) }, [])
+  return wide
+}
+
+/** All of one patient's open tests for this department on one screen; Enter walks every field; ⌘↵ releases them together. Beside them,
+ *  for a reader who holds read:record at this bench, the patient's glance (chart-plan.md §1.5): problems, medicines, allergies, the
+ *  last vitals, key results, visits — read-only (pharmacists and lab technicians hold no read:record, so they see none: owner D13). */
 export function BenchPatient() {
   const { patientId } = useParams(); const navigate = useNavigate(); const qc = useQueryClient()
   const { org, dept, can } = useDepartment()
@@ -41,7 +52,8 @@ export function BenchPatient() {
   const g = groups.find((x) => x.patient.id === patientId)
   const next = groups.find((x) => x.patient.id !== patientId)
   const [entries, setEntries] = useState<Record<string, Entry>>({}); const [packVals, setPackVals] = useState<Record<string, unknown>>({}); const [checked, setChecked] = useState(false); const [prelim, setPrelim] = useState(false); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
-  const root = useRef<HTMLDivElement>(null)
+  const root = useRef<HTMLDivElement>(null); const wide = useWide(); const [record, setRecord] = useState(false)
+  const glance = can('read:record'); const width = glance ? 'max-w-7xl' : 'max-w-5xl'   // the glance widens the screen beside the grid
   const e = (id: string) => entries[id] ?? blank()
   const set = (id: string, patch: Partial<Entry>) => setEntries((s) => ({ ...s, [id]: { ...(s[id] ?? blank()), ...patch } }))
   // each field carries the range that fits this patient, as the server will flag it
@@ -80,7 +92,7 @@ export function BenchPatient() {
   if (!g) return <Centered><div className="text-center text-14 text-faint"><p>No open requests for this patient.</p><Button className="mt-3" variant="outline" onClick={() => navigate('/')}>Back to the bench</Button></div></Centered>
   const bySection = [...new Set(g.rows.map((r) => r.section_name ?? 'Other'))]
   return <div ref={root} onKeyDown={onKey} className="pb-24">
-    <div className="sticky top-0 z-sticky border-b border-line bg-surface/95 backdrop-blur"><div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
+    <div className="sticky top-0 z-sticky border-b border-line bg-surface/95 backdrop-blur"><div className={cn('mx-auto flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5', width)}>
       <IconButton size="md" onClick={() => navigate('/')} className="-ms-1" title="Back to the bench" aria-label="Back to the bench"><ArrowLeft className="rtl:-scale-x-100" /></IconButton>
       <div><p className="flex items-baseline gap-2"><span className="text-18 font-semibold tracking-tight">{g.patient.given_name} {g.patient.family_name}</span><span className="text-14 text-muted tnum">{ageOf(g.patient.born_on)} y · {g.patient.sex[0].toUpperCase()}</span></p>
         <p className="text-12 text-faint tnum">#{g.patient.record_number} · {g.rows.length} open · from {g.from.join(', ')}</p></div>
@@ -92,7 +104,13 @@ export function BenchPatient() {
       </div>
     </div></div>
 
-    <div className="mx-auto mt-4 grid max-w-5xl gap-4 px-4">
+    <div className={cn('mx-auto mt-4 grid gap-4 px-4', width, glance && 'xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start')}>
+      {glance && <aside aria-label="Record" className="order-first grid content-start gap-2 xl:sticky xl:top-20 xl:order-last xl:max-h-[calc(100dvh-7rem)] xl:overflow-y-auto">
+        {!wide && <button type="button" aria-expanded={record} onClick={() => setRecord(!record)} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-13 font-medium text-muted ring-1 ring-inset ring-line transition-colors hover:bg-hover hover:text-fg focus-ring">
+          <ChevronRight aria-hidden className={cn('size-4 text-faint transition-transform duration-base rtl:-scale-x-100', record && 'rotate-90')} />Record<span className="font-normal text-faint">problems, medicines, allergies, results, visits</span></button>}
+        {(wide || record) && <ChartGlance patientId={g.patient.id} />}
+      </aside>}
+      <div className="grid min-w-0 content-start gap-4">
       {bySection.map((sec) => <section key={sec}><Heading className="mb-1.5">{sec}</Heading><div className="grid gap-3">
         {g.rows.filter((r) => (r.section_name ?? 'Other') === sec).map((r) => { const x = e(r.id); const fields = fieldsOf(r); return <Card key={r.id} className={cn('p-4', x.notDone && 'bg-sunken')}>
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
@@ -118,9 +136,10 @@ export function BenchPatient() {
           </>}
         </Card> })}
       </div></section>)}
+      </div>
     </div>
 
-    <Toolbar position="bottom" inner="max-w-5xl">
+    <Toolbar position="bottom" inner={width}>
       <span className="text-14 text-muted tnum">{ready.length} of {g.rows.length} ready{flagged.length > 0 && <span className="ms-2 font-medium text-warn">· {flagged.length} abnormal{flagged.includes('critical') && <b className="ms-1 text-danger">· critical</b>}</span>}</span>
       {g.rows.some((r) => !formOf(r)) && <label className="flex items-center gap-1.5 text-12 text-muted"><input type="checkbox" checked={prelim} onChange={(ev) => setPrelim(ev.target.checked)} />preliminary</label>}
       {err && <span className="text-14 text-danger">{err}</span>}

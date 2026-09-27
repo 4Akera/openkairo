@@ -2,9 +2,8 @@
 import type { ComponentType } from 'react'
 import type { Card, RequestQueueRow, Value } from '../db/types'
 import type { EntryBody } from '../db/rpc'
-import { useOrganization } from '../hooks/organization'
 import type { ChartItem } from '../screens/chart/model/items'
-import { AnalyteTable, KV, Tag, flagClass, hm } from '../ui'
+import { AnalyteTable, KV } from '../ui'
 /** what a block's body receives (chart-plan.md §1.3): the item with its states (the chart's EntryBlock draws the shell, the time, the
  *  label and every state around it), the data of the version drawn, and compact in the glance. A pack draws its body with kit parts. */
 export interface BlockProps { item: ChartItem; data: Record<string, unknown>; compact?: boolean }
@@ -53,24 +52,5 @@ export function FallbackFull({ data }: { card: Card; data: Record<string, unknow
     {text && <p className="whitespace-pre-wrap text-14 leading-relaxed">{text}</p>}
     {values.length > 0 && <ValuesTable values={values} />}
     {Object.keys(rest).length > 0 && <KV items={Object.entries(rest).map(([k, v]) => [k.replace(/_text$|_on$|_id$/, '').replace(/_/g, ' '), show(v)])} />}
-  </div>
-}
-// the type in the registry's plain words, on a neutral tag: a family is told by a word, colour is for state (build plan D4)
-export function CardLine({ card }: { card: Card }) {
-  const types = useOrganization().data?.types
-  const R = rendererFor(card.type)?.Card
-  if (R) return <R card={card} />
-  const r = card.request
-  const label = types?.find((t) => t.key === card.type)?.labels.en ?? card.type.replace(/_/g, ' ')
-  return <div className="flex items-start gap-3 text-13">
-    <span className="w-10 shrink-0 pt-px text-12 text-faint tnum">{hm(card.occurred_at)}</span>
-    <Tag className="w-[5.5rem] justify-center">{label}</Tag>
-    <span className="min-w-0 flex-1">
-      <span className={card.replaced_by_id ? 'text-faint line-through' : 'text-fg'}>{card.display_line}</span>
-      {!card.is_final && <span className="ms-2 text-11 font-medium uppercase text-warn">preliminary</span>}
-      {r && <span className="ms-2 text-12 text-faint">→ {r.to_department_name ?? 'outside'} · <span className={r.status === 'open' ? 'font-medium text-warn' : r.status === 'cancelled' ? 'text-faint' : 'text-accent'}>{r.step}</span></span>}
-      {r?.reply_line && <span className={`mt-0.5 block text-12 tnum ${r.reply_flag && r.reply_flag !== 'normal' ? flagClass(r.reply_flag) : 'text-muted'}`}>↳ {r.reply_line}</span>}
-    </span>
-    <span className="shrink-0 text-11 text-faint">{card.author_name}</span>
   </div>
 }

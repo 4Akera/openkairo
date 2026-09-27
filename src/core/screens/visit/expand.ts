@@ -16,12 +16,12 @@ export const presetLine = (l: string) => {
   if (t.startsWith('/') && WAS_NOTE[w.toLowerCase()] && !commandNamed(w)) return `${WAS_NOTE[w.toLowerCase()]}: ${rest}`
   return t.startsWith('/') || !commandNamed(w) ? t : `/${t}`
 }
-/** a preset of headings only ("S:", "O:", "A:", "P:") is a note to fill: it opens beside the record */
+/** a preset of headings only ("S:", "O:", "A:", "P:") is a note to fill: it opens under the line */
 const HEADING = /^[\p{L}/ ]{1,24}:\s*$/u
 export const readPresetLine = (l: string, ctx: Ctx): Result => { const line = presetLine(l); const r = parse(line, ctx)
   return r ?? (line.startsWith('/') ? { error: `${splitCommand(line)[0] ? `/${splitCommand(line)[0]}` : 'A command'} needs its text in a preset — e.g. ${commandNamed(splitCommand(line)[0])?.example ?? '/rx metformin 500 bd'}` } : null) }
 
-/** a line: note text, a /command (with text: filled; alone: an empty card or a note beside the record), or a #preset */
+/** a line: note text, a /command (with text: filled; alone: an empty card or the long note under the line), or a #preset */
 export function expand(text: string, ctx: Ctx, presets: Template[]): Expanded | null {
   const s = text.trim(); if (!s) return null
   const wrap = (r: Result): Expanded | null => !r ? null : 'error' in r ? { items: [], errors: [r.error] } : { items: r.ok, errors: [] }

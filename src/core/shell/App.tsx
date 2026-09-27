@@ -9,15 +9,13 @@ import { Button, Centered, Spinner, errorText } from '../ui'
 import { Shell } from './Shell'
 import { Login } from './Login'
 import { DepartmentScreen } from '../screens/Department'
-import { VisitScreen } from '../screens/visit/VisitScreen'
+import { ChartScreen } from '../screens/chart/ChartScreen'
 import { RequestScreen } from '../screens/Request'
 import { SettingsScreen } from '../screens/Settings'
 import { BenchCorrect, BenchPatient } from '../screens/bench/BenchPatient'
 
 // the style guide is loaded when it is opened: no one needs it for a day's work
 const DesignScreen = lazy(() => import('../screens/design/DesignScreen').then((m) => ({ default: m.DesignScreen })))
-// the chart's parts on real reads while they are built (build plan 3.4–3.9): development only, gone at the switch (3.10)
-const DevChart = import.meta.env.DEV ? lazy(() => import('../screens/chart/dev/DevChart').then((m) => ({ default: m.DevChart }))) : null
 
 function RequireAuth() {
   const status = useAuth((s) => s.status)
@@ -60,14 +58,14 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route element={<Shell />}>
           <Route index element={<DepartmentScreen />} />
-          <Route path="visit/:visitId" element={<VisitScreen />} />
-          <Route path="patient/:patientId" element={<VisitScreen />} />
+          {/* the patient screen: a clinic visit, a ward stay, the record with no encounter (the chart, spec §4.6) */}
+          <Route path="visit/:visitId" element={<ChartScreen />} />
+          <Route path="patient/:patientId" element={<ChartScreen />} />
           <Route path="request/:requestId" element={<RequestScreen />} />
           <Route path="bench/correct/:requestId" element={<BenchCorrect />} />
           <Route path="bench/:patientId" element={<BenchPatient />} />
           <Route path="settings/*" element={<SettingsScreen />} />
           <Route path="design/*" element={<Suspense fallback={<Centered><Spinner /></Centered>}><DesignScreen /></Suspense>} />
-          {DevChart && <Route path="dev/chart/:patientId" element={<Suspense fallback={<Centered><Spinner /></Centered>}><DevChart /></Suspense>} />}
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

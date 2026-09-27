@@ -11,16 +11,23 @@ import { purposeFor } from './reads'
 type Before = { recorded_at: string; id: string }
 /** which entries: by visit, by type (a pack's type follows its base_type), by department, before a point; newest first */
 export interface EntryPageQuery { patient_id: string; visits?: string[] | null; types?: string[] | null; departments?: string[] | null; before?: Before | null; limit?: number }
-export interface EntryPage { entries: ServerEntry[]; more: boolean; hidden: ServerRecord['hidden'] }
+export interface EntryPage { entries: ServerEntry[]; more: boolean; hidden: ServerRecord['hidden']; next: Before | null }
 const page = (departmentId: string, q: EntryPageQuery) => read<ServerRecord>({ shape: 'record', patient_id: q.patient_id, department_id: departmentId, include: [],
   visits: q.visits ?? undefined, types: q.types ?? undefined, departments: q.departments ?? undefined, before: q.before ?? undefined, limit: q.limit ?? 100, ...purposeFor(q.patient_id) })
 
-/** a page of raw entries, and whether there are more (the chart folds them into items itself) */
-export function useEntryPage(q: EntryPageQuery | null) {
+/** raw entries, a page at a time (the chart folds them into items itself): a visit's or a stay's, or the Whole record's by kind, newest
+ *  first; "Earlier" fetches the next page. first: what the record's own page already holds, drawn while the read is under way */
+export function useEntryPages(q: Omit<EntryPageQuery, 'before'> | null, first?: ServerEntry[]) {
   const { dept, org } = useDepartment()
-  return useQuery({
-    queryKey: ['record', q?.patient_id, 'page', q, dept?.id], enabled: !!q && !!dept && !!org,
-    queryFn: async (): Promise<EntryPage> => { const r = await page(dept!.id, q!); return { entries: r.entries, more: r.more, hidden: r.hidden } },
+  return useInfiniteQuery({
+    queryKey: ['record', q?.patient_id, 'pages', q, dept?.id], enabled: !!q && !!dept && !!org,
+    initialPageParam: null as Before | null,
+    queryFn: async ({ pageParam }): Promise<EntryPage> => {
+      const r = await page(dept!.id, { ...q!, before: pageParam }); const last = r.entries[r.entries.length - 1]
+      return { entries: r.entries, hidden: r.hidden, more: r.more, next: r.more && last ? { recorded_at: last.recorded_at, id: last.id } : null }
+    },
+    getNextPageParam: (p) => p.next,
+    placeholderData: first ? { pages: [{ entries: first, hidden: [], more: false, next: null }], pageParams: [null] } : undefined,
   })
 }
 

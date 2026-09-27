@@ -1,6 +1,6 @@
 import { useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { MapPin } from 'lucide-react'
+import { ChevronRight, MapPin } from 'lucide-react'
 import { savePatient } from '../../db/rpc'
 import { useDepartment } from '../../hooks/organization'
 import { useVisitActions } from '../../hooks/writes'
@@ -8,6 +8,7 @@ import { rememberPatient } from '../../hooks/recent'
 import type { Department, PatientHit } from '../../db/types'
 import { Button, Input, Kbd, Select, Tag, cn, errorText, minutesSince } from '../../ui'
 import { ageSex, duration, fullName, type ClinicRow } from './words'
+import { GlanceVisits } from '../chart/glance/ChartGlance'
 
 /** a key for each clinic: its first free letter ("P" Psychiatry); M U L G E ↵ are the card's own */
 function clinicKeys(clinics: Department[]) {
@@ -27,7 +28,7 @@ export function PatientCard({ handle, p, clinics, usual, rows, canSend, canEdit,
   p: PatientHit; clinics: Department[]; usual: Department | null; rows: ClinicRow[]; canSend: boolean; canEdit: boolean; orgId: string
   onSaid: (s: string) => void; onSent: (clinicId: string) => void; onDone: () => void; onEscape: () => void
 }) {
-  const visits = useVisitActions(); const [moving, setMoving] = useState(false); const [editing, setEditing] = useState(false)
+  const visits = useVisitActions(); const [moving, setMoving] = useState(false); const [editing, setEditing] = useState(false); const [past, setPast] = useState(false)
   const keys = clinicKeys(clinics)
   const open = p.open_visits.find((v) => clinics.some((c) => c.id === v.department_id))
   const row = open ? rows.find((r) => r.id === open.id) : undefined
@@ -98,6 +99,10 @@ export function PatientCard({ handle, p, clinics, usual, rows, canSend, canEdit,
       {p.died_on && <Tag>deceased</Tag>}{row && row.priority !== 'routine' && <Tag tone="danger">{row.priority}</Tag>}{row && row.missed_calls > 0 && <Tag tone="warn">not here ×{row.missed_calls}</Tag>}
     </div>
     {where && <p className="flex items-center gap-2 rounded-lg bg-sunken px-3 py-2 text-14 text-fg"><MapPin className="h-4 w-4 text-faint" />{where}</p>}
+    {/* where he has been (the chart's glance, presence only: the desk reads no record), read when folded out */}
+    <button type="button" aria-expanded={past} onClick={() => setPast(!past)} className="flex items-center gap-1 justify-self-start rounded-sm text-12 text-muted hover:text-fg focus-ring">
+      <ChevronRight aria-hidden className={cn('size-3.5 text-faint transition-transform duration-base rtl:-scale-x-100', past && 'rotate-90')} />Visits</button>
+    {past && <GlanceVisits patientId={p.id} />}
 
     {editing ? <EditDetails p={p} orgId={orgId} onDone={(said) => { setEditing(false); onSaid(said) }} onCancel={() => setEditing(false)} />
       : <div className="flex flex-wrap items-center gap-1.5">

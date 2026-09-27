@@ -35,14 +35,15 @@ export function ClinicHome({ dept, offers }: { dept: Department; offers: boolean
 }
 
 const REASON: Record<string, [Tone, string]> = { critical: ['danger', 'critical'], abnormal: ['warn', 'abnormal'], not_seen: ['info', 'patient not seen'], corrected: ['warn', 'corrected'], result: ['neutral', 'result'], rejected: ['warn', 'not done'], flag: ['warn', 'flagged'] }
-/** My results to review: the line opens the patient; Reviewed writes a reviewed entry about the result and the row closes */
+/** My results to review: the line opens the patient's chart with that result in the center (?at=entry:); Reviewed writes a reviewed
+ *  entry about the result and the row closes */
 function ToReview({ cards, rule, departmentId }: { cards: EntryCard[]; rule: Department['review_results']; departmentId: string }) {
   const navigate = useNavigate(); const w = useWrite()
   const why = `Critical results, corrected results and results for patients who left before being seen come here${rule === 'abnormal' ? ', and abnormal ones' : rule === 'all' ? ', and every final result' : ''}.`
   return <Card className="overflow-hidden ring-1 ring-danger-line"><ul>
     <ListSection title="My results to review" count={cards.length} />
     {cards.map((c) => { const p = (c as unknown as { patient?: { given_name: string; family_name: string } }).patient; const reason = c.request?.review_reason; return <li key={c.id} className="flex items-center border-t border-line pe-3">
-      <button type="button" title={why} onClick={() => navigate(`/patient/${c.patient_id}`)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2 text-start text-13 hover:bg-hover focus-ring">
+      <button type="button" title={why} onClick={() => navigate(`/patient/${c.patient_id}?at=entry:${c.id}`)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2 text-start text-13 hover:bg-hover focus-ring">
         <span className="w-48 shrink-0 truncate font-medium">{p?.given_name} {p?.family_name}</span>
         {reason && <Tag tone={REASON[reason]?.[0] ?? 'neutral'}>{REASON[reason]?.[1] ?? reason}</Tag>}
         <span className={cn('min-w-0 flex-1 truncate', c.flag && c.flag !== 'normal' && flagClass(c.flag))}>{c.display_line}</span><Compared c={c} /></button>

@@ -3,8 +3,8 @@ import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { read } from '../db/rpc'
-import type { Card, Entry, Identity, ListRowData, OrderRow, Organization, PatientHit, PresenceRow, RecordView, RequestQueue, ReviewRow, ServerEntry, ServerRecord, TableRead, VisitQueue } from '../db/types'
-import { banner, benchRow, cards, card, hit, mayIn, queueRows, recentRow, recordView, resultsTable, userName } from '../db/views'
+import type { Entry, Identity, ListRowData, OrderRow, Organization, PatientHit, PresenceRow, RecordView, RequestQueue, ReviewRow, ServerEntry, ServerRecord, TableRead, VisitQueue } from '../db/types'
+import { banner, benchRow, cards, card, hit, mayIn, queueRows, recentRow, recordView, userName } from '../db/views'
 import { ymd } from '../ui'
 import { useDepartment } from './organization'
 import { useLive } from './live'
@@ -105,8 +105,7 @@ export function useToReview(departmentId: string | null = null, enabled = true) 
 }
 
 /** the record: identity, lists, visits, orders, values, a page of entries, and where private items are. One read per patient and
- *  department: the view for a visit is built in select (chart-plan §3.3), so the visit screen and the results table share the read
- *  instead of reading the whole record twice */
+ *  department: the view for a visit is built in select (chart-plan §3.3), so the banner, the center and the record panel share it */
 export function useRecord(patientId: string | null, departmentId: string | null, visitId?: string | null) {
   const { org } = useDepartment()
   useLive(patientId ? `record:${patientId}` : null, [['record', patientId]])
@@ -117,21 +116,6 @@ export function useRecord(patientId: string | null, departmentId: string | null,
     enabled: !!patientId && !!departmentId && !!org,
     queryFn: () => read<ServerRecord>({ shape: 'record', patient_id: patientId, department_id: departmentId, limit: 100, ...purposeFor(patientId!) }),
     select,
-  })
-}
-
-/** a page of the record: by visit, or every entry before a point */
-export interface EntryQuery { patient_id: string; types?: string[] | null; visit_ids?: string[] | null; department_ids?: string[] | null; before_at?: string | null; before_id?: string | null; limit?: number }
-export function useEntries(q: EntryQuery | null) {
-  const { org, dept } = useDepartment()
-  return useQuery({
-    queryKey: ['record', q?.patient_id, 'entries', q, dept?.id],
-    enabled: !!q && !!dept && !!org,
-    queryFn: async (): Promise<Card[]> => {
-      const r = await read<ServerRecord>({ shape: 'record', patient_id: q!.patient_id, department_id: dept!.id, include: ['base.orders'], types: q!.types ?? undefined, visits: q!.visit_ids ?? undefined,
-        departments: q!.department_ids ?? undefined, before: q!.before_at ? { recorded_at: q!.before_at, id: q!.before_id } : undefined, limit: q!.limit ?? 100, ...purposeFor(q!.patient_id) })
-      return cards(r.entries, org, r.tables['base.orders']?.rows ?? [], r.tables['base.orders']?.entries ?? {})
-    },
   })
 }
 
@@ -174,11 +158,4 @@ export function useEntry(entryId: string | null) {
         versions: vc.filter((x) => x.id !== latest.id), related: related.map((e) => card(e, org)), author_name: userName(org, latest.author_id) }
     },
   })
-}
-
-/** results over time and key results: from the record's values */
-export function useResultsTable(patientId: string | null, enabled = true) {
-  const { dept } = useDepartment()
-  const r = useRecord(enabled ? patientId : null, dept?.id ?? null)
-  return { ...r, data: r.data ? resultsTable(r.data.values) : undefined }
 }

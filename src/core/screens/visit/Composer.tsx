@@ -1,15 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CornerDownLeft, Pencil, X } from 'lucide-react'
+import { CornerDownLeft } from 'lucide-react'
 import { useDepartment, worksFor } from '../../hooks/organization'
 import { canSendPrescriptions } from './send'
-import { useDrafts, useDraftsFor, type Draft } from '../../hooks/drafts'
+import { useDrafts, useDraftsFor } from '../../hooks/drafts'
 import { useComposer, type Seed } from '../../hooks/composer'
 import type { Allergy, Medication, RecordView } from '../../db/types'
-import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Select, cn } from '../../ui'
+import { Button, Card, Input, Kbd, cn } from '../../ui'
 import { ALLERGENS, DRUGS, PROBLEMS, allergyWarnings, doseWarnings, drugWarnings, duplicateMedication, duplicateProblem, type Warning } from './catalog'
 import { expand, suggest, type Expanded, type Suggestion } from './expand'
 import { CardItem, WarningItem } from './Card'
-import { KIND_TONE, NOTE_KINDS } from './kinds'
 import { lineOf, type Ctx, type Parsed } from './parse'
 import { commandsFor } from './commands'
 import { replyFormFor } from '../../renderers'
@@ -21,7 +20,8 @@ type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explic
 export interface ComposerHandle { focus: () => void; flush: () => boolean; slash: () => void }
 
 /** One composer (spec 05): type first; the card under the line shows what it will write and lets you change any field.
- *  The side lists, the drafts and the shortcuts open the same card. Nothing is written until Done. */
+ *  The record panel, the draft blocks and the shortcuts open the same card. Nothing is written until Done. The drafts are drawn as
+ *  blocks under it and the long note opens inline under the line (the chart's DraftBlocks and LongNote, chart-plan.md §2 #28–29). */
 export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: string; departmentId: string; can: (a: string) => boolean }>(function Composer({ r, patientId, departmentId, can }, ref) {
   const { org } = useDepartment()
   const drafts = useDraftsFor(patientId)
@@ -30,7 +30,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   const [edited, setEdited] = useState<{ key: string; items: Parsed[] } | null>(null)
   const [armed, setArmed] = useState<string | null>(null); const [pick, setPick] = useState(-1)
   const [history, setHistory] = useState<string[]>([]); const [hi, setHi] = useState(-1); const [help, setHelp] = useState(false)
-  const [drawer, setDrawer] = useState<{ kind: string; text: string; draftId?: string } | null>(null)
+  const openLongNote = useComposer((s) => s.openLongNote)
 
   const presets = useMemo(() => (org?.templates ?? []).filter((t) => !t.department_id || t.department_id === departmentId), [org, departmentId])
   const ctx: Ctx = useMemo(() => ({
@@ -53,12 +53,11 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
 
   /** open the card on an item; every opening is new, so an abandoned edit never comes back */
   const openSeed = (s: Seed) => { setText(''); setSeed(s); setEdited(null); setArmed(null); setSeedN((n) => n + 1); requestAnimationFrame(() => card.current?.querySelector<HTMLElement>('input, select, textarea')?.focus()) }
-  // commands from the side lists and the keyboard: only ones sent while this patient is open
+  // commands from the record panel, the drafts and the keyboard: only ones sent while this patient is open (the long note has its own slot)
   useEffect(() => useComposer.subscribe((st, prev) => {
     const c = st.command; if (!c || c === prev.command) return
     if ('text' in c) { setSeed(null); setEdited(null); setText(c.text); setPick(-1); requestAnimationFrame(() => { const el = input.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) } }) }
     else if ('seed' in c) openSeed(c.seed)
-    else setDrawer(c.drawer)
   }), [])
 
   const key = seed ? `seed:${seedN}` : text
@@ -110,7 +109,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     if (!open) return true
     if (/^\/\s*$/.test(text) && !seed) { clear(); return true }                        // a stray "/" holds up nothing
     if (refused) return false
-    if (base?.drawer && !items.length) { setDrawer({ ...base.drawer }); clear(); return false }
+    if (base?.drawer && !items.length) { openLongNote({ ...base.drawer }); clear(); return false }
     if (!base || base.errors.length || !items.length || incomplete) return false
     if (blocking.length && armed !== key) { setArmed(key); return false }
     const st = useDrafts.getState()
@@ -139,10 +138,6 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     const t = e.target as HTMLElement
     if (e.key === 'Escape') { e.stopPropagation(); input.current?.focus() }
     else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || 'chip' in t.dataset || t.getAttribute('role') === 'radio' || (t.tagName === 'TEXTAREA' && !e.shiftKey))) { e.preventDefault(); commit() }  // a chip is clicked, not pressed: Enter adds
-  }
-  const editDraft = (d: Draft) => {
-    if (d.function === 'note' && String(d.params.text ?? '').length > 120) { setDrawer({ kind: String(d.params.kind ?? 'progress'), text: String(d.params.text ?? ''), draftId: d.id }); return }
-    openSeed({ label: 'Edit', items: [{ function: d.function, params: d.params, line: d.line, kind: d.kind ?? 'note', tag: d.tag }], draftId: d.id })
   }
   // the same drug or problem already on the list: offer to repeat, change or update it instead (never one already being changed or stopped)
   const one = items.length === 1 ? items[0] : null; const oq = (one?.params ?? {}) as Q; const typed = new Set(one?.typed ?? [])
@@ -174,7 +169,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     <datalist id="oc-drugs">{DRUGS.map((d) => <option key={d.name} value={d.name} />)}</datalist>
     <datalist id="oc-problems">{PROBLEMS.map((p) => <option key={p.name} value={p.name}>{p.icd10}</option>)}</datalist>
     <datalist id="oc-allergens">{ALLERGENS.map((a) => <option key={a.name} value={a.name} />)}{DRUGS.map((d) => <option key={`d${d.name}`} value={d.name} />)}</datalist>
-    <div className={cn('p-3', drafts.length > 0 && 'border-b border-line')}>
+    <div className="p-3">
       <div className="relative">
         {seed && <span className="absolute start-2 top-1/2 z-raised -translate-y-1/2 rounded-md bg-accent-soft px-2 py-0.5 text-12 font-medium text-accent ring-1 ring-accent-line">{seed.label}</span>}
         <Input ref={input} value={seed ? '' : text} onChange={(e) => { setSeed(null); setEdited(null); setText(e.target.value); setHi(-1); setPick(-1) }} onKeyDown={keyInput} autoFocus spellCheck={false} aria-label="Composer"
@@ -194,10 +189,10 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
         {base?.errors.map((e) => <p key={e} className="px-3 pt-2 text-13 text-danger">{e}</p>)}
         {base?.skipped?.map((e) => <p key={e} className="px-3 pt-2 text-12 text-warn">Left out {e}</p>)}
         {refused && <p className="px-3 pt-2 text-13 text-danger">Your role cannot write a {refused.kind}.</p>}
-        {base?.label && !seed && <p className="px-3 pt-2 text-12 font-medium text-faint">{base.label}{base.drawer && ' — Enter opens it beside the record'}</p>}
+        {base?.label && !seed && <p className="px-3 pt-2 text-12 font-medium text-faint">{base.label}{base.drawer && ' — Enter opens it under the line'}</p>}
         {!sugg && <div className="divide-y divide-line">{items.map((p, i) => <CardItem key={`${key}:${i}`} item={p} ctx={ctx} warnings={warningsOf(p)}
           onChange={(n) => setItems(items.map((x, j) => j === i ? n : x))} onRemove={items.length > 1 ? () => setItems(items.filter((_, j) => j !== i)) : undefined}
-          onLongNote={(kind, t) => { setDrawer({ kind, text: t, draftId: seed?.draftId }); clear() }}
+          onLongNote={(kind, t) => { openLongNote({ kind, text: t, draftId: seed?.draftId }); clear() }}
           extra={i === 0 && (dup || dupProblem) ? <div className="mb-2 flex flex-wrap gap-1.5">
             {dup && <Button size="sm" variant="outline" onClick={() => repeatDup(dup)}>Repeat {dup.drug_name} as it is</Button>}
             {dup && <Button size="sm" variant="outline" onClick={() => changeDup(dup)}>Change its dose instead</Button>}
@@ -213,45 +208,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
         <tr><td className="py-0.5 pe-4 font-mono text-fg">#dm · #soap …</td><td className="text-muted">a preset (Settings → Presets)</td></tr>
         <tr><td className="py-0.5 pe-4 font-mono text-fg">hx: … · ex: … · plan: …</td><td className="text-muted">a note line under that heading</td></tr>
         <tr><td className="py-0.5 pe-4 font-mono text-fg">anything else</td><td className="text-muted">today’s note</td></tr>
-        <tr><td colSpan={2} className="pt-1.5 text-faint">A command alone (/rx, /v, /note) opens its card or the note beside the record · Tab takes a suggestion or moves into the card · ↑ recalls earlier lines · Alt+P / M / A · ⌘↵ adds and signs</td></tr></tbody></table>}
+        <tr><td colSpan={2} className="pt-1.5 text-faint">A command alone (/rx, /v, /note) opens its card, or the long note under the line · Tab takes a suggestion or moves into the card · ↑ recalls earlier lines · Alt+P / M / A · ⌘↵ adds and signs</td></tr></tbody></table>}
     </div>
-
-    {drafts.length > 0 && <div className="px-3 py-2">
-      <Heading count={drafts.length} tone="accent" className="mb-1">{r.visit?.kind === 'stay' ? 'This stay · signed on Sign' : 'This visit · signed on Done'}</Heading>
-      <ul>{drafts.map((d) => { const q = d.params as Q
-        // a drafted prescription is checked again against allergies recorded after it
-        const clash = d.function === 'medication' && q.action !== 'stop' && q.drug?.name ? drugWarnings(q.drug.name, allergies, [], null).find((w) => w.level === 'block') : undefined
-        return <li key={d.id} className="group flex items-start gap-2 py-1 text-13">
-          <Badge tone={KIND_TONE[d.kind ?? ''] ?? 'neutral'} className="mt-0.5 w-20 justify-center">{d.kind ?? d.function.replace('write_', '')}</Badge>
-          <button onClick={() => editDraft(d)} className="min-w-0 flex-1 whitespace-pre-wrap text-start hover:text-accent">{d.function === 'note' ? String(d.params.text) : d.line}
-            {clash && <span className="mt-0.5 flex items-start gap-1 text-12 text-danger"><AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />{clash.text}</span>}</button>
-          <span className="flex opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"><IconButton title="Edit" onClick={() => editDraft(d)}><Pencil className="h-3.5 w-3.5" /></IconButton>
-            <IconButton title="Remove" onClick={() => useDrafts.getState().remove(patientId, d.id)}><X className="h-3.5 w-3.5" /></IconButton></span></li> })}</ul>
-    </div>}
-
-    {drawer && <NoteDrawer key={`${drawer.draftId ?? ''}|${drawer.kind}|${drawer.text}`} value={drawer} onClose={() => { setDrawer(null); input.current?.focus() }} onAdd={(kind, t) => {
-      if (drawer.draftId) useDrafts.getState().replace(patientId, drawer.draftId, { function: 'note', kind: 'note', tag: `note:${kind}`, params: { kind, text: t }, line: t })
-      else useDrafts.getState().add(patientId, { function: 'note', kind: 'note', tag: `note:${kind}`, append: true, params: { kind, text: t }, line: t })
-      setDrawer(null); input.current?.focus()
-    }} />}
   </Card>
 })
-
-/** a template's headings left empty are not kept */
-const tidy = (t: string) => t.replace(/^(S|O|A|P|History|Examination):[ \t]*$\n?/gm, '').trim()
-/** a long note beside the record, not over it: the record stays readable on the left */
-function NoteDrawer({ value, onClose, onAdd }: { value: { kind: string; text: string; draftId?: string }; onClose: () => void; onAdd: (kind: string, text: string) => void }) {
-  const [kind, setKind] = useState(value.kind); const [text, setText] = useState(value.text); const area = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => { const el = area.current; if (el) { el.focus(); const at = el.value.indexOf(': '); el.setSelectionRange(at >= 0 && !value.draftId ? at + 2 : el.value.length, at >= 0 && !value.draftId ? at + 2 : el.value.length) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const ok = !!tidy(text)
-  return <aside className="fixed inset-y-0 right-0 z-popover flex w-full max-w-md flex-col border-l border-line bg-raised shadow-md" role="dialog" aria-label="Note"
-    onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (ok) onAdd(kind, tidy(text)) } }}>
-    <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-      <Select value={kind} onChange={(e) => setKind(e.target.value)} className="h-8 w-56">{NOTE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
-      <IconButton title="Close (Esc)" onClick={onClose} className="ml-auto"><X className="h-4 w-4" /></IconButton>
-    </div>
-    <textarea ref={area} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write the note…" className="min-h-0 flex-1 resize-none px-4 py-3 text-14 leading-relaxed focus:outline-none" />
-    <div className="flex items-center gap-2 border-t border-line px-4 py-3"><span className="text-11 text-faint"><Kbd>⌘↵</Kbd> add · <Kbd>esc</Kbd> close</span>
-      <Button size="sm" variant="ghost" className="ml-auto" onClick={onClose}>Cancel</Button><Button size="sm" disabled={!ok} onClick={() => onAdd(kind, tidy(text))}>{value.draftId ? 'Save' : 'Add to this visit'}</Button></div>
-  </aside>
-}
