@@ -114,9 +114,9 @@ export function VisitScreen() {
   })
   if (!dept) return <Centered><Spinner /></Centered>
   if (!patientId && (queue.isLoading || where.isLoading)) return <Centered><Spinner label="Opening the visit" /></Centered>
-  if (!patientId) return <Centered><p className="text-sm text-neutral-500">This visit is not in your queue. <button className="text-teal-800" onClick={() => navigate('/')}>Back to the queue</button></p></Centered>
+  if (!patientId) return <Centered><p className="text-14 text-faint">This visit is not in your queue. <button className="text-accent" onClick={() => navigate('/')}>Back to the queue</button></p></Centered>
   if (rec.isLoading) return <Centered><Spinner label="Opening the record" /></Centered>
-  if (rec.error || !rec.data) return <Centered><p className="text-sm text-red-700">{rec.error?.message ?? 'no record'}</p></Centered>
+  if (rec.error || !rec.data) return <Centered><p className="text-14 text-danger">{rec.error?.message ?? 'no record'}</p></Centered>
   const r = rec.data
   const canWrite = can('write:note') || can('write:vitals') || can('write:order')
   const strip = dept.work === 'visits' && !stay && !!queue.data   // the clinic's line above the banner: the lists below stick lower
@@ -125,11 +125,11 @@ export function VisitScreen() {
       strip={strip ? <QueueStrip rows={queue.data.rows.filter((x) => x.id !== visitId)} next={next} me={meId} onOpen={(x) => void openOther(x)} /> : null}
       actions={stay && visit ? <>
         {admitted && visit.department_id === dept.id && can('write:discharged') && !discharging && <Button variant="outline" onClick={() => setDischarging(true)} disabled={busy}>Discharge</Button>}
-        <Button onClick={sign} disabled={busy}>Sign{drafts.length ? ` ${drafts.length}` : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button></>
+        <Button onClick={sign} disabled={busy}>Sign{drafts.length ? ` ${drafts.length}` : ''}<Kbd className="ml-1">⌘↵</Kbd></Button></>
       : mine && visit?.status === 'in_consult' ? <>
-        <Button onClick={() => done(dept.after_done !== 'queue')} disabled={busy}>{drafts.length ? `Sign ${drafts.length} · ` : ''}Done{dept.after_done !== 'queue' && next ? ` → ${next.patient.given_name}` : ''}<Kbd className="ml-1 border-white/40">⌘↵</Kbd></Button>
+        <Button onClick={() => done(dept.after_done !== 'queue')} disabled={busy}>{drafts.length ? `Sign ${drafts.length} · ` : ''}Done{dept.after_done !== 'queue' && next ? ` → ${next.patient.given_name}` : ''}<Kbd className="ml-1">⌘↵</Kbd></Button>
         <Menu.Root><Menu.Trigger asChild><Button variant="outline" size="md" aria-label="More"><ChevronDown className="h-4 w-4" /></Button></Menu.Trigger>
-          <Menu.Portal><Menu.Content align="end" sideOffset={6} className="z-50 min-w-60 rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg">
+          <Menu.Portal><Menu.Content align="end" sideOffset={6} className="z-popover min-w-60 rounded-lg border border-line bg-raised p-1 text-14 shadow-md">
             {dept.patients_wait
               ? <MenuItem onSelect={() => done(dept.after_done !== 'queue', false)} hint="The visit closes now; results go to your review list">Done — patient goes home</MenuItem>
               : <MenuItem onSelect={() => done(dept.after_done !== 'queue', true)} hint="The patient comes back when the results are in">Done — patient waits for results</MenuItem>}
@@ -137,15 +137,15 @@ export function VisitScreen() {
             {!visit.seen_at && <MenuItem onSelect={() => visits.back.mutate({ visit, reason: 'not_here' }, { onSuccess: () => navigate('/') })} hint="Called but not here: he keeps his place, and the desk sees the missed call">Not here</MenuItem>}
             <MenuItem onSelect={() => void backToWaiting()} hint={drafts.length ? `Signs the ${drafts.length} written so far; the visit stays open` : 'The visit stays open; call the patient in again later'}>Return to waiting</MenuItem>
           </Menu.Content></Menu.Portal></Menu.Root></>
-        : <>{withOther && <span className="text-sm text-neutral-500">With {fromQueue?.assignee_name ?? 'another clinician'} — theirs to finish</span>}
+        : <>{withOther && <span className="text-14 text-faint">With {fromQueue?.assignee_name ?? 'another clinician'} — theirs to finish</span>}
             {!mine && drafts.length > 0 && <Button onClick={sign} disabled={busy}>Sign {drafts.length}</Button>}
             {!visit && dept.work === 'visits' && can('write:checked_in') && <Button variant="outline" onClick={() => visits.open.mutate({ patient_id: patientId, department_id: dept.id }, { onSuccess: (v) => navigate(`/visit/${v.id}`) })}>Start visit</Button>}</>} />
-    {err && <p className="mx-auto mt-3 max-w-7xl rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200" role="alert">{err}</p>}
-    {warn && <div className="mx-auto mt-3 grid max-w-7xl gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200" role="alert">
+    {err && <p className="mx-auto mt-3 max-w-7xl rounded-lg bg-danger-soft px-3 py-2 text-14 text-danger ring-1 ring-danger-line" role="alert">{err}</p>}
+    {warn && <div className="mx-auto mt-3 grid max-w-7xl gap-1.5 rounded-lg bg-warn-soft px-3 py-2 text-14 text-warn ring-1 ring-warn-line" role="alert">
       {warn.findings.map((f, i) => <p key={i}><b className="font-medium">{words(f.code)}</b>{f.detail ? ` — ${f.detail}` : ''}</p>)}
       <div className="flex gap-2"><Button size="sm" onClick={() => warn.retry(warn.findings.map((f) => f.code))} disabled={busy}>Sign anyway</Button><Button size="sm" variant="ghost" onClick={() => setWarn(null)}>Change it</Button></div></div>}
-    {discharging && admitted && <div className="mx-auto mt-3 flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-neutral-50 px-3 py-2 ring-1 ring-neutral-200">
-      <span className="text-sm font-medium">Discharge{drafts.length ? ` — signs the ${drafts.length} written` : ''}</span>
+    {discharging && admitted && <div className="mx-auto mt-3 flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-sunken px-3 py-2 ring-1 ring-line">
+      <span className="text-14 font-medium">Discharge{drafts.length ? ` — signs the ${drafts.length} written` : ''}</span>
       <Choose label="To" options={DISPOSITION} go="Discharge" busy={busy} onCancel={() => setDischarging(false)} onGo={discharge} /></div>}
     <div className="mx-auto mt-4 grid max-w-7xl gap-4 px-4 lg:grid-cols-[340px_minmax(0,1fr)]">
       {/* the lists stay in view while the record scrolls */}
@@ -171,22 +171,22 @@ function Banner({ r, visit, mine, stay, onBack, actions, strip }: { r: RecordVie
   const allergies = r.allergies.filter((a) => a.status === 'active')
   const vit = [pick('8480-6') && pick('8462-4') ? ['BP', `${pick('8480-6')!.value_number}/${pick('8462-4')!.value_number}`, pick('8480-6')!.flag] : null, pick('8867-4') ? ['P', pick('8867-4')!.value_number, pick('8867-4')!.flag] : null,
     pick('8310-5') ? ['T', pick('8310-5')!.value_number, pick('8310-5')!.flag] : null, pick('29463-7') ? ['Wt', pick('29463-7')!.value_number, null] : null, pick('59408-5') ? ['SpO₂', pick('59408-5')!.value_number, pick('59408-5')!.flag] : null].filter(Boolean) as [string, number | string, string | null][]
-  return <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur">
+  return <div className="sticky top-0 z-sticky border-b border-line bg-surface/95 backdrop-blur">
     {strip}
     <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
-      <button onClick={onBack} className="-ml-1 rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800" title={stay ? 'Back to the beds' : 'Back to the queue'}><ArrowLeft className="h-4 w-4" /></button>
+      <button onClick={onBack} className="-ml-1 rounded-md p-1 text-faint hover:bg-hover hover:text-fg" title={stay ? 'Back to the beds' : 'Back to the queue'}><ArrowLeft className="h-4 w-4" /></button>
       <div className="min-w-0">
-        <p className="flex items-baseline gap-2"><span className="text-lg font-semibold tracking-tight text-neutral-900">{r.patient.given_name} {r.patient.family_name}</span><span className="text-sm text-neutral-600 tnum">{r.patient.age} y · {SEX[r.patient.sex] ?? ''}</span>{r.patient.died_on && <Badge tone="neutral">deceased</Badge>}</p>
-        <p className="text-xs text-neutral-500 tnum">#{r.patient.record_number}{r.patient.phone_text && ` · ${r.patient.phone_text}`}{visit && (stay ? <> · <span className="text-teal-800">{stay}</span></>
-          : <> · <span className={mine ? 'text-teal-800' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>)}{visit?.priority && visit.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{visit.priority}</Badge>}</p>
+        <p className="flex items-baseline gap-2"><span className="text-18 font-semibold tracking-tight text-fg">{r.patient.given_name} {r.patient.family_name}</span><span className="text-14 text-muted tnum">{r.patient.age} y · {SEX[r.patient.sex] ?? ''}</span>{r.patient.died_on && <Badge tone="neutral">deceased</Badge>}</p>
+        <p className="text-12 text-faint tnum">#{r.patient.record_number}{r.patient.phone_text && ` · ${r.patient.phone_text}`}{visit && (stay ? <> · <span className="text-accent">{stay}</span></>
+          : <> · <span className={mine ? 'text-accent' : ''}>{visit.status.replace('_', ' ')}</span> · {visit.is_first ? 'new' : 'follow-up'}{visit.seen_at && ` · ${minutesSince(visit.seen_at)} min`}</>)}{visit?.priority && visit.priority !== 'routine' && <Badge tone="red" className="ml-1.5">{visit.priority}</Badge>}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-1">{allergies.length ? allergies.map((a) => <Badge key={a.id} tone="red">⚠ {a.substance_name}</Badge>) : r.allergy_review ? <span className="text-xs text-neutral-500">No known allergies</span> : <span className="text-xs text-amber-700">Allergies not asked</span>}</div>
-      {vit.length > 0 && <div className="flex items-baseline gap-3 text-xs text-neutral-500 tnum">{vit.map(([l, n, f]) => <span key={l}>{l} <b className={cn('font-semibold text-neutral-800', f && f !== 'normal' && flagClass(f))}>{n}</b></span>)}</div>}
+      <div className="flex flex-wrap items-center gap-1">{allergies.length ? allergies.map((a) => <Badge key={a.id} tone="red">⚠ {a.substance_name}</Badge>) : r.allergy_review ? <span className="text-12 text-faint">No known allergies</span> : <span className="text-12 text-warn">Allergies not asked</span>}</div>
+      {vit.length > 0 && <div className="flex items-baseline gap-3 text-12 text-faint tnum">{vit.map(([l, n, f]) => <span key={l}>{l} <b className={cn('font-semibold text-fg', f && f !== 'normal' && flagClass(f))}>{n}</b></span>)}</div>}
       <div className="ml-auto flex items-center gap-2">{actions}</div>
     </div>
   </div>
 }
 
 function MenuItem({ children, hint, onSelect }: { children: React.ReactNode; hint?: string; onSelect: () => void }) {
-  return <Menu.Item onSelect={onSelect} className="cursor-pointer rounded px-2 py-1.5 outline-none data-[highlighted]:bg-neutral-100">{children}{hint && <span className="block text-[11px] text-neutral-500">{hint}</span>}</Menu.Item>
+  return <Menu.Item onSelect={onSelect} className="cursor-pointer rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-hover">{children}{hint && <span className="block text-11 text-faint">{hint}</span>}</Menu.Item>
 }

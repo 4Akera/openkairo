@@ -8,7 +8,7 @@ import type { Allergy, Medication, RecordView } from '../../db/types'
 import { Badge, Button, Card, Heading, IconButton, Input, Kbd, Select, cn } from '../../ui'
 import { ALLERGENS, DRUGS, PROBLEMS, allergyWarnings, doseWarnings, drugWarnings, duplicateMedication, duplicateProblem, type Warning } from './catalog'
 import { expand, suggest, type Expanded, type Suggestion } from './expand'
-import { CardItem } from './Card'
+import { CardItem, WarningItem } from './Card'
 import { KIND_TONE, NOTE_KINDS } from './kinds'
 import { lineOf, type Ctx, type Parsed } from './parse'
 import { commandsFor } from './commands'
@@ -138,7 +138,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   function keyCard(e: React.KeyboardEvent<HTMLDivElement>) {
     const t = e.target as HTMLElement
     if (e.key === 'Escape') { e.stopPropagation(); input.current?.focus() }
-    else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || 'chip' in t.dataset || (t.tagName === 'TEXTAREA' && !e.shiftKey))) { e.preventDefault(); commit() }  // a chip is clicked, not pressed: Enter adds
+    else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || 'chip' in t.dataset || t.getAttribute('role') === 'radio' || (t.tagName === 'TEXTAREA' && !e.shiftKey))) { e.preventDefault(); commit() }  // a chip is clicked, not pressed: Enter adds
   }
   const editDraft = (d: Draft) => {
     if (d.function === 'note' && String(d.params.text ?? '').length > 120) { setDrawer({ kind: String(d.params.kind ?? 'progress'), text: String(d.params.text ?? ''), draftId: d.id }); return }
@@ -167,35 +167,35 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       certainty: pickTyped('certainty', oq.certainty, p.certainty), onset_on: pickTyped('onset_on', oq.onset_on, p.onset_on), text: pickTyped('text', oq.text, p.note_text) } }
     openSeed({ label: `Update ${p.name}`, items: [{ ...s, line: lineOf(s) }], draftId: seed?.draftId })
   }
-  const footer = blocking.length > 0 ? <span className="font-medium text-red-700">{armed === key ? 'Enter again to go ahead despite the warning' : '↵ ↵ — twice, against the warning'}</span>
-    : incomplete ? <span className="text-amber-700">{incomplete}</span> : null
+  const footer = blocking.length > 0 ? <span className="font-medium text-danger">{armed === key ? 'Enter again to go ahead despite the warning' : '↵ ↵ — twice, against the warning'}</span>
+    : incomplete ? <span className="text-warn">{incomplete}</span> : null
 
   return <Card>
     <datalist id="oc-drugs">{DRUGS.map((d) => <option key={d.name} value={d.name} />)}</datalist>
     <datalist id="oc-problems">{PROBLEMS.map((p) => <option key={p.name} value={p.name}>{p.icd10}</option>)}</datalist>
     <datalist id="oc-allergens">{ALLERGENS.map((a) => <option key={a.name} value={a.name} />)}{DRUGS.map((d) => <option key={`d${d.name}`} value={d.name} />)}</datalist>
-    <div className={cn('p-3', drafts.length > 0 && 'border-b border-neutral-100')}>
+    <div className={cn('p-3', drafts.length > 0 && 'border-b border-line')}>
       <div className="relative">
-        {seed && <span className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-md bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-900 ring-1 ring-teal-200">{seed.label}</span>}
+        {seed && <span className="absolute start-2 top-1/2 z-raised -translate-y-1/2 rounded-md bg-accent-soft px-2 py-0.5 text-12 font-medium text-accent ring-1 ring-accent-line">{seed.label}</span>}
         <Input ref={input} value={seed ? '' : text} onChange={(e) => { setSeed(null); setEdited(null); setText(e.target.value); setHi(-1); setPick(-1) }} onKeyDown={keyInput} autoFocus spellCheck={false} aria-label="Composer"
-          placeholder={seed ? '' : 'Type the note (hx: · ex: · plan:) — / for a command: /v /rx /dx /al /order /note — # for a preset'} className={cn('h-11 pr-24 font-mono text-[14px] placeholder:font-sans', seed && 'pl-40')} />
-        <span className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 text-neutral-400"><button onClick={() => setHelp(!help)} className={cn('rounded px-1.5 text-xs hover:text-neutral-700', help && 'text-teal-800')} aria-label="Help">?</button><Kbd>/</Kbd></span>
+          placeholder={seed ? '' : 'Type the note (hx: · ex: · plan:) — / for a command: /v /rx /dx /al /order /note — # for a preset'} className={cn('h-11 pe-24 font-mono text-14 placeholder:font-sans', seed && 'ps-40')} />
+        <span className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 text-faint"><button onClick={() => setHelp(!help)} className={cn('rounded-sm px-1.5 text-12 hover:text-muted focus-ring', help && 'text-accent')} aria-label="Help">?</button><Kbd>/</Kbd></span>
       </div>
-      {open && <div ref={card} onKeyDown={keyCard} className="mt-2 overflow-hidden rounded-xl bg-white ring-1 ring-neutral-200">
-        {sugg && <div className="grid gap-1.5 border-b border-neutral-100 bg-neutral-50/70 p-2 sm:grid-cols-2">{sugg.items.map((s, i) => { const on = pick === i || (pick < 0 && i === 0); const chosen = pick === i
+      {open && <div ref={card} onKeyDown={keyCard} className="mt-2 overflow-hidden rounded-xl bg-raised shadow-sm ring-1 ring-line">
+        {sugg && <div className="grid gap-1.5 border-b border-line bg-sunken p-2 sm:grid-cols-2">{sugg.items.map((s, i) => { const on = pick === i || (pick < 0 && i === 0); const chosen = pick === i
           return <button key={s.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => accept(s)}
-            className={cn('flex min-w-0 flex-col items-start rounded-lg bg-white px-2.5 py-1.5 text-left ring-1 transition-colors', chosen ? 'ring-2 ring-teal-600' : on ? 'ring-teal-400' : 'ring-neutral-200 hover:ring-neutral-400')}>
-            <span className="flex w-full items-center gap-2"><span className="truncate text-[13px] font-medium text-neutral-900">{s.label}</span>{on && <Kbd className="ml-auto shrink-0 text-teal-800">{chosen ? '↵' : 'tab'}</Kbd>}</span>
-            {s.detail && <span className="w-full truncate text-[11.5px] text-neutral-500">{s.detail}</span>}</button> })}
-          {items.length > 0 && pick < 0 && <p className="text-[11px] text-neutral-500 sm:col-span-2"><Kbd>tab</Kbd> takes the first · <Kbd>↓</Kbd> chooses · <Kbd>↵</Kbd> adds as typed: <span className="text-neutral-700">{items.map((x) => x.line).join(' · ')}</span></p>}
+            className={cn('flex min-w-0 flex-col items-start rounded-lg bg-surface px-2.5 py-1.5 text-start ring-1 transition-colors', chosen ? 'ring-2 ring-accent' : on ? 'ring-accent-line' : 'ring-line hover:ring-line-strong')}>
+            <span className="flex w-full items-center gap-2"><span className="truncate text-13 font-medium text-fg">{s.label}</span>{on && <Kbd className="ms-auto shrink-0 text-accent">{chosen ? '↵' : 'tab'}</Kbd>}</span>
+            {s.detail && <span className="w-full truncate text-11 text-faint">{s.detail}</span>}</button> })}
+          {items.length > 0 && pick < 0 && <p className="text-11 text-faint sm:col-span-2"><Kbd>tab</Kbd> takes the first · <Kbd>↓</Kbd> chooses · <Kbd>↵</Kbd> adds as typed: <span className="text-muted">{items.map((x) => x.line).join(' · ')}</span></p>}
           {/* what Enter would add as typed is still checked: its warnings show here too */}
-          {pick < 0 && warnings.length > 0 && <ul className="grid gap-1 sm:col-span-2">{warnings.map((w, i) => <li key={i} className={cn('flex items-start gap-1.5 rounded-md px-2 py-1 text-xs', w.level === 'block' ? 'bg-red-50 text-red-800 ring-1 ring-red-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200')}><AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />{w.text}</li>)}</ul>}
-          {pick < 0 && footer && <p className="text-[11px] sm:col-span-2">{footer}</p>}</div>}
-        {base?.errors.map((e) => <p key={e} className="px-3 pt-2 text-[13px] text-red-700">{e}</p>)}
-        {base?.skipped?.map((e) => <p key={e} className="px-3 pt-2 text-xs text-amber-700">Left out {e}</p>)}
-        {refused && <p className="px-3 pt-2 text-[13px] text-red-700">Your role cannot write a {refused.kind}.</p>}
-        {base?.label && !seed && <p className="px-3 pt-2 text-xs font-medium text-neutral-500">{base.label}{base.drawer && ' — Enter opens it beside the record'}</p>}
-        {!sugg && <div className="divide-y divide-neutral-100">{items.map((p, i) => <CardItem key={`${key}:${i}`} item={p} ctx={ctx} warnings={warningsOf(p)}
+          {pick < 0 && warnings.length > 0 && <ul className="grid gap-1 sm:col-span-2">{warnings.map((w, i) => <WarningItem key={i} w={w} />)}</ul>}
+          {pick < 0 && footer && <p className="text-11 sm:col-span-2">{footer}</p>}</div>}
+        {base?.errors.map((e) => <p key={e} className="px-3 pt-2 text-13 text-danger">{e}</p>)}
+        {base?.skipped?.map((e) => <p key={e} className="px-3 pt-2 text-12 text-warn">Left out {e}</p>)}
+        {refused && <p className="px-3 pt-2 text-13 text-danger">Your role cannot write a {refused.kind}.</p>}
+        {base?.label && !seed && <p className="px-3 pt-2 text-12 font-medium text-faint">{base.label}{base.drawer && ' — Enter opens it beside the record'}</p>}
+        {!sugg && <div className="divide-y divide-line">{items.map((p, i) => <CardItem key={`${key}:${i}`} item={p} ctx={ctx} warnings={warningsOf(p)}
           onChange={(n) => setItems(items.map((x, j) => j === i ? n : x))} onRemove={items.length > 1 ? () => setItems(items.filter((_, j) => j !== i)) : undefined}
           onLongNote={(kind, t) => { setDrawer({ kind, text: t, draftId: seed?.draftId }); clear() }}
           extra={i === 0 && (dup || dupProblem) ? <div className="mb-2 flex flex-wrap gap-1.5">
@@ -203,17 +203,17 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
             {dup && <Button size="sm" variant="outline" onClick={() => changeDup(dup)}>Change its dose instead</Button>}
             {dupProblem && <Button size="sm" variant="outline" onClick={() => updateDup(dupProblem)}>Update {dupProblem.name}</Button>}
           </div> : undefined} />)}</div>}
-        {!sugg && !items.length && !base?.drawer && !base?.errors.length && <p className="px-3 py-2 text-xs text-amber-700">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
-        {!sugg && (items.length > 0 || base?.drawer) && <div className="flex items-center gap-3 border-t border-neutral-100 px-3 py-2 text-[11px] text-neutral-500">
+        {!sugg && !items.length && !base?.drawer && !base?.errors.length && <p className="px-3 py-2 text-12 text-warn">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
+        {!sugg && (items.length > 0 || base?.drawer) && <div className="flex items-center gap-3 border-t border-line px-3 py-2 text-11 text-faint">
           {footer ?? <span className="inline-flex items-center gap-1"><CornerDownLeft className="h-3 w-3" />{seed?.draftId ? 'save' : base?.drawer && !items.length ? 'open' : `add${items.length > 1 ? ` ${items.length}` : ''}`}</span>}
           <span><Kbd>tab</Kbd> edit fields</span><span><Kbd>esc</Kbd> {seed ? 'cancel' : 'clear'}</span>
-          <span className="ml-auto">⌘↵ adds it and signs</span></div>}
+          <span className="ms-auto">⌘↵ adds it and signs</span></div>}
       </div>}
-      {help && !open && <table className="mt-3 w-full text-xs"><tbody>{commandsFor(ctx).map((c) => <tr key={c.name}><td className="py-0.5 pr-4 font-mono text-neutral-800">{c.example}</td><td className="text-neutral-500">{c.label}</td></tr>)}
-        <tr><td className="py-0.5 pr-4 font-mono text-neutral-800">#dm · #soap …</td><td className="text-neutral-500">a preset (Settings → Presets)</td></tr>
-        <tr><td className="py-0.5 pr-4 font-mono text-neutral-800">hx: … · ex: … · plan: …</td><td className="text-neutral-500">a note line under that heading</td></tr>
-        <tr><td className="py-0.5 pr-4 font-mono text-neutral-800">anything else</td><td className="text-neutral-500">today’s note</td></tr>
-        <tr><td colSpan={2} className="pt-1.5 text-neutral-400">A command alone (/rx, /v, /note) opens its card or the note beside the record · Tab takes a suggestion or moves into the card · ↑ recalls earlier lines · Alt+P / M / A · ⌘↵ adds and signs</td></tr></tbody></table>}
+      {help && !open && <table className="mt-3 w-full text-12"><tbody>{commandsFor(ctx).map((c) => <tr key={c.name}><td className="py-0.5 pe-4 font-mono text-fg">{c.example}</td><td className="text-muted">{c.label}</td></tr>)}
+        <tr><td className="py-0.5 pe-4 font-mono text-fg">#dm · #soap …</td><td className="text-muted">a preset (Settings → Presets)</td></tr>
+        <tr><td className="py-0.5 pe-4 font-mono text-fg">hx: … · ex: … · plan: …</td><td className="text-muted">a note line under that heading</td></tr>
+        <tr><td className="py-0.5 pe-4 font-mono text-fg">anything else</td><td className="text-muted">today’s note</td></tr>
+        <tr><td colSpan={2} className="pt-1.5 text-faint">A command alone (/rx, /v, /note) opens its card or the note beside the record · Tab takes a suggestion or moves into the card · ↑ recalls earlier lines · Alt+P / M / A · ⌘↵ adds and signs</td></tr></tbody></table>}
     </div>
 
     {drafts.length > 0 && <div className="px-3 py-2">
@@ -221,10 +221,10 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       <ul>{drafts.map((d) => { const q = d.params as Q
         // a drafted prescription is checked again against allergies recorded after it
         const clash = d.function === 'medication' && q.action !== 'stop' && q.drug?.name ? drugWarnings(q.drug.name, allergies, [], null).find((w) => w.level === 'block') : undefined
-        return <li key={d.id} className="group flex items-start gap-2 py-1 text-[13.5px]">
+        return <li key={d.id} className="group flex items-start gap-2 py-1 text-13">
           <Badge tone={KIND_TONE[d.kind ?? ''] ?? 'neutral'} className="mt-0.5 w-20 justify-center">{d.kind ?? d.function.replace('write_', '')}</Badge>
-          <button onClick={() => editDraft(d)} className="min-w-0 flex-1 whitespace-pre-wrap text-left hover:text-teal-900">{d.function === 'note' ? String(d.params.text) : d.line}
-            {clash && <span className="mt-0.5 flex items-start gap-1 text-xs text-red-700"><AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />{clash.text}</span>}</button>
+          <button onClick={() => editDraft(d)} className="min-w-0 flex-1 whitespace-pre-wrap text-start hover:text-accent">{d.function === 'note' ? String(d.params.text) : d.line}
+            {clash && <span className="mt-0.5 flex items-start gap-1 text-12 text-danger"><AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />{clash.text}</span>}</button>
           <span className="flex opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"><IconButton title="Edit" onClick={() => editDraft(d)}><Pencil className="h-3.5 w-3.5" /></IconButton>
             <IconButton title="Remove" onClick={() => useDrafts.getState().remove(patientId, d.id)}><X className="h-3.5 w-3.5" /></IconButton></span></li> })}</ul>
     </div>}
@@ -244,14 +244,14 @@ function NoteDrawer({ value, onClose, onAdd }: { value: { kind: string; text: st
   const [kind, setKind] = useState(value.kind); const [text, setText] = useState(value.text); const area = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { const el = area.current; if (el) { el.focus(); const at = el.value.indexOf(': '); el.setSelectionRange(at >= 0 && !value.draftId ? at + 2 : el.value.length, at >= 0 && !value.draftId ? at + 2 : el.value.length) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const ok = !!tidy(text)
-  return <aside className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-neutral-200 bg-white shadow-2xl" role="dialog" aria-label="Note"
+  return <aside className="fixed inset-y-0 right-0 z-popover flex w-full max-w-md flex-col border-l border-line bg-raised shadow-md" role="dialog" aria-label="Note"
     onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (ok) onAdd(kind, tidy(text)) } }}>
-    <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-3">
+    <div className="flex items-center gap-2 border-b border-line px-4 py-3">
       <Select value={kind} onChange={(e) => setKind(e.target.value)} className="h-8 w-56">{NOTE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
       <IconButton title="Close (Esc)" onClick={onClose} className="ml-auto"><X className="h-4 w-4" /></IconButton>
     </div>
-    <textarea ref={area} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write the note…" className="min-h-0 flex-1 resize-none px-4 py-3 text-[14px] leading-relaxed focus:outline-none" />
-    <div className="flex items-center gap-2 border-t border-neutral-100 px-4 py-3"><span className="text-[11px] text-neutral-400"><Kbd>⌘↵</Kbd> add · <Kbd>esc</Kbd> close</span>
+    <textarea ref={area} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write the note…" className="min-h-0 flex-1 resize-none px-4 py-3 text-14 leading-relaxed focus:outline-none" />
+    <div className="flex items-center gap-2 border-t border-line px-4 py-3"><span className="text-11 text-faint"><Kbd>⌘↵</Kbd> add · <Kbd>esc</Kbd> close</span>
       <Button size="sm" variant="ghost" className="ml-auto" onClick={onClose}>Cancel</Button><Button size="sm" disabled={!ok} onClick={() => onAdd(kind, tidy(text))}>{value.draftId ? 'Save' : 'Add to this visit'}</Button></div>
   </aside>
 }

@@ -23,20 +23,20 @@ export function KeyResults({ patientId }: { patientId: string }) {
     .filter((t): t is (typeof rows)[number] => !!t).slice(0, 8)
   if (q.isLoading || !(q.data ?? []).length) return null                        // no results at all: nothing to show or open
   return <Card className="px-3.5 py-3">
-    <Heading className="mb-1" right={<button onClick={() => go('view', 'results')} className="text-[10.5px] text-teal-800 hover:underline">All results</button>}>Key results</Heading>
-    {!shown.length && <p className="py-1 text-xs text-neutral-400">None of the key tests yet, and nothing flagged — the other results are in All results.</p>}
-    <ul className="divide-y divide-neutral-100">{shown.map((t) => {
+    <Heading className="mb-1" right={<button onClick={() => go('view', 'results')} className="text-11 text-accent hover:underline">All results</button>}>Key results</Heading>
+    {!shown.length && <p className="py-1 text-12 text-faint">None of the key tests yet, and nothing flagged — the other results are in All results.</p>}
+    <ul className="divide-y divide-line">{shown.map((t) => {
       const [now, before] = t.points
       // BP is one row: systolic/diastolic measured together
       const d = t.code === SYS ? dia?.points.find((p) => p.at === now.at) : undefined; const db = t.code === SYS && before ? dia?.points.find((p) => p.at === before.at) : undefined
       const value = d ? `${now.value_number}/${d.value_number}` : `${now.value_number}`; const was = before ? (db ? `${before.value_number}/${db.value_number}` : `${before.value_number}`) : null
       const flag = bad(now.flag) ? now.flag : d?.flag
-      return <li key={t.code} className="flex items-baseline gap-2 py-1 text-[13px]">
-        <span className="w-20 shrink-0 truncate text-neutral-600" title={t.name}>{SHORT[t.code] ?? t.name}</span>
-        <button onClick={() => go('entry', now.entry_id)} className={cn('tnum font-semibold hover:underline', bad(flag) ? flagClass(flag) : 'text-neutral-900')} title={`${shortDate(now.at)}${t.unit ? ` · ${t.unit}` : ''}`}>
+      return <li key={t.code} className="flex items-baseline gap-2 py-1 text-13">
+        <span className="w-20 shrink-0 truncate text-muted" title={t.name}>{SHORT[t.code] ?? t.name}</span>
+        <button onClick={() => go('entry', now.entry_id)} className={cn('tnum font-semibold hover:underline', bad(flag) ? flagClass(flag) : 'text-fg')} title={`${shortDate(now.at)}${t.unit ? ` · ${t.unit}` : ''}`}>
           {value}{now.flag === 'critical' ? ' ‼' : ''}</button>
-        {before && <span className="text-xs text-neutral-400">{arrow(now.value_number, before.value_number)}</span>}
-        <span className="ml-auto truncate text-right text-[11px] text-neutral-400 tnum">{was ? `was ${was} · ${shortDate(before!.at)}` : shortDate(now.at)}</span>
+        {before && <span className="text-12 text-faint">{arrow(now.value_number, before.value_number)}</span>}
+        <span className="ml-auto truncate text-right text-11 text-faint tnum">{was ? `was ${was} · ${shortDate(before!.at)}` : shortDate(now.at)}</span>
       </li> })}</ul>
   </Card>
 }

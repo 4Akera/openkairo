@@ -26,19 +26,19 @@ export function QueueStrip({ rows, next, me, onOpen }: { rows: QueueRow[]; next:
     if (e.key === 'Enter' && found[0]) { e.preventDefault(); go(found[0]) }
     else if (e.key === 'Escape') { e.preventDefault(); setQ(''); box.current?.blur() }
   }
-  return <div className="border-b border-neutral-100 bg-neutral-50/80">
-    <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-1 text-xs text-neutral-500 tnum">
-      {next ? <button type="button" onClick={() => onOpen(next)} className="rounded px-1 -mx-1 font-medium text-teal-800 hover:bg-teal-50" title="Open the next patient">
+  return <div className="border-b border-line bg-sunken">
+    <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-1 text-12 text-faint tnum">
+      {next ? <button type="button" onClick={() => onOpen(next)} className="rounded-sm px-1 -mx-1 font-medium text-accent hover:bg-accent-soft" title="Open the next patient">
         Next #{next.patient.record_number}{next.band === 'back' && ' (back)'} ›</button> : <span>Nobody next</span>}
-      <span><b className="font-semibold text-neutral-800">{waiting.length}</b> waiting</span>
-      {waiting.length > 0 && <span>longest <b className={cn('font-semibold', longest >= 60 ? 'text-red-700' : longest >= 30 ? 'text-amber-700' : 'text-neutral-800')}>{wait(longest)}</b></span>}
-      {back.length > 0 && <span><b className="font-semibold text-neutral-800">{back.length}</b> back</span>}
-      <span className="ml-auto flex min-w-0 items-center gap-1.5">
-        {found.map((r, i) => <button key={r.id} type="button" onClick={() => go(r)} className={cn('truncate rounded px-1.5 py-0.5 ring-1', i === 0 ? 'bg-teal-50 text-teal-900 ring-teal-300' : 'text-neutral-700 ring-neutral-200 hover:ring-neutral-400')}>
-          #{r.patient.record_number} {r.patient.given_name} {r.patient.family_name}{i === 0 && <Kbd className="ml-1">↵</Kbd>}</button>)}
-        {t && !found.length && <span className="text-neutral-400">nobody in the list</span>}
+      <span><b className="font-semibold text-fg">{waiting.length}</b> waiting</span>
+      {waiting.length > 0 && <span>longest <b className={cn('font-semibold', longest >= 60 ? 'text-danger' : longest >= 30 ? 'text-warn' : 'text-fg')}>{wait(longest)}</b></span>}
+      {back.length > 0 && <span><b className="font-semibold text-fg">{back.length}</b> back</span>}
+      <span className="ms-auto flex min-w-0 items-center gap-1.5">
+        {found.map((r, i) => <button key={r.id} type="button" onClick={() => go(r)} className={cn('truncate rounded-sm px-1.5 py-0.5 ring-1', i === 0 ? 'bg-accent-soft text-accent ring-accent-line' : 'text-muted ring-line hover:ring-line-strong')}>
+          #{r.patient.record_number} {r.patient.given_name} {r.patient.family_name}{i === 0 && <Kbd className="ms-1">↵</Kbd>}</button>)}
+        {t && !found.length && <span className="text-faint">nobody in the list</span>}
         <input ref={box} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} aria-label="Who's in? Open a patient from the list"
-          placeholder="Who's in? # or name  ⌥J" className="h-6 w-44 rounded border border-neutral-200 bg-white px-2 text-xs text-neutral-800 placeholder:text-neutral-400 focus:border-teal-700 focus:outline-none" />
+          placeholder="Who's in? # or name  ⌥J" className="h-6 w-44 rounded-sm border border-line bg-surface px-2 text-12 text-fg placeholder:text-faint focus:border-accent focus:outline-none" />
       </span>
     </div>
   </div>
