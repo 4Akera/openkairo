@@ -4,8 +4,7 @@ import { DEFAULT_SCREEN, mayIn } from '../../db/views'
 import { newId } from '../../hooks/writes'
 import type { Department, Organization } from '../../db/types'
 import type { SettingData } from '../../db/shapes.generated'
-import { Badge, Button, Card, IconButton, Input, Select, cn } from '../../ui'
-import { DeleteButton, EditPanel, Empty, Group, Labeled, Line, NewCard, PageHead, Pick, RetireButton, Row, Section, Segmented, useDraft } from './parts'
+import { Badge, Button, Card, Chip, DeleteButton, EditPanel, Empty, Field, Fieldset, FormRow, IconButton, Input, NewCard, PageHead, RetireButton, Row, Section, Segmented, Select, cn, useDraft } from '../../ui'
 import { PlacesCount, PlacesEditor } from './Places'
 import { SitesSection } from './Sites'
 import { useSave } from './save'
@@ -72,39 +71,39 @@ export function DepartmentsPage({ org }: { org: Organization }) {
       onSave={() => save.mutate({ id: e.id!, d, was: existing }, { onSuccess: e.done })}
       aside={existing && <><RetireButton what={existing.name} onRetire={() => retire.mutate(existing.id, { onSuccess: e.done })} /><DeleteButton what={existing.name} onDelete={() => del.mutate(existing.id, { onSuccess: e.done })} /></>}>
       <div className={cn('grid gap-3', sites.length ? 'sm:grid-cols-[1fr_11rem_11rem]' : 'sm:grid-cols-[1fr_11rem]')}>
-        <Labeled label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Cardiology" required autoFocus /></Labeled>
-        <Labeled label="Work" changed={e.changed('work')} hint={WORKS.find(([k]) => k === d.work)?.[2]}><Select value={d.work} onChange={(x) => setWork(x.target.value as Department['work'])}>{WORKS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Labeled>
-        {sites.length > 0 && <Labeled label="Site" changed={e.changed('site_id')}><Select value={d.site_id ?? ''} onChange={(x) => e.set({ site_id: x.target.value || null })}>
-          <option value="">none</option>{sites.map((s) => <option key={s.id} value={s.id}>{s.name}{s.retired_at ? ' (retired)' : ''}</option>)}</Select></Labeled>}
+        <Field label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Cardiology" required autoFocus /></Field>
+        <Field label="Work" changed={e.changed('work')} hint={WORKS.find(([k]) => k === d.work)?.[2]}><Select value={d.work} onChange={(x) => setWork(x.target.value as Department['work'])}>{WORKS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
+        {sites.length > 0 && <Field label="Site" changed={e.changed('site_id')}><Select value={d.site_id ?? ''} onChange={(x) => e.set({ site_id: x.target.value || null })}>
+          <option value="">none</option>{sites.map((s) => <option key={s.id} value={s.id}>{s.name}{s.retired_at ? ' (retired)' : ''}</option>)}</Select></Field>}
       </div>
-      {(d.work === 'desk' || d.work === 'bench') && <Group title="Serves">
-        <Line label={d.work === 'desk' ? 'Checks in for' : 'Works for'} changed={e.changed('serves')}
+      {(d.work === 'desk' || d.work === 'bench') && <Fieldset title="Serves">
+        <FormRow label={d.work === 'desk' ? 'Checks in for' : 'Works for'} changed={e.changed('serves')}
           hint={d.work === 'desk' ? 'Its desk sends patients to these and sees their queues.' : 'Only these send it orders (and prescriptions, for a pharmacy); others are refused. With two labs, each works for its own.'}>
           <div className="flex flex-wrap gap-1.5">
-            <Pick on={d.serves.includes(null)} onClick={() => e.set({ serves: [null] })}>{every(d.work)[0].toUpperCase() + every(d.work).slice(1)}</Pick>
+            <Chip variant="check" shape="pill" on={d.serves.includes(null)} onClick={() => e.set({ serves: [null] })}>{every(d.work)[0].toUpperCase() + every(d.work).slice(1)}</Chip>
             {clients.map((v) => { const on = d.serves.includes(v.id); const rest = d.serves.filter((x): x is string => !!x && x !== v.id)
-              return <Pick key={v.id} on={on} onClick={() => e.set({ serves: on ? served(rest) : [...rest, v.id] })}>{v.name}</Pick> })}
-            {clients.length === 0 && <span className="text-xs text-neutral-400">No clinics or wards yet.</span>}</div>
-        </Line></Group>}
-      {flow && <Group title="Rules">
-        <Line label="After Done" changed={e.changed('after_done')} hint="Where Done (or Release on a bench) takes you.">
-          <Segmented value={d.after_done} onChange={(v) => e.set({ after_done: v })} options={[['next', 'Next patient'], ['queue', 'Back to the queue']]} /></Line>
+              return <Chip variant="check" shape="pill" key={v.id} on={on} onClick={() => e.set({ serves: on ? served(rest) : [...rest, v.id] })}>{v.name}</Chip> })}
+            {clients.length === 0 && <span className="text-12 text-faint">No clinics or wards yet.</span>}</div>
+        </FormRow></Fieldset>}
+      {flow && <Fieldset title="Rules">
+        <FormRow label="After Done" changed={e.changed('after_done')} hint="Where Done (or Release on a bench) takes you.">
+          <Segmented value={d.after_done} onChange={(v) => e.set({ after_done: v })} options={[['next', 'Next patient'], ['queue', 'Back to the queue']]} /></FormRow>
         {rules && <>
-        <Line label="When results are still out at Done" changed={e.changed('patients_wait')} hint="Whether the patient stays for them or is sent home and called back.">
-          <Segmented value={d.patients_wait ? 'wait' : 'home'} onChange={(v) => e.set({ patients_wait: v === 'wait' })} options={[['wait', 'Patient waits'], ['home', 'Patient goes home']]} /></Line>
-        <Line label="Results to review" changed={e.changed('review_results')} hint="Results for a patient who left before being seen again, and corrected results, always go to review.">
-          <Segmented value={d.review_results} onChange={(v) => e.set({ review_results: v })} options={REVIEW} /></Line>
-        <Line label="Notes" changed={e.changed('is_private')} hint={'In a private department every note is private: only the people who work here read it, and others see "Private note". Its medicines, results, problems, orders and its name stay visible to everyone who may read the record.'}>
-          <Segmented value={d.is_private ? 'private' : 'shared'} onChange={(v) => e.set({ is_private: v === 'private' })} options={[['shared', 'Shared'], ['private', 'Private department']]} /></Line>
-        <Line label="Kind of encounter" changed={e.changed('encounter_class')} hint={`What its ${d.work === 'stays' ? 'stays' : 'visits'} are called in a FHIR export (Encounter.class). Unless set, ${d.work === 'stays' ? 'a ward\'s are inpatient' : 'a clinic\'s are outpatient'}.`}>
-          <Select value={d.encounter_class} onChange={(x) => e.set({ encounter_class: x.target.value as EncounterClass })} className="max-w-60">{CLASSES.map(([k, l]) => <option key={k} value={k}>{l} · {k}</option>)}</Select></Line></>}
-      </Group>}
-      {screens.length > 0 && <Group title="Screens">
-        <Line label="Screens" changed={e.changed('screens')} hint="What the people here work in. A pack that is on may add its own; at least one stays.">
-          <div className="flex flex-wrap gap-1.5">{keys.map((k) => <Pick key={k} on={d.screens.includes(k)} onClick={() => flip(k)}>{screenName(k)}</Pick>)}</div></Line>
-        {d.screens.length > 1 && <Line label="Opens first" changed={e.changed('opens')} hint="The screen the department opens on.">
-          <Segmented value={d.opens} onChange={(v) => e.set({ opens: v })} options={d.screens.map((k): [string, string] => [k, screenName(k)])} /></Line>}
-      </Group>}
+        <FormRow label="When results are still out at Done" changed={e.changed('patients_wait')} hint="Whether the patient stays for them or is sent home and called back.">
+          <Segmented value={d.patients_wait ? 'wait' : 'home'} onChange={(v) => e.set({ patients_wait: v === 'wait' })} options={[['wait', 'Patient waits'], ['home', 'Patient goes home']]} /></FormRow>
+        <FormRow label="Results to review" changed={e.changed('review_results')} hint="Results for a patient who left before being seen again, and corrected results, always go to review.">
+          <Segmented value={d.review_results} onChange={(v) => e.set({ review_results: v })} options={REVIEW} /></FormRow>
+        <FormRow label="Notes" changed={e.changed('is_private')} hint={'In a private department every note is private: only the people who work here read it, and others see "Private note". Its medicines, results, problems, orders and its name stay visible to everyone who may read the record.'}>
+          <Segmented value={d.is_private ? 'private' : 'shared'} onChange={(v) => e.set({ is_private: v === 'private' })} options={[['shared', 'Shared'], ['private', 'Private department']]} /></FormRow>
+        <FormRow label="Kind of encounter" changed={e.changed('encounter_class')} hint={`What its ${d.work === 'stays' ? 'stays' : 'visits'} are called in a FHIR export (Encounter.class). Unless set, ${d.work === 'stays' ? 'a ward\'s are inpatient' : 'a clinic\'s are outpatient'}.`}>
+          <Select value={d.encounter_class} onChange={(x) => e.set({ encounter_class: x.target.value as EncounterClass })} className="max-w-60">{CLASSES.map(([k, l]) => <option key={k} value={k}>{l} · {k}</option>)}</Select></FormRow></>}
+      </Fieldset>}
+      {screens.length > 0 && <Fieldset title="Screens">
+        <FormRow label="Screens" changed={e.changed('screens')} hint="What the people here work in. A pack that is on may add its own; at least one stays.">
+          <div className="flex flex-wrap gap-1.5">{keys.map((k) => <Chip variant="check" shape="pill" key={k} on={d.screens.includes(k)} onClick={() => flip(k)}>{screenName(k)}</Chip>)}</div></FormRow>
+        {d.screens.length > 1 && <FormRow label="Opens first" changed={e.changed('opens')} hint="The screen the department opens on.">
+          <Segmented value={d.opens} onChange={(v) => e.set({ opens: v })} options={d.screens.map((k): [string, string] => [k, screenName(k)])} /></FormRow>}
+      </Fieldset>}
     </EditPanel>
     {existing && existing.work !== 'outside' && <PlacesEditor org={org} dept={existing} />}</> }
 
@@ -113,20 +112,20 @@ export function DepartmentsPage({ org }: { org: Organization }) {
     {e.isNew && <NewCard title="New department">{editor()}</NewCard>}
     {mayIn(org, 'manage:places', null) && <SitesSection org={org} />}
     {WORKS.map(([w, label]) => { const ds = org.departments.filter((d) => d.work === w); if (!ds.length) return null
-      return <Section key={w} id={`dept.${w}`} title={label} count={ds.length} summary={ds.map((d) => d.name).join(', ')}
+      return <Section flush key={w} id={`dept.${w}`} title={label} count={ds.length} summary={ds.map((d) => d.name).join(', ')}
         right={w !== 'outside' && <IconButton title={`Add to ${label.toLowerCase()}`} onClick={() => add(w)}><Plus className="h-3.5 w-3.5" /></IconButton>}>
-        <ul className="divide-y divide-neutral-100">{ds.map((d) => { const serves = d.work === 'desk' ? d.checks_in_for : d.serves
+        <ul className="divide-y divide-line">{ds.map((d) => { const serves = d.work === 'desk' ? d.checks_in_for : d.serves
           return <Row key={d.id} open={e.id === d.id && !e.isNew} editor={editor}
           onToggle={() => open(d.id, { name: d.name, work: d.work, site_id: d.site_id, serves: served(serves), patients_wait: d.patients_wait, review_results: d.review_results, is_private: d.is_private,
             after_done: d.after_done ?? 'next', encounter_class: d.encounter_class ?? classFor(d.work), screens: d.screens, opens: d.opens ?? d.screens[0] ?? DEFAULT_SCREEN[d.work] })}>
           <span className="w-48 truncate font-medium">{d.name}</span>
-          {d.site_name && <span className="text-xs text-neutral-400">{d.site_name}</span>}
+          {d.site_name && <span className="text-12 text-faint">{d.site_name}</span>}
           {d.is_visited && <span className="flex flex-wrap gap-1">
             <Badge>{d.patients_wait ? 'Patient waits' : 'Goes home'}</Badge><Badge>Review: {REVIEW.find(([k]) => k === d.review_results)?.[1].toLowerCase()}</Badge>{d.is_private && <Badge tone="amber">Private department</Badge>}
             {d.encounter_class && d.encounter_class !== classFor(d.work) && <Badge>{CLASSES.find(([k]) => k === d.encounter_class)?.[1] ?? d.encounter_class}</Badge>}</span>}
           {d.after_done === 'queue' && d.work !== 'desk' && d.work !== 'outside' && <Badge>Then: queue</Badge>}
           {d.screens.some((k) => k !== DEFAULT_SCREEN[d.work]) && <Badge tone="blue">{d.screens.map(screenName).join(' · ')}</Badge>}
-          {(d.work === 'desk' || d.work === 'bench') && <span className="text-xs text-neutral-500">{d.work === 'desk' ? 'checks in for' : 'works for'} {served(serves).map((x) => nameOf(x, d.work)).join(', ')}</span>}
+          {(d.work === 'desk' || d.work === 'bench') && <span className="text-12 text-faint">{d.work === 'desk' ? 'checks in for' : 'works for'} {served(serves).map((x) => nameOf(x, d.work)).join(', ')}</span>}
           <PlacesCount places={org.places.filter((p) => p.department_id === d.id)} />
         </Row> })}</ul>
       </Section> })}

@@ -3,8 +3,7 @@ import { ArrowDown, ArrowUp, ChevronRight, Plus } from 'lucide-react'
 import { Refusal, remove, save as saveRow, writeSetting } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
 import type { Department, Organization, Place } from '../../db/types'
-import { Badge, Button, IconButton, Input, Select, cn, errorText } from '../../ui'
-import { DeleteButton, EditPanel, Labeled, Line, RetireButton, Segmented, useDraft } from './parts'
+import { Badge, Button, DeleteButton, EditPanel, Field, FormRow, IconButton, Input, RetireButton, Segmented, Select, cn, errorText, useDraft } from '../../ui'
 import { useSave } from './save'
 
 // the word is a label: a bed may sit in a room (spec/openCare.md §3.3)
@@ -17,7 +16,7 @@ export function PlacesCount({ places }: { places: Place[] }) {
   const by = LABELS.map(([k, w]): [number, string] => [places.filter((p) => p.label === k).length, w.toLowerCase()]).filter(([n]) => n)
   const closed = places.filter((p) => p.closed).length
   if (!places.length) return null
-  return <span className="text-xs text-neutral-500">{by.map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`).join(' · ')}{closed ? ` · ${closed} closed` : ''}</span>
+  return <span className="text-12 text-faint">{by.map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`).join(' · ')}{closed ? ` · ${closed} closed` : ''}</span>
 }
 
 /** a place is a row (save) and closed is its place.closed setting (§4.6), each written only when it changed */
@@ -51,45 +50,45 @@ export function PlacesEditor({ org, dept }: { org: Organization; dept: Departmen
       onSave={() => edit.mutate({ id: p.id, d, was: p }, { onSuccess: e.done })}
       aside={inUse ? <RetireButton what={p.name} onRetire={() => retire.mutate(p.id, { onSuccess: e.done })} /> : <DeleteButton what={p.name} onDelete={() => del.mutate(p.id, { onSuccess: e.done })} />}>
       <div className="grid gap-3 sm:grid-cols-[9rem_1fr]">
-        <Labeled label="Kind" changed={e.changed('label')}><Select value={d.label} onChange={(x) => e.set({ label: x.target.value })}>{LABELS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Labeled>
-        <Labeled label="Name" changed={e.changed('name')} hint={taken(d.name, p.id) ? `There is already a ${d.name.trim()} here.` : undefined}>
-          <Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} required autoFocus /></Labeled>
+        <Field label="Kind" changed={e.changed('label')}><Select value={d.label} onChange={(x) => e.set({ label: x.target.value })}>{LABELS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
+        <Field label="Name" changed={e.changed('name')} hint={taken(d.name, p.id) ? `There is already a ${d.name.trim()} here.` : undefined}>
+          <Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} required autoFocus /></Field>
       </div>
-      <Line label="Open for patients" changed={e.changed('closed') || e.changed('reason')} hint="Closed, it shows greyed and takes no one new; a patient already in it stays.">
+      <FormRow label="Open for patients" changed={e.changed('closed') || e.changed('reason')} hint="Closed, it shows greyed and takes no one new; a patient already in it stays.">
         <div className="flex flex-wrap items-center gap-2">
           <Segmented value={d.closed ? 'closed' : 'open'} onChange={(v) => e.set({ closed: v === 'closed' })} options={[['open', 'Open'], ['closed', 'Closed']]} />
-          {d.closed && <Input value={d.reason} onChange={(x) => e.set({ reason: x.target.value })} placeholder="Why: cleaning, repair…" className="h-8 max-w-64" />}</div></Line>
-      {inUse && <p className="text-xs text-neutral-600">Retired, it leaves the bed board and the lists of places; every entry that names it keeps it.</p>}
+          {d.closed && <Input value={d.reason} onChange={(x) => e.set({ reason: x.target.value })} placeholder="Why: cleaning, repair…" className="h-8 max-w-64" />}</div></FormRow>
+      {inUse && <p className="text-12 text-muted">Retired, it leaves the bed board and the lists of places; every entry that names it keeps it.</p>}
     </EditPanel> }
 
-  return <div className="border-b border-teal-200 bg-teal-50/30 px-4 py-4">
-    <div className="overflow-hidden rounded-lg bg-white ring-1 ring-neutral-200">
+  return <div className="border-b border-accent-line bg-accent-soft/30 px-4 py-4">
+    <div className="overflow-hidden rounded-lg bg-surface ring-1 ring-line">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 pb-2 pt-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Places · {places.length}</p>
-        <p className="text-xs text-neutral-500">Beds, rooms, chairs and cubicles, in the order {dept.work === 'stays' ? 'the bed board shows them' : 'they are listed'}.</p>
-        {reorder.error && <p className="text-sm text-red-700">{errorText(reorder.error)}</p>}
+        <p className="text-11 font-semibold uppercase tracking-wider text-faint">Places · {places.length}</p>
+        <p className="text-12 text-faint">Beds, rooms, chairs and cubicles, in the order {dept.work === 'stays' ? 'the bed board shows them' : 'they are listed'}.</p>
+        {reorder.error && <p className="text-14 text-danger">{errorText(reorder.error)}</p>}
       </div>
-      {places.length > 0 && <ul className="divide-y divide-neutral-100 border-t border-neutral-100">{places.map((p, i) => { const on = e.id === p.id; const parent = p.parent_id && places.find((x) => x.id === p.parent_id)?.name
+      {places.length > 0 && <ul className="divide-y divide-line border-t border-line">{places.map((p, i) => { const on = e.id === p.id; const parent = p.parent_id && places.find((x) => x.id === p.parent_id)?.name
         return <li key={p.id}>
-          <div className={cn('flex items-center gap-2 px-2 text-sm', on && 'bg-teal-50/50')}>
+          <div className={cn('flex items-center gap-2 px-2 text-14', on && 'bg-accent-soft/50')}>
             <span className="flex shrink-0"><IconButton type="button" title="Up" onClick={() => move(i, -1)} disabled={i === 0 || reorder.isPending}><ArrowUp className="h-3 w-3" /></IconButton>
               <IconButton type="button" title="Down" onClick={() => move(i, 1)} disabled={i === places.length - 1 || reorder.isPending}><ArrowDown className="h-3 w-3" /></IconButton></span>
-            <button type="button" onClick={() => open(p)} aria-expanded={on} className="group flex min-w-0 flex-1 items-center gap-3 py-2 text-left">
-              <span className="w-16 shrink-0 text-xs text-neutral-500">{word(p.label)}</span>
-              <span className={cn('truncate font-medium', p.closed && 'text-neutral-400')}>{p.name}</span>
-              {parent && <span className="text-xs text-neutral-400">in {parent}</span>}
+            <button type="button" onClick={() => open(p)} aria-expanded={on} className="group flex min-w-0 flex-1 items-center gap-3 py-2 text-start">
+              <span className="w-16 shrink-0 text-12 text-faint">{word(p.label)}</span>
+              <span className={cn('truncate font-medium', p.closed && 'text-faint')}>{p.name}</span>
+              {parent && <span className="text-12 text-faint">in {parent}</span>}
               {p.closed && <Badge tone="amber">closed{p.closed_reason ? ` · ${p.closed_reason}` : ''}</Badge>}
-              <ChevronRight className={cn('ml-auto h-4 w-4 shrink-0 text-neutral-300 transition-transform group-hover:text-neutral-500', on && 'rotate-90 text-teal-700')} />
+              <ChevronRight className={cn('ms-auto h-4 w-4 shrink-0 text-faint transition-transform group-hover:text-faint', on && 'rotate-90 text-accent')} />
             </button>
           </div>
           {on && editor(p)}
         </li> })}</ul>}
-      <form className="flex flex-wrap items-center gap-2 border-t border-neutral-100 px-4 py-2.5"
+      <form className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5"
         onSubmit={(x) => { x.preventDefault(); if (name && !taken(name) && !add.isPending) add.mutate({ id: newId(), label, name, position: Math.max(0, ...places.map((p) => p.position)) + 1 }, { onSuccess: () => setTyped(null) }) }}>
         <Select value={label} onChange={(x) => { setLabel(x.target.value); setTyped(null) }} className="h-8 w-28" aria-label="Kind">{LABELS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
         <Input value={typed ?? next} onChange={(x) => setTyped(x.target.value)} className="h-8 w-40" aria-label="Name" />
         <Button type="submit" size="sm" variant="outline" disabled={!name || taken(name) || add.isPending}><Plus className="h-3.5 w-3.5" />{add.isPending ? 'Adding…' : 'Add'}</Button>
-        {add.error ? <span className="text-sm text-red-700">{errorText(add.error)}</span> : taken(name) && <span className="text-xs text-amber-700">There is already a {name} here.</span>}
+        {add.error ? <span className="text-14 text-danger">{errorText(add.error)}</span> : taken(name) && <span className="text-12 text-warn">There is already a {name} here.</span>}
       </form>
     </div>
   </div>

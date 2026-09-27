@@ -4,11 +4,10 @@ import { writeSetting } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
 import type { Organization } from '../../db/types'
 import type { SettingData } from '../../db/shapes.generated'
-import { Badge, Button, Card, Input, Select, cn } from '../../ui'
+import { Badge, Button, Card, Chip, EditPanel, Empty, Field, Fieldset, Input, NewCard, PageHead, RetireButton, Row, SearchInput, Section, Select, cn, useDraft } from '../../ui'
 import { readPresetLine } from '../visit/expand'
 import { replyFormFor } from '../../renderers'
 import { PROBLEMS } from '../visit/catalog'
-import { EditPanel, Empty, Filter, Group, Labeled, NewCard, PageHead, Pick, RetireButton, Row, Section, useDraft } from './parts'
 import { useSave } from './save'
 
 // ── Presets ──
@@ -33,37 +32,37 @@ export function TemplatesPage({ org }: { org: Organization }) {
       onSave={() => save.mutate({ id: e.id!, data: { name: d.name.trim(), department_id: d.department_id || null, services: d.items, shortcut: sc || null, lines } }, { onSuccess: e.done })}
       aside={existing && <RetireButton what={existing.name} onRetire={() => retire.mutate(existing.id, { onSuccess: e.done })} />}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Labeled label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Antenatal booking" required autoFocus /></Labeled>
-        <Labeled label="Offered to" changed={e.changed('department_id')} hint="Everyone, or only one department's staff."><Select value={d.department_id} onChange={(x) => e.set({ department_id: x.target.value })}><option value="">everyone</option>{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></Labeled>
-        <Labeled label="Shortcut" changed={e.changed('shortcut')} hint={scBad ? 'Letters, digits and _ only, and not taken by another preset.' : lines.length && !sc ? 'Lines run only from a shortcut — give it one.' : 'Typed in the visit as #dm — runs the services and the lines below. Headings only (S: O: A: P:) open a note to fill.'}>
-          <Input aria-label="Shortcut" value={d.shortcut} onChange={(x) => e.set({ shortcut: x.target.value })} placeholder="#dm" className={cn('font-mono', (scBad || (lines.length > 0 && !sc)) && 'border-red-400')} /></Labeled>
+        <Field label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Antenatal booking" required autoFocus /></Field>
+        <Field label="Offered to" changed={e.changed('department_id')} hint="Everyone, or only one department's staff."><Select value={d.department_id} onChange={(x) => e.set({ department_id: x.target.value })}><option value="">everyone</option>{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></Field>
+        <Field label="Shortcut" changed={e.changed('shortcut')} hint={scBad ? 'Letters, digits and _ only, and not taken by another preset.' : lines.length && !sc ? 'Lines run only from a shortcut — give it one.' : 'Typed in the visit as #dm — runs the services and the lines below. Headings only (S: O: A: P:) open a note to fill.'}>
+          <Input aria-label="Shortcut" value={d.shortcut} onChange={(x) => e.set({ shortcut: x.target.value })} placeholder="#dm" className={cn('font-mono', (scBad || (lines.length > 0 && !sc)) && 'border-danger')} /></Field>
       </div>
-      <Group title={`Lines · ${lines.length}`}>
+      <Fieldset title={`Lines · ${lines.length}`}>
         <textarea aria-label="Lines" value={d.lines} onChange={(x) => e.set({ lines: x.target.value })} rows={Math.max(3, lines.length + 1)} spellCheck={false} placeholder={'/rx metformin 500 bd 30d for dm\nplan: review HbA1c in 3 months'}
-          className="-mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-[13px] focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20" />
-        <p className="-mt-1 text-xs text-neutral-500">One line each, as typed in the visit’s composer: /rx, /dx, /al, /v, /order, or a note line (plan: …). The slash may be left out here. They become drafts the clinician can change before Done.</p>
-        {checked.some((c) => c.r) && <p className="text-xs text-red-700">Fix the lines in red first — the visit could not read them.</p>}
-        {checked.length > 0 && <ul className="grid gap-0.5 text-xs">{checked.map((c, i) => <li key={i} className={c.r ? 'text-red-700' : 'text-neutral-600'}><span className="font-mono text-neutral-400">{i + 1}</span> {c.r ?? c.what}</li>)}</ul>}
-      </Group>
-      <Group title={`Services · ${d.items.length} chosen`}>
-        {d.items.length > 0 && <div className="-mt-1 flex flex-wrap gap-1.5">{d.items.map((id) => <Pick key={id} on onClick={() => flip(id)}>{svc(id)?.name ?? '?'}</Pick>)}</div>}
-        {d.items.length === 0 && lines.length === 0 && <p className="-mt-2 text-xs text-amber-700">Choose a service or write a line.</p>}
-        <Filter value={pq} onChange={setPq} placeholder="Find a service… (↵ adds the first)" onEnter={() => { if (f && findable[0]) { flip(findable[0].id); setPq('') } }} />
+          className="-mt-1 w-full rounded-lg border border-line-strong px-3 py-2 font-mono text-13 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20" />
+        <p className="-mt-1 text-12 text-faint">One line each, as typed in the visit’s composer: /rx, /dx, /al, /v, /order, or a note line (plan: …). The slash may be left out here. They become drafts the clinician can change before Done.</p>
+        {checked.some((c) => c.r) && <p className="text-12 text-danger">Fix the lines in red first — the visit could not read them.</p>}
+        {checked.length > 0 && <ul className="grid gap-0.5 text-12">{checked.map((c, i) => <li key={i} className={c.r ? 'text-danger' : 'text-muted'}><span className="font-mono text-faint">{i + 1}</span> {c.r ?? c.what}</li>)}</ul>}
+      </Fieldset>
+      <Fieldset title={`Services · ${d.items.length} chosen`}>
+        {d.items.length > 0 && <div className="-mt-1 flex flex-wrap gap-1.5">{d.items.map((id) => <Chip variant="check" shape="pill" key={id} on onClick={() => flip(id)}>{svc(id)?.name ?? '?'}</Chip>)}</div>}
+        {d.items.length === 0 && lines.length === 0 && <p className="-mt-2 text-12 text-warn">Choose a service or write a line.</p>}
+        <SearchInput className="max-w-sm" value={pq} onChange={setPq} placeholder="Find a service… (↵ adds the first)" onEnter={() => { if (f && findable[0]) { flip(findable[0].id); setPq('') } }} />
         <div className="grid max-h-72 gap-3 overflow-y-auto">{org.departments.map((dep) => { const ss = findable.filter((s) => s.department_id === dep.id); if (!ss.length) return null
-          return <div key={dep.id}><p className="mb-1 text-[11px] text-neutral-500">{dep.name}</p><div className="flex flex-wrap gap-1.5">{ss.map((s) => <Pick key={s.id} on={false} onClick={() => flip(s.id)}>{s.name}</Pick>)}</div></div> })}</div>
-      </Group>
+          return <div key={dep.id}><p className="mb-1 text-11 text-faint">{dep.name}</p><div className="flex flex-wrap gap-1.5">{ss.map((s) => <Chip variant="check" shape="pill" key={s.id} on={false} onClick={() => flip(s.id)}>{s.name}</Chip>)}</div></div> })}</div>
+      </Fieldset>
     </EditPanel> }
 
   return <div className="grid gap-4">
     <PageHead title="Presets" hint="What is often written together — services and speed lines — run by typing its #shortcut in the visit (its services also by /order <name>)." right={<Button size="sm" onClick={() => open(newId(), { name: '', department_id: '', items: [], shortcut: '', lines: '' }, true)}><Plus className="h-3.5 w-3.5" />Preset</Button>} />
     {e.isNew && <NewCard title="New preset">{editor()}</NewCard>}
     {groups.map(([dep, label]) => { const ts = org.templates.filter((t) => (t.department_id ?? '') === dep); if (!ts.length) return null
-      return <Section key={dep || 'all'} id={`preset.${dep || 'all'}`} title={label} count={ts.length} summary={ts.map((t) => t.name).join(', ')}>
-        <ul className="divide-y divide-neutral-100">{ts.map((t) => <Row key={t.id} open={e.id === t.id && !e.isNew} editor={editor}
+      return <Section flush key={dep || 'all'} id={`preset.${dep || 'all'}`} title={label} count={ts.length} summary={ts.map((t) => t.name).join(', ')}>
+        <ul className="divide-y divide-line">{ts.map((t) => <Row key={t.id} open={e.id === t.id && !e.isNew} editor={editor}
           onToggle={() => open(t.id, { name: t.name, department_id: t.department_id ?? '', items: t.items.map((i) => i.service_id), shortcut: t.shortcut ?? '', lines: (t.lines ?? []).join('\n') })}>
-          <span className="w-48 truncate font-medium">{t.name}{t.shortcut && <span className="ml-1.5 font-mono text-xs font-normal text-teal-800">#{t.shortcut}</span>}</span>
+          <span className="w-48 truncate font-medium">{t.name}{t.shortcut && <span className="ms-1.5 font-mono text-12 font-normal text-accent">#{t.shortcut}</span>}</span>
           {t.items.length > 0 && <Badge>{t.items.length} services</Badge>}{(t.lines ?? []).length > 0 && <Badge tone="brand">{t.lines.length} lines</Badge>}
-          <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">{[...t.items.map((i) => svc(i.service_id)?.name ?? '?'), ...(t.lines ?? [])].join(' · ')}</span>
+          <span className="min-w-0 flex-1 truncate text-12 text-faint">{[...t.items.map((i) => svc(i.service_id)?.name ?? '?'), ...(t.lines ?? [])].join(' · ')}</span>
         </Row>)}</ul>
       </Section> })}
     {org.templates.length === 0 && !e.isNew && <Card><Empty>No presets yet.</Empty></Card>}

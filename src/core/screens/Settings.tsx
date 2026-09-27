@@ -1,17 +1,16 @@
 import { useMemo, useState } from 'react'
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Palette, Plus, Puzzle, Users, X } from 'lucide-react'
 import { read, remove, save as saveRow, writeSetting } from '../db/rpc'
 import { useDepartment } from '../hooks/organization'
 import { newId } from '../hooks/writes'
 import type { Organization } from '../db/types'
-import { Badge, Button, Centered, IconButton, Input, NavItem, Select, Spinner, cn, dateTime, errorText } from '../ui'
+import { Avatar, Badge, Button, Callout, Centered, DeleteButton, EditPanel, Empty, Field, Fieldset, FormRow, IconButton, Input, NavItem, NewCard, PageHead, Row, SaveState, SearchInput, Section, Segmented, Select, Spinner, Switch, dateTime, errorText, useDraft } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
 import { PAGE_ACTION, useMfaNeeded, useSave } from './settings/save'
 import { RolesPage } from './settings/Roles'
-import { DeleteButton, NewCard, EditPanel, Empty, Filter, Group, Labeled, Line, PageHead, Row, Saved, Section, Segmented, Unsaved, useDraft } from './settings/parts'
 import { ReadsPage } from './settings/Reads'
 import { DepartmentsPage } from './settings/Departments'
 import { TemplatesPage } from './settings/Presets'
@@ -25,14 +24,13 @@ export function SettingsScreen() {
   const mfaNeeded = useMfaNeeded((s) => s.needed)
   if (!org) return <Centered><Spinner /></Centered>
   const pages = PAGES.filter(([k]) => can(PAGE_ACTION[k]))
-  if (!pages.length) return <Centered><p className="text-sm text-neutral-500">Settings need a role that manages something here.</p></Centered>
+  if (!pages.length) return <Centered><p className="text-14 text-faint">Settings need a role that manages something here.</p></Centered>
   const counts: Record<string, number | string> = { departments: org.departments.length, services: org.services.length, users: org.users.filter((u) => !u.retired_at).length, roles: org.roles.length,
     templates: org.templates.length, packs: `${org.packs.filter((p) => p.enabled).length}/${org.packs.length}` }
   return <div className="mx-auto grid max-w-6xl gap-6 p-4 md:grid-cols-[200px_1fr]">
     <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:grid md:content-start md:gap-0.5 md:overflow-visible md:px-0 print:hidden">
-      <p className="hidden px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500 md:block">Settings</p>
-      {pages.map(([k, l, Icon]) => <NavLink key={k} to={`/settings/${k}`} className={({ isActive }) => cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors', isActive ? 'bg-teal-50 font-medium text-teal-900' : 'text-neutral-600 hover:bg-neutral-100')}>
-        <Icon className="h-4 w-4 shrink-0 opacity-70" />{l}{counts[k] !== undefined && <span className="ml-auto pl-2 text-[11px] text-neutral-400 tnum">{counts[k]}</span>}</NavLink>)}
+      <p className="hidden px-3 pb-2 text-11 font-semibold uppercase tracking-[0.08em] text-faint md:block">Settings</p>
+      {pages.map(([k, l, Icon]) => <NavItem key={k} to={`/settings/${k}`} icon={Icon} count={counts[k]} className="shrink-0">{l}</NavItem>)}
       <NavItem to="/design" icon={Palette} className="shrink-0 md:mt-3">Design system</NavItem>
     </nav>
     <div className="min-w-0">{mfaNeeded && <Mfa onDone={() => useMfaNeeded.getState().set(false)} />}<Routes>
@@ -48,7 +46,7 @@ export function SettingsScreen() {
     </Routes></div>
   </div>
 }
-const Err = ({ e }: { e: Error | null }) => e ? <p className="px-4 py-2 text-sm text-red-700">{errorText(e)}</p> : null
+const Err = ({ e }: { e: Error | null }) => e ? <p className="px-4 py-2 text-14 text-danger">{errorText(e)}</p> : null
 
 // ── Organization ──
 type Change = { id: string; at: string; action: string; what: string; user_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
@@ -66,19 +64,19 @@ function OrganizationPage({ org }: { org: Organization }) {
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, (id) => names.get(id) ?? `${id.slice(0, 8)}…`); return s.length > 60 ? `${s.slice(0, 60)}…` : s || '—' }
   return <div className="grid gap-4">
     <PageHead title={org.organization.name} hint="Settings that hold for the whole organization, and what changed lately." />
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{tiles.map(([k, l, n]) => <Link key={k} to={`/settings/${k}`} className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3 shadow-xs transition-colors hover:border-teal-300">
-      <p className="text-xl font-semibold tnum">{n}</p><p className="text-xs text-neutral-500">{l}</p></Link>)}</div>
-    {org.parked_pack_calls > 0 && <Link to="/settings/packs" className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-800 ring-1 ring-red-200">{org.parked_pack_calls} pack calls are parked and waiting. Check the packs.</Link>}
-    <Section id="org.general" title="The clinic" summary={`${org.organization.time_zone.replace(/_/g, ' ')} · record ${org.organization.record_view === 'entries' ? 'as all entries' : 'by visit'}`}>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{tiles.map(([k, l, n]) => <Link key={k} to={`/settings/${k}`} className="rounded-xl border border-line bg-surface px-4 py-3 shadow-xs transition-colors hover:border-accent-line">
+      <p className="text-22 font-semibold tnum">{n}</p><p className="text-12 text-faint">{l}</p></Link>)}</div>
+    {org.parked_pack_calls > 0 && <Callout tone="danger"><Link to="/settings/packs" className="rounded-sm hover:underline focus-ring">{org.parked_pack_calls} pack calls are parked and waiting. Check the packs.</Link></Callout>}
+    <Section flush id="org.general" title="The clinic" summary={`${org.organization.time_zone.replace(/_/g, ' ')} · record ${org.organization.record_view === 'entries' ? 'as all entries' : 'by visit'}`}>
       <div className="grid gap-6 p-4"><ClinicZone org={org} /><RecordViewSetting org={org} /></div>
     </Section>
-    <Section id="org.changes" title="Recent changes" count={ch.data?.length} summary="the last 30 changes to settings, newest first">
+    <Section flush id="org.changes" title="Recent changes" count={ch.data?.length} summary="the last 30 changes to settings, newest first">
       {ch.isLoading ? <div className="p-4"><Spinner /></div> : (ch.data ?? []).length === 0 ? <Empty>Nothing changed yet.</Empty>
-      : <ul className="divide-y divide-neutral-100 text-xs">{ch.data!.map((c) => <li key={c.id} className="grid gap-1 px-4 py-2 sm:grid-cols-[8.5rem_7.5rem_1fr] sm:gap-3">
-          <span className="text-neutral-400 tnum">{dateTime(c.at)}</span>
+      : <ul className="divide-y divide-line text-12">{ch.data!.map((c) => <li key={c.id} className="grid gap-1 px-4 py-2 sm:grid-cols-[8.5rem_7.5rem_1fr] sm:gap-3">
+          <span className="text-faint tnum">{dateTime(c.at)}</span>
           <span className="truncate"><Badge>{c.action} {c.what.replace(/^setting:/, '').replace(/[._]/g, ' ')}</Badge></span>
-          <span className="min-w-0">{c.user_id && <span className="mr-2 font-medium text-neutral-700">{names.get(c.user_id) ?? ''}</span>}
-            {Object.entries(changed(c)).map(([k, v]) => <span key={k} className="mr-3 inline-block text-neutral-500">{k.replace(/_/g, ' ')} <span className="text-neutral-800">{val(v)}</span></span>)}</span></li>)}</ul>}
+          <span className="min-w-0">{c.user_id && <span className="me-2 font-medium text-muted">{names.get(c.user_id) ?? ''}</span>}
+            {Object.entries(changed(c)).map(([k, v]) => <span key={k} className="me-3 inline-block text-faint">{k.replace(/_/g, ' ')} <span className="text-fg">{val(v)}</span></span>)}</span></li>)}</ul>}
     </Section>
   </div>
 }
@@ -88,37 +86,36 @@ function ClinicZone({ org }: { org: Organization }) {
   const save = useSave((zone: string) => writeSetting({ key: 'organization.time_zone', data: { zone } })); const saved = org.organization.time_zone; const [tz, setTz] = useState(saved)
   const zones = useMemo(() => { try { return (Intl as unknown as { supportedValuesOf: (k: string) => string[] }).supportedValuesOf('timeZone') } catch { return [saved] } }, [saved])
   const now = new Date().toLocaleString(undefined, { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit' })
-  return <Line label="Time zone" hint={'Times on every screen, and "today" in queues and counts, follow this clock.'} changed={tz !== saved}>
+  return <FormRow label="Time zone" hint={'Times on every screen, and "today" in queues and counts, follow this clock.'} changed={tz !== saved}>
     <div className="flex flex-wrap items-center gap-2">
       <Select value={tz} onChange={(e) => setTz(e.target.value)} className="w-64">{[...new Set([saved, tz, 'UTC', ...zones])].map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>)}</Select>
-      <span className="text-xs text-neutral-500">now {now} there</span>
+      <span className="text-12 text-faint">now {now} there</span>
       <SaveUndo dirty={tz !== saved} save={save} onSave={() => save.mutate(tz)} onUndo={() => setTz(saved)} />
     </div>
-  </Line>
+  </FormRow>
 }
 
 /** how every department's staff see the record: by visit, or every entry newest first (one choice for the organization) */
 function RecordViewSetting({ org }: { org: Organization }) {
   const save = useSave((view: Organization['organization']['record_view']) => writeSetting({ key: 'organization.record_view', data: { view } })); const saved = org.organization.record_view ?? 'visits'; const [v, setV] = useState(saved)
-  return <Line label="The record shows" changed={v !== saved}
+  return <FormRow label="The record shows" changed={v !== saved}
     hint={`For everyone in ${org.organization.name}. By visit groups the record into visits, newest activity first; all entries lists every entry newest first.`}>
     <div className="flex flex-wrap items-center gap-2">
       <Segmented value={v} onChange={setV} options={[['visits', 'By visit'], ['entries', 'All entries']]} />
       <SaveUndo dirty={v !== saved} save={save} onSave={() => save.mutate(v)} onUndo={() => setV(saved)} />
     </div>
-  </Line>
+  </FormRow>
 }
 
 /** a single setting's own save: appears once it differs from what is saved */
 function SaveUndo({ dirty, save, onSave, onUndo }: { dirty: boolean; save: { error: Error | null; isSuccess: boolean; isPending: boolean }; onSave: () => void; onUndo: () => void }) {
-  if (save.error) return <span className="text-sm text-red-700">{errorText(save.error)}</span>
-  if (!dirty) return save.isSuccess ? <Saved /> : null
-  return <><Button size="sm" onClick={onSave} disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save'}</Button><Button size="sm" variant="ghost" onClick={onUndo}>Undo</Button><Unsaved /></>
+  if (save.error) return <span className="text-14 text-danger">{errorText(save.error)}</span>
+  if (!dirty) return save.isSuccess ? <SaveState state="saved" /> : null
+  return <><Button size="sm" onClick={onSave} disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save'}</Button><Button size="sm" variant="ghost" onClick={onUndo}>Undo</Button><SaveState state="unsaved" /></>
 }
 
 // ── Users ──
 const KINDS = ['staff', 'pack', 'patient', 'proxy']
-const initials = (name: string) => name.split(/\s+/).filter((w) => w && !/^(dr|prof|mr|mrs|ms)\.?$/i.test(w)).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 type UserDraft = { name: string; title: string; kind: string; roles: { role_id: string; department_id: string | null }[]; retired: boolean }
 function UsersPage({ org }: { org: Organization }) {
   const save = useSave((r: Record<string, unknown>) => saveRow('user', r)); const del = useSave((id: string) => remove('user', id)); const e = useDraft<UserDraft>(); const [q, setQ] = useState('')
@@ -136,30 +133,30 @@ function UsersPage({ org }: { org: Organization }) {
       onSave={() => save.mutate({ id: e.id, ...(was ? {} : { kind: d.kind }), name: d.name.trim(), title: d.title || null, retired: d.retired,
         ...(!was || e.changed('roles') ? { holdings: d.roles } : {}) }, { onSuccess: e.done })}>
       <div className="grid gap-3 sm:grid-cols-[1fr_8rem_9rem]">
-        <Labeled label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Amina Hassan" required autoFocus /></Labeled>
-        <Labeled label="Title" changed={e.changed('title')}><Input value={d.title} onChange={(x) => e.set({ title: x.target.value })} placeholder="Dr." /></Labeled>
-        <Labeled label="Kind" changed={e.changed('kind')} hint={was ? 'Set when the user is made.' : undefined}><Select value={d.kind} disabled={!!was} onChange={(x) => e.set({ kind: x.target.value })}>{KINDS.map((k) => <option key={k}>{k}</option>)}</Select></Labeled>
+        <Field label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Amina Hassan" required autoFocus /></Field>
+        <Field label="Title" changed={e.changed('title')}><Input value={d.title} onChange={(x) => e.set({ title: x.target.value })} placeholder="Dr." /></Field>
+        <Field label="Kind" changed={e.changed('kind')} hint={was ? 'Set when the user is made.' : undefined}><Select value={d.kind} disabled={!!was} onChange={(x) => e.set({ kind: x.target.value })}>{KINDS.map((k) => <option key={k}>{k}</option>)}</Select></Field>
       </div>
-      <Group title="Roles">
-        <p className="-mt-2 text-xs text-neutral-500">What this user may do, and where. A role for every department holds everywhere.</p>
-        {d.roles.length === 0 && <p className="text-xs text-amber-700">No roles: this user can sign in but do nothing.</p>}
+      <Fieldset title="Roles">
+        <p className="-mt-2 text-12 text-faint">What this user may do, and where. A role for every department holds everywhere.</p>
+        {d.roles.length === 0 && <p className="text-12 text-warn">No roles: this user can sign in but do nothing.</p>}
         {d.roles.map((r, i) => <div key={i} className="grid grid-cols-[1fr_1fr_1.5rem] items-center gap-2">
           <Select value={r.role_id} onChange={(x) => setRole(i, { role_id: x.target.value })}>{org.roles.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select>
           <Select value={r.department_id ?? ''} onChange={(x) => setRole(i, { department_id: x.target.value || null })}><option value="">every department</option>{org.departments.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select>
-          <IconButton type="button" title="Remove role" className="hover:text-red-700" onClick={() => e.set({ roles: d.roles.filter((_, j) => j !== i) })}><X className="h-3.5 w-3.5" /></IconButton></div>)}
+          <IconButton type="button" title="Remove role" tone="danger" onClick={() => e.set({ roles: d.roles.filter((_, j) => j !== i) })}><X className="h-3.5 w-3.5" /></IconButton></div>)}
         <div><Button type="button" size="sm" variant="outline" onClick={() => e.set({ roles: [...d.roles, { role_id: org.roles[0]?.id ?? '', department_id: null }] })}><Plus className="h-3.5 w-3.5" />Role</Button></div>
-      </Group>
-      <Line label="Status" changed={e.changed('retired')} hint="A retired user can no longer sign in. Everything they wrote stays on the record.">
-        <Segmented value={d.retired ? 'retired' : 'active'} onChange={(v) => e.set({ retired: v === 'retired' })} options={[['active', 'Active'], ['retired', 'Retired']]} /></Line>
+      </Fieldset>
+      <FormRow label="Status" changed={e.changed('retired')} hint="A retired user can no longer sign in. Everything they wrote stays on the record.">
+        <Segmented value={d.retired ? 'retired' : 'active'} onChange={(v) => e.set({ retired: v === 'retired' })} options={[['active', 'Active'], ['retired', 'Retired']]} /></FormRow>
     </EditPanel> }
 
-  const list = (us: Organization['users']) => <ul className="divide-y divide-neutral-100">{us.map((u) => <Row key={u.id} open={e.id === u.id && !e.isNew} editor={editor} muted={!!u.retired_at}
+  const list = (us: Organization['users']) => <ul className="divide-y divide-line">{us.map((u) => <Row key={u.id} open={e.id === u.id && !e.isNew} editor={editor} muted={!!u.retired_at}
     onToggle={() => open(u.id, { name: u.name, title: u.title ?? '', kind: u.kind, roles: u.roles.map((r) => ({ role_id: r.role_id, department_id: r.department_id })), retired: !!u.retired_at })}>
-    <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold', u.retired_at ? 'bg-neutral-100 text-neutral-400' : 'bg-teal-50 text-teal-800')}>{initials(u.name)}</span>
-    <span className="w-48 truncate"><span className="font-medium">{u.name}</span>{u.title && <span className="ml-1.5 text-xs text-neutral-400">{u.title}</span>}</span>
+    <Avatar name={u.name} muted={!!u.retired_at} />
+    <span className="w-48 truncate"><span className="font-medium">{u.name}</span>{u.title && <span className="ms-1.5 text-12 text-faint">{u.title}</span>}</span>
     {u.kind !== 'staff' && <Badge tone="blue">{u.kind}</Badge>}
-    <span className="flex flex-wrap gap-1">{u.roles.map((r, i) => <Badge key={i} tone="brand">{roleName(r.role_id)}{r.department_id && <span className="ml-1 font-normal opacity-70">· {deptName(r.department_id)}</span>}</Badge>)}
-      {u.roles.length === 0 && <span className="text-xs text-neutral-400">no roles</span>}</span>
+    <span className="flex flex-wrap gap-1">{u.roles.map((r, i) => <Badge key={i} tone="brand">{roleName(r.role_id)}{r.department_id && <span className="ms-1 font-normal opacity-70">· {deptName(r.department_id)}</span>}</Badge>)}
+      {u.roles.length === 0 && <span className="text-12 text-faint">no roles</span>}</span>
     {!u.retired_at && !u.accepted_at && <Badge tone="amber">not signed in yet</Badge>}
   </Row>)}</ul>
   const active = shown.filter((u) => !u.retired_at); const retired = shown.filter((u) => u.retired_at)
@@ -167,10 +164,10 @@ function UsersPage({ org }: { org: Organization }) {
   return <div className="grid gap-4">
     <PageHead title="Users" hint="Who works here and what each may do. A new user gets a login when they accept the invitation (linked by an administrator outside this screen in v1)."
       right={<Button size="sm" onClick={() => open(newId(), { name: '', title: '', kind: 'staff', roles: [], retired: false }, true)}><Plus className="h-3.5 w-3.5" />User</Button>} />
-    <Filter value={q} onChange={setQ} placeholder="Filter by name, title or role…" />
+    <SearchInput className="max-w-sm" value={q} onChange={setQ} placeholder="Filter by name, title or role…" />
     {e.isNew && <NewCard title="New user">{editor()}</NewCard>}
-    <Section id="users.active" title="Active" count={active.length} summary={active.slice(0, 6).map((u) => u.name).join(', ')}>{active.length ? list(active) : <Empty>{f ? 'No one matches.' : 'No active users.'}</Empty>}</Section>
-    {retired.length > 0 && <Section id="users.retired" title="Retired" count={retired.length} start={false} summary="can no longer sign in">{list(retired)}</Section>}
+    <Section flush id="users.active" title="Active" count={active.length} summary={active.slice(0, 6).map((u) => u.name).join(', ')}>{active.length ? list(active) : <Empty>{f ? 'No one matches.' : 'No active users.'}</Empty>}</Section>
+    {retired.length > 0 && <Section flush id="users.retired" title="Retired" count={retired.length} start={false} summary="can no longer sign in">{list(retired)}</Section>}
   </div>
 }
 
@@ -183,16 +180,14 @@ function PacksPage({ org }: { org: Organization }) {
   const busy = on.isPending || off.isPending
   return <div className="grid gap-4">
     <PageHead title="Packs" hint="Add-ons installed on this server. Turn one on to use it in this organization." />
-    {org.parked_pack_calls > 0 && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-800 ring-1 ring-red-200">{org.parked_pack_calls} pack calls are parked and waiting.</p>}
-    <Section id="packs" title="Installed" count={org.packs.length} summary={org.packs.filter((p) => p.enabled).map((p) => p.name).join(', ') || 'none on'}>
+    {org.parked_pack_calls > 0 && <Callout tone="danger">{org.parked_pack_calls} pack calls are parked and waiting.</Callout>}
+    <Section flush id="packs" title="Installed" count={org.packs.length} summary={org.packs.filter((p) => p.enabled).map((p) => p.name).join(', ') || 'none on'}>
       {org.packs.length === 0 ? <Empty>No packs installed on this server yet.</Empty>
-      : <ul className="divide-y divide-neutral-100">{org.packs.map((p) => <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-          <span className="min-w-0 flex-1"><span className="font-medium">{p.name}</span> <span className="font-mono text-xs text-neutral-400">{p.key}</span></span>
+      : <ul className="divide-y divide-line">{org.packs.map((p) => <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-14">
+          <span className="min-w-0 flex-1"><span className="font-medium">{p.name}</span> <span className="font-mono text-12 text-faint">{p.key}</span></span>
           <Badge tone={p.enabled ? 'brand' : 'neutral'}>{p.enabled ? 'On' : 'Off'}</Badge>
-          <button type="button" role="switch" aria-checked={p.enabled} aria-label={`${p.name} ${p.enabled ? 'on' : 'off'}`} disabled={busy}
-            onClick={() => p.enabled ? confirm(`Turn off ${p.name}? What it adds stops working here until it is turned on again.`) && off.mutate(p.key) : on.mutate(p.key)}
-            className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50', p.enabled ? 'bg-teal-700' : 'bg-neutral-300')}>
-            <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all', p.enabled ? 'left-[18px]' : 'left-0.5')} /></button>
+          <Switch checked={p.enabled} label={p.name} disabled={busy}
+            onChange={() => p.enabled ? confirm(`Turn off ${p.name}? What it adds stops working here until it is turned on again.`) && off.mutate(p.key) : on.mutate(p.key)} />
         </li>)}</ul>}
       <Err e={on.error ?? off.error} />
     </Section>

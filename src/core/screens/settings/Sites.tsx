@@ -2,8 +2,7 @@ import { Plus } from 'lucide-react'
 import { save as saveRow } from '../../db/rpc'
 import { newId } from '../../hooks/writes'
 import type { Organization } from '../../db/types'
-import { Badge, IconButton, Input } from '../../ui'
-import { EditPanel, Empty, Labeled, Line, NewCard, RetireButton, Row, Section, Segmented, useDraft } from './parts'
+import { Badge, EditPanel, Empty, Field, FormRow, IconButton, Input, NewCard, RetireButton, Row, Section, Segmented, useDraft } from '../../ui'
 import { useSave } from './save'
 
 type SiteDraft = { name: string; retired: boolean }
@@ -21,21 +20,21 @@ export function SitesSection({ org }: { org: Organization }) {
     return <EditPanel dirty={e.dirty} saving={save.isPending} error={save.error} canSave={!!d.name.trim()} onCancel={e.cancel}
       onSave={() => save.mutate({ id: e.id!, name: d.name.trim(), retired: d.retired }, { onSuccess: e.done })}
       aside={was && !was.retired_at && <RetireButton what={was.name} onRetire={() => save.mutate({ id: was.id, name: was.name, retired: true }, { onSuccess: e.done })} />}>
-      <Labeled label="Name" changed={e.changed('name')} hint={ds.length ? `Departments here: ${ds.join(', ')}.` : 'Name its departments on the Departments page.'}>
-        <Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Main building" required autoFocus className="max-w-sm" /></Labeled>
-      {was?.retired_at && <Line label="Status" changed={e.changed('retired')} hint="Retired, it is no longer offered to departments.">
-        <Segmented value={d.retired ? 'retired' : 'active'} onChange={(v) => e.set({ retired: v === 'retired' })} options={[['active', 'Active'], ['retired', 'Retired']]} /></Line>}
+      <Field label="Name" changed={e.changed('name')} hint={ds.length ? `Departments here: ${ds.join(', ')}.` : 'Name its departments on the Departments page.'}>
+        <Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Main building" required autoFocus className="max-w-sm" /></Field>
+      {was?.retired_at && <FormRow label="Status" changed={e.changed('retired')} hint="Retired, it is no longer offered to departments.">
+        <Segmented value={d.retired ? 'retired' : 'active'} onChange={(v) => e.set({ retired: v === 'retired' })} options={[['active', 'Active'], ['retired', 'Retired']]} /></FormRow>}
     </EditPanel> }
 
   return <>
     {e.isNew && <NewCard title="New site">{editor()}</NewCard>}
-    <Section id="org.sites" title="Sites" count={live.length} summary={live.map((s) => s.name).join(', ') || 'none: one place'}
+    <Section flush id="org.sites" title="Sites" count={live.length} summary={live.map((s) => s.name).join(', ') || 'none: one place'}
       right={<IconButton title="Add a site" onClick={() => open(newId(), { name: '', retired: false }, true)}><Plus className="h-3.5 w-3.5" /></IconButton>}>
       {org.sites.length === 0 ? <Empty>No sites. With more than one building, add each; a department then names its own.</Empty>
-      : <ul className="divide-y divide-neutral-100">{org.sites.map((s) => { const ds = there(s.id)
+      : <ul className="divide-y divide-line">{org.sites.map((s) => { const ds = there(s.id)
         return <Row key={s.id} open={e.id === s.id && !e.isNew} editor={editor} muted={!!s.retired_at} onToggle={() => open(s.id, { name: s.name, retired: !!s.retired_at })}>
           <span className="w-48 truncate font-medium">{s.name}</span>{s.retired_at && <Badge>retired</Badge>}
-          <span className="min-w-0 truncate text-xs text-neutral-500">{ds.length ? ds.join(', ') : 'no departments'}</span>
+          <span className="min-w-0 truncate text-12 text-faint">{ds.length ? ds.join(', ') : 'no departments'}</span>
         </Row> })}</ul>}
     </Section>
   </>
