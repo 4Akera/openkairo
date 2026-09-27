@@ -408,15 +408,52 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   `export:fhir`, `manage:patients`, `manage:settings`, `manage:users`, `manage:roles`, `manage:places`, `erase:patient`.
 - Built-in roles (fixed ids): Owner `…c001` (every action, held everywhere), Doctor `…c002`, Nurse `…c003`, Reception `…c004`, Lab
   technician `…c005`. A pack may ship its own (Pharmacist `…ca01`).
-- Default screens: front desk (work `desk`), queue and visit (work `visits`), bench (work `bench`), bed board (work `stays`), record,
-  composer, settings. All of them write and read through the same two doors.
+- Default screens: front desk (work `desk`), queue and visit (work `visits`), bench (work `bench`), bed board (work `stays`), the
+  patient's chart, composer, settings, the style guide (`/design`). All of them write and read through the same two doors.
+- **The chart** is the patient screen: the clinic visit and the ward stay (`/visit/:id`) and the record with no encounter
+  (`/patient/:id`). Whose visit it is: the queue row, else who-is-where (`base.presence`), else the patient of the link.
+  - *Banner* (sticky; the clinic's queue strip above it, not in a stay): name, age, sex, number, phone, deceased; the encounter in words
+    (in consult · follow-up · 12 min, or Admitted · Bed 3 · day 4, day 1 the admission's clinical day); active alerts, then allergies or
+    No known allergies / Allergies not asked; the last vitals (unflagged: vitals carry no interpretation); "1 critical to review" when
+    results wait for the reader. Actions: a clinic visit of mine in consult, **Done** (Sign N · Done → next, ⌘↵) and **More**, whose
+    choices (goes home / waits, → next or back to the queue, Not here, Return to waiting) open in a strip under the banner, never a menu
+    over the record; a stay, **Sign** (into the stay, no move) and **Discharge** (inline chooser); otherwise "with Dr. X — theirs to
+    finish", **Sign N** (outside any visit) and **Start visit**.
+  - *Center*: notices (the error line; the writer's warnings, Sign anyway), the composer (for `write:note | write:vitals | write:order`),
+    the long note, the drafts drawn as the blocks they will be, then what the center shows (`?at=`): this visit's signed sets (one card
+    per set; a prescription, a requisition, the problems, the allergies of a set are one block each), a stay's days with **Since
+    yesterday**, **Since Done** for a clinic patient back with results; an older visit (read-only, Esc back), Outside a visit, the
+    **Whole record** (by visit or by day per `organization.record_view`, paged), results over time, one entry with its Details under
+    it. A kind filter (`?kind=`, `[` `]`) narrows each. Nothing opens over the record.
+  - *Record panel* (right; tabs under 1100 px): the **Summary** — active problems, current medicines, allergies and alerts, last
+    vitals, key results, last visits, still waiting, each with its limit and empty state — then Problems, Medicines, Allergies &
+    alerts, History, Results, Documents, Visits & stays; list actions seed the composer; a fact opens its entry in the center.
+  - *Glance*: the Summary's first five items at half their limits and the visits, read-only — beside the bench grid for a reader
+    holding `read:record` there, and in place of the chart for a reader who may not read the record (presence and identity only; the
+    desk's card folds out the same visits).
+  - *Keys*: `/` the composer · Alt+P / M / A start /dx /rx /al · ⌘↵ Done (Sign in a stay; Sign N for someone else's patient) · Alt+R
+    the record's sections and back · `[` `]` the kind filter · ↵ a block's Details · Esc closes them, then back to this visit · Alt+J
+    Who's in.
+
+#### Design system
+One system for core and packs (`src/core/ui`, imported as `@core/ui`): **tokens** in `src/core/styles.css`, a light and a dark value
+each (canvas, surface, raised, sunken, paper; fg, muted, faint; line, line-strong, hover, focus, selection, overlay, band; accent and danger, warn, ok,
+info, each with `-soft`, `-line` and `-fg`; text 11–22, radii sm–xl, shadows xs–md, the layers, `split` 1100 px); the theme is the
+user's choice (System, Light, Dark; per browser, no flash). **The kit** builds every screen: buttons, fields, chips, tags and badges,
+callouts, sections, tabs, rows, the banner, the split frame, KV, the analyte table, steps, stat, sparkline and line chart. **The rule**
+`opencare/tokens-only` (ESLint) refuses raw palette classes, literal colours, off-scale sizes and `dark:` anywhere outside the kit;
+colour marks state, never type, and never alone (a glyph or a word goes with it). **`/design`** shows every token with its live
+contrast (all pairs AA in both themes), every component and state, the record's blocks and the charts; it is the one reference a
+pack builds against.
 
 ### 4.7 The composer
 The composer turns typed lines into one set. `/v 120/80 88` becomes `vitals` with codings by stable key; `/dx` a `problem`; `/rx` a
 `medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s; a plain line a `note`; `!` a `private`
 entry about the line's entry; `#preset` expands the preset's lines. Warnings come back as inline cards below the line. Done is one set
 that includes `seen` (when not yet seen) and `done`; drafts live in the browser (IndexedDB per user, patient and department), cleared
-at sign-out.
+at sign-out. The drafts are drawn under the line as the blocks they will be (the exact type and data the set will write), and
+`/note` alone, a card's long note or a long draft's edit open the long note inline under the line (⌘↵ adds, Esc closes), so the
+record stays in view.
 
 ---
 
@@ -434,7 +471,10 @@ at sign-out.
 - **Off** (not in `organization.packs_used`): its types refuse new entries except corrections and cross-outs, and its visibility
   rules keep applying. **On again**: its tables are refreshed for the organization before its screens show. There is no removal while
   its entries exist.
-- A pack screen may look nothing like the base's and may replace a department's default screen, but it calls the same actions.
+- A pack screen may look nothing like the base's and may replace a department's default screen, but it calls the same actions. It is
+  built from the kit (`@core/ui`) and the tokens only (`opencare/tokens-only`, §4.6 Design system), so it reads natively in both
+  themes; a record block of its own type goes through `registerRenderer(type, { Block })`, drawn inside the chart's shell. A colour
+  the tokens lack is asked for in core, never invented in the pack.
 - **No new packs until the owner says so.** Pharmacy is the one pack, ported as the proof.
 
 ---
@@ -628,4 +668,23 @@ types, parked pack calls with per-call Retry, Postgres enums.
     calling no longer counts as seeing for private notes, and a refused move sent late makes nobody responsible; entries and settings
     keep one order across a clock step (each is dated after the organization's latest other); a stay in bed exports as in progress
     however long since its last move.
+- 2026-09-27 (evening): one design system and the new chart (`scratchpad/build-plan.md` steps 1–3; the owner approved every default).
+  - **Design system** (§4.6): tokens and the dark theme (`src/core/styles.css`, `index.html`'s no-flash script, `ui/theme.ts`); the kit
+    split into `src/core/ui/*` and re-skinned; `/design`; `opencare/tokens-only` as a warning; the import guards fixed (three
+    overlapping `no-restricted-imports` had left only the db-client one in force); `scripts/codemod-tokens.mjs`. Every screen swept to
+    tokens (the codemod one directory at a time, then hand fixes: the kit's `Menu`, `Callout`, `Chip`, `Switch`, `Avatar`, `NavItem`, `ListRow`), tone names
+    (brand → accent, amber → warn, red → danger, blue → info; "here" ok, "back" accent), the raw palette cleared, the theme in the user
+    menu. The rule is still a warning (0 reported); it becomes an error with the shims' removal (build plan step 4).
+  - **The chart** replaces the visit screen (§4.6): `src/core/screens/chart/` — a pure model (items, the encounter, the record's lists,
+    values, the Summary, the screen's decisions; `npm run test:chart`, 31 groups), the blocks (one design per entry type, a pack's
+    `Block` inside the same shell), the record panel, the center, the banner and its actions, the glance. Moved and gone:
+    `visit/VisitScreen.tsx`, `Record.tsx` (its entry drawer is a block's Details, its results table the center's), `Side.tsx` (the
+    panel's list actions, every one kept), `KeyResults.tsx` (Summary · key results), the composer's draft list and long-note drawer
+    (drafts as blocks, the long note inline), `CardLine`, `useEntries`, `useResultsTable`. The review list opens the result in the
+    chart (`?at=entry:`); old `?entry=` and `?view=results` links still land.
+  - **The read fix**: `useRecord` put the visit in its query key while the results table read with none, so a visit opened from the
+    queue read the whole record twice; the key is the patient and department now, the view is built in `select`.
+  - **Empty until something writes them** (designed places and empty states, no writer yet): reported medicines, alerts, procedures,
+    family and social history, documents (no uploader). History's LOINC codes (10157-6, 11331-6, 11341-5, 71802-3) are in the base
+    codes. The demo day's Nadia Kamel fills the chart: two past visits and a three-day stay.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
