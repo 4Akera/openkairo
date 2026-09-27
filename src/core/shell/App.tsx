@@ -24,7 +24,7 @@ function RequireAuth() {
   if (status === 'signed_out') return <Navigate to="/login" replace />
   if (org.isLoading) return <Centered><Spinner label="Opening your clinic" /></Centered>
   if (org.error instanceof Refusal && org.error.code === 'choose_user') return <ChooseUser />
-  if (org.error) return <Centered><div className="text-center text-sm"><p className="text-red-700">{errorText(org.error)}</p><Button className="mt-3" variant="outline" onClick={() => void db.auth.signOut()}>Sign out</Button></div></Centered>
+  if (org.error) return <Centered><div className="text-center text-14"><p className="text-danger">{errorText(org.error)}</p><Button className="mt-3" variant="outline" onClick={() => void db.auth.signOut()}>Sign out</Button></div></Centered>
   return <Outlet />
 }
 
@@ -33,12 +33,12 @@ function ChooseUser() {
   const qc = useQueryClient()
   const users = useQuery({ queryKey: ['my_users'], queryFn: myUsers })
   const pick = useMutation({ mutationFn: chooseUser, onSuccess: () => qc.invalidateQueries() })
-  return <Centered><div className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-5">
-    <p className="mb-3 text-sm font-medium">Where are you working today?</p>
-    {users.isLoading ? <Spinner /> : <ul className="divide-y divide-neutral-200 rounded-md border border-neutral-200">{(users.data ?? []).map((u) =>
-      <li key={u.id}><button onClick={() => pick.mutate(u.id)} disabled={pick.isPending} className="flex w-full justify-between px-3 py-2.5 text-left text-sm hover:bg-neutral-50">
-        <span>{u.organization}</span><span className="text-[11px] text-neutral-400">{u.name}</span></button></li>)}</ul>}
-    {pick.error && <p className="mt-2 text-sm text-red-700">{errorText(pick.error)}</p>}</div></Centered>
+  return <Centered><div className="w-full max-w-sm rounded-lg border border-line bg-surface p-5">
+    <p className="mb-3 text-14 font-medium">Where are you working today?</p>
+    {users.isLoading ? <Spinner /> : <ul className="divide-y divide-line rounded-md border border-line">{(users.data ?? []).map((u) =>
+      <li key={u.id}><button onClick={() => pick.mutate(u.id)} disabled={pick.isPending} className="flex w-full justify-between px-3 py-2.5 text-left text-14 hover:bg-hover">
+        <span>{u.organization}</span><span className="text-11 text-faint">{u.name}</span></button></li>)}</ul>}
+    {pick.error && <p className="mt-2 text-14 text-danger">{errorText(pick.error)}</p>}</div></Centered>
 }
 
 /** a different person signs in: nothing of the last one stays in this tab — cached reads (which may hold a private visit they opened), unsigned drafts */

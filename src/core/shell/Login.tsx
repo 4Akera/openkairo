@@ -15,17 +15,17 @@ export function Login() {
   }
   const submit = (e: FormEvent) => { e.preventDefault(); void go(email, password) }
   return (
-    <div className="grid min-h-screen place-items-center bg-neutral-50 px-4">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-lg font-semibold tracking-tight">openCare</h1>
-        <p className="mb-5 text-sm text-neutral-500">Sign in to your department</p>
+    <div className="grid min-h-screen place-items-center bg-canvas px-4">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h1 className="mb-1 text-18 font-semibold tracking-tight">openCare</h1>
+        <p className="mb-5 text-14 text-faint">Sign in to your department</p>
         <div className="mb-3"><Field label="Email"><Input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required /></Field></div>
         <div className="mb-4"><Field label="Password"><Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field></div>
-        {error && <p className="mb-3 text-sm text-red-700" role="alert">{error}</p>}
+        {error && <p className="mb-3 text-14 text-danger" role="alert">{error}</p>}
         <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
-        {DEMO && <div className="mt-6 border-t border-neutral-200 pt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Demo · one click</p>
-          <ul className="grid grid-cols-2 gap-1.5">{USERS.map(([e, l, r]) => <li key={e}><button type="button" onClick={() => go(e, 'Demo123!')} disabled={busy} className="w-full rounded-md border border-neutral-200 px-2.5 py-1.5 text-left hover:border-teal-700 hover:bg-teal-50 disabled:opacity-50"><span className="block text-sm font-medium">{l}</span><span className="block text-[11px] text-neutral-500">{r}</span></button></li>)}</ul>
+        {DEMO && <div className="mt-6 border-t border-line pt-4">
+          <p className="mb-2 text-11 font-semibold uppercase tracking-wider text-faint">Demo · one click</p>
+          <ul className="grid grid-cols-2 gap-1.5">{USERS.map(([e, l, r]) => <li key={e}><button type="button" onClick={() => go(e, 'Demo123!')} disabled={busy} className="w-full rounded-md border border-line px-2.5 py-1.5 text-left hover:border-accent hover:bg-accent-soft disabled:opacity-50"><span className="block text-14 font-medium">{l}</span><span className="block text-11 text-faint">{r}</span></button></li>)}</ul>
         </div>}
       </form>
     </div>
