@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes, Outlet } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth, useLoginId } from '../auth'
@@ -13,6 +13,9 @@ import { VisitScreen } from '../screens/visit/VisitScreen'
 import { RequestScreen } from '../screens/Request'
 import { SettingsScreen } from '../screens/Settings'
 import { BenchCorrect, BenchPatient } from '../screens/bench/BenchPatient'
+
+// the style guide is loaded when it is opened: no one needs it for a day's work
+const DesignScreen = lazy(() => import('../screens/design/DesignScreen').then((m) => ({ default: m.DesignScreen })))
 
 function RequireAuth() {
   const status = useAuth((s) => s.status)
@@ -61,6 +64,7 @@ export function App() {
           <Route path="bench/correct/:requestId" element={<BenchCorrect />} />
           <Route path="bench/:patientId" element={<BenchPatient />} />
           <Route path="settings/*" element={<SettingsScreen />} />
+          <Route path="design/*" element={<Suspense fallback={<Centered><Spinner /></Centered>}><DesignScreen /></Suspense>} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -2,7 +2,7 @@ import { PAGE_ACTION } from '../screens/settings/save'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import * as Menu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, LogOut, Settings as Cog } from 'lucide-react'
+import { ChevronDown, LogOut, Palette, Settings as Cog } from 'lucide-react'
 import { signOut, useAuth } from '../auth'
 import { useDepartment } from '../hooks/organization'
 import { Button, Centered, Spinner } from '../ui'
@@ -12,12 +12,13 @@ const WORK: Record<string, string> = { desk: 'front desk', visits: 'clinic', sta
 export function Shell() {
   const { org, isLoading, error, departments, dept, can, setDepartment } = useDepartment()
   const navigate = useNavigate()
-  const inSettings = useLocation().pathname.startsWith('/settings')
+  // Settings and the design system (/design) need no department: they are about the clinic and the app, not a day's work
+  const { pathname } = useLocation(); const free = pathname.startsWith('/settings') || pathname.startsWith('/design')
   const email = useAuth((s) => s.session?.user.email)
   const [searchOpen, setSearchOpen] = useState(false)
   useEffect(() => { if (!dept && departments.length === 1) setDepartment(departments[0].id) }, [dept, departments, setDepartment])
   // reception's screen is the search, so the header has none there and ⌘K focuses that box instead
-  const onReception = dept?.work === 'desk' && !inSettings
+  const onReception = dept?.work === 'desk' && !free
   useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); if (onReception) window.dispatchEvent(new Event('opencare:search')); else setSearchOpen(true) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onReception])
   if (isLoading) return <Centered><Spinner /></Centered>
   if (error || !org) return <Centered><p className="text-sm text-red-700">{String(error ?? 'no organization')}</p></Centered>
@@ -32,11 +33,12 @@ export function Shell() {
         {!onReception && <button onClick={() => setSearchOpen(true)} className="ml-2 hidden h-9 w-80 items-center rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-left text-sm text-neutral-400 transition-colors hover:border-neutral-300 hover:bg-white sm:flex">Search or add a patient… <kbd className="ml-auto rounded bg-white px-1 text-[10px] text-neutral-500">⌘K</kbd></button>}
         <div className="flex-1" />
         <span className="text-xs text-neutral-500">{email}</span>
+        <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => navigate('/design')} aria-label="Design system" title="Design system"><Palette className="h-4 w-4" /></Button>
         {Object.values(PAGE_ACTION).some((x) => can(x)) && <Button variant="ghost" size="sm" onClick={() => navigate('/settings')} aria-label="Settings"><Cog className="h-4 w-4" /></Button>}
         <Button variant="ghost" size="sm" onClick={() => { setDepartment(null); void signOut() }} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
       </header>
       <main className="flex-1">
-        {dept || inSettings || departments.length === 0 ? <Outlet /> : <Centered><div className="w-full max-w-sm"><h2 className="mb-3 text-sm font-medium">Where are you working today?</h2>
+        {dept || free || departments.length === 0 ? <Outlet /> : <Centered><div className="w-full max-w-sm"><h2 className="mb-3 text-sm font-medium">Where are you working today?</h2>
           <ul className="divide-y divide-neutral-200 rounded-md border border-neutral-200 bg-white">{departments.map((d) => <li key={d.id}><button onClick={() => setDepartment(d.id)} className="flex w-full justify-between px-3 py-2.5 text-left text-sm hover:bg-neutral-50"><span>{d.name}</span><span className="text-[11px] text-neutral-400">{WORK[d.work]}</span></button></li>)}</ul></div></Centered>}
       </main>
       {searchOpen && <Search onClose={() => setSearchOpen(false)} />}

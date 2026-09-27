@@ -5,10 +5,11 @@ import * as RadixMenu from '@radix-ui/react-dropdown-menu'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from './tone'
 
-export function Menu({ trigger, align = 'start', children, className }: { trigger: ReactNode; align?: 'start' | 'end'; children: ReactNode; className?: string }) {
+/** container: where the open menu is drawn (default the body); /design opens it inside a themed column so it takes that theme */
+export function Menu({ trigger, align = 'start', container, children, className }: { trigger: ReactNode; align?: 'start' | 'end'; container?: HTMLElement | null; children: ReactNode; className?: string }) {
   return <RadixMenu.Root>
     <RadixMenu.Trigger asChild>{trigger}</RadixMenu.Trigger>
-    <RadixMenu.Portal><RadixMenu.Content align={align} sideOffset={6} className={cn('z-popover min-w-56 animate-pop rounded-lg border border-line bg-raised p-1 text-14 text-fg shadow-md', className)}>
+    <RadixMenu.Portal container={container ?? undefined}><RadixMenu.Content align={align} sideOffset={6} className={cn('z-popover min-w-56 animate-pop rounded-lg border border-line bg-raised p-1 text-14 text-fg shadow-md', className)}>
       {children}
     </RadixMenu.Content></RadixMenu.Portal>
   </RadixMenu.Root>

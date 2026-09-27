@@ -85,13 +85,14 @@ export function LineChart({ points, unit, band, critical, height = 160, label, o
     if (k !== null) { e.preventDefault(); setAt(clamp(k, 0, n - 1)) } else if (e.key === 'Enter') open(at); else if (e.key === 'Escape') setAt(null)
   }
   const cur = at == null ? null : points[at]; const last = points[n - 1]
+  const bandY = n && Math.abs(s.y(last.value) - 9 - (b0 + 11)) < 14 ? b1 - 4 : b0 + 11   // the band's label moves to its foot when the last value's label would sit on it
   return <figure className="grid min-w-0 gap-2">
     <figcaption className="flex items-center gap-2 text-12 text-muted"><span className="min-w-0 flex-1 truncate">{label}</span><Chip variant="check" on={table} onClick={() => setTable(!table)}>Table</Chip></figcaption>
     {table ? <AnalyteTable dense nameHead="Date" rows={points.map((p) => ({ name: `${shortDate(p.at)} ${hm(p.at)}`, value: p.value, unit, flag: p.flag, low: band?.low, high: band?.high, text: p.corrected ? 'corrected' : null, onOpen: p.entryId && onPoint ? () => onPoint(p.entryId!) : undefined }))} />
       : <div ref={box} className="relative">
         {w > 0 && n > 0 && <svg width={w} height={height} role="img" aria-roledescription="chart" aria-label={`${label}: ${points.map(said).join('; ')}`} tabIndex={0} className="block overflow-visible rounded-md focus-ring"
           onPointerMove={near} onPointerLeave={() => { if (!focused) setAt(null) }} onClick={() => open(at)} onKeyDown={keys} onFocus={() => { setFocused(true); setAt((a) => a ?? n - 1) }} onBlur={() => { setFocused(false); setAt(null) }}>
-          {hasBand && b1 > b0 && <><rect x={L} width={w - L - R} y={b0} height={b1 - b0} fill="var(--band)" /><text x={w - R} y={b0 + 11} textAnchor="end" className="fill-faint text-11">normal {range(band)}</text></>}
+          {hasBand && b1 > b0 && <><rect x={L} width={w - L - R} y={b0} height={b1 - b0} fill="var(--band)" /><text x={w - R} y={bandY} textAnchor="end" className="fill-faint text-11">normal {range(band)}</text></>}
           {ticks.map((v) => <g key={v}><line x1={L} x2={w - R} y1={s.y(v)} y2={s.y(v)} stroke="var(--line)" /><text x={L - 6} y={s.y(v) + 4} textAnchor="end" className="fill-faint text-11 tnum">{fmt(v, step)}</text></g>)}
           {[critical?.low, critical?.high].map((v, i) => v != null && v >= s.lo && v <= s.hi && <line key={i} x1={L} x2={w - R} y1={s.y(v)} y2={s.y(v)} stroke="var(--danger-line)" />)}
           {dates.map((i, k) => <text key={i} x={s.x(i)} y={height - 4} textAnchor={k === 0 && dates.length > 1 ? 'start' : k === dates.length - 1 && dates.length > 1 ? 'end' : 'middle'} className="fill-faint text-11 tnum">{shortDate(points[i].at)}</text>)}

@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Plus, Puzzle, Users, X } from 'lucide-react'
+import { Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Palette, Plus, Puzzle, Users, X } from 'lucide-react'
 import { read, remove, save as saveRow, writeSetting } from '../db/rpc'
 import { useDepartment } from '../hooks/organization'
 import { newId } from '../hooks/writes'
 import type { Organization } from '../db/types'
-import { Badge, Button, Centered, IconButton, Input, Select, Spinner, cn, dateTime, errorText } from '../ui'
+import { Badge, Button, Centered, IconButton, Input, NavItem, Select, Spinner, cn, dateTime, errorText } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
 import { PAGE_ACTION, useMfaNeeded, useSave } from './settings/save'
@@ -33,6 +33,7 @@ export function SettingsScreen() {
       <p className="hidden px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500 md:block">Settings</p>
       {pages.map(([k, l, Icon]) => <NavLink key={k} to={`/settings/${k}`} className={({ isActive }) => cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors', isActive ? 'bg-teal-50 font-medium text-teal-900' : 'text-neutral-600 hover:bg-neutral-100')}>
         <Icon className="h-4 w-4 shrink-0 opacity-70" />{l}{counts[k] !== undefined && <span className="ml-auto pl-2 text-[11px] text-neutral-400 tnum">{counts[k]}</span>}</NavLink>)}
+      <NavItem to="/design" icon={Palette} className="shrink-0 md:mt-3">Design system</NavItem>
     </nav>
     <div className="min-w-0">{mfaNeeded && <Mfa onDone={() => useMfaNeeded.getState().set(false)} />}<Routes>
       <Route index element={<Navigate to={pages[0][0]} replace />} />
