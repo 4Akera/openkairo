@@ -24,6 +24,8 @@ export const ageOf = (born: string) => { const [y, m = 1, d = 1] = born.split('-
 /** 34 F */
 export const ageSex = (p: { born_on: string; sex: string }) => `${ageOf(p.born_on)} ${p.sex?.[0]?.toUpperCase() ?? ''}`
 export const STEP_TONE: Record<string, 'amber' | 'blue' | 'neutral' | 'brand'> = { sent: 'amber', started: 'blue', held: 'neutral', replied: 'brand', reopened: 'amber' }
+/** a typed value's field by its flag: warn for low, high or abnormal, danger for critical (the glyph and the word stand beside it) */
+export const fieldTone = (f: string | null | undefined): 'default' | 'warn' | 'danger' => f === 'critical' ? 'danger' : f && f !== 'normal' ? 'warn' : 'default'
 const STEP_LABEL: Record<string, string> = { sent: 'new', started: 'in progress', held: 'held', replied: 'preliminary', reopened: 'reopened' }
 /** a step in the bench's words: new, in progress, held, preliminary, or a step of the service (sample_sent → sample sent) */
 export const stepLabel = (s = 'sent') => STEP_LABEL[s] ?? s.replace(/_/g, ' ')
