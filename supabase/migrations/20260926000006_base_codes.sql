@@ -121,6 +121,8 @@ insert into core.codes (system, code, labels, props) select 'loinc', c, jsonb_bu
   ('14959-1', 'Microalbumin/creatinine ratio, urine', '{"ucum":"mg/g"}'), ('3084-1', 'Uric acid', '{"ucum":"mg/dL"}'), ('2132-9', 'Vitamin B12', '{"ucum":"pg/mL"}'),
   ('1989-3', 'Vitamin D (25-OH)', '{"ucum":"ng/mL"}'), ('36643-5', 'Chest X-ray, 2 views', '{}'), ('24627-2', 'CT chest', '{}'), ('11524-6', 'ECG study', '{}'),
   ('72166-2', 'Tobacco smoking status', '{}'), ('82810-3', 'Pregnancy status', '{}'), ('8665-2', 'Last menstrual period start date', '{}'),
+  ('10157-6', 'History of family member diseases', '{}'), ('11331-6', 'History of alcohol use', '{}'), ('11341-5', 'History of occupation', '{}'),
+  ('71802-3', 'Housing status', '{}'),
   ('11506-3', 'Progress note', '{"note":"progress"}'), ('34117-2', 'History and physical note', '{"note":"history_physical"}'), ('11488-4', 'Consult note', '{"note":"consult"}'),
   ('34111-1', 'Emergency department note', '{"note":"emergency"}'), ('28570-0', 'Procedure note', '{"note":"procedure"}'), ('18842-5', 'Discharge summary', '{"note":"discharge"}'),
   ('18776-5', 'Plan of care note', '{"note":"plan"}'), ('57133-1', 'Referral note', '{"note":"referral"}'), ('34109-9', 'Note', '{"note":"other"}'),

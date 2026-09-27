@@ -1,4 +1,5 @@
 // Every screen's reads, through the one door out (spec/openCare.md §3.10). The server logs each; the rows come masked.
+import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { read } from '../db/rpc'
@@ -16,7 +17,7 @@ const table = <R,>(t: string, departmentId: string, where: Record<string, unknow
 export const useOpened = create<{ until: Record<string, { at: number; reason: string }>; open: (patientId: string, reason: string) => void }>((set) => ({
   until: {}, open: (patientId, reason) => set((s) => ({ until: { ...s.until, [patientId]: { at: Date.now() + 12 * 3600_000, reason } } })),
 }))
-const purposeFor = (patientId: string) => { const o = useOpened.getState().until[patientId]; return o && o.at > Date.now() ? { purpose: 'BTG', reason: o.reason } : { purpose: 'TREAT' } }
+export const purposeFor = (patientId: string) => { const o = useOpened.getState().until[patientId]; return o && o.at > Date.now() ? { purpose: 'BTG', reason: o.reason } : { purpose: 'TREAT' } }
 
 /** a clinic's queue: its open visits, the orders they wait for, who has allergies; done today. One query function, so every
  *  observer of the same key (the clinic's own line, the desk's counts) refetches it the same way. */
@@ -103,17 +104,19 @@ export function useToReview(departmentId: string | null = null, enabled = true) 
   })
 }
 
-/** the record: identity, lists, visits, orders, values, a page of entries, and where private items are */
+/** the record: identity, lists, visits, orders, values, a page of entries, and where private items are. One read per patient and
+ *  department: the view for a visit is built in select (chart-plan §3.3), so the visit screen and the results table share the read
+ *  instead of reading the whole record twice */
 export function useRecord(patientId: string | null, departmentId: string | null, visitId?: string | null) {
   const { org } = useDepartment()
   useLive(patientId ? `record:${patientId}` : null, [['record', patientId]])
+  // stable while its inputs are, so the view is not rebuilt on every render
+  const select = useCallback((r: ServerRecord): RecordView => recordView(r, org, departmentId!, visitId), [org, departmentId, visitId])
   return useQuery({
-    queryKey: ['record', patientId, departmentId, visitId ?? null],
+    queryKey: ['record', patientId, departmentId],
     enabled: !!patientId && !!departmentId && !!org,
-    queryFn: async (): Promise<RecordView> => {
-      const r = await read<ServerRecord>({ shape: 'record', patient_id: patientId, department_id: departmentId, limit: 100, ...purposeFor(patientId!) })
-      return recordView(r, org, departmentId!, visitId)
-    },
+    queryFn: () => read<ServerRecord>({ shape: 'record', patient_id: patientId, department_id: departmentId, limit: 100, ...purposeFor(patientId!) }),
+    select,
   })
 }
 

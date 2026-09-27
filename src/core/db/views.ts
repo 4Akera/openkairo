@@ -1,6 +1,6 @@
 // The screens' view models, built from what read() returns (spec/openCare.md §3.10). Pure: no fetching here.
 import type {
-  Allergy, Card, DeceasedRow, Department, Flag, Identity, ListReview, Medication, OrderRow, Organization, PatientBanner, PatientHit, Place, PresenceRow, Problem,
+  Allergy, Card, DeceasedRow, Department, Flag, Identity, ListReview, ListRowData, Medication, OrderRow, Organization, PatientBanner, PatientHit, Place, PresenceRow, Problem,
   QueueRow, RecentRow, RecordView, RequestQueueRow, ResultRow, ServerEntry, ServerMe, ServerRecord, Service, ServiceField, SettingRow, TableRead, Template, Value, ValueRow, VisitRow, VisitStatus,
 } from './types'
 import type { EntryData, SettingData } from './shapes.generated'
@@ -164,27 +164,44 @@ export function recentRow(x: OrderRow, read: TableRead<OrderRow>, o: Organizatio
   return { ...base, reply: last ? { id: last.id, item: last.item, version: last.item_version, data: last.data ?? {}, author_name: userName(o, last.author_id), recorded_at: last.recorded_at, is_final: dataOf(last, 'result', o?.types)?.status !== 'preliminary' } : null }
 }
 
+// ── the lists: a row as the screens show it, built from any version of its item (the chart draws the version before a change too) ──
+type Types = Organization['types'] | undefined
+export function problemOf(x: ListRowData, en: ServerEntry | undefined, types: Types): Problem {
+  const d = dataOf(en, 'problem', types); const c = d?.concept.codings?.[0]
+  return { id: x.item, entry_id: en?.id ?? x.entry_id, version: en?.item_version ?? 1, code: c ? `${c.system}:${c.code}` : null, name: d?.concept.text ?? '',
+    status: d?.clinical_status ?? x.status, onset_on: d?.onset?.value ?? null, note_text: d?.note ?? null,
+    certainty: ['provisional', 'unconfirmed', 'differential'].includes(d?.verification ?? '') ? 'suspected' : 'confirmed', data: d }
+}
+export function medicationOf(x: ListRowData, en: ServerEntry | undefined, types: Types): Medication {
+  const d = dataOf(en, 'medication', types); const dos = d?.dosage; const atc = d?.drug.codings?.find((c) => c.system === 'atc')
+  return { id: x.item, entry_id: en?.id ?? x.entry_id, version: en?.item_version ?? 1, drug_code: atc ? `atc:${atc.code}` : null, drug_name: d?.drug.text ?? '', dose_number: dos?.dose ? Number(dos.dose.value) : null,
+    dose_unit: dos?.dose?.unit ?? null, route: dos?.route ?? null, frequency: dos?.timing?.code ?? (dos?.as_needed ? 'PRN' : null), prn: !!dos?.as_needed, prn_reason_text: dos?.as_needed_for ?? null,
+    problem_id: d?.reasons?.[0]?.id ?? null, status: d?.status ?? x.status, started_on: x.first_at.slice(0, 10), instructions_text: d?.instructions ?? null,
+    basis: d?.basis ?? 'prescribed', duration_days: d?.duration_days ?? null, data: d }
+}
+export function allergyOf(x: ListRowData, en: ServerEntry | undefined, types: Types): Allergy {
+  const d = dataOf(en, 'allergy', types); const reactions = d?.reactions ?? []
+  return { id: x.item, entry_id: en?.id ?? x.entry_id, version: en?.item_version ?? 1, substance_name: d?.concept.text ?? '', class_code: null, kind: d?.type ?? 'allergy',
+    reactions_text: reactions.map((y) => y.manifestation.text).join(', ') || null, severity: reactions.find((y) => y.severity)?.severity ?? null, status: d?.clinical_status ?? x.status, certainty: d?.verification ?? null, data: d }
+}
+/** a list's latest review (problems, medications, allergies); when, in clinical time (the same as recorded for a live write) */
+export function listReviewOf(lists: TableRead<ListRowData>, list: string, types: Types): ListReview | null {
+  const e = (id: string) => lists.entries[id]
+  const x = lists.rows.filter((y) => y.list === 'reviews' && dataOf(e(y.entry_id), 'list_review', types)?.list === list).sort((a, b) => b.changed_at.localeCompare(a.changed_at))[0]
+  if (!x) return null
+  const en = e(x.entry_id); return { list, reviewed_at: en?.occurred_at ?? x.changed_at, reviewed_by_id: en?.author_id ?? '', outcome: dataOf(en, 'list_review', types)?.outcome ?? 'reviewed' }
+}
+
 // ── the record ──
 const ACTIVE_PROBLEM = new Set(['active', 'recurrence', 'relapse'])
 export function recordView(r: ServerRecord, o: Organization | undefined, departmentId: string, visitId?: string | null): RecordView {
   const lists = r.tables['base.lists'] ?? { rows: [], entries: {}, patients: {}, withheld: 0 }
   const e = (id: string) => lists.entries[id]
   const types = o?.types
-  const problems: Problem[] = lists.rows.filter((x) => x.list === 'problems' && ACTIVE_PROBLEM.has(x.status)).map((x) => { const en = e(x.entry_id); const d = dataOf(en, 'problem', types); const c = d?.concept.codings?.[0]
-    return { id: x.item, entry_id: x.entry_id, version: en?.item_version ?? 1, code: c ? `${c.system}:${c.code}` : null, name: d?.concept.text ?? '',
-      status: x.status, onset_on: d?.onset?.value ?? null, note_text: d?.note ?? null,
-      certainty: ['provisional', 'unconfirmed', 'differential'].includes(d?.verification ?? '') ? 'suspected' : 'confirmed', data: d } })
-  const medications: Medication[] = lists.rows.filter((x) => x.list === 'medications' && (x.status === 'active' || x.status === 'on-hold')).map((x) => { const en = e(x.entry_id); const d = dataOf(en, 'medication', types)
-    const dos = d?.dosage; const atc = d?.drug.codings?.find((c) => c.system === 'atc')
-    return { id: x.item, entry_id: x.entry_id, version: en?.item_version ?? 1, drug_code: atc ? `atc:${atc.code}` : null, drug_name: d?.drug.text ?? '', dose_number: dos?.dose ? Number(dos.dose.value) : null,
-      dose_unit: dos?.dose?.unit ?? null, route: dos?.route ?? null, frequency: dos?.timing?.code ?? (dos?.as_needed ? 'PRN' : null), prn: !!dos?.as_needed, prn_reason_text: dos?.as_needed_for ?? null,
-      problem_id: d?.reasons?.[0]?.id ?? null, status: x.status, started_on: x.first_at.slice(0, 10), instructions_text: d?.instructions ?? null,
-      basis: d?.basis ?? 'prescribed', duration_days: d?.duration_days ?? null, data: d } })
-  const allergies: Allergy[] = lists.rows.filter((x) => x.list === 'allergies').map((x) => { const en = e(x.entry_id); const d = dataOf(en, 'allergy', types); const reactions = d?.reactions ?? []
-    return { id: x.item, entry_id: x.entry_id, version: en?.item_version ?? 1, substance_name: d?.concept.text ?? '', class_code: null, kind: d?.type ?? 'allergy',
-      reactions_text: reactions.map((y) => y.manifestation.text).join(', ') || null, severity: reactions.find((y) => y.severity)?.severity ?? null, status: x.status, certainty: d?.verification ?? null, data: d } })
-  const review = (list: string): ListReview | null => { const rs = lists.rows.filter((x) => x.list === 'reviews' && dataOf(e(x.entry_id), 'list_review', types)?.list === list).sort((a, b) => b.changed_at.localeCompare(a.changed_at))
-    const x = rs[0]; if (!x) return null; const en = e(x.entry_id); return { list, reviewed_at: x.changed_at, reviewed_by_id: en?.author_id ?? '', outcome: dataOf(en, 'list_review', types)?.outcome ?? 'reviewed' } }
+  const problems: Problem[] = lists.rows.filter((x) => x.list === 'problems' && ACTIVE_PROBLEM.has(x.status)).map((x) => problemOf(x, e(x.entry_id), types))
+  const medications: Medication[] = lists.rows.filter((x) => x.list === 'medications' && (x.status === 'active' || x.status === 'on-hold')).map((x) => medicationOf(x, e(x.entry_id), types))
+  const allergies: Allergy[] = lists.rows.filter((x) => x.list === 'allergies').map((x) => allergyOf(x, e(x.entry_id), types))
+  const review = (list: string) => listReviewOf(lists, list, types)
   const presence = r.tables['base.presence']?.rows ?? []
   const orders = r.tables['base.orders']?.rows ?? []
   const orderEntries = r.tables['base.orders']?.entries ?? {}

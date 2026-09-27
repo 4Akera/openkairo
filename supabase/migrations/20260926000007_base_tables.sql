@@ -1,6 +1,7 @@
 -- 07 · base: the derived tables and their refreshes (spec/openCare.md §4.2, §4.5). Each holds nothing entries do not: a refresh
 -- recomputes, from entries and settings as of each entry, every row that depends on the items it is given. Declared in dependency
 -- order (orders → presence → review → lists → values → deceased): a refresh may read the tables declared before it.
+-- A row's source_entries are in write order (recorded_at, id), so a rebuild gives the same row whichever plan the query takes.
 
 set client_min_messages = warning;
 set role base_role;
@@ -107,7 +108,7 @@ begin
       when ol.data ->> 'status' = 'completed' then 'completed'
       else 'active' end;
     if v_answered is null and v_status in ('completed', 'rejected', 'cancelled', 'failed', 'revoked') then v_answered := coalesce(st.recorded_at, ol.recorded_at); end if;
-    select coalesce(array_agg(x.id), '{}') into src from core.entries x where x.organization_id = p_org
+    select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') into src from core.entries x where x.organization_id = p_org
        and (x.item = k or x.item in (select a.item from core.entries a where a.organization_id = p_org and a.relation = 'answers'
                                        and a.refers_to in (select y.id from core.entries y where y.organization_id = p_org and y.item = k)));
     insert into base.orders values (p_org, k, core.survivor(p_org, o1.patient_id), o1.visit_id, o1.author_id, o1.department_id,
@@ -245,7 +246,7 @@ begin
     v_e := base.latest(p_org, k);
     r.latest_entry := v_e.id; r.version := v_e.item_version; r.last_at := v_e.recorded_at;
     r.day := (f.recorded_at at time zone base.tz(p_org))::date;
-    select coalesce(array_agg(x.id), '{}') into r.source_entries from core.entries x where x.organization_id = p_org and x.item = k;
+    select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') into r.source_entries from core.entries x where x.organization_id = p_org and x.item = k;
     insert into base.presence select r.*;
   end loop;
 end $$;
@@ -307,7 +308,7 @@ begin
         if v_why is not null then
           insert into base.review values (p_org, k, core.survivor(p_org, l.patient_id), v_why, v_level, coalesce(v_level = 'critical', false), v_o.requester_id,
             v_o.from_department_id, v_o.item, v_o.visit_id, l.id, l.recorded_at,
-            (select coalesce(array_agg(x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
+            (select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
         end if;
       end if;
     end if;
@@ -316,7 +317,7 @@ begin
       select x into fl from jsonb_array_elements(l.findings) x where x ->> 'level' = 'flag' limit 1;
       if fl is not null then
         insert into base.review values (p_org, k, core.survivor(p_org, l.patient_id), 'flag', fl ->> 'code', false, null, l.department_id, null, l.visit_id, l.id, l.recorded_at,
-          (select coalesce(array_agg(x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
+          (select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
       end if;
     end if;
   end loop;
@@ -356,7 +357,7 @@ begin
                        when 'medication' then l.data ->> 'status' else l.data ->> 'list' end;
     select (c ->> 'system') || ':' || (c ->> 'code') into v_code from core.codings(coalesce(l.data -> 'concept', l.data -> 'drug', '{}')) c limit 1;
     insert into base.lists values (p_org, k, core.survivor(p_org, l.patient_id), v_list, coalesce(v_status, 'active'), v_code, l.id, f.recorded_at, l.recorded_at, f.visit_id,
-      (select coalesce(array_agg(x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
+      (select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
   end loop;
 end $$;
 
@@ -402,7 +403,7 @@ begin
     continue when b not in ('vitals', 'result', 'observation');
     l := base.latest(p_org, k);
     continue when base.gone(p_org, l);
-    src := (select coalesce(array_agg(x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k);
+    src := (select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k);
     pt := core.survivor(p_org, l.patient_id);
     if b = 'vitals' then
       insert into base.values select p_org, core.uuid5(k, v.key), k, v.key, pt, v.code, v.name, (l.data #>> (v.path || array['value']))::numeric,
@@ -448,7 +449,7 @@ begin
     l := base.latest(p_org, k);
     continue when base.gone(p_org, l);
     insert into base.deceased values (p_org, k, core.survivor(p_org, l.patient_id), l.occurred_at, l.precision, l.id,
-      (select coalesce(array_agg(x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
+      (select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
   end loop;
 end $$;
 

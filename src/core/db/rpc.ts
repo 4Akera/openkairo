@@ -22,6 +22,7 @@ const WORDS: Record<string, string> = {
   cannot_grant: 'You cannot give a right you do not hold everywhere', builtin_role: 'Built-in roles are read-only — copy one to change it', unknown_action: 'Unknown action',
   in_use: 'It has been used, so it stays — retire it instead', name_missing: 'A name is needed', duplicate: 'Already exists', merged: 'That record was merged',
   bad_answer: 'No pack here answers that way', unknown_setting: 'Unknown setting', no_session: 'Sign in again to choose',
+  file_missing: 'The file is not in storage: it was named in the record but never uploaded',
   allergy_clash: 'Allergy', allergy_caution: 'Caution', duplicate_medication: 'Already on this medicine', duplicate_class: 'Another medicine of the same class', already_on_list: 'Already on the list',
 }
 const USED: Record<string, string> = { record: 'the record points at it', services: 'it has services', people: 'people hold roles there', signed_in: 'this person has signed in', places: 'it has beds or rooms', outside: 'every organization keeps one' }
@@ -82,4 +83,11 @@ export const writeSetting = <K extends keyof SettingData>(p: { key: K; owner_id?
 export const myUsers = () => call<{ id: string; organization_id: string; organization: string; name: string }[]>('my_users', {})
 export const chooseUser = (userId: string) => call<{ user_id: string; organization_id: string }>('choose_user', { p_user_id: userId })
 export const erasePatient = (p: { patient_id: string; reason: string }) => call('erase_patient', { p: p as unknown as Json })
+/** a file of an entry: read() says where it is (the reader may see the entry; the read is logged), then a link that lasts two minutes */
+export async function fileLink(entryId: string, sha256: string, departmentId: string): Promise<string> {
+  const f = await read<{ bucket: string; path: string }>({ shape: 'file', entry_id: entryId, sha256, department_id: departmentId })
+  const { data, error } = await db.storage.from(f.bucket).createSignedUrl(f.path, 120)
+  if (error || !data?.signedUrl) throw new Refusal('file_missing')
+  return data.signedUrl
+}
 export { db as _db }
