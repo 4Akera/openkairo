@@ -477,6 +477,61 @@ record stays in view.
   the tokens lack is asked for in core, never invented in the pack.
 - **No new packs until the owner says so.** Pharmacy is the one pack, ported as the proof.
 
+### 5.1 How a pack shows up (decided with the owner, one rule at a time, from 2026-10-04)
+- **Rule 1 · on per department.** Two switches: the clinic turns a pack on (`organization.packs_used`), then each department ticks
+  the packs it uses, from those (Settings → Departments → *Packs used here*; a starter setup ticks its own). One tick brings
+  everything together: the pack's tabs on the department's Screens line, its chart section (rule 2), its composer commands, its
+  banner words and its marks on the department's lists. Where a pack is not ticked, its commands are not offered; the composer says
+  where they work ("/anc is used in: ObGyn clinic"). Unticking hides these there and keeps every entry; a patient's section still
+  shows by rule 2 when they have its data. A pack off for the clinic cannot be ticked anywhere.
+- **Rule 2 · a pack's section in the chart.** It shows when this department uses the pack *and* the patient fits it, or when the
+  patient already has that pack's data. Each pack declares its fit once, by age and sex (Pregnancy: women 10–55; Growth: under 19);
+  a clinic cannot change it. Base sections always show. Every other section waits behind **More · n**, which opens in place as more
+  chips (never a menu over the record). Order: Summary, this department's pack sections, the base sections, then other packs'
+  sections that have data. A section that shows because of private data shows the fact, not the story (§4.3).
+- **Rule 3 · the banner stays short.** One line in fixed zones, split by thin lines: *who* (name, age, sex, record number) · *where*
+  (the encounter in words: "Admitted · Bed 3 · day 3", "In consult · 12 min") · *safety*, the same in every department: allergies
+  (severe ones by name, "not asked" in amber), the base alerts (DNR, isolation for HBV and HCV, never HIV, fall risk), critical
+  results waiting, pregnant or breastfeeding (base facts, since they change what is safe to prescribe or image) · *this department's
+  packs*: at most 2 words, each pack ranking its own, then **+n**. +n opens a second banner line in place and folds it again; nothing
+  pops over the record. The phone number and everything else live in the Summary.
+- **Rule 4 · one board per place.** Beds, chairs and cubicles always show on the one base board, the same in every ward, ICU, labour
+  ward, dialysis unit and ER. A pack the department uses adds one line to each tile (its words: "Ventilated d2 · NorAd 0.15 · MAP 62",
+  "6 cm · past alert line") and at most 2 buttons of its own, after the base buttons; Admit, Move and Discharge are always the base's,
+  in the same place. A list of work that is not places (the theatre list, the radiology worklist, dispensing) may be the pack's own
+  screen: then it is the department's only screen for that work, never a second tab beside the base one, and it does the base
+  actions (call, start, done) itself.
+- **Rule 5 · one frame for every screen.** The platform draws it for base and pack screens alike: the department's tab row, then one
+  toolbar (the screen's views on the left; search, date and the main action on the right), then the content, at one width with one
+  margin everywhere. No heading under the tabs: the selected tab is the title. The pack fills only the content; empty and "not for
+  your role" states use the kit's one component for each.
+- **Rule 6 · one row of tabs.** The department's tabs are the only tab row. A screen's own views (Collect, Receive, To verify…) are
+  counted filters in its toolbar, with a state colour only when the count needs action ("To call 1"). A tab shows only to roles that
+  can use it. At most 5 tabs, the department's most used first, then More · n, which opens in place.
+- **Rule 7 · every setting editable in the app.** Each pack setting is declared with its shape, and the platform draws its form from
+  that shape (a choice, a number with its unit, a small table, a list to add to), with the same checks as the server; a pack may add
+  its own editor only for a complex setting (a price list, a growth table), inside the same frame. Clinic-wide settings sit on the
+  pack's page (Settings → Packs → Emergency: the triage scale); per-department ones on that department's card (its zones and places).
+  A change takes effect from the moment it is saved; the old value stays in the history with who changed it and when. Licensed
+  reference lists (EDA drugs, WHO growth charts, ICD-10) come in by import script and show read-only with their version, source and
+  licence.
+- **Rule 8 · a score is worked out once.** Each score (NEWS2, SOFA, APACHE II, Aldrete, GCS, PHQ-9, EPDS…) is a declared points
+  table with a version and its source, and the server is the only place that adds it up: a card asks the server while the user
+  types, and the record, the board tile and the review list all show that one result. An entry keeps the version it used ("NEWS2 6,
+  2017"); a new version applies to new entries only, and nothing is recomputed. Settings → Scores shows every table read-only, with
+  its version, its source and the clinician who signed it off for this clinic.
+- **Rule 9 · each pack brings its own demo.** Its own 2–3 patients for its main path, with real-sounding, unique names and believable
+  values; a demo login for each role it declares, on the sign-in page grouped by department, so every screen is checked as the person
+  who uses it (never as Admin). Times are relative to the moment the demo loads ("arrived 40 min ago", "admitted 2 days ago"); one
+  command reloads it. No pack writes on another pack's patients, except one shared journey patient (GP → ER → ward → ICU → ward →
+  home, follow-up booked) whose steps the packs add in order. The demo passes the packs' fit tests (rule 2): no adult values on a
+  baby.
+- **The section chips** (the owner's choice A): one row. Summary, then this department's pack sections, a thin line, then the base
+  sections, then More · n. Each chip carries its count or its state in words ("Medicines 1", "Allergies not asked", "Results 1
+  critical", "Chronic care on target"); a section declares that word as it declares its Summary line. Colour only for a state
+  (critical red, not asked amber), never to mark a pack: the department's packs are told apart by their place and the line. Keys
+  1–9 jump to the chip in that place. On a phone the row scrolls sideways under the banner.
+
 ---
 
 ## 6. Standards
