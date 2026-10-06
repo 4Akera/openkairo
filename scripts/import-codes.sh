@@ -24,6 +24,6 @@ SQL
 if [ -n "${DATABASE_URL:-}" ]; then
   script | psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -t -f -
 else
-  DB=$(docker ps --format '{{.Names}}' | grep -E '^supabase_db_' | head -1)
+  DB=$(bash "$(dirname "$0")/db-container.sh") || exit 1
   script | docker exec -i "$DB" psql -U postgres -v ON_ERROR_STOP=1 -q -t -f -
 fi

@@ -9,8 +9,7 @@
 # `db-test.sh <name> …` runs only those suites.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-DB=$(docker ps --format '{{.Names}}' | grep -E '^supabase_db_' | head -1)
-[ -n "$DB" ] || { echo "no supabase_db container is running"; exit 1; }
+DB=$(bash scripts/db-container.sh) || exit 1   # this checkout's own stack (supabase/config.toml project_id)
 reset() { supabase db reset > /dev/null 2>&1 || { echo "db reset failed"; exit 1; }; }
 LIB=$(cat supabase/tests/lib/*.sql)
 DBHOST=$(docker exec "$DB" hostname -i | awk '{print $1}')   # the concurrency suite opens real second sessions (dblink) through it

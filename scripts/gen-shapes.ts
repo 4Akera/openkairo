@@ -17,7 +17,7 @@ const TYPED = new Set(['type', 'properties', 'required', 'additionalProperties',
 
 // ── the database, read-only ──
 function query<T>(sql: string): T {
-  const db = execFileSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8' }).split('\n').find((n) => /^supabase_db_/.test(n))
+  const db = execFileSync('bash', ['scripts/db-container.sh'], { encoding: 'utf8' }).trim()   // this checkout's own stack
   if (!db) throw new Error('no supabase_db container is running (supabase start)')
   const out = execFileSync('docker', ['exec', '-i', db, 'psql', '-U', 'postgres', '-At', '-v', 'ON_ERROR_STOP=1',
     '-c', 'set default_transaction_read_only = on', '-c', sql], { encoding: 'utf8', maxBuffer: 64 << 20 })
