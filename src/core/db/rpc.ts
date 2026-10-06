@@ -23,6 +23,9 @@ const WORDS: Record<string, string> = {
   in_use: 'It has been used, so it stays — retire it instead', name_missing: 'A name is needed', duplicate: 'Already exists', merged: 'That record was merged',
   bad_answer: 'No pack here answers that way', unknown_setting: 'Unknown setting', no_session: 'Sign in again to choose',
   file_missing: 'The file is not in storage: it was named in the record but never uploaded',
+  names_hiv: 'An alert shows in every department, so it never names HIV or AIDS', nothing_to_end: 'Nothing standing to end', already_ended: 'Already ended: a new one starts its own',
+  already_recorded: 'Already recorded by someone else — look again and change that one', dates_not_pregnant: 'Not pregnant takes no dates', lmp_or_weeks: 'The LMP or the weeks, not both',
+  lmp_future: 'The LMP is after the day written', bad_lmp: 'The LMP is not a day', lmp_long_ago: 'The LMP is more than 44 weeks back', sex_male: 'Recorded pregnant, but the patient is male',
   allergy_clash: 'Allergy', allergy_caution: 'Caution', duplicate_medication: 'Already on this medicine', duplicate_class: 'Another medicine of the same class', already_on_list: 'Already on the list',
 }
 const USED: Record<string, string> = { record: 'the record points at it', services: 'it has services', people: 'people hold roles there', signed_in: 'this person has signed in', places: 'it has beds or rooms', outside: 'every organization keeps one' }

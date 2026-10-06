@@ -1,14 +1,15 @@
 // The pharmacy pack's client (spec/openCare.md §5): dispensing is one click. A medication the doctor sent is an order to the pharmacy;
 // its Dispensing screen, in place of the bench, shows what to give (the pack's own table, pharmacy.queue). Give all writes
 // pharmacy.dispense — the pack's type that extends the base's step — straight from the medication. Not given takes a one-word reason.
-// Its section in the chart (Pharmacy) lists what was dispensed.
+// Its section in the chart (Pharmacy) lists what was dispensed; its banner word says what waits to be collected.
 import { registerRenderer, registerReplyForm } from '@core/renderers'
 import { registerScreen } from '@core/screens/registry'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import type { RequestQueueRow } from '@core/db/types'
 import { Chip, Field, Input, KV, Tag } from '@core/ui'
 import { Dispensing } from './Dispensing'
-import { suppliedLine, suppliedOf, suppliedWord } from './dispensed'
+import { registerBannerWords } from '@core/screens/chart/words'
+import { collectWords, suppliedLine, suppliedOf, suppliedWord } from './dispensed'
 import { Supplied } from './Section'
 
 interface Dispense { given: boolean; reason: string }
@@ -56,6 +57,8 @@ registerScreen('pharmacy.dispensing', Dispensing)
 // its section in the chart: for anyone, shown in a department that uses the pack and wherever the patient has dispenses
 registerSection({ key: 'pharmacy.dispensed', title: 'Pharmacy', types: ['pharmacy.dispense'], fit: ANYONE, Body: Supplied,
   word: (x) => suppliedWord(suppliedOf(x.own)), summary: (x) => suppliedLine(suppliedOf(x.own, x.rec)) })
+// its banner word, only where the department uses the pharmacy: a supply prepared and waiting, "1 to collect"
+registerBannerWords({ key: 'pharmacy.collect', types: ['pharmacy.dispense'], words: (x) => collectWords(suppliedOf(x.own)) })
 type Given = { drug: { text: string }; dose?: { value: string; unit?: string }; quantity?: { value: string } }
 const amount = (i: Given) => [`${i.dose?.value ?? ''}${i.dose?.unit ? ` ${i.dose.unit}` : ''}`.trim(), i.quantity && `× ${i.quantity.value}`].filter(Boolean).join(' ')
 // the dispense in the record, with no colour of its own: a word for the state (Given ok, Not given warn), the lines as label and value

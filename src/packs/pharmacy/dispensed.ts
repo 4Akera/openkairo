@@ -3,6 +3,7 @@
 // ("2 supplied") and its Summary line (the last supply). A dispense with no products (not given) is named by the medicine it answers:
 // its order (the base's orders) is about that medication (the base's lists). Fit: anyone. Pure.
 import type { ChipWord, Own } from '@core/screens/chart/sections'
+import type { BannerWord } from '@core/screens/chart/words'
 import type { Rec } from '@core/screens/chart/model/record'
 import { shortDate } from '@core/ui/time'
 
@@ -47,4 +48,9 @@ export function suppliedLine(rows: Supplied[]): string | null {
   const all = given(rows); const last = all[0]
   if (!last) return null
   return [whatText(last) || 'Supplied', shortDate(last.at), all.length > 1 ? `${all.length} supplied` : null].filter(Boolean).join(' · ')
+}
+/** the banner's word in a department that uses the pharmacy: prepared and not yet given, "1 to collect" (the pharmacy's first) */
+export function collectWords(rows: Supplied[]): BannerWord[] {
+  const n = rows.filter((r) => r.state === 'prepared').length
+  return n ? [{ word: `${n} to collect`, rank: 1 }] : []
 }

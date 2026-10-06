@@ -120,6 +120,12 @@ export interface BackToWaiting {
   reason?: 'not_here' | 'sent_out' | 'other'
   text?: string
 }
+/** breastfeeding v1 (base) */
+export interface Breastfeeding {
+  breastfeeding: boolean
+  note?: string
+  status: 'current' | 'ended'
+}
 /** called v1 (base) */
 export interface Called {
   note?: string
@@ -281,6 +287,15 @@ export interface PharmacyDispense {
   reason?: string
   status: 'in-progress' | 'completed' | 'cancelled' | 'rejected'
   step?: string
+}
+/** pregnancy v1 (base) */
+export interface Pregnancy {
+  lmp?: PartialDate
+  note?: string
+  pregnant: boolean
+  reason?: string
+  status: 'current' | 'ended'
+  weeks?: number
 }
 /** private v1 (base) */
 export interface Private {
@@ -491,6 +506,7 @@ export interface EntryData {
   'assigned': Assigned
   'away': Away
   'back_to_waiting': BackToWaiting
+  'breastfeeding': Breastfeeding
   'called': Called
   'checked_in': CheckedIn
   'crossed_out': CrossedOut
@@ -510,6 +526,7 @@ export interface EntryData {
   'opened_anyway': OpenedAnyway
   'order': Order
   'pharmacy.dispense': PharmacyDispense
+  'pregnancy': Pregnancy
   'private': Private
   'problem': Problem
   'procedure': Procedure

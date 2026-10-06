@@ -1,4 +1,4 @@
--- 08 · base: the 34 types (spec/openCare.md §4.1–§4.4): shapes, one-line summaries, checks, claims; the privacy rule; the actions,
+-- 08 · base: the 36 types (spec/openCare.md §4.1–§4.4): shapes, one-line summaries, checks, claims; the privacy rule; the actions,
 -- settings keys, built-in roles and default screens. Checks return findings {code, level: refuse | warn | flag} and never raise.
 
 set client_min_messages = warning;
@@ -119,6 +119,18 @@ create function base.reviewed_line(e jsonb) returns text language sql stable sec
 $$;
 create function base.alert_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
   select 'Alert: ' || (e -> 'data' -> 'concept' ->> 'text') || case when e -> 'data' ->> 'status' = 'inactive' then ' · inactive' else '' end
+$$;
+-- pregnant and breastfeeding: base facts (spec §5.1 rule 3), each current until a version ends it
+create function base.pregnancy_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
+  select case when e -> 'data' ->> 'status' = 'ended' then 'Ended: ' else '' end ||
+    case when (e -> 'data' ->> 'pregnant')::boolean then 'Pregnant' else 'Not pregnant' end ||
+    coalesce(' · ' || (e -> 'data' ->> 'weeks') || ' wk', '') || coalesce(' · LMP ' || (e -> 'data' -> 'lmp' ->> 'value'), '') ||
+    coalesce(' · ' || nullif(e -> 'data' ->> 'reason', ''), '') || coalesce(' · ' || nullif(e -> 'data' ->> 'note', ''), '')
+$$;
+create function base.breastfeeding_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
+  select case when e -> 'data' ->> 'status' = 'ended' then 'Ended: ' else '' end ||
+    case when (e -> 'data' ->> 'breastfeeding')::boolean then 'Breastfeeding' else 'Not breastfeeding' end ||
+    coalesce(' · ' || nullif(e -> 'data' ->> 'note', ''), '')
 $$;
 create function base.died_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
   select 'Died' || coalesce(' · ' || (e -> 'data' -> 'cause' ->> 'text'), '')
@@ -366,6 +378,57 @@ end $$;
 create function base.kind_check(p_entry jsonb, p_set jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select base.same_kind(p_entry, p_set)
 $$;
+
+-- names HIV (§5.1 rule 3: an alert shows in every department): the word (HIV1, _hiv too), AIDS, spelled out, in Arabic, and the ICD-10
+-- codes (B20–B24, Z21, R75, Z20.6, Z71.7, O98.7); the client's namesHiv (chart/model/facts.ts) holds the same pattern
+create function base.names_hiv(s text) returns boolean language sql immutable as $$
+  select coalesce(s, '') ~* '(^|[^a-z])(hiv|aids)([^a-z]|$)|human[^a-z]*immuno[^a-z]*deficiency|(^|[^a-z0-9])(b2[0-4]|z21|r75|z20\.6|z71\.7|o98\.7)([^0-9]|$)|إيدز|ايدز|نقص المناعة'
+$$;
+
+-- the standing facts (alert, pregnancy, breastfeeding): ending one changes it, once; an alert never names HIV, in any version (§5.1
+-- rule 3: the banner shows alerts in every department); one current pregnancy and one breastfeeding at a time (a new line changes the
+-- standing one); pregnancy dates only when pregnant, an LMP or weeks, a real day never after the day it is written
+create function base.fact_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p_entry ->> 'organization_id')::uuid; d jsonb := p_entry -> 'data'; v_type text := core.base_of(p_entry ->> 'type');
+        f jsonb := base.same_kind(p_entry, p_set); t core.entries; v_lmp text; v_on date; out jsonb := '[]';
+        v_new boolean := p_entry ->> 'replaces' is null and p_entry ->> 'relation' is distinct from 'changes';
+begin
+  if jsonb_array_length(f) > 0 then return f; end if;
+  if v_type = 'alert' and (base.names_hiv(d -> 'concept' ->> 'text') or base.names_hiv(d ->> 'note')
+       or exists (select 1 from jsonb_array_elements(coalesce(d -> 'concept' -> 'codings', '[]')) c where base.names_hiv(c ->> 'code') or base.names_hiv(c ->> 'display'))) then
+    return jsonb_build_array(base.find('names_hiv', 'refuse', 'an alert shows in every department: write Isolation, never the reason'));
+  end if;
+  if d ->> 'status' in ('ended', 'inactive') and v_new then
+    return jsonb_build_array(base.find('nothing_to_end', 'refuse', 'ending changes the fact it ends'));
+  end if;
+  if p_entry ->> 'relation' = 'changes' then
+    t := base.target(p_entry, p_set);
+    if t.data ->> 'status' in ('ended', 'inactive') then return jsonb_build_array(base.find('already_ended')); end if;
+  end if;
+  if v_type in ('pregnancy', 'breastfeeding') and v_new and exists (select 1 from core.entries x
+       where x.organization_id = v_org and x.patient_id = any (core.family(v_org, (p_entry ->> 'patient_id')::uuid)) and core.base_of(x.type) = v_type
+         and x.data ->> 'status' = 'current'
+         and not exists (select 1 from core.entries y where y.organization_id = v_org and y.item = x.item and y.item_version > x.item_version)) then
+    return jsonb_build_array(base.find('already_recorded', 'refuse', 'change the one recorded'));
+  end if;
+  if v_type = 'pregnancy' then
+    if not (d ->> 'pregnant')::boolean and (d ? 'lmp' or d ? 'weeks') then return jsonb_build_array(base.find('dates_not_pregnant')); end if;
+    if d ? 'lmp' and d ? 'weeks' then return jsonb_build_array(base.find('lmp_or_weeks')); end if;
+    if d ? 'lmp' then
+      v_lmp := d -> 'lmp' ->> 'value' || substr('-01-01', length(d -> 'lmp' ->> 'value') - 3);
+      if not pg_input_is_valid(v_lmp, 'date') then return jsonb_build_array(base.find('bad_lmp', 'refuse', 'the LMP is not a day')); end if;
+      v_on := ((p_entry ->> 'occurred_at')::timestamptz at time zone coalesce(core.setting_at(v_org, 'organization.time_zone', v_org) ->> 'zone', 'Africa/Cairo'))::date;
+      if v_lmp::date > v_on then return jsonb_build_array(base.find('lmp_future')); end if;
+      -- only while current: an end written after the delivery is long after the LMP, and right
+      if d ->> 'status' = 'current' and v_lmp::date < v_on - 44 * 7 then out := out || base.find('lmp_long_ago', 'warn'); end if;
+    end if;
+    if (d ->> 'pregnant')::boolean and d ->> 'status' = 'current'
+       and (select p.gender from core.patients p where p.organization_id = v_org and p.id = core.survivor(v_org, (p_entry ->> 'patient_id')::uuid)) = 'male' then
+      out := out || base.find('sex_male', 'warn');
+    end if;
+  end if;
+  return out;
+end $$;
 
 -- crossing out: of the author's own entry or one the writer may write there; never an order someone already answered
 create function base.crossed_out_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
@@ -615,7 +678,14 @@ begin
     feeds => array['base.review'], in_record => false, labels => '{"en":"Reviewed"}');
   perform core.declare_type('alert', 1, 'base', format('{"type":"object","additionalProperties":false,"required":["concept","status"],
       "properties":{"concept":%1$s,"status":{"enum":["active","inactive"]},"period":{"$ref":"#/$defs/period"},"note":{"type":"string"}}}', concept)::jsonb,
-    'base.alert_line(jsonb)', array['Flag'], checks => array['base.kind_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Alert"}');
+    'base.alert_line(jsonb)', array['Flag'], checks => array['base.fact_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Alert"}');
+  perform core.declare_type('pregnancy', 1, 'base', format('{"type":"object","additionalProperties":false,"required":["status","pregnant"],
+      "properties":{"status":{"enum":["current","ended"]},"pregnant":{"type":"boolean"},"lmp":%1$s,"weeks":{"type":"integer","minimum":0,"maximum":45},
+        "reason":{"type":"string"},"note":{"type":"string"}}}', pdate)::jsonb,
+    'base.pregnancy_line(jsonb)', array['Observation'], checks => array['base.fact_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Pregnancy","ar":"الحمل"}');
+  perform core.declare_type('breastfeeding', 1, 'base', '{"type":"object","additionalProperties":false,"required":["status","breastfeeding"],
+      "properties":{"status":{"enum":["current","ended"]},"breastfeeding":{"type":"boolean"},"note":{"type":"string"}}}'::jsonb,
+    'base.breastfeeding_line(jsonb)', array['Observation'], checks => array['base.fact_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Breastfeeding","ar":"الرضاعة الطبيعية"}');
   perform core.declare_type('died', 1, 'base', format('{"type":"object","additionalProperties":false,"properties":{"cause":%1$s,"note":{"type":"string"}}}', concept)::jsonb,
     'base.died_line(jsonb)', array['Patient'], checks => array['base.kind_check(jsonb,jsonb)']::regprocedure[],
     feeds => array['base.deceased'], labels => '{"en":"Died"}');
@@ -720,12 +790,12 @@ select core.declare_role('00000000-0000-0000-0000-00000000c001', 'owner', 'base'
 select core.declare_role('00000000-0000-0000-0000-00000000c002', 'doctor', 'base', 'Doctor', array[
   'read:patients', 'read:record', 'read:queue', 'read:review', 'read:bench', 'export:fhir',
   'write:note', 'write:vitals', 'write:observation', 'write:problem', 'write:allergy', 'write:medication', 'write:given', 'write:list_review', 'write:order',
-  'write:result', 'write:procedure', 'write:reviewed', 'write:alert', 'write:died', 'write:crossed_out',
+  'write:result', 'write:procedure', 'write:reviewed', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:died', 'write:crossed_out',
   'write:here', 'write:not_here', 'write:called', 'write:seen', 'write:back_to_waiting', 'write:away', 'write:urgent', 'write:assigned', 'write:left', 'write:done',
   'write:transferred', 'write:admitted', 'write:moved', 'write:discharged', 'write:private', 'write:not_private', 'write:opened_anyway'], '{"en":"Doctor"}');
 select core.declare_role('00000000-0000-0000-0000-00000000c003', 'nurse', 'base', 'Nurse', array[
   'read:patients', 'read:record', 'read:queue', 'write:note', 'write:vitals', 'write:observation', 'write:allergy', 'write:given', 'write:list_review',
-  'write:procedure', 'write:alert', 'write:crossed_out', 'write:here', 'write:not_here', 'write:called', 'write:back_to_waiting', 'write:away', 'write:urgent',
+  'write:procedure', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:crossed_out', 'write:here', 'write:not_here', 'write:called', 'write:back_to_waiting', 'write:away', 'write:urgent',
   'write:assigned', 'write:moved', 'write:private'], '{"en":"Nurse"}');
 select core.declare_role('00000000-0000-0000-0000-00000000c004', 'reception', 'base', 'Reception', array[
   'read:patients', 'read:queue', 'manage:patients', 'write:checked_in', 'write:here', 'write:not_here', 'write:away', 'write:urgent', 'write:transferred',

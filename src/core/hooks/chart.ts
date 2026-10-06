@@ -9,6 +9,8 @@ import { useDepartment } from './organization'
 import { purposeFor } from './reads'
 
 type Before = { recorded_at: string; id: string }
+/** the facts page's types: what nothing derives (the banner's alerts and pregnancy and breastfeeding among them) */
+export const FACT_TYPES = ['alert', 'pregnancy', 'breastfeeding', 'procedure', 'observation', 'crossed_out']
 /** which entries: by visit, by type (a pack's type follows its base_type), by department, before a point; newest first */
 export interface EntryPageQuery { patient_id: string; visits?: string[] | null; types?: string[] | null; departments?: string[] | null; before?: Before | null; limit?: number }
 export interface EntryPage { entries: ServerEntry[]; more: boolean; hidden: ServerRecord['hidden']; next: Before | null }
@@ -31,13 +33,14 @@ export function useEntryPages(q: Omit<EntryPageQuery, 'before'> | null, first?: 
   })
 }
 
-/** alerts, procedures and observations with their cross-outs (the model keeps each item's latest and drops the crossed out); the
- *  cross-outs also mark items crossed in the encounter, whose page (by visit) never holds a cross-out written outside it */
+/** alerts, pregnancy, breastfeeding, procedures and observations with their cross-outs (the model keeps each item's latest and drops
+ *  the crossed out); the cross-outs also mark items crossed in the encounter, whose page (by visit) never holds a cross-out written
+ *  outside it */
 export function useFacts(patientId: string | null) {
   const { dept, org } = useDepartment()
   return useQuery({
     queryKey: ['record', patientId, 'facts', dept?.id], enabled: !!patientId && !!dept && !!org,
-    queryFn: async () => (await page(dept!.id, { patient_id: patientId!, types: ['alert', 'procedure', 'observation', 'crossed_out'], limit: 500 })).entries,
+    queryFn: async () => (await page(dept!.id, { patient_id: patientId!, types: FACT_TYPES, limit: 500 })).entries,
   })
 }
 

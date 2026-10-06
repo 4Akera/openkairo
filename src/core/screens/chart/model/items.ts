@@ -10,7 +10,7 @@ export type Kind = 'notes' | 'results' | 'vitals' | 'medicines' | 'orders' | 'pr
 export const KINDS: Kind[] = ['notes', 'results', 'vitals', 'medicines', 'orders', 'problems', 'allergies', 'other']
 /** the entry types a kind reads (the Whole record passes them to the reader; a pack's type follows its base_type there) */
 export const KIND_TYPES: Record<Kind, string[]> = { notes: ['note'], results: ['result'], vitals: ['vitals'], medicines: ['medication', 'given', 'list_review'], orders: ['order'],
-  problems: ['problem', 'list_review'], allergies: ['allergy', 'list_review'], other: ['procedure', 'observation', 'alert', 'died', 'crossed_out'] }
+  problems: ['problem', 'list_review'], allergies: ['allergy', 'list_review'], other: ['procedure', 'observation', 'alert', 'pregnancy', 'breastfeeding', 'died', 'crossed_out'] }
 
 export interface ChartItem {
   id: string; item: string; type: string; base: string; family: Family
@@ -39,7 +39,8 @@ export interface ItemCtx {
 export const MOVES = new Set(['checked_in', 'admitted', 'here', 'not_here', 'called', 'seen', 'back_to_waiting', 'away', 'urgent', 'assigned', 'transferred', 'left', 'done', 'moved', 'discharged'])
 const NOT_IN_RECORD = new Set([...MOVES, 'reviewed', 'private', 'not_private', 'opened_anyway'])
 const FAMILY: Record<string, Family> = { note: 'note', vitals: 'vitals', result: 'result', medication: 'medication', order: 'order', problem: 'problem', allergy: 'allergy',
-  list_review: 'review', given: 'given', procedure: 'procedure', observation: 'observation', alert: 'alert', died: 'died' }
+  list_review: 'review', given: 'given', procedure: 'procedure', observation: 'observation', alert: 'alert', died: 'died',
+  pregnancy: 'observation', breastfeeding: 'observation' }
 /** a type's base (the registry's base_type: pharmacy.dispense → step), else the type itself */
 export const baseOf = (type: string, types?: ItemCtx['types']) => types?.find((t) => t.key === type)?.base_type ?? type
 export const family = (type: string, types?: ItemCtx['types']): Family => FAMILY[baseOf(type, types)] ?? 'other'

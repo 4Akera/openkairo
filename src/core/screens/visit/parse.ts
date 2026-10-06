@@ -22,9 +22,11 @@ export interface Ctx {
   departmentType?: string                             // this department's type: a pack may give it its own version of a command
   packCards?: boolean                                 // does this department use its packs' cards (departments.pack_cards)
   canSend?: boolean                                   // a pharmacy here answers prescriptions: /rx … send
+  facts?: StandingFacts                               // the pregnancy, breastfeeding and alerts standing now: /preg, /bf, /alert change or end them
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
 import { allowed, commandNamed, registerCommand, usedWhere } from './commands'
+import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, factLine, pregnancy, type StandingFacts } from './facts'
 
 /** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
 export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string; action?: string }
@@ -244,6 +246,7 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'>): 
       return `${svc?.name ?? 'Request'}${q.priority && q.priority !== 'routine' ? ` (${q.priority})` : ''} → ${dname(svc?.department_id)}`
     }
     case 'note': return String(q.text ?? '')
+    case 'pregnancy': case 'breastfeeding': case 'alert': return factLine(p)
     default: return p.line
   }
 }
@@ -272,3 +275,10 @@ registerCommand({ name: 'order', label: 'Request — a service, or a department 
   } })
 registerCommand({ name: 'note', label: 'Long note under the line', example: '/note · or just type: hx: … · ex: … · plan: …', action: 'write:note', writes: ['note'],
   parse: (rest, ctx) => rest ? { ok: [noteLine(rest, ctx)] } : null, empty: (ctx) => ({ drawer: { kind: ctx.noteKind ?? 'progress', text: '' } }) })
+// the base facts the banner shows (facts.ts)
+registerCommand({ name: 'preg', aliases: ['pregnant'], label: 'Pregnant or not', example: '/preg 12w · /preg lmp 2026-08-01 · /preg no · /preg end', action: 'write:pregnancy', writes: ['pregnancy'],
+  parse: (rest, ctx) => pregnancy(rest, ctx), empty: emptyPregnancy })
+registerCommand({ name: 'bf', aliases: ['breastfeeding'], label: 'Breastfeeding or not', example: '/bf · /bf no · /bf end', action: 'write:breastfeeding', writes: ['breastfeeding'],
+  parse: (rest, ctx) => breastfeeding(rest, ctx), empty: emptyBreastfeeding })
+registerCommand({ name: 'alert', label: 'Alert — DNR, isolation (HBV, HCV), fall risk', example: '/alert dnr · /alert hbv · /alert fall · /alert end dnr', action: 'write:alert', writes: ['alert'],
+  parse: (rest, ctx) => alert(rest, ctx), empty: emptyAlert })

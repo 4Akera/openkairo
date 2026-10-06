@@ -27,6 +27,7 @@ import { KINDS, isForMe } from './model/items'
 import { cmdEnter, doneNext, roleOf } from './model/visit'
 import { RecordPanel } from './panel/RecordPanel'
 import { packTypes } from './sections'
+import { wordTypes } from './words'
 import { useChartActions } from './useChartActions'
 
 const START: Record<string, string> = { KeyP: '/dx ', KeyM: '/rx ', KeyA: '/al ', p: '/dx ', m: '/rx ', a: '/al ' }
@@ -45,7 +46,8 @@ export function ChartScreen() {
   const reader = can('read:record')
   const rec = useRecord(reader ? patientId : null, dept?.id ?? null, visitId)
   const facts = useFacts(reader ? patientId : null)
-  const packs = usePackEntries(reader ? patientId : null, packTypes())   // the pack sections' entries: which packs' data the patient has
+  // the pack sections' and banner words' entries: which packs' data the patient has, and what their words say
+  const packs = usePackEntries(reader ? patientId : null, [...new Set([...packTypes(), ...wordTypes()])])
   const drafts = useDraftsFor(patientId).length
   const composer = useRef<ComposerHandle>(null)
   const me = org?.me.id ?? ''; const visit = rec.data?.visit ?? null
@@ -102,11 +104,11 @@ export function ChartScreen() {
   if (!reader) return <ChartGlance patientId={patientId} page />
   if (rec.isLoading) return <Centered><Spinner label="Opening the record" /></Centered>
   if (rec.error || !rec.data) return <Centered><p role="alert" className="text-14 text-danger">{rec.error ? errorText(rec.error) : 'No record'}</p></Centered>
-  const chart: Chart = { r: rec.data, facts: facts.data, patientId, departmentId: dept.id, encounter: visit, mode: role.stay ? 'stay' : visit ? 'visit' : 'record', role, me, can,
+  const chart: Chart = { r: rec.data, facts: facts.data, packs: packs.data, patientId, departmentId: dept.id, encounter: visit, mode: role.stay ? 'stay' : visit ? 'visit' : 'record', role, me, can,
     writer: can('write:note') || can('write:vitals') || can('write:order'), at, open, kind, setKind, showKinds, tab, setTab, actions }
   const review = rec.data.reviews.filter((x) => isForMe(x, me, dept.id)).length   // results waiting for my review
   return <ChartContext.Provider value={chart}><div className="pb-10">
-    <ChartBanner next={next} assignee={fromQueue?.assignee_name ?? null} />
+    <ChartBanner key={patientId} next={next} assignee={fromQueue?.assignee_name ?? null} />
     <DoneChoices next={next} />
     <SplitPane className="mt-4" tab={tab} onTab={setTab} mainTab={<>Encounter{drafts > 0 && <span className="text-accent tnum">· {drafts}</span>}</>}
       asideTab={<>Record{review > 0 && <span className="text-warn tnum">· {review}</span>}</>}

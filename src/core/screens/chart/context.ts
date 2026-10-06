@@ -11,7 +11,8 @@ import type { ChartActions } from './useChartActions'
 export type KindOrAll = Kind | 'all'
 export interface Chart {
   r: RecordView                               // the one record read (r.server: every derived table with its source entries)
-  facts: ServerEntry[] | undefined            // alerts, procedures, observations and their cross-outs (useFacts)
+  facts: ServerEntry[] | undefined            // alerts, pregnancy, breastfeeding, procedures, observations and their cross-outs (useFacts)
+  packs: ServerEntry[] | undefined            // the pack sections' and banner words' types and their cross-outs (usePackEntries)
   patientId: string; departmentId: string     // the department the reads are made in (the chart's, never the entry's)
   encounter: VisitRow | null                  // this visit or stay (from the URL, else the open one here)
   mode: 'visit' | 'stay' | 'record'           // record: no encounter (a search, a link)

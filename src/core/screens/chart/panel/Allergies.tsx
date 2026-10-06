@@ -1,5 +1,5 @@
-// Allergies & alerts (chart-plan.md §2 #26, from visit/Side.tsx): the active alerts first (from the facts page: nothing writes them
-// yet, so none), then the active allergies with the reactions, severity and class; Refute (a draft) and Undo; the ones drafted here;
+// Allergies & alerts (chart-plan.md §2 #26, from visit/Side.tsx): the active alerts first (from the facts page; /alert writes them,
+// End seeds the composer with an end), then the active allergies with the reactions, severity and class; Refute (a draft) and Undo; the ones drafted here;
 // the "no known allergies" line (checked, drafted, or not asked with its button); the review toggle; + (Alt+A). The others — ruled
 // out, inactive, resolved, and alerts that are over — fold under one line.
 import { useMemo, useState } from 'react'
@@ -8,7 +8,8 @@ import { Badge, Button, Empty, IconButton, Section, Skeleton, Tag, cn, shortDate
 import { classOfAllergy } from '../../visit/catalog'
 import { ALLERGY_STATUS, partialWords } from '../model/labels'
 import { alertsOf, allergiesOf, type AllergyRow, type FactRow } from '../model/record'
-import { DRAFT, useListDrafts, type ListDrafts } from './actions'
+import { DRAFT, endFact, useListDrafts, type ListDrafts } from './actions'
+import { alertWord, namesHiv } from '../model/facts'
 import { AddButton, DraftRow, Fact, More, ReviewToggle, RowActions, Undo } from './parts'
 import type { Panel } from './RecordPanel'
 
@@ -40,11 +41,15 @@ export function Allergies({ p }: { p: Panel }) {
   </Section>
 }
 
-/** an active alert: danger, with since when and its note */
+/** an active alert: danger, with since when and its note; End (on hover) seeds the composer with its end */
 function Alert({ p, x }: { p: Panel; x: FactRow }) {
-  return <li className="flex items-start gap-1.5 py-2 text-13 text-danger"><TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-    <div className="min-w-0 flex-1"><Fact onOpen={() => p.open(x.entry.id)} className="font-medium">{x.text}</Fact><span className="sr-only"> (alert)</span>
-      {(x.when || x.note) && <p className="text-12 text-faint">{x.when && `since ${partialWords({ value: x.when }, ymd)}`}{x.when && x.note && ' — '}{x.note}</p>}</div>
+  const end = () => { endFact('alert', x.entry.id, x.entry.data, alertWord(x.text, x.code)); p.onCompose?.() }
+  // every department sees this: words or a note naming HIV are never drawn (the server refuses them; this is the second guard)
+  const text = alertWord(x.text, null); const note = namesHiv(x.note) ? null : x.note
+  return <li className="group flex items-start gap-1.5 py-2 text-13 text-danger"><TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+    <div className="min-w-0 flex-1"><Fact onOpen={() => p.open(x.entry.id)} className="font-medium">{text}</Fact><span className="sr-only"> (alert)</span>
+      {(x.when || note) && <p className="text-12 text-faint">{x.when && `since ${partialWords({ value: x.when }, ymd)}`}{x.when && note && ' — '}{note}</p>}</div>
+    {p.writes('write:alert') && <RowActions><IconButton title="End this alert" aria-label={`End the alert ${text}`} onClick={end}><X /></IconButton></RowActions>}
     <Tag tone="danger">Alert</Tag>
   </li>
 }

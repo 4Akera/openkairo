@@ -15,11 +15,14 @@ type BannerProps = {
   vitals?: { label: string; value: ReactNode; flag?: Flag | string | null }[]
   back?: { label: string; onClick: () => void }
   actions?: ReactNode; strip?: ReactNode /* the clinic's queue strip, above */
+  /** the chart's zones after who (spec §5.1 rule 3), split by thin lines; with them, context and flags are not drawn */
+  zones?: { key: string; label: string; node: ReactNode }[]
+  second?: ReactNode                  // a second line, opened in place (the pack words behind +n)
   size?: 'full' | 'compact'; sticky?: boolean /* default: full → true */; className?: string
 }
 /** The patient banner: the clinic visit, the ward stay, and (compact) the bench and the desk. Stuck to the top, it writes its
  *  height to --chart-top so what sticks under it knows where to stop (no guessed offsets). */
-export function Banner({ name, sub, context, flags, vitals, back, actions, strip, size = 'full', sticky, className }: BannerProps) {
+export function Banner({ name, sub, context, flags, vitals, back, actions, strip, zones, second, size = 'full', sticky, className }: BannerProps) {
   const ref = useRef<HTMLDivElement>(null)
   const full = size === 'full'; const stuck = full && (sticky ?? true)
   useLayoutEffect(() => {
@@ -35,6 +38,20 @@ export function Banner({ name, sub, context, flags, vitals, back, actions, strip
   if (!full) return <Card className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3', className)}>
     {backButton}{who}{flags && <div className="flex flex-wrap items-center gap-1">{flags}</div>}{actions && <div className="ms-auto flex items-center gap-2">{actions}</div>}
   </Card>
+  if (zones) return <div ref={ref} className={cn('border-b border-line bg-surface/95 backdrop-blur', stuck && 'sticky top-0 z-sticky', className)}>
+    {strip}
+    <div className="mx-auto flex max-w-chart flex-wrap items-start gap-x-3 gap-y-1.5 px-4 py-2">
+      {backButton}
+      {/* one line of zones; under 640 px they wrap, without the thin lines, and nothing runs past the edge (the actions wrap first) */}
+      <div className="flex min-w-0 flex-1 basis-64 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div role="group" aria-label="Patient" className="min-w-0">{who}</div>
+        {zones.map((z) => <div key={z.key} role="group" aria-label={z.label} data-zone={z.key}
+          className="flex min-w-0 max-w-full flex-wrap items-center gap-1 sm:border-s sm:border-line sm:ps-3">{z.node}</div>)}
+      </div>
+      {actions && <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-2 self-center">{actions}</div>}
+    </div>
+    {second && <div className="mx-auto flex max-w-chart flex-wrap items-center gap-1 px-4 pb-2 sm:ps-12">{second}</div>}
+  </div>
   return <div ref={ref} className={cn('border-b border-line bg-surface/95 backdrop-blur', stuck && 'sticky top-0 z-sticky', className)}>
     {strip}
     <div className="mx-auto flex max-w-chart flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2">

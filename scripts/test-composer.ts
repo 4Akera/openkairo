@@ -7,6 +7,7 @@ import { registerCommand } from '../src/core/screens/visit/commands'
 import { drugWarnings, allergyWarnings, doseWarnings, duplicateProblem, findDrug } from '../src/core/screens/visit/catalog'
 import type { Allergy, Medication, Organization, Problem, Template } from '../src/core/db/types'
 import { draftEntries } from '../src/core/db/entries'
+import { factMissing, isDay } from '../src/core/screens/visit/facts'
 
 const ctx: Ctx = {
   departmentId: 'im', now: new Date('2026-09-24T10:00:00Z'),
@@ -175,5 +176,43 @@ test('a pack\'s command only where the department uses its pack; elsewhere the c
   assert.deepEqual(pe.items.map((x) => x.function), ['medication']); assert.deepEqual(pe.skipped, ['“/tpk 3”: /tpk is used in: ObGyn clinic, Labour ward'])
   assert.equal(expand('#tp', here, [tp])!.items.length, 2, 'in a department that uses it, the preset writes both')
   assert.deepEqual(parse('/tpk 3', there), { error: '/tpk is used in: ObGyn clinic, Labour ward' }, 'parse checks the department before the role')
+})
+test('the base facts: /preg with an LMP or weeks, /bf, /alert by kind; an end changes the standing fact; HIV is never written', () => {
+  const was = { status: 'current', pregnant: true, weeks: 10 }
+  const standing = { pregnancy: { entry_id: 'g1', data: was, words: 'Pregnant · 12 wk' }, breastfeeding: null,
+    alerts: [{ entry_id: 'a1', data: { concept: { text: 'DNR' }, status: 'active' }, words: 'DNR', code: 'local.alert:dnr' }] }
+  const fx: Ctx = { ...ctx, facts: standing }
+  const one = (line: string, c: Ctx = ctx) => { const r = parse(line, c); assert.ok(r && 'ok' in r, `${line} → ${JSON.stringify(r)}`); return r.ok[0] }
+  const no = (line: string, c: Ctx = ctx) => { const r = parse(line, c); assert.ok(r && 'error' in r, `${line} should be refused, got ${JSON.stringify(r)}`); return r.error }
+  assert.deepEqual(one('/preg 12w').params, { action: 'record', pregnant: true, weeks: 12, lmp: null, entry_id: null }); assert.equal(one('/preg 12 weeks').line, 'Pregnant · 12 wk')
+  assert.equal(one('/preg lmp 2026-08-01').line, 'Pregnant · LMP 2026-08-01'); assert.equal(one('/preg no').line, 'Not pregnant'); assert.equal(one('/preg').action, 'write:pregnancy')
+  assert.match(no('/preg no 12w'), /no dates/); assert.match(no('/preg 12w lmp 2026-08-01'), /not both/); assert.match(no('/preg end'), /No pregnancy/)
+  assert.equal(one('/preg 14w', fx).params.entry_id, 'g1', 'a standing pregnancy is changed, never doubled')
+  const ended = one('/preg end delivered', fx); assert.equal(ended.line, 'End: Pregnant · 12 wk — delivered')
+  const [e] = draftEntries({ id: 'd1', function: ended.function, params: ended.params }, { patientId: 'pt', departmentId: 'im' })
+  assert.deepEqual({ type: e.type, data: e.data, refers_to: e.refers_to, relation: e.relation }, { type: 'pregnancy', data: { ...was, status: 'ended', reason: 'delivered' }, refers_to: 'g1', relation: 'changes' })
+  const [g] = draftEntries({ id: 'd2', function: 'pregnancy', params: one('/preg lmp 2026-08-01').params }, { patientId: 'pt', departmentId: 'im' })
+  assert.deepEqual(g.data, { status: 'current', pregnant: true, lmp: { value: '2026-08-01', precision: 'day' } })
+  assert.equal(one('/bf').line, 'Breastfeeding'); assert.equal(one('/bf no').line, 'Not breastfeeding'); assert.match(no('/bf end'), /No breastfeeding/)
+  assert.deepEqual(one('/alert hbv').params, { action: 'add', kind: 'isolation_hbv', text: 'Isolation · HBV' }); assert.equal(one('/alert dnr').line, 'Alert: DNR')
+  assert.equal(one('/alert fall risk').params.kind, 'fall_risk'); assert.equal(one('/alert difficult airway').params.kind, 'other')
+  assert.match(no('/alert isolation hiv'), /never names HIV/); assert.match(no('/alert HIV+'), /never names HIV/)
+  const [al] = draftEntries({ id: 'd3', function: 'alert', params: one('/alert hcv').params }, { patientId: 'pt', departmentId: 'im' })
+  assert.deepEqual(al.data, { concept: { text: 'Isolation · HCV', codings: [{ system: 'local.alert', code: 'isolation_hcv', display: 'Isolation · HCV' }] }, status: 'active' })
+  const end = one('/alert end dnr', fx); assert.equal(end.line, 'End alert: DNR'); assert.equal(one('/alert end', fx).params.entry_id, 'a1', 'the one standing alert')
+  const [ae] = draftEntries({ id: 'd4', function: 'alert', params: end.params }, { patientId: 'pt', departmentId: 'im' })
+  assert.equal((ae.data as { status: string }).status, 'inactive'); assert.equal(ae.refers_to, 'a1')
+})
+test('the facts\' guards: a bare /alert is no alert yet; an LMP that is not a day; AIDS is HIV', () => {
+  const no = (line: string) => { const r = parse(line, ctx); assert.ok(r && 'error' in r, `${line} should be refused, got ${JSON.stringify(r)}`); return r.error }
+  const x = expand('/alert', ctx, []); assert.equal(x?.items.length, 1, JSON.stringify(x)); const bare = x!.items[0]
+  assert.equal(bare.params.kind, null); assert.equal(bare.line, 'Alert')
+  assert.match(factMissing(bare, '2026-10-06') ?? '', /Say what the alert is/, 'Enter on a bare /alert drafts nothing (never a DNR)')
+  assert.equal(factMissing({ ...bare, params: { ...bare.params, kind: 'dnr', text: 'DNR' } }, '2026-10-06'), null, 'a kind picked: it may be added')
+  assert.match(no('/preg lmp 2025-02-30'), /not a day/); assert.match(no('/preg 2025-13-01'), /not a day/)
+  assert.match(factMissing({ function: 'pregnancy', params: { action: 'record', pregnant: true, lmp: '2025-02-30' } }, '2026-10-06') ?? '', /LMP is a day/)
+  assert.equal(isDay('2024-02-29'), true); assert.equal(isDay('2025-02-29'), false)
+  assert.match(no('/alert isolation AIDS'), /never names HIV/); assert.match(no('/alert human immunodeficiency virus'), /never names HIV/)
+  assert.match(factMissing({ function: 'alert', params: { action: 'add', kind: 'other', text: 'Isolation B20' } }, '2026-10-06') ?? '', /never names HIV/)
 })
 console.log(`composer: ${n} groups passed`)

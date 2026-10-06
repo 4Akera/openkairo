@@ -68,6 +68,19 @@ function medicationData(q: Q, was?: EntryData['medication']): EntryData['medicat
     duration_days: q.duration_days || undefined, instructions: q.instructions_text || undefined, reasons: ((q.problems as { id: string }[] | undefined) ?? []).map((p) => ({ to: 'item', id: p.id })), status: 'active' })
 }
 
+/** a standing fact (pregnancy, breastfeeding, an alert): a new one, the standing one changed, or its end (it carries what it ends) */
+function factData(type: 'pregnancy' | 'breastfeeding' | 'alert', q: Q): EntryData['pregnancy' | 'breastfeeding' | 'alert'] {
+  const was = (q.was ?? {}) as Q
+  if (q.action === 'end') return type === 'alert' ? clean<EntryData['alert']>({ ...was as EntryData['alert'], status: 'inactive', period: { ...was.period, end: new Date().toISOString() } })
+    : type === 'pregnancy' ? clean<EntryData['pregnancy']>({ ...was as EntryData['pregnancy'], status: 'ended', reason: q.reason || undefined })
+    : clean<EntryData['breastfeeding']>({ ...was as EntryData['breastfeeding'], status: 'ended' })
+  if (type === 'pregnancy') return clean<EntryData['pregnancy']>({ status: 'current', pregnant: !!q.pregnant, lmp: q.pregnant ? partial(q.lmp) : undefined,
+    weeks: q.pregnant && q.weeks != null ? Number(q.weeks) : undefined })
+  if (type === 'breastfeeding') return { status: 'current', breastfeeding: !!q.breastfeeding }
+  const text = String(q.text ?? '').trim()
+  return { concept: { text, codings: q.kind && q.kind !== 'other' ? [{ system: 'local.alert', code: String(q.kind), display: text }] : [] }, status: 'active' }
+}
+
 /** one draft → the entries it writes (a medication sent to the pharmacy is two: the medication, and an order about it) */
 export function draftEntries(d: Draft, w: Where): EntryIn[] {
   const q = d.params as Q; const base = { patient_id: w.patientId, department_id: w.departmentId, visit_id: w.visitId ?? null }
@@ -104,6 +117,8 @@ export function draftEntries(d: Draft, w: Where): EntryIn[] {
       return [{ ...base, id: d.id, type: 'order', data: clean<EntryData['order']>({ service: consult ? { id: consult.id, code: consult.code, name: consult.name } : { name: 'Consult', answer: 'note' },
         department_id: q.to_department_id, priority: q.priority ?? 'routine', status: 'active', question: q.question_text || undefined }) }]
     }
+    case 'pregnancy': case 'breastfeeding': case 'alert':
+      return [{ ...base, id: d.id, type: d.function, data: factData(d.function, q), ...(q.entry_id ? { refers_to: String(q.entry_id), relation: 'changes' as const } : {}) } as EntryIn]
     // another type's draft (the composer makes none today): its params are that type's data, which the writer checks
     default: return [{ ...base, id: d.id, type: d.function, data: q } as EntryIn]
   }

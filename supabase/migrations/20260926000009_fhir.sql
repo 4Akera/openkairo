@@ -375,6 +375,36 @@ create function base.alert_fhir(p jsonb) returns jsonb language sql stable secur
   from (select base.fhir_own(p) o) x
 $$;
 
+-- pregnant and breastfeeding: an Observation each (LOINC 82810-3 with its answer, and 63895-7); an ended fact keeps its period
+create function base.fact_effective(p jsonb, o jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select case when o -> 'data' ->> 'status' = 'ended' then jsonb_build_object('effectivePeriod', jsonb_build_object(
+      'start', core.fhir_date((p -> 'entries' -> 0 ->> 'occurred_at')::timestamptz, p -> 'entries' -> 0 ->> 'precision', (p ->> 'org')::uuid),
+      'end', core.fhir_date((o ->> 'occurred_at')::timestamptz, o ->> 'precision', (p ->> 'org')::uuid)))
+    else jsonb_build_object('effectiveDateTime', core.fhir_date((o ->> 'occurred_at')::timestamptz, o ->> 'precision', (p ->> 'org')::uuid)) end
+$$;
+create function base.pregnancy_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_array(base.fhir_head(p, 'Observation') || base.fact_effective(p, o) || jsonb_strip_nulls(jsonb_build_object(
+    'status', case when base.fhir_gone(p) then 'entered-in-error' when (base.fhir_latest(p) ->> 'item_version')::int > 1 then 'amended' else 'final' end,
+    'code', core.fhir_code('loinc', '82810-3', null, (p ->> 'org')::uuid), 'subject', base.fhir_subject(p), 'encounter', base.fhir_ref('Encounter', o ->> 'visit_id'),
+    'valueCodeableConcept', core.fhir_code('loinc', case when (o -> 'data' ->> 'pregnant')::boolean then 'LA15173-0' else 'LA26683-5' end, null, (p ->> 'org')::uuid),
+    'component', case when o -> 'data' ? 'lmp' then jsonb_build_array(jsonb_build_object('code', core.fhir_code('loinc', '8665-2', null, (p ->> 'org')::uuid),
+        'valueDateTime', o -> 'data' -> 'lmp' ->> 'value'))
+      when o -> 'data' ? 'weeks' then jsonb_build_array(jsonb_build_object('code', core.fhir_code('loinc', '49051-6', null, (p ->> 'org')::uuid),
+        'valueQuantity', core.fhir_quantity(jsonb_build_object('value', o -> 'data' ->> 'weeks', 'unit', 'wk', 'ucum', 'wk')))) end,
+    'performer', jsonb_build_array(base.fhir_ref('PractitionerRole', o ->> 'author_id')),
+    'note', case when o -> 'data' ? 'note' or o -> 'data' ? 'reason' then jsonb_build_array(jsonb_build_object('text', concat_ws(' · ', o -> 'data' ->> 'reason', o -> 'data' ->> 'note'))) end)))
+  from (select base.fhir_own(p) o) x
+$$;
+create function base.breastfeeding_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_array(base.fhir_head(p, 'Observation') || base.fact_effective(p, o) || jsonb_strip_nulls(jsonb_build_object(
+    'status', case when base.fhir_gone(p) then 'entered-in-error' when (base.fhir_latest(p) ->> 'item_version')::int > 1 then 'amended' else 'final' end,
+    'code', core.fhir_code('loinc', '63895-7', null, (p ->> 'org')::uuid), 'subject', base.fhir_subject(p), 'encounter', base.fhir_ref('Encounter', o ->> 'visit_id'),
+    'valueBoolean', (o -> 'data' ->> 'breastfeeding')::boolean,
+    'performer', jsonb_build_array(base.fhir_ref('PractitionerRole', o ->> 'author_id')),
+    'note', case when o -> 'data' ? 'note' then jsonb_build_array(jsonb_build_object('text', o -> 'data' ->> 'note')) end)))
+  from (select base.fhir_own(p) o) x
+$$;
+
 -- death is not a resource: it patches the Patient (core merges it in)
 create function base.died_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select case when base.fhir_gone(p) then '[]'::jsonb else jsonb_build_array(jsonb_build_object('patch', 'Patient',
@@ -425,6 +455,8 @@ select core.declare_fhir('result', 1, 'base.result_fhir(jsonb)');
 select core.declare_fhir('procedure', 1, 'base.procedure_fhir(jsonb)');
 select core.declare_fhir('reviewed', 1, 'base.reviewed_fhir(jsonb)');
 select core.declare_fhir('alert', 1, 'base.alert_fhir(jsonb)');
+select core.declare_fhir('pregnancy', 1, 'base.pregnancy_fhir(jsonb)');
+select core.declare_fhir('breastfeeding', 1, 'base.breastfeeding_fhir(jsonb)');
 select core.declare_fhir('died', 1, 'base.died_fhir(jsonb)');
 select core.declare_fhir('checked_in', 1, 'base.encounter_fhir(jsonb)');
 select core.declare_fhir('admitted', 1, 'base.encounter_fhir(jsonb)');

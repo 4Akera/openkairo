@@ -18,7 +18,7 @@ deployment, so nothing here needs a data migration.
  │ PACKS   pharmacy.* …  own types (often extending a base type), checks, visibility rules (hide only), │
  │         settings, screens. React to other layers' types after commit.                               │
  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
- │ BASE    all meaning: 34 types, presence, privacy, checks, derived tables, the review loop,         │
+ │ BASE    all meaning: 36 types, presence, privacy, checks, derived tables, the review loop,         │
  │         code systems and their rows, settings keys, FHIR mappings. Always on; released with core.  │
  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
  │ CORE    people · patients · places · registry · settings · codes · counters · files · datatypes    │
@@ -310,7 +310,9 @@ FHIR's own code wherever the meaning matches, so the mapping is identity and the
 | `result` | an answer to an order, or an outside result · code, status (preliminary · final · corrected · amended), analytes[{key, code, name, value, text, interpretation, reference range copied at write, critical range}], conclusion, attachments | DiagnosticReport + Observation per analyte, id `{item}-{key}` | LOINC, UCUM, v3 ObservationInterpretation |
 | `procedure` | something done · code, status, performed time, body site, outcome, reason | Procedure | local |
 | `reviewed` | the requester saw an answer (`about` → result or step) | Task (review), completed | — |
-| `alert` | a standing warning (DNR, isolation, fall risk) · code, status, period | Flag | local |
+| `alert` | a standing warning (DNR, isolation for HBV or HCV, fall risk, other) · concept, status (active · inactive), period; ended by an inactive version that `changes` it, once; never names HIV (`names_hiv`) | Flag | local (`local.alert`: dnr, isolation_hbv, isolation_hcv, fall_risk…) |
+| `pregnancy` | pregnant or not, a base fact (§5.1 rule 3) · status (current · ended), pregnant, LMP (partial date) or weeks (0–45), reason (why it ended), note; ended by a version that `changes` it, once | Observation 82810-3 (LA15173-0 Pregnant · LA26683-5 Not pregnant; LMP 8665-2 or 49051-6 weeks as a component; ended: effectivePeriod) | LOINC |
+| `breastfeeding` | breastfeeding or not, a base fact · status (current · ended), breastfeeding, note | Observation 63895-7, valueBoolean | LOINC |
 | `died` | death · time with precision, cause | Patient.deceasedDateTime | WHO ICD-10 |
 | `crossed_out` | "this should not be here" · reason (typo · wrong value · wrong patient · late information · other), text | the target's next version, entered-in-error; Provenance NULLIFY | local reasons |
 
@@ -381,6 +383,14 @@ again, or when it was corrected after being seen.
   it is refused `unknown_step` (the first step finds the order it answers; a later one, through the step it changes); keys come in any
   order and may repeat (a sample collected again); a step with a status only (in progress, held, not done) names none. A service
   without steps or retired, or an order with no service id, lists none; a service lists each key once (`duplicate`).
+- **Standing facts** (`alert`, `pregnancy`, `breastfeeding`, one check `base.fact_check`): an end (`ended`, an alert `inactive`)
+  `changes` the fact (`nothing_to_end`) and only one still standing (`already_ended`: an ended fact is over, a new one starts its own
+  item); an alert, in any version, never names HIV in its words, note or codings (`names_hiv`: the word, HIV1 and `_hiv` too, AIDS,
+  spelled out, in Arabic, the ICD-10 codes B20–B24, Z21, R75, Z20.6, Z71.7, O98.7; `base.names_hiv` and the client's `namesHiv` hold
+  one pattern); one current pregnancy and one breastfeeding at a time (`already_recorded`: a new line changes the standing one); a
+  pregnancy's dates only when pregnant (`dates_not_pregnant`), an LMP or weeks, not both (`lmp_or_weeks`), an LMP a real day
+  (`bad_lmp`) never after the day written (`lmp_future`); a warning for a current pregnancy's LMP more than 44 weeks back
+  (`lmp_long_ago`; an end written after the delivery is not warned) and for a man recorded pregnant (`sex_male`).
 - **Warnings** (inline cards): allergy clash and duplicate therapy (by ATC ingredient and class), a dose above the usual, a problem
   already on the list.
 - **Flags**: an unknown code, a unit that is not UCUM, a late conflict, a stale correction, a critical result (LL, HH, AA).
@@ -428,10 +438,15 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   replaces the bench lists every request sent to the department. Every screen sits in the kit's frame.
 - **The chart** is the patient screen: the clinic visit and the ward stay (`/visit/:id`) and the record with no encounter
   (`/patient/:id`). Whose visit it is: the queue row, else who-is-where (`base.presence`), else the patient of the link.
-  - *Banner* (sticky, one row; no queue line above it: the queue is the clinic's home): name, age, sex, number, phone, deceased; the
-    encounter in words (in consult · follow-up · 12 min, or Admitted · Bed 3 · day 4, day 1 the admission's clinical day); active
-    alerts, then allergies or No known allergies / Allergies not asked; "1 critical to review" when results wait for the reader. No
-    vitals: the Summary shows them with their trend. Actions: a clinic visit of mine in consult, **Done** (Sign N · Done → next, ⌘↵) and **More**, whose
+  - *Banner* (sticky, one line in zones by §5.1 rule 3; no queue line above it: the queue is the clinic's home): *who* (name, age,
+    sex, number, deceased; the phone is in the Summary) · *where* (in consult · follow-up · 12 min, or Admitted · Bed 3 · day 4, day 1
+    the admission's clinical day; urgent) · *safety*, the same in every department (`model/banner.ts`): severe allergies by name
+    (high criticality or a severe reaction) and the others counted, or No known allergies / Allergies not asked (warn); the active
+    alerts in short words (DNR, Isolation · HBV, Isolation · HCV, Fall risk in warn; words naming HIV read Isolation); "1 critical to
+    review", the patient's critical results waiting whoever they wait for (opens the review list); Pregnant · n wk (weeks from the
+    LMP, or the weeks said plus the weeks since; past 44 weeks never ended, "Pregnancy · check (n wk)" in warn), Breastfeeding · then
+    this department's pack words (`registerBannerWords`, `src/core/screens/chart/words.ts`): two, best ranked, then **+n**, which
+    opens the rest as a second line in the banner and folds it again (Fewer). No vitals: the Summary shows them with their trend. Actions: a clinic visit of mine in consult, **Done** (Sign N · Done → next, ⌘↵) and **More**, whose
     choices (goes home / waits, → next or back to the queue, Not here, Return to waiting) open in a strip under the banner, never a menu
     over the record; a stay, **Sign** (into the stay, no move) and **Discharge** (inline chooser); otherwise "with Dr. X — theirs to
     finish", **Sign N** (outside any visit) and **Start visit**.
@@ -441,7 +456,8 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
     yesterday**, **Since Done** for a clinic patient back with results; an older visit (read-only, Esc back), Outside a visit, the
     **Whole record** (by visit or by day per `organization.record_view`, paged), results over time, one entry with its Details under
     it. A kind filter (`?kind=`, `[` `]`) narrows each. Nothing opens over the record.
-  - *Record panel* (right; tabs under 640 px, on a phone): the **Summary** — active problems, current medicines, allergies and alerts, last
+  - *Record panel* (right; tabs under 640 px, on a phone): the **Summary** — the phone, active problems, current medicines, allergies
+    and alerts, pregnancy & feeding (when either is recorded, each with End), last
     vitals, key results, last visits, still waiting, each with its limit and empty state, and before Last visits each shown pack
     section's Summary line — then Problems, Medicines, Allergies & alerts, History, Results, Documents, Visits & stays, and the packs'
     sections by §5.1 rule 2. Every section comes from one registry (`registerSection`, `src/core/screens/chart/sections.ts`; the
@@ -469,7 +485,9 @@ pack builds against.
 
 ### 4.7 The composer
 The composer turns typed lines into one set. `/v 120/80 88` becomes `vitals` with codings by stable key; `/dx` a `problem`; `/rx` a
-`medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s; a plain line a `note`; `!` a `private`
+`medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s; `/preg 12w` (or `lmp 2026-08-01`, `no`,
+`end delivered`) a `pregnancy`, `/bf` (`no`, `end`) a `breastfeeding` and `/alert dnr · hbv · hcv · fall · <words>` (`end dnr`) an
+`alert`, each with its card, changing or ending the fact that stands (an alert never names HIV); a plain line a `note`; `!` a `private`
 entry about the line's entry; `#preset` expands the preset's lines. Warnings come back as inline cards below the line. Done is one set
 that includes `seen` (when not yet seen) and `done`; drafts live in the browser (IndexedDB per user, patient and department), cleared
 at sign-out. The drafts are drawn under the line as the blocks they will be (the exact type and data the set will write), and
@@ -525,7 +543,12 @@ it works ("/x is used in: …").
   (severe ones by name, "not asked" in amber), the base alerts (DNR, isolation for HBV and HCV, never HIV, fall risk), critical
   results waiting, pregnant or breastfeeding (base facts, since they change what is safe to prescribe or image) · *this department's
   packs*: at most 2 words, each pack ranking its own, then **+n**. +n opens a second banner line in place and folds it again; nothing
-  pops over the record. The phone number and everything else live in the Summary.
+  pops over the record. The phone number and everything else live in the Summary. *Built 2026-10-06:* the zones are the kit
+  banner's (`zones`, `second`), thin lines from 640 px, wrapping without them on a phone (the actions wrap first); safety is worked
+  out from the record alone, never the department (`safetyOf`); a pack registers its words with a rank (1 first,
+  `registerBannerWords`), read from its types' entries in the packs' own read; only the packs the department uses speak (its
+  `department.packs` through the directory), sorted by rank, then the department's pack order; a pack whose words fail says nothing.
+  Pharmacy's: "n to collect" while a dispense waits prepared.
 - **Rule 4 · one board per place.** Beds, chairs and cubicles always show on the one base board, the same in every ward, ICU, labour
   ward, dialysis unit and ER. A pack the department uses adds one line to each tile (its words: "Ventilated d2 · NorAd 0.15 · MAP 62",
   "6 cm · past alert line") and at most 2 buttons of its own, after the base buttons; Admit, Move and Discharge are always the base's,
@@ -597,7 +620,8 @@ it works ("/x is used in: …").
 - **Reference data.** Licensed lists come in by import script (rule 7); the demo loads a small sample of each, labelled "demo sample,
   not the full list".
 - **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
-  each tab needs; the fit test, chip words and Summary lines; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
+  each tab needs; the fit test, chip words and Summary lines; banner words with their rank; the pregnant and breastfeeding facts;
+  the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -856,4 +880,34 @@ types, parked pack calls with per-call Retry, Postgres enums.
     off), the order and More, private data as the fact only, a section's own entries, Summary lines, the registry, the base words,
     pharmacy's, and one per review finding (redacted, the packs' own read, Documents "n+", drafts on the chips, the medicine not
     given). `test:chart` 22 + 9 groups, `test:composer` 13, `test:screens` 9; 17 suites, 529 checks (unchanged).
+- 2026-10-06: platform piece 3 — the banner in zones and the base facts it needs (§5.1 rule 3), proven on pharmacy.
+  - **Server**: two base types, `pregnancy` and `breastfeeding` (36 in all), each current until a version that `changes` it ends it;
+    one check for the standing facts, `base.fact_check`, which the `alert` now takes too (`nothing_to_end`, `already_ended`,
+    `names_hiv`, `dates_not_pregnant`, `lmp_or_weeks`, `lmp_future`; warnings `lmp_long_ago`, `sex_male`); their lines and FHIR
+    (Observation 82810-3 with the LOINC answer and the LMP or weeks, 63895-7; an ended fact as a period); LOINC 49051-6, 63895-7,
+    LA15173-0, LA26683-5 and the alerts `isolation_hbv`, `isolation_hcv` in the codes; the Doctor and the Nurse write them.
+  - **Client**: the kit's banner takes zones and a second line; the chart's banner is who · where · safety · this department's words
+    (`model/banner.ts`, `words.ts`), the phone moved to the Summary, which shows Pregnancy & feeding with End; the composer's `/preg`,
+    `/bf` and `/alert` with their cards (`visit/facts.ts`, `FactCards.tsx`), a new line changing the standing fact and `end`
+    ending it (End on the Summary and on an alert seeds it); the facts page reads the two new types and a block draws them;
+    pharmacy's banner word "n to collect". `/design` shows the banner in zones.
+  - **Reviewed** (find, then an adversarial check of each finding): the safety zone counted critical results through the reader's
+    own waiting list, so a critical result waiting for the ER showed only there; it now counts the patient's critical review rows
+    whoever they wait for (one per result). `names_hiv` caught only the token "hiv": AIDS, the name spelled out, HIV1, a code such as
+    `isolation_hiv` or B20, a note, or an inactive version got through and would show in every department; now one pattern
+    (`base.names_hiv`, the client's `namesHiv`) checks the words, the note and every coding in every version, and the Allergies &
+    alerts panel and the alert block never draw words or a note naming HIV. Ending a pregnancy after the delivery warned
+    `lmp_long_ago`; only a current one is warned. A pregnancy never ended counted weeks for ever; past 44 weeks it reads "Pregnancy
+    · check (n wk)" in warn, on the banner and in the Summary. An impossible LMP (2025-02-30) raised in the check and landed flagged;
+    the composer refuses it and the server says `bad_lmp`. Two clinicians could each start a current pregnancy (or breastfeeding);
+    the second is refused `already_recorded`. A bare `/alert` opened a card set to DNR, so Enter drafted a DNR; it starts with no kind
+    and asks what the alert is. The banner's actions no longer keep one line on a phone (they wrap). The client has words for the
+    facts' codes.
+  - **Tests**: 18 suites, 579 checks (new `facts`: 50 — the declarations, shapes, checks, a change by another clinician, ending once,
+    a correction of an end, an alert written and ended, HIV refused in every form, a bad LMP, one current fact at a time, an end long
+    after the LMP, FHIR); `npm run test:banner` (new), 13 groups — the zones' order, who without the phone, allergies, alerts (HIV
+    never named, one pattern with the server's), critical results, pregnant and breastfeeding, the safety zone the same in every
+    department and for every reader, a pregnancy past 44 weeks, the pack words (department filter, rank, two, +n), the second line,
+    the registry, pharmacy's word; `test:composer` 15 groups (the facts' commands and entries, a bare /alert, a bad LMP),
+    `test:chart` 22 + 9, `test:sections` 19, `test:screens` 9.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

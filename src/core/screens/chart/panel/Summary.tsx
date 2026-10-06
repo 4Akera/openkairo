@@ -3,7 +3,8 @@
 // notices above them (opened anyway, died; the private notes stand just above the Summary). The label sits left of the facts where
 // the panel is wide, above them where it is narrow. Vitals carry no flag (none exists): a tile shows its change (↗ ↘ →), never a flag
 // arrow; a result keeps its analyte's own interpretation (↑‼ critically high). A fact opens its entry in the center, "+N more" its
-// section. "Not reviewed" is warn, as Side.tsx's amber: it asks for a review. A pack's Summary line sits before Last visits, only
+// section. The phone sits at the top (the banner keeps it short), and Pregnancy & feeding after the allergies when either is recorded,
+// each with End. "Not reviewed" is warn, as Side.tsx's amber: it asks for a review. A pack's Summary line sits before Last visits, only
 // while its section shows (spec/openCare.md §5.1), and opens that section.
 import { useMemo, useState, type ReactNode } from 'react'
 import { Lock, TriangleAlert } from 'lucide-react'
@@ -16,7 +17,8 @@ import { partialWords, sinceWords } from '../model/labels'
 import { doseText, waitingOf } from '../model/record'
 import { summaryOf, type Summary as S } from '../model/summary'
 import type { KeyResult, VitalTile } from '../model/values'
-import { DRAFT, useListDrafts } from './actions'
+import { DRAFT, endFact, useListDrafts } from './actions'
+import { breastfeedingWords, pregnancyWords } from '../model/facts'
 import { Fact, More, ReviewLine, Undo } from './parts'
 import type { Panel } from './RecordPanel'
 
@@ -30,9 +32,10 @@ const live = (o: { at: number; reason: string } | undefined) => o && o.at > Date
 
 export function Summary({ p }: { p: Panel }) {
   const presence = p.r.visit?.presence
-  const s = useMemo(() => summaryOf(p.rec, p.ctx, { facts: p.facts, visitId: p.visitId, visit: presence }), [p.rec, p.ctx, p.facts, p.visitId, presence])
-  const btg = live(useOpened((x) => x.until[p.patientId]))
+  const s = useMemo(() => summaryOf(p.rec, p.ctx, { facts: p.facts, visitId: p.visitId, visit: presence, today: today() }), [p.rec, p.ctx, p.facts, p.visitId, presence])
+  const btg = live(useOpened((x) => x.until[p.patientId])); const phone = p.r.patient.phone_text
   return <Section variant="compact" title="Summary" className="@container">
+    {phone && <p className="mb-2 text-12 text-muted">Phone <span className="text-fg tnum">{phone}</span></p>}
     {(btg || s.notices.died) && <div className="mb-2 grid gap-1 text-12">
       {btg && <p className="flex items-center gap-1.5 text-muted"><Lock aria-hidden className="size-3.5 text-faint" />Opened anyway — until {hm(new Date(btg.at).toISOString())} · {btg.reason}</p>}
       {s.notices.died && <p className="font-medium text-fg">Died {longDate(s.notices.died)}</p>}
@@ -64,6 +67,7 @@ export function Summary({ p }: { p: Panel }) {
           {a.kind === 'intolerance' && <Tag className="ms-1.5">Intolerance</Tag>}{a.high_risk && <Badge tone="danger" className="ms-1.5">High risk</Badge>}</p>)}
         {!s.allergies.rows.length && <NoneKnown p={p} checked={s.allergies.nka} at={s.allergies.review} />}
       </Item>
+      {(s.facts.pregnancy || s.facts.breastfeeding) && <Item label="Pregnancy & feeding"><Facts p={p} s={s} /></Item>}
       <Item label="Last vitals">
         {s.vitals.at ? <>
           <p className="mb-1 text-12 text-faint tnum">{taken(s.vitals.at)}</p>
@@ -92,6 +96,19 @@ export function Summary({ p }: { p: Panel }) {
 function Item({ label, id, children }: { label: string; id?: string; children: ReactNode }) {
   return <div id={id} className="grid scroll-mt-2 grid-cols-1 gap-0.5 @md:grid-cols-[7.5rem_minmax(0,1fr)] @md:gap-3">
     <dt className="text-12 text-faint @md:pt-px">{label}</dt><dd className="min-w-0 text-13 text-fg">{children}</dd>
+  </div>
+}
+
+/** the current pregnancy and breastfeeding facts, yes or no, each with End for whoever may write it (it seeds the composer) */
+function Facts({ p, s }: { p: Panel; s: S }) {
+  const { pregnancy: g, breastfeeding: b } = s.facts
+  const end = (fn: 'pregnancy' | 'breastfeeding', id: string, data: Record<string, unknown>, words: string) => p.writes(`write:${fn}`) &&
+    <Button size="xs" variant="outline" onClick={() => { endFact(fn, id, data, words); p.onCompose?.() }}>End</Button>
+  return <div className="grid gap-0.5">
+    {g && <p className="flex flex-wrap items-center gap-x-1.5"><Fact onOpen={() => p.open(g.entry.id)} className={cn(g.pregnant && 'font-medium', g.overdue && 'text-warn')}>{pregnancyWords(g)}</Fact>
+      {g.lmp && <span className="text-12 text-faint tnum">LMP {longDate(g.lmp)}</span>}<span className="text-12 text-faint tnum">· {shortDate(g.at)}</span>{end('pregnancy', g.entry.id, { ...g.data }, pregnancyWords(g))}</p>}
+    {b && <p className="flex flex-wrap items-center gap-x-1.5"><Fact onOpen={() => p.open(b.entry.id)} className={cn(b.breastfeeding && 'font-medium')}>{breastfeedingWords(b)}</Fact>
+      <span className="text-12 text-faint tnum">· {shortDate(b.at)}</span>{end('breastfeeding', b.entry.id, { ...b.data }, breastfeedingWords(b))}</p>}
   </div>
 }
 

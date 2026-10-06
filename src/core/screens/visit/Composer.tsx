@@ -5,12 +5,14 @@ import { canSendPrescriptions } from './send'
 import { useDrafts, useDraftsFor } from '../../hooks/drafts'
 import { useComposer, type Seed } from '../../hooks/composer'
 import type { Allergy, Medication, RecordView } from '../../db/types'
-import { Button, Callout, Card, Input, Kbd, cn } from '../../ui'
+import { Button, Callout, Card, Input, Kbd, cn, ymd } from '../../ui'
 import { ALLERGENS, DRUGS, PROBLEMS, allergyWarnings, doseWarnings, drugWarnings, duplicateMedication, duplicateProblem, type Warning } from './catalog'
 import { expand, suggest, type Expanded, type Suggestion } from './expand'
 import { CardItem, WarningItem } from './Card'
 import { lineOf, type Ctx, type Parsed } from './parse'
 import { commandsFor } from './commands'
+import { factMissing, standingOf } from './facts'
+import { useFacts } from '../../hooks/chart'
 import { replyFormFor } from '../../renderers'
 
 const FN_ACTION: Record<string, string> = { write_vitals: 'write:vitals', write_prescription: 'write:medication', write_request: 'write:order', write_problem: 'write:problem', write_allergy: 'write:allergy', write_note: 'write:note', write_list_review: 'write:list_review' }
@@ -25,6 +27,7 @@ export interface ComposerHandle { focus: () => void; flush: () => boolean; slash
 export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: string; departmentId: string; can: (a: string) => boolean }>(function Composer({ r, patientId, departmentId, can }, ref) {
   const { org } = useDepartment()
   const drafts = useDraftsFor(patientId)
+  const facts = useFacts(patientId)   // the standing pregnancy, breastfeeding and alerts: /preg, /bf and /alert change or end them
   const input = useRef<HTMLInputElement>(null); const card = useRef<HTMLDivElement>(null)
   const [text, setText] = useState(''); const [seed, setSeed] = useState<Seed | null>(null); const [seedN, setSeedN] = useState(0)
   const [edited, setEdited] = useState<{ key: string; items: Parsed[] } | null>(null)
@@ -43,7 +46,8 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     canSend: canSendPrescriptions(org, departmentId) && can('write:medication'),   // a pharmacy answers prescriptions here
     departmentType: org?.departments.find((x) => x.id === departmentId)?.type, packCards: org?.departments.find((x) => x.id === departmentId)?.pack_cards ?? true,
     problems: [...r.problems.map((p) => ({ id: p.id, name: p.name })), ...drafts.filter((d) => d.function === 'problem' && d.params.action === 'add').map((d) => ({ id: d.id, name: String(d.params.name) }))],
-  }), [org, presets, departmentId, r.problems, drafts, can])
+    facts: standingOf(facts.data, org?.types, ymd(new Date().toISOString())),
+  }), [org, presets, departmentId, r.problems, drafts, can, facts.data])
 
   // what the lists hold once this visit's drafts are signed: warnings check against these
   const allergies: Allergy[] = useMemo(() => [...r.allergies.filter((a) => a.status === 'active' && !drafts.some((d) => d.function === 'allergy' && d.params.action === 'refute' && d.params.allergy_id === a.id)),
@@ -91,6 +95,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       case 'allergy': return q.action === 'add' && !String(q.substance?.name ?? '').trim() ? 'Name the substance' : null
       case 'order': return q.service_id ? null : !q.to_department_id ? 'Choose the department' : !String(q.question_text ?? '').trim() ? 'Type the question' : null
       case 'note': return String(q.text ?? '').trim() ? null : 'The note is empty'
+      case 'pregnancy': case 'breastfeeding': case 'alert': return factMissing(p, ymd(new Date().toISOString()))
       case 'list_review': return q.list === 'allergies' && q.outcome === 'none_known' && allergies.length ? `Allergies are recorded (${allergies.map((a) => a.substance_name).join(', ')}), so not “no known allergies”` : null
     }
     return null

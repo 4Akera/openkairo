@@ -6,11 +6,12 @@ import { Activity, ClipboardList, File, FileText, FlaskConical, HeartOff, ListCh
 import type { Organization } from '../../../db/types'
 import { dataOf } from '../../../db/views'
 import { rendererFor, type BlockProps } from '../../../renderers'
-import { family, type BlockGroup, type ChartItem, type Family } from '../model/items'
+import { baseOf, family, type BlockGroup, type ChartItem, type Family } from '../model/items'
 import { GROUP_WORD, noteKind, typeLabel } from '../model/labels'
 import { Alert } from './Alert'
 import { Allergies } from './Allergy'
 import { Died } from './Died'
+import { Fact } from './Fact'
 import { Fallback, PackFull } from './Fallback'
 import { Given } from './Given'
 import { ListReview } from './ListReview'
@@ -30,10 +31,12 @@ export const ICON: Record<Family, LucideIcon> = { note: FileText, vitals: Activi
 const CORE: Partial<Record<Family, ComponentType<BlockProps>>> = { note: Note, vitals: Vitals, result: Result, review: ListReview, given: Given, procedure: Procedure,
   observation: Observation, alert: Alert, died: Died }
 
+/** the base facts drawn in the observation family with a block of their own */
+const BY_BASE: Record<string, ComponentType<BlockProps>> = { pregnancy: Fact, breastfeeding: Fact }
 /** a type's body: its pack's Block, its pack's Full, its base type's block, the Fallback (a lookup, never a component made in render) */
 export function blockFor(type: string, types: Types): { Body: ComponentType<BlockProps> } {
   const r = rendererFor(type)
-  return { Body: r?.Block ?? (r?.Full ? PackFull : CORE[family(type, types)] ?? Fallback) }
+  return { Body: r?.Block ?? (r?.Full ? PackFull : BY_BASE[baseOf(type, types)] ?? CORE[family(type, types)] ?? Fallback) }
 }
 /** a pack's own block stands alone, even where its family is drawn as a group */
 export const ownBlock = (type: string) => !!rendererFor(type)?.Block

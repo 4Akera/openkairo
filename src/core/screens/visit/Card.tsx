@@ -7,6 +7,7 @@ import { REACTIONS, findAllergen, findDrug, findProblem, classOfDrug, resolveDru
 import { KIND_TONE, NOTE_KINDS } from './kinds'
 import { lineOf, partialDate, type Ctx, type Parsed } from './parse'
 import { cardFor } from './commands'
+import { FactCard } from './FactCards'
 
 const FREQS = ['OD', 'BD', 'TDS', 'QDS', 'q6h', 'q8h', 'q12h', 'weekly', 'monthly', 'once', 'stat']
 const ROUTES = ['oral', 'sc', 'im', 'iv', 'sl', 'topical', 'inhaled', 'nasal', 'pr', 'pv']
@@ -15,6 +16,7 @@ const STOP_REASONS = ['Side effect', 'Not effective', 'Course complete', 'Patien
 const VITALS: [string, string, string][] = [['systolic', 'Sys', 'mmHg'], ['diastolic', 'Dia', 'mmHg'], ['pulse', 'Pulse', 'bpm'], ['temperature', 'Temp', '°C'], ['weight', 'Wt', 'kg'], ['spo2', 'SpO₂', '%'], ['respiratory_rate', 'RR', '/min'], ['height', 'Ht', 'cm']]
 
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+const FACTS = new Set(['pregnancy', 'breastfeeding', 'alert'])
 export interface CardProps { item: Parsed; ctx: Ctx; onChange: (p: Parsed) => void; onRemove?: () => void; onLongNote?: (kind: string, text: string) => void }
 
 /** one item of the card: its kind, its live line, its fields */
@@ -30,6 +32,7 @@ export function CardItem({ item, ctx, onChange, onRemove, onLongNote, warnings, 
     : item.function === 'vitals' ? <Vitals q={q} set={set} />
     : item.function === 'order' ? <Req q={q} set={set} ctx={ctx} />
     : item.function === 'note' ? <Note q={q} set={set} onLong={onLongNote} />
+    : FACTS.has(item.function) ? <FactCard fn={item.function} q={q} set={set} />
     : null
   const compact = item.function === 'order' && !!q.service_id || item.function === 'list_review'
   if (compact) return <div className="flex items-center gap-2 px-3 py-1.5 text-13">

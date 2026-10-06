@@ -2,7 +2,7 @@
 // the patient's line, and the settings rows that open their editor under them. All of it Demo Patient; nothing is saved.
 import { useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
-import { Badge, Banner, Button, DeleteButton, EditPanel, Field, Fieldset, FormRow, Input, ListRow, ListSection, NewCard, PatientLine, RetireButton, Row, SaveState, Segmented, Chip } from '../../ui'
+import { Badge, Banner, Button, DeleteButton, EditPanel, Field, Fieldset, FormRow, Input, ListRow, ListSection, NewCard, PatientLine, RetireButton, Row, SaveState, Segmented, Chip, Tag } from '../../ui'
 import { Group, Sample } from './Frame'
 import { FREQUENCIES, PATIENT, PATIENT_SUB, QUEUE } from './fixtures'
 
@@ -10,14 +10,17 @@ const noop = () => {}
 
 export function Rows() {
   const [folded, setFolded] = useState(false); const [open, setOpen] = useState<string | null>('fever'); const [name, setName] = useState('Fever clinic'); const [freq, setFreq] = useState('bid')
-  const [urgent, setUrgent] = useState<'routine' | 'urgent'>('routine')
+  const [urgent, setUrgent] = useState<'routine' | 'urgent'>('routine'); const [more, setMore] = useState(false)
   const dirty = name !== 'Fever clinic'
   return <>
-    <Group title="The patient" hint="the banner: the clinic visit and the stay (full), the bench and the desk (compact); vitals are unflagged">
+    <Group title="The patient" hint="the banner: the chart's zones split by thin lines — who · where · safety · this department's words, +n opening a second line (full); the bench and the desk (compact)">
       <div className="-mx-4 overflow-hidden border-y border-line">
-        <Banner sticky={false} name={`${PATIENT.given_name} ${PATIENT.family_name}`} sub={PATIENT_SUB} context="In consult · follow-up · 6 min" back={{ label: 'Back to the queue', onClick: noop }}
-          flags={<><Badge tone="danger" icon={TriangleAlert}>Penicillin</Badge><Badge tone="warn">Fall risk</Badge></>}
-          vitals={[{ label: 'BP', value: '148/92' }, { label: 'P', value: 84 }, { label: 'SpO₂', value: '97 %' }, { label: 'Wt', value: '80.4 kg' }]}
+        <Banner sticky={false} name={`${PATIENT.given_name} ${PATIENT.family_name}`} sub="58 y · F · #10001" back={{ label: 'Back to the queue', onClick: noop }}
+          zones={[{ key: 'where', label: 'Where', node: <span className="text-13 text-accent">In consult · follow-up · 6 min</span> },
+            { key: 'safety', label: 'Safety', node: <><Badge tone="danger" icon={TriangleAlert}>Penicillin</Badge><Badge tone="warn" icon={TriangleAlert}>Fall risk</Badge><Badge tone="info">Pregnant · 24 wk</Badge></> },
+            { key: 'packs', label: 'This department', node: <><Tag>1 to collect</Tag><Tag>Chronic care due</Tag>
+              <button type="button" aria-expanded={more} onClick={() => setMore(!more)} className="rounded-full px-1.5 text-12 font-medium text-accent hover:bg-hover focus-ring">{more ? 'Fewer' : '+1'}</button></> }]}
+          second={more && <Tag>Growth due</Tag>}
           actions={<><Button size="sm" variant="outline">Return to waiting</Button><Button size="sm">Done → next</Button></>} />
       </div>
       <Banner size="compact" name={`${PATIENT.given_name} ${PATIENT.family_name}`} sub={PATIENT_SUB} flags={<span className="text-12 text-faint">No known allergies</span>}

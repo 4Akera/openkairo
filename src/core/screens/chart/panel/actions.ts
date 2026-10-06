@@ -7,6 +7,7 @@ import { compose } from '../../../hooks/composer'
 import type { Allergy, Medication, Problem } from '../../../db/types'
 import { lineOf, type Parsed } from '../../visit/parse'
 import type { Drafted } from '../sections'
+import { KIND } from '../../visit/facts'
 
 const seed = (label: string, p: Omit<Parsed, 'line'>) => compose({ seed: { label, items: [{ ...p, line: lineOf({ ...p, line: '' }) }] } })
 /** open the composer on a medication: a new dose */
@@ -16,6 +17,9 @@ export const changeMed = (m: Medication) => seed(`Change ${m.drug_name}`, { func
 export const stopMed = (m: Medication) => seed(`Stop ${m.drug_name}`, { function: 'medication', kind: 'prescription', params: { action: 'stop', medication_id: m.id, drug: { code: m.drug_code, name: m.drug_name }, stop_reason_text: null } })
 /** open the composer on a problem: certainty, since, note */
 export const updateProblem = (p: Problem) => seed(`Update ${p.name}`, { function: 'problem', kind: 'problem', params: { action: 'update', problem_id: p.id, name: p.name, status: 'active', certainty: p.certainty, onset_on: p.onset_on, text: p.note_text } })
+/** open the composer on ending a standing fact (a pregnancy with why, breastfeeding, an alert): it changes the fact once, on Done */
+export const endFact = (fn: 'pregnancy' | 'breastfeeding' | 'alert', entryId: string, data: Record<string, unknown> | undefined, words: string) =>
+  seed(`End ${words}`, { function: fn, kind: KIND[fn], action: `write:${fn}`, params: { action: 'end', entry_id: entryId, was: { ...data }, words, reason: null } })
 /** + : a line started in the composer */
 export const startLine = (line: string) => compose({ text: line })
 
