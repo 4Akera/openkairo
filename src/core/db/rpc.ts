@@ -26,13 +26,15 @@ const WORDS: Record<string, string> = {
   names_hiv: 'An alert shows in every department, so it never names HIV or AIDS', nothing_to_end: 'Nothing standing to end', already_ended: 'Already ended: a new one starts its own',
   already_recorded: 'Already recorded by someone else — look again and change that one', dates_not_pregnant: 'Not pregnant takes no dates', lmp_or_weeks: 'The LMP or the weeks, not both',
   lmp_future: 'The LMP is after the day written', bad_lmp: 'The LMP is not a day', lmp_long_ago: 'The LMP is more than 44 weeks back', sex_male: 'Recorded pregnant, but the patient is male',
+  note_missing: 'Write the note to show, or turn it off',
   allergy_clash: 'Allergy', allergy_caution: 'Caution', duplicate_medication: 'Already on this medicine', duplicate_class: 'Another medicine of the same class', already_on_list: 'Already on the list',
 }
 const USED: Record<string, string> = { record: 'the record points at it', services: 'it has services', people: 'people hold roles there', signed_in: 'this person has signed in', places: 'it has beds or rooms', outside: 'every organization keeps one' }
 export const words = (code: string) => WORDS[code] ?? code.replace(/_/g, ' ')
 
 export class Refusal extends Error {
-  constructor(public code: string, public detail?: string) {
+  /** field: the setting's field a refusal names (its path, rows.2.dose), so the form shows it there (§5.1 rule 7) */
+  constructor(public code: string, public detail?: string, public field?: string) {
     super(`${words(code)}${code === 'in_use' && detail ? ` (${USED[detail] ?? detail})` : detail && /^(cannot_grant|pack_off|unknown_action|not_allowed|unknown_step|reserved_step)$/.test(code) ? `: ${detail}` : ''}`)
   }
 }
@@ -45,7 +47,7 @@ export class WriteWarned extends Error { constructor(public outcome: Outcome) { 
 
 async function call<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await db.rpc(fn as never, args as never)
-  if (error) throw new Refusal(error.message, error.details ?? undefined)
+  if (error) throw new Refusal(error.message, error.details ?? undefined, error.hint || undefined)
   return data as T
 }
 

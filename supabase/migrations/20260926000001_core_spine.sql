@@ -293,6 +293,9 @@ create table core.setting_keys (
   check_fn    regprocedure,
   many        boolean not null default false,       -- many things per owner (services, presets) or one
   labels      jsonb not null default '{}',
+  -- what the automatic form needs (§5.1 rule 7): each field in order, {key (a path through properties), labels, help, unit, choices}
+  fields      jsonb not null default '[]',
+  form        text check (form in ('pack', 'department')),   -- where its form shows: the pack's page, the department's card; null: an editor of the core's
   hashes      jsonb not null default '{}'
 );
 create table core.screens (
@@ -330,6 +333,17 @@ create table core.codes (
   primary key (system, code)
 );
 create index codes_label on core.codes using gin ((labels->>'en') extensions.gin_trgm_ops);
+-- each load of a licensed list (§5.1 rule 7, §7 decision 5): the import script's, or the demo's sample, shown read-only in Settings
+create table core.code_imports (
+  id          bigint generated always as identity primary key,
+  system      text not null references core.systems,
+  version     text,
+  source      text not null,                        -- the file or where it came from
+  licence     text,                                 -- the system's licence note as it stood at the load
+  sample      boolean not null default false,       -- a demo sample, not the full list
+  codes       int not null,                         -- the system's codes after the load
+  loaded_at   timestamptz not null default clock_timestamp()
+);
 create table core.canon (
   one         boolean primary key default true check (one),
   url         text not null

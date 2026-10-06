@@ -6,7 +6,7 @@ import { Refusal } from '../../db/rpc'
 
 // each Settings page opens to whoever holds its own manage: action (a clinic's own role may hold only some)
 export const PAGE_ACTION: Record<string, string> = { organization: 'manage:settings', departments: 'manage:places', services: 'manage:settings', users: 'manage:users',
-  roles: 'manage:roles', templates: 'manage:settings', packs: 'manage:settings', reads: 'read:log' }
+  roles: 'manage:roles', templates: 'manage:settings', packs: 'manage:settings', reference: 'manage:settings', reads: 'read:log' }
 /** a manage: call refused for want of a second factor opens the MFA prompt */
 export const useMfaNeeded = create<{ needed: boolean; set: (v: boolean) => void }>((set) => ({ needed: false, set: (needed) => set({ needed }) }))
 export function useSave<A>(fn: (a: A) => Promise<unknown>) {

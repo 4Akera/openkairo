@@ -53,6 +53,9 @@ def demo():
         seen.add(d['atc'])
         rows.append(f"('atc', {q(d['atc'])}, {j({'en': d['name']})}, {j({'allergy_class': d['allergy_class'], 'group': d['group'], 'route': d['route'], 'unit': d['unit']})})")
     out.append('insert into core.codes (system, code, labels, props) values\n  ' + ',\n  '.join(rows) + '\non conflict (system, code) do nothing;')
+    # each list's load, marked a sample: Settings -> Reference lists says "demo sample, not the full list"
+    out.append("select core.record_import('icd10', null, 'openCare demo: the composer catalog''s terms (scripts/gen-codes.py)', true);")
+    out.append("select core.record_import('atc', null, 'openCare demo: the composer catalog''s drugs (scripts/gen-codes.py)', true);")
     return '\n'.join(out)
 if sys.argv[1:] == ['local']: print(local())
 else:

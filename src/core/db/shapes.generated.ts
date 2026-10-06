@@ -452,6 +452,15 @@ export interface OrganizationRecordViewSetting {
 export interface OrganizationTimeZoneSetting {
   zone: string
 }
+/** setting pharmacy.counselling (pharmacy; owner organization) */
+export interface PharmacyCounsellingSetting {
+  note?: string
+  show: boolean
+}
+/** setting pharmacy.late_after (pharmacy; owner department) */
+export interface PharmacyLateAfterSetting {
+  minutes: number
+}
 /** setting place.closed (base; owner place) */
 export interface PlaceClosedSetting {
   closed: boolean
@@ -552,6 +561,8 @@ export interface SettingData {
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
+  'pharmacy.counselling': PharmacyCounsellingSetting
+  'pharmacy.late_after': PharmacyLateAfterSetting
   'place.closed': PlaceClosedSetting
   'preset': PresetSetting
   'service': ServiceSetting

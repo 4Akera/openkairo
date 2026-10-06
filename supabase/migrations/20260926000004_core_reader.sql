@@ -147,7 +147,8 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
         from core.roles r where (r.organization_id = me.organization_id or (r.organization_id is null and core.layer_on(me.organization_id, r.layer)))), '[]'),
     'actions', coalesce((select jsonb_agg(jsonb_build_object('key', a.key, 'layer', a.layer, 'scope', a.scope, 'everyday', a.everyday, 'labels', a.labels) order by a.key)
         from core.actions a where core.layer_on(me.organization_id, a.layer)), '[]'),
-    'settings', coalesce((select jsonb_agg(jsonb_build_object('key', s.key, 'thing_id', s.thing_id, 'owner_id', s.owner_id, 'data', s.data, 'recorded_at', s.recorded_at))
+    'settings', coalesce((select jsonb_agg(jsonb_build_object('key', s.key, 'thing_id', s.thing_id, 'owner_id', s.owner_id, 'data', s.data, 'recorded_at', s.recorded_at,
+          'author_id', s.author_id))
         from (select distinct on (s.key, s.thing_id) s.* from core.settings s where s.organization_id = me.organization_id order by s.key, s.thing_id, s.recorded_at desc, s.id desc) s
         where not s.retired), '[]'),
     'registry', jsonb_build_object(
@@ -155,7 +156,13 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
           'in_record', t.in_record, 'may_be_private', t.may_be_private, 'labels', t.labels) order by t.key, t.version) from core.types t), '[]'),
       -- every screen, a pack's off included: a line naming one whose pack is not used shows the base screens it stands in for
       'screens', coalesce((select jsonb_agg(to_jsonb(s) order by s.key) from core.screens s), '[]'),
-      'setting_keys', coalesce((select jsonb_agg(jsonb_build_object('key', k.key, 'layer', k.layer, 'owner_kind', k.owner_kind, 'many', k.many, 'labels', k.labels)) from core.setting_keys k), '[]'),
+      -- each key with its shape (the datatypes once, below; its own $defs kept) and what its form needs: the fields in order with their
+      -- words, where it shows
+      'setting_keys', coalesce((select jsonb_agg(jsonb_build_object('key', k.key, 'layer', k.layer, 'owner_kind', k.owner_kind, 'many', k.many, 'labels', k.labels,
+          'shape', (k.shape - '$defs') || coalesce((select jsonb_build_object('$defs', jsonb_object_agg(d.k, d.v)) from jsonb_each(k.shape -> '$defs') d(k, v)
+            where core.datatypes() -> d.k is distinct from d.v having count(*) > 0), '{}'),
+          'fields', k.fields, 'form', k.form) order by k.key) from core.setting_keys k), '[]'),
+      'datatypes', core.datatypes(),
       'packs', coalesce((select jsonb_agg(jsonb_build_object('key', l.key, 'version', l.version, 'requires', l.requires, 'labels', l.labels,
           'used', l.key = any (core.packs_used(me.organization_id)),
           'stale', (select count(*) from core.stale s where s.organization_id = me.organization_id and s.layer = l.key))) from core.layers l where l.is_pack), '[]'),
@@ -336,6 +343,7 @@ begin
   end if;
   return jsonb_build_object('changes', coalesce((select jsonb_agg(to_jsonb(a) - 'organization_id' order by a.at desc) from (
     select * from core.audit a where a.organization_id = me.organization_id and (q ->> 'thing_id' is null or a.thing_id = (q ->> 'thing_id')::uuid)
+       and (q ->> 'what' is null or a.what = q ->> 'what')
      order by a.at desc limit greatest(1, least(coalesce((q ->> 'limit')::int, 200), 1000))) a), '[]'));
 end $$;
 
@@ -345,6 +353,16 @@ create function core.read_codes(me core.users, q jsonb) returns jsonb language s
   from (select * from core.codes c where c.retired_at is null and (q ->> 'system' is null or c.system = q ->> 'system')
           and (coalesce(q ->> 'q', '') = '' or c.code ilike (q ->> 'q') || '%' or c.labels ->> 'en' ilike '%' || (q ->> 'q') || '%')
         order by c.system, c.code limit greatest(1, least(coalesce((q ->> 'limit')::int, 50), 2000))) c
+$$;
+
+-- the licensed reference lists loaded here (§5.1 rule 7): each system's latest load, with its version, source, licence and whether it is
+-- the demo's sample; reference data, no patient data, not logged
+create function core.read_reference(me core.users) returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('lists', coalesce(jsonb_agg(jsonb_build_object('system', i.system, 'labels', s.labels, 'uri', s.uri, 'version', coalesce(i.version, s.version),
+      'source', i.source, 'licence', coalesce(i.licence, s.licence), 'sample', i.sample, 'codes', i.codes, 'loaded_at', i.loaded_at,
+      'loads', (select count(*) from core.code_imports x where x.system = i.system)) order by i.system), '[]'))
+  from (select distinct on (x.system) x.* from core.code_imports x order by x.system, x.loaded_at desc, x.id desc) i join core.systems s on s.key = i.system
+  where me.id is not null
 $$;
 
 -- ── masked by default (§5.2): a pack's read for a person sees what that person may see (the pack doors, migration 11) ──
@@ -398,6 +416,7 @@ begin
     when 'log'      then core.read_log_rows(me, p_query)
     when 'audit'    then core.read_audit(me, p_query)
     when 'codes'    then core.read_codes(me, p_query)
+    when 'reference' then core.read_reference(me)
     else null end;
 end $$;
 revoke all on function public.read(jsonb) from public, anon;

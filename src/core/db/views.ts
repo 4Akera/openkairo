@@ -70,6 +70,7 @@ export function directory(m: ServerMe): Organization {
       built_on: r.built_on ?? null, everyday: !!r.everyday, own: r.own ?? r.actions })),
     actions: m.actions.map((a) => ({ key: a.key, layer: a.layer, label: a.labels.en ?? a.key, everyday: !!a.everyday })), types: m.registry.types, screens: m.registry.screens,
     parked_pack_calls: m.registry.packs.reduce((n, p) => n + p.stale, 0), loginUsers: m.users_of_login,
+    settings: m.settings, settingKeys: m.registry.setting_keys ?? [], datatypes: m.registry.datatypes ?? {},
   }
 }
 /** may I do this here, as the server's may answers it (a role held here or everywhere; a pack's actions only where the department uses

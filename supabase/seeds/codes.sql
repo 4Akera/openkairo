@@ -637,3 +637,5 @@ insert into core.codes (system, code, labels, props) values
   ('atc', 'B02AA02', '{"en": "Tranexamic acid"}', '{"allergy_class": null, "group": "Antifibrinolytic", "route": "oral", "unit": "mg"}'),
   ('atc', 'N01BB02', '{"en": "Lidocaine"}', '{"allergy_class": "local_anaesthetic_amide", "group": "Local anaesthetic (amide)", "route": "sc", "unit": "mg"}')
 on conflict (system, code) do nothing;
+select core.record_import('icd10', null, 'openCare demo: the composer catalog''s terms (scripts/gen-codes.py)', true);
+select core.record_import('atc', null, 'openCare demo: the composer catalog''s drugs (scripts/gen-codes.py)', true);

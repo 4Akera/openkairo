@@ -132,7 +132,13 @@ configuration tables of their own. `core.department_uses(organization, departmen
 the core and the base always, a pack only while it is on for the clinic and ticked in the department's `department.packs`, as of now
 (granted to the base's and every pack's role).
 Written only by `public.write_setting`, which checks `may(user, 'manage:settings', owner department)` (or held everywhere for an
-organization key), the shape and the key's check; every change is an AuditEvent.
+organization key), the shape and the key's check; every change is an AuditEvent. A refusal names the field it is about when it can
+(the error's hint: the shape's, worked out by `core.shape_field` as a path with an array's index, `rows.2.dose`; a check's, by its
+finding's `field`), so the form shows it there. A key may declare what its automatic form needs (§3.8, §5.1 rule 7): its fields in
+order, each with its words, help, unit and choices' words, and where the form shows (`pack`: the pack's page, a clinic-wide setting;
+`department`: the department's card); read `me` sends every key with its shape (the datatypes once; the key's own `$defs` with it), its fields and its form, and
+each setting with who changed it last and when; the `audit` read takes `what` (`setting:<key>`) and `thing_id` for one setting's
+history.
 
 ### 3.5 Codes
 - `core.systems`: declared in the registry: key, kind (`code` | `identifier`), canonical URI, version, labels, `closed`, an optional
@@ -141,6 +147,9 @@ organization key), the shape and the key's check; every change is an AuditEvent.
   LOINC code's canonical UCUM unit and allowed units, an ATC level, an EDA product's strength and form). Codes are plain data loaded by
   the base, packs and import scripts. Maps between systems come later as `code_maps`, applied only when reading.
 - **Entries store system keys, never URIs.** URIs are resolved at export (`{canon}` is one row of `core.canon`).
+- `core.code_imports`: each load of a licensed list (`core.record_import(system, version, source, sample)`, called by
+  `scripts/import-codes.sh` and by the demo seed, which marks its loads a sample): the version, the source, the system's licence note
+  as it stood, the count of codes after it, when. The `reference` read lists each system's latest load (Settings → Reference lists).
 
 ### 3.6 Counters and files
 - `core.next_number(organization, key, scope, day)`: record numbers, queue numbers (#12), specimen numbers, invoices.
@@ -192,7 +201,9 @@ select core.declare_table   (key => 'base.lists', layer => 'base', refresh => 'b
 select core.declare_rule    (key => 'base.private', layer => 'base', hidden => 'base.private_hidden(uuid,uuid[])');
 select core.declare_action  (key => 'write:note', layer => 'base', scope => 'department', labels => '{…}',
                              everyday => false);       -- a pack's only: held by the everyday roles where a department uses the pack
-select core.declare_setting (key => 'department.private', layer => 'base', owner => 'department', shape => '{…}', check_fn => null, many => false);
+select core.declare_setting (key => 'department.private', layer => 'base', owner => 'department', shape => '{…}', check_fn => null, many => false,
+                             fields => '[{"key":"minutes","labels":{…},"help":{…},"unit":"min","choices":{…}}]',  -- the form's fields, in order
+                             form => null);            -- where its automatic form shows: 'pack' (the pack's page) · 'department' (its card)
 select core.declare_screen  (key => 'pharmacy.dispensing', layer => 'pharmacy', work => 'bench', labels => '{…}',
                              action => 'read:pharmacy.queue',  -- what a user needs in the department to see its tab; null: anyone working there
                              replaces => array['base.bench']); -- a pack screen: the base screens of its work it stands in for
@@ -210,6 +221,11 @@ select core.declare_role_action(layer, role, action);  -- one action more, by th
 - Keys must sit inside the layer's prefix: pharmacy cannot declare `note` or `obgyn.x`. `requires` may not form a loop.
 - A screen's action is the core's, the base's or its own layer's (`unknown_action`); what it replaces are base screens of its work
   (`unknown_screen`).
+- A setting's fields: each names a node of the shape by its path (`rows.dose`, through objects and arrays of objects), once
+  (`unknown_field`, `duplicate`), with words (`label_missing`); a unit only on a number or a list of numbers (`unit_not_number`),
+  choices only of its enum or its list's items' enum, matched as text so a numeric enum's too (`unknown_choice`). A form is only a
+  pack's (`not_a_pack`): on its page an organization key, on a department's card a department key (`wrong_owner`), one value per owner
+  (`form_many`), and every node it draws has its words (`field_unlabelled`).
 - `may_be_private` is refused for a type whose resources include MedicationRequest, MedicationStatement, MedicationAdministration,
   Immunization or AllergyIntolerance, pack types included.
 - Every derived table has `organization_id, patient_id, item, source_entries uuid[]`, so the reader can mask it, and erase and rebuild
@@ -273,7 +289,8 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 | `file` | a storage path for one attachment | the entry is visible |
 | `fhir` | an R4 Bundle (`bundle`) or International Patient Summary (`ips`) for a patient | `read:record` and `export:fhir` |
 | `log` | the read log, opened-anyway and privacy changes | `read:log` |
-| `audit` | settings and admin changes | `manage:settings` |
+| `audit` | settings and admin changes; `what` and `thing_id` narrow it to one setting's history | `manage:settings` |
+| `reference` | the licensed lists loaded here: each system's latest load (version, source, licence, sample or not, codes, when) | a live user |
 
 - It collects the source entry ids of every row and calls each visibility rule once as `rule(reader, ids[]) → hidden ids[]`. Rules only
   hide and combine with OR over hidden (AND over visible); a rule that raises means hidden, and is logged. Base rules apply to every
@@ -585,7 +602,19 @@ it works ("/x is used in: …").
   pack's page (Settings → Packs → Emergency: the triage scale); per-department ones on that department's card (its zones and places).
   A change takes effect from the moment it is saved; the old value stays in the history with who changed it and when. Licensed
   reference lists (EDA drugs, WHO growth charts, ICD-10) come in by import script and show read-only with their version, source and
-  licence.
+  licence. *Built 2026-10-06:* `declare_setting(…, fields, form)` (§3.8); the automatic form (`src/core/screens/settings/form/`: a
+  pure model drawing a choice as chips, a number with its unit, words, yes/no, a small table of up to four plain columns with rows to
+  add and remove, a list to add to (words, numbers, or choices to tick; larger objects as a group each), a sub-section as a group, a
+  datatype left to the pack's editor; a choice keeps its value as declared, a number's too; checked against the same shape as the
+  server, each error and each refusal the server names a field for under that field, and one at a path the form does not draw (inside
+  a datatype, a key the shape no longer names) at its nearest drawn place, else over the Save, so a refusal is never silent; a saved
+  value starts the form less any key its shape no longer names); each setting in its card with Save, "Changed by … · when" and a History fold (the `audit` read by
+  setting); `registerSettingEditor(key, Component)` draws a pack's own editor in the same card. Settings → Packs → *pack* lists its
+  clinic-wide settings; Settings → Departments → a department shows, for each pack it uses, a card of that pack's per-department ones;
+  Settings → Reference lists shows each loaded list (a demo's marked "demo sample, not the full list"). Pharmacy's: `pharmacy.late_after`
+  (per pharmacy, 5–1440 min, 30 by default: Dispensing marks a prepared row waiting longer "late · n min" and counts Prepared in
+  warn) and `pharmacy.counselling` (for the clinic: a note shown above Give, which its check refuses empty while shown,
+  `note_missing`).
 - **Rule 8 · a score is worked out once.** Each score (NEWS2, SOFA, APACHE II, Aldrete, GCS, PHQ-9, EPDS…) is a declared points
   table with a version and its source, and the server is the only place that adds it up: a card asks the server while the user
   types, and the record, the board tile and the review list all show that one result. An entry keeps the version it used ("NEWS2 6,
@@ -663,7 +692,7 @@ it works ("/x is used in: …").
   not the full list".
 - **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
   each tab needs; the fit test, chip words and Summary lines; banner words with their rank; the pregnant and breastfeeding facts;
-  the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
+  setting shapes with labels and units, and the form drawn from them; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -984,4 +1013,32 @@ types, parked pack calls with per-call Retry, Postgres enums.
     organization-wide action); `pack_contract` +6 (the row rule); `pharmacy` +6 (off: its holders keep nothing, a correction by its
     author lands, by anyone else not, a cross-out lands; on: a former pharmacist's change refused in the ward and in the pharmacy).
     19 suites, 620 checks; `test:composer` 13 groups, `test:chart` 22 + 9, `test:screens` 9, `test:sections` 19.
+- 2026-10-06: platform piece 5 — every setting editable in the app (§5.1 rule 7; §3.4, §3.5, §3.8, §3.10), proven on pharmacy.
+  - **Server**: `core.setting_keys.fields` and `form`; `declare_setting(…, fields, form)` checks each field against the shape once
+    (`unknown_field`, `duplicate`, `label_missing`, `unit_not_number`, `unknown_choice`, `field_unlabelled`, `wrong_owner`,
+    `not_a_pack`, `form_many`, `bad_fields`); `write_setting`'s refusals name their field in the hint (`core.refuse_at`; the shape's
+    by `core.shape_field`, a check's by its finding's `field`); read `me` sends each key's shape, fields and form, the datatypes once,
+    and each setting's author; the `audit` read takes `what`; `core.code_imports` and `core.record_import` (the import script and the
+    demo seed record each load) and the `reference` read. Pharmacy: `pharmacy.late_after` (per pharmacy) and `pharmacy.counselling`
+    (for the clinic, with `pharmacy.counselling_check`: `note_missing` at `note`); the demo shows a counselling note.
+  - **Client**: the automatic form (`settings/form/`: `model.ts` pure, `AutoForm.tsx`, `SettingCard.tsx` with Save, who and when,
+    History; `registerSettingEditor`); Settings → Packs → *pack*, the department's pack cards, Settings → Reference lists; Dispensing
+    marks a prepared row late past the pharmacy's limit and shows the counselling note above Give; `Refusal.field`.
+  - **Tests**: new `settings` (43: the declarations and every refusal of a bad one, a probe pack's setting with every kind of field,
+    read `me`, a refusal's field from the shape (a table's cell, a sub-section's field, a choice, an unknown key) and from a check, who
+    may, a pack off, the history by setting, the reference lists with the demo's sample and a later full load); `npm run test:settings`
+    (new), 8 groups — each kind of shape drawn, the checks by path, what is sent and the defaults, a refusal rendered under its field,
+    the history's words, a pack's own editor, pharmacy's late mark and counselling note. 21 suites, 713 checks; `test:composer` 15
+    groups, `test:chart` 22 + 9, `test:screens` 9, `test:sections` 19, `test:banner` 13.
+  - **Review fixes**: an error at a path the form does not draw (a datatype's inside, a key a pack's upgrade dropped, a check's own
+    field) moved to its nearest drawn place or over the Save (`placeErrors`), a whole item's error shown under its head, and a saved key
+    the shape no longer names left out of the form's start (`prune`); a numeric choice keeps its number (chips, lists of choices, the
+    history's words), and `check_fields` matches choices' words as text and takes a list's unit and choices from its items; `not_a_pack`
+    for any form on a layer that is not a pack; read `me` keeps a key's own `$defs` and the client merges them; a department's pack card
+    read-only while the clinic has the pack off; Undo draws the editor again (a box's unread text goes); chips in a named group (not a
+    radio group), each Remove named, a number's name with its unit. `settings` 48 checks (a list of choices with words, a list of
+    numbers with a unit, a numeric choice with words, `not_a_pack` on a department form, a key's own `$defs` in read `me`);
+    `test:settings` 11 groups (a numeric choice, errors placed, a whole item's error, the dropped key, a key's own `$defs`).
+    After the fixes: 21 suites, 718 checks; `test:composer` 15 groups, `test:chart` 22 + 9, `test:screens` 9, `test:sections` 19,
+    `test:banner` 13, `test:settings` 11; typecheck, eslint and the build clean.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

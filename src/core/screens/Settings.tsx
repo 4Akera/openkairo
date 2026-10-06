@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Palette, Plus, Puzzle, Users, X } from 'lucide-react'
+import { BookOpen, Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Palette, Plus, Puzzle, Users, X } from 'lucide-react'
 import { read, remove, save as saveRow, writeSetting } from '../db/rpc'
 import { useDepartment } from '../hooks/organization'
 import { newId } from '../hooks/writes'
@@ -14,9 +14,11 @@ import { RolesPage } from './settings/Roles'
 import { ReadsPage } from './settings/Reads'
 import { DepartmentsPage } from './settings/Departments'
 import { TemplatesPage } from './settings/Presets'
+import { PackPage, hasSettings } from './settings/PackSettings'
+import { ReferencePage } from './settings/Reference'
 
 const PAGES = [['organization', 'Organization', Building2], ['departments', 'Departments', LayoutGrid], ['services', 'Services', FlaskConical], ['users', 'Users', Users],
-  ['roles', 'Roles', KeyRound], ['templates', 'Presets', ListChecks], ['packs', 'Packs', Puzzle], ['reads', 'Record reads', Eye]] as const
+  ['roles', 'Roles', KeyRound], ['templates', 'Presets', ListChecks], ['packs', 'Packs', Puzzle], ['reference', 'Reference lists', BookOpen], ['reads', 'Record reads', Eye]] as const
 
 /** Settings (spec 02/05): the practice builds its own clinic here, a page per kind of thing, every list folds and every row edits in place. Owners only. */
 export function SettingsScreen() {
@@ -42,6 +44,8 @@ export function SettingsScreen() {
       <Route path="roles" element={can(PAGE_ACTION.roles) ? <RolesPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
       <Route path="templates" element={can(PAGE_ACTION.templates) ? <TemplatesPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
       <Route path="packs" element={can(PAGE_ACTION.packs) ? <PacksPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="packs/:key" element={can(PAGE_ACTION.packs) ? <PackPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="reference" element={can(PAGE_ACTION.reference) ? <ReferencePage /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
       <Route path="reads" element={can(PAGE_ACTION.reads) ? <ReadsPage orgId={org.organization.id} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
     </Routes></div>
   </div>
@@ -185,6 +189,7 @@ function PacksPage({ org }: { org: Organization }) {
       {org.packs.length === 0 ? <Empty>No packs installed on this server yet.</Empty>
       : <ul className="divide-y divide-line">{org.packs.map((p) => <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-14">
           <span className="min-w-0 flex-1"><span className="font-medium">{p.name}</span> <span className="font-mono text-12 text-faint">{p.key}</span></span>
+          {hasSettings(org, p.key) && <Link to={`/settings/packs/${p.key}`} className="rounded-sm text-12 text-accent hover:underline focus-ring">Settings</Link>}
           <Badge tone={p.enabled ? 'accent' : 'neutral'}>{p.enabled ? 'On' : 'Off'}</Badge>
           <Switch checked={p.enabled} label={p.name} disabled={busy}
             onChange={() => p.enabled ? confirm(`Turn off ${p.name}? What it adds stops working here until it is turned on again.`) && off.mutate(p.key) : on.mutate(p.key)} />

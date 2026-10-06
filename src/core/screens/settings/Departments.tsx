@@ -10,6 +10,7 @@ import { SitesSection } from './Sites'
 import { useSave } from './save'
 import { baseLine, lineForPacks, lineHere } from '../line'
 import { PacksAndScreens } from './DepartmentScreens'
+import { PackCards } from './PackSettings'
 
 const WORKS: [Department['work'], string, string][] = [['visits', 'Clinics', 'Patients are seen here in visits.'], ['stays', 'Wards', 'Patients stay here, in beds.'],
   ['desk', 'Front desks', 'Checks patients in for the clinics it serves.'], ['bench', 'Benches', 'Does work others order: a lab, imaging, a pharmacy.'],
@@ -99,7 +100,8 @@ export function DepartmentsPage({ org }: { org: Organization }) {
       </Fieldset>}
       <PacksAndScreens org={org} d={d} set={(x) => e.set(x)} changed={(k) => e.changed(k)} />
     </EditPanel>
-    {existing && existing.work !== 'outside' && <PlacesEditor org={org} dept={existing} />}</> }
+    {existing && existing.work !== 'outside' && <PlacesEditor org={org} dept={existing} />}
+    {existing && <PackCards org={org} dept={existing} />}</> }
 
   return <div className="grid gap-4">
     <PageHead title="Departments" hint="Where patients are seen and where work is done. Open one to rename it or change its rules, its screens and its places." right={<Button size="sm" onClick={() => add()}><Plus className="h-3.5 w-3.5" />Department</Button>} />

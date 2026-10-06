@@ -9,6 +9,11 @@ create function core.refuse(code text, detail text default null) returns void la
 begin
   raise exception using message = code, detail = coalesce(detail, ''), errcode = 'P0001';
 end $$;
+-- a refusal of one field of a setting (§5.1 rule 7): the field's path is the hint, so the form shows it there
+create function core.refuse_at(code text, detail text, field text) returns void language plpgsql as $$
+begin
+  raise exception using message = code, detail = coalesce(detail, ''), hint = coalesce(field, ''), errcode = 'P0001';
+end $$;
 
 -- "now" for a live check: never behind the transaction's own start, though the clock may step back (§3.1)
 create function core.now_safe() returns timestamptz language sql volatile as $$
@@ -391,6 +396,17 @@ begin
      licence = excluded.licence, labels = excluded.labels, hashes = excluded.hashes where core.systems.layer = excluded.layer;
 end $$;
 
+-- a licensed list loaded (scripts/import-codes.sh, or the demo's sample): recorded once per load, with the system's licence note as it
+-- stands and its count of codes after the load (§5.1 rule 7)
+create function core.record_import(p_system text, p_version text, p_source text, p_sample boolean default false) returns void language plpgsql as $$
+begin
+  if not exists (select 1 from core.systems s where s.key = p_system) then perform core.refuse('unknown_system', p_system); end if;
+  if coalesce(trim(p_source), '') = '' then perform core.refuse('source_missing', p_system); end if;
+  insert into core.code_imports (system, version, source, licence, sample, codes)
+  select p_system, coalesce(nullif(trim(p_version), ''), s.version), trim(p_source), s.licence, coalesce(p_sample, false), (select count(*) from core.codes c where c.system = p_system)
+    from core.systems s where s.key = p_system;
+end $$;
+
 create function core.declare_table(key text, layer text, refresh regprocedure, action text) returns void language plpgsql as $$
 #variable_conflict use_variable
 declare rel regclass := to_regclass(key); c text;
@@ -423,18 +439,64 @@ begin
   on conflict on constraint rules_pkey do update set hidden = excluded.hidden, hashes = excluded.hashes where core.rules.layer = excluded.layer;
 end $$;
 
-create function core.declare_setting(key text, layer text, owner text, shape jsonb, check_fn regprocedure default null, many boolean default false, labels jsonb default '{}')
+-- the nodes a setting's form draws (§5.1 rule 7): each property by its path (a.b), through objects and arrays of objects; a $ref is a
+-- datatype, a node of its own (a pack's editor draws it)
+create function core.shape_nodes(p_shape jsonb) returns table (path text, node jsonb) language sql immutable as $$
+  with recursive n(path, node) as (
+    select k, v from jsonb_each(coalesce(p_shape -> 'properties', '{}')) x(k, v)
+    union all
+    select n.path || '.' || x.k, x.v from n, jsonb_each(coalesce(n.node -> 'properties', n.node -> 'items' -> 'properties', '{}')) x(k, v)
+  ) select path, node from n
+$$;
+create function core.node_is(p_node jsonb, p_types text[]) returns boolean language sql immutable as $$
+  select exists (select 1 from jsonb_array_elements_text(case jsonb_typeof(p_node -> 'type') when 'array' then p_node -> 'type'
+    when 'string' then jsonb_build_array(p_node -> 'type') else '[]' end) t where t = any (p_types))
+$$;
+-- what a form needs, checked once at declaration: each field names a node of the shape, once, with its words; a unit only on a number,
+-- choices only of its enum (on a list, of its items': the chips to tick; matched as text, so a number's too); a form shows on a pack's
+-- page (a clinic-wide setting of a pack) or a department's card (a per-department one), only for a pack, one value per owner, and then
+-- every node it draws has its words
+create function core.check_fields(p_key text, p_layer text, p_owner text, p_many boolean, p_shape jsonb, p_fields jsonb, p_form text) returns void language plpgsql as $$
+declare f jsonb; nd jsonb; v jsonb; c text; v_owner text := case p_form when 'pack' then 'organization' when 'department' then 'department' end;
+begin
+  if jsonb_typeof(p_fields) is distinct from 'array' then perform core.refuse('bad_fields', p_key); end if;
+  if p_form is not null and not exists (select 1 from core.layers l where l.key = p_layer and l.is_pack) then perform core.refuse('not_a_pack', p_key); end if;
+  if p_owner is distinct from coalesce(v_owner, p_owner) then
+    perform core.refuse('wrong_owner', format('%s: a form on the %s edits a setting of the %s', p_key, p_form, v_owner));
+  end if;
+  if p_form is not null and p_many then perform core.refuse('form_many', p_key); end if;
+  for f in select x from jsonb_array_elements(p_fields) x loop
+    nd := (select n.node from core.shape_nodes(p_shape) n where n.path = f ->> 'key');
+    if nd is null then perform core.refuse('unknown_field', p_key || ': ' || coalesce(f ->> 'key', '(no key)')); end if;
+    if coalesce(f -> 'labels' ->> 'en', '') = '' then perform core.refuse('label_missing', p_key || ': ' || (f ->> 'key')); end if;
+    v := case when core.node_is(nd, array['array']) and nd ? 'items' then nd -> 'items' else nd end;   -- a list's unit and choices are its items'
+    if f ? 'unit' and not core.node_is(v, array['number', 'integer']) then perform core.refuse('unit_not_number', p_key || ': ' || (f ->> 'key')); end if;
+    if f ? 'choices' and exists (select 1 from jsonb_object_keys(f -> 'choices') x
+        where not exists (select 1 from jsonb_array_elements(case jsonb_typeof(v -> 'enum') when 'array' then v -> 'enum' else '[]' end) e where e #>> '{}' = x)) then
+      perform core.refuse('unknown_choice', p_key || ': ' || (f ->> 'key'));
+    end if;
+  end loop;
+  if (select count(*) <> count(distinct x ->> 'key') from jsonb_array_elements(p_fields) x) then perform core.refuse('duplicate', p_key || ': field'); end if;
+  if p_form is not null then
+    c := (select n.path from core.shape_nodes(p_shape) n where not exists (select 1 from jsonb_array_elements(p_fields) x where x ->> 'key' = n.path) order by n.path limit 1);
+    if c is not null then perform core.refuse('field_unlabelled', p_key || ': ' || c); end if;
+  end if;
+end $$;
+
+create function core.declare_setting(key text, layer text, owner text, shape jsonb, check_fn regprocedure default null, many boolean default false, labels jsonb default '{}',
+  fields jsonb default '[]', form text default null)
 returns void language plpgsql as $$
 #variable_conflict use_variable
 declare s jsonb := shape || jsonb_build_object('$defs', core.datatypes() || coalesce(shape -> '$defs', '{}'));
 begin
   perform core.check_prefix(layer, key);
   if not extensions.jsonschema_is_valid(s::json) then perform core.refuse('bad_schema', key); end if;
-  insert into core.setting_keys (key, layer, owner_kind, shape, check_fn, many, labels, hashes)
-  values (declare_setting.key, declare_setting.layer, owner, s, declare_setting.check_fn, declare_setting.many, declare_setting.labels,
+  perform core.check_fields(key, layer, owner, many, s, coalesce(fields, '[]'), form);
+  insert into core.setting_keys (key, layer, owner_kind, shape, check_fn, many, labels, fields, form, hashes)
+  values (declare_setting.key, declare_setting.layer, owner, s, declare_setting.check_fn, declare_setting.many, declare_setting.labels, coalesce(declare_setting.fields, '[]'), declare_setting.form,
           case when declare_setting.check_fn is null then '{}' else jsonb_build_object('check', core.check_fn(layer, declare_setting.check_fn, 's', 'setting check')) end)
   on conflict on constraint setting_keys_pkey do update set shape = excluded.shape, check_fn = excluded.check_fn, many = excluded.many, labels = excluded.labels,
-     hashes = excluded.hashes where core.setting_keys.layer = excluded.layer;
+     fields = excluded.fields, form = excluded.form, hashes = excluded.hashes where core.setting_keys.layer = excluded.layer;
 end $$;
 
 -- a screen: its work, the action its tab needs (the core's, the base's or its own layer's; null: anyone working there) and, for a pack's,

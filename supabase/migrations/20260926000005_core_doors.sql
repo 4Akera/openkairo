@@ -355,7 +355,39 @@ begin
   return jsonb_build_object('survivor', v_into, 'family', to_jsonb(fam));
 end $$;
 
--- ── settings (§3.4): shape, key check, may; organization and place keys need the action everywhere ──
+-- where a value breaks its setting's shape (§5.1 rule 7): the first property whose value does not match, as a path with an array's index
+-- (rows.2.dose), going as deep as it can; null when no one property is to blame. The form shows the refusal next to that field.
+create function core.shape_field(p_shape jsonb, p_data jsonb, p_defs jsonb default null, p_prefix text default '') returns text language plpgsql stable as $$
+declare d jsonb := coalesce(p_defs, p_shape -> '$defs', '{}'); s jsonb := p_shape; k text; v jsonb; sub jsonb; i int;
+begin
+  if s ? '$ref' then s := d -> substr(s ->> '$ref', 9); end if;   -- '#/$defs/<name>'
+  if s is null then return null; end if;
+  if jsonb_typeof(p_data) = 'object' and s ? 'properties' then
+    for k in select x from jsonb_array_elements_text(coalesce(s -> 'required', '[]')) x loop
+      if not p_data ? k then return p_prefix || k; end if;
+    end loop;
+    for k, v in select x.key, x.value from jsonb_each(p_data) x order by x.key loop
+      sub := s -> 'properties' -> k;
+      if sub is null then
+        if s -> 'additionalProperties' = 'false'::jsonb then return p_prefix || k; end if;
+        continue;
+      end if;
+      if not extensions.jsonb_matches_schema((sub || jsonb_build_object('$defs', d))::json, v) then
+        return coalesce(core.shape_field(sub, v, d, p_prefix || k || '.'), p_prefix || k);
+      end if;
+    end loop;
+  elsif jsonb_typeof(p_data) = 'array' and s ? 'items' then
+    for i in 0 .. jsonb_array_length(p_data) - 1 loop
+      if not extensions.jsonb_matches_schema(((s -> 'items') || jsonb_build_object('$defs', d))::json, p_data -> i) then
+        return coalesce(core.shape_field(s -> 'items', p_data -> i, d, p_prefix || i || '.'), p_prefix || i);
+      end if;
+    end loop;
+  end if;
+  return null;
+end $$;
+
+-- ── settings (§3.4): shape, key check, may; organization and place keys need the action everywhere. A refusal names its field when it
+-- can (the hint): the shape's, by core.shape_field; a check's, by its finding's field ──
 create function public.write_setting(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare me core.users := core.me(); v_org uuid; k core.setting_keys; v_owner uuid := (p ->> 'owner_id')::uuid; v_thing uuid; v_data jsonb := coalesce(p -> 'data', '{}');
         v_retired boolean := coalesce((p ->> 'retired')::boolean, false); fs jsonb; before jsonb; v_id uuid; v_on_before text[]; v_on_after text[]; v_layer text; d core.derived; l core.listeners;
@@ -383,13 +415,13 @@ begin
   if before is not null and (before ->> 'owner_id')::uuid is distinct from v_owner then perform core.refuse('not_found', 'setting'); end if;
   if not v_retired then
     if not extensions.jsonb_matches_schema(k.shape::json, v_data) then
-      perform core.refuse('bad_shape', (select string_agg(x, '; ') from unnest(extensions.jsonschema_validation_errors(k.shape::json, v_data::json)) x));
+      perform core.refuse_at('bad_shape', (select string_agg(x, '; ') from unnest(extensions.jsonschema_validation_errors(k.shape::json, v_data::json)) x),
+                             core.shape_field(k.shape, v_data));
     end if;
     if k.check_fn is not null then
       execute format('select %s($1, $2)', k.check_fn::regproc) into fs using jsonb_build_object('organization_id', v_org, 'owner_id', v_owner, 'thing_id', v_thing), v_data;
       if exists (select 1 from jsonb_array_elements(coalesce(fs, '[]')) f where f ->> 'level' = 'refuse') then
-        perform core.refuse((select f ->> 'code' from jsonb_array_elements(fs) f where f ->> 'level' = 'refuse' limit 1),
-                            (select f ->> 'detail' from jsonb_array_elements(fs) f where f ->> 'level' = 'refuse' limit 1));
+        perform core.refuse_at(f ->> 'code', f ->> 'detail', f ->> 'field') from (select f from jsonb_array_elements(fs) f where f ->> 'level' = 'refuse' limit 1) x;
       end if;
     end if;
   end if;

@@ -15,6 +15,7 @@
     "test:screens": "npx --yes tsx scripts/test-screens.ts",
     "test:sections": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-sections.ts",
     "test:banner": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-banner.ts",
+    "test:settings": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-settings.ts",
     "gen:types": "supabase gen types typescript --local --schema public > src/core/db/types.generated.ts",
     "gen:shapes": "npx --yes tsx scripts/gen-shapes.ts",
     "db:demo": "docker exec -i $(bash scripts/db-container.sh) psql -U postgres -q -v ON_ERROR_STOP=1 < scripts/demo-day.sql",

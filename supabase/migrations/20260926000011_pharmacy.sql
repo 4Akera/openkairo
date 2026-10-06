@@ -225,6 +225,12 @@ create function pharmacy.dispense_line(e jsonb) returns text language sql stable
     coalesce(' · ' || nullif(e -> 'data' ->> 'reason', ''), '')
 $$;
 
+-- the counselling note shown when giving: shown needs words (the form shows the refusal next to the note)
+create function pharmacy.counselling_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select case when coalesce((p_data ->> 'show')::boolean, false) and coalesce(trim(p_data ->> 'note'), '') = ''
+    then jsonb_build_array(jsonb_build_object('code', 'note_missing', 'level', 'refuse', 'field', 'note')) else '[]'::jsonb end
+$$;
+
 reset role;
 
 grant select, delete on pharmacy.queue to core_eraser;
@@ -244,3 +250,15 @@ select core.declare_listener('pharmacy', array['order', 'medication'], 'pharmacy
 select core.declare_screen('pharmacy.dispensing', 'pharmacy', 'bench', '{"en":"Dispensing"}', 'read:pharmacy.queue', array['base.bench']);
 select core.declare_role('00000000-0000-0000-0000-00000000ca01', 'pharmacist', 'pharmacy', 'Pharmacist', array[
   'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out'], '{"en":"Pharmacist"}');
+-- its settings (§5.1 rule 7), each drawn by the automatic form: how long a prepared dispense waits before Dispensing marks it late, per
+-- pharmacy (on the department's card); the counselling note shown when giving, for the clinic (on the pack's page)
+select core.declare_setting('pharmacy.late_after', 'pharmacy', 'department',
+  '{"type":"object","additionalProperties":false,"required":["minutes"],"properties":{"minutes":{"type":"integer","minimum":5,"maximum":1440,"default":30}}}',
+  labels => '{"en":"Late to collect"}', form => 'department',
+  fields => '[{"key":"minutes","labels":{"en":"Prepared reads late after"},"unit":"min",
+    "help":{"en":"A dispense prepared this long ago and not yet given is marked late on Dispensing."}}]');
+select core.declare_setting('pharmacy.counselling', 'pharmacy', 'organization',
+  '{"type":"object","additionalProperties":false,"required":["show"],"properties":{"show":{"type":"boolean","default":false},"note":{"type":"string","maxLength":400}}}',
+  'pharmacy.counselling_check(jsonb,jsonb)', labels => '{"en":"Counselling when giving"}', form => 'pack',
+  fields => '[{"key":"show","labels":{"en":"Show a counselling note"},"help":{"en":"Shown to whoever gives, above Give."}},
+    {"key":"note","labels":{"en":"Note"},"help":{"en":"What to tell the patient: how to take it, what to watch for."}}]');

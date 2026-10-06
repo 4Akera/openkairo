@@ -4,7 +4,8 @@
 // patient: Prepared takes each order to its service's next step; Give all writes every order the pack's form can give as it stands,
 // in one set; a request the pack does not answer (a result, a note) goes to the bench's patient page (Answer). Keys as on the bench:
 // / or typing goes to the box, ↑↓ move, ↵ folds the row out under itself with each order's form (given, or not and why) and Give,
-// Esc folds it, then clears the box.
+// Esc folds it, then clears the box. Its settings (settings.ts): a prepared row waiting past the pharmacy's limit reads late (Prepared
+// then counts in warn), and the clinic's counselling note shows above Give.
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -18,6 +19,7 @@ import { replyFormFor } from '@core/renderers'
 import type { ScreenProps } from '@core/screens/registry'
 import { ageSex, groupByPatient, matches, nextSteps, phaseOf, stepName, testsLine, type PatientGroup } from '@core/screens/bench/shared'
 import { Button, Callout, Card, Empty, Input, ListRow, NotForRole, ScreenFrame, Spinner, Tag, errorText, hm, minutesSince, type ScreenView } from '@core/ui'
+import { counselling, lateAfter, lateBy, preparedSince } from './settings'
 
 type View = 'give' | 'prepared' | 'done'
 
@@ -33,8 +35,11 @@ export function Dispensing({ dept }: ScreenProps) {
   const give = groupByPatient(rows.filter((r) => phaseOf(r.request?.step) === 'todo')).filter((g) => matches(g.patient, f))
   const prepared = groupByPatient(rows.filter((r) => phaseOf(r.request?.step) === 'doing')).filter((g) => matches(g.patient, f))
   const done = (q.data?.recent ?? []).filter((r) => matches(r.patient, f))
-  const views: ScreenView<View>[] = [{ id: 'give', label: 'To give', count: give.length, needs: 'warn' }, { id: 'prepared', label: 'Prepared', count: prepared.length },
-    { id: 'done', label: 'Given today', count: done.length }]
+  // waiting past this pharmacy's limit: late (Prepared counts in warn while any is)
+  const limit = lateAfter(org, dept.id); const note = counselling(org)
+  const late = (g: PatientGroup) => lateBy(preparedSince(g.rows), limit)
+  const views: ScreenView<View>[] = [{ id: 'give', label: 'To give', count: give.length, needs: 'warn' },
+    { id: 'prepared', label: 'Prepared', count: prepared.length, needs: prepared.some((g) => late(g) !== null) ? 'warn' : undefined }, { id: 'done', label: 'Given today', count: done.length }]
   const groups = view === 'give' ? give : view === 'prepared' ? prepared : []
   const n = view === 'done' ? done.length : groups.length
   const c = Math.min(cursor, Math.max(0, n - 1))
@@ -76,13 +81,14 @@ export function Dispensing({ dept }: ScreenProps) {
   useEffect(() => { list.current?.querySelector('.dispense-cursor')?.scrollIntoView({ block: 'nearest' }) }, [c, view])
 
   const row = (g: PatientGroup, i: number) => {
-    const isOpen = open === g.patient.id; const quick = answers(g, false)
+    const isOpen = open === g.patient.id; const quick = answers(g, false); const waited = view === 'prepared' ? late(g) : null
     const steps = view === 'give' ? nextSteps(g.rows, org, can) : []
     const others = g.rows.filter((r) => !replyFormFor(r.reply_type))    // answered with a result or a note, on the bench's page
     const answer = others.length > 0 && <Button size="sm" variant="outline" onClick={() => navigate(`/bench/${g.patient.id}`)}>Answer{others.length > 1 ? ` ${others.length}` : ''}</Button>
     return [<ListRow key={g.patient.id} number={g.patient.record_number} name={`${g.patient.given_name} ${g.patient.family_name}`} age={ageSex(g.patient)}
       selected={isOpen || (i === c && arrows)} enter={i === c && !arrows && !!f} className={i === c ? 'dispense-cursor' : undefined}
-      status={<>{g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}<span className="truncate">{testsLine(g.rows)}</span></>}
+      status={<>{g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{waited !== null && <Tag tone="warn" title={`Prepared ${waited} min ago; late after ${limit} min`}>late · {waited} min</Tag>}
+        <span className="truncate">{testsLine(g.rows)}</span></>}
       minutes={g.since ? minutesSince(g.since) : null} onOpen={() => toggle(g.patient.id)}
       actions={<>{steps.map((s) => <Button key={`${s.type} ${s.key}`} size="sm" variant="outline" disabled={busy === g.patient.id}
           onClick={() => void land(g.patient.id, s.rows.map((r) => stepEntry(r, dept.id, 'in-progress', undefined, s.key, s.type)))}>{stepName(s.key)}{s.rows.length > 1 ? ` ${s.rows.length}` : ''}</Button>)}
@@ -92,6 +98,7 @@ export function Dispensing({ dept }: ScreenProps) {
         {g.rows.filter((r) => replyFormFor(r.reply_type)).map((r) => { const F = formOf(r)?.Editor
           return F ? <F key={r.order.item} request={r} value={values[r.order.item] as never} onChange={(v: unknown) => setValues((x) => ({ ...x, [r.order.item]: v }))} />
             : <NotForRole key={r.order.item} size="sm">{r.display_line} — not for your role here.</NotForRole> })}
+        {note && others.length < g.rows.length && <Callout tone="info" title="Counselling">{note}</Callout>}
         {others.length > 0 && <div className="flex flex-wrap items-center gap-2 text-14 text-muted"><span>{others.map((r) => r.service_name ?? r.display_line).join(', ')}: answered on the patient's page</span>{answer}</div>}
         <div className="flex gap-2">{others.length < g.rows.length && <Button size="sm" loading={busy === g.patient.id} disabled={!answers(g, true).length} onClick={() => void land(g.patient.id, answers(g, true))}>Give</Button>}
           <Button size="sm" variant="ghost" onClick={() => setOpen(null)}>Close</Button></div>
