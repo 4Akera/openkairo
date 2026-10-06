@@ -1,6 +1,8 @@
 -- The shared journey's last step (spec/openCare.md §5.1 rule 9; the journey: supabase/demo/journey/1-base.sql): home an hour ago,
 -- after every pack's step, the IV antibiotic stopped and a follow-up booked at the clinic in a week.
 
+select demo.layer('base');
+
 do $$
 declare ward uuid := demo.base('ward'); s uuid := demo.kept('journey_stay');
 begin

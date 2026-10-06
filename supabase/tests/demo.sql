@@ -54,6 +54,18 @@ select t.ok(f.settings = (select count(*) from core.settings where organization_
   and f.holdings = (select count(*) from core.holdings where organization_id = demo.base('clinic'))
   and f.users = (select count(*) from core.users where organization_id = demo.base('clinic')), 'the seeds run again add nothing: settings, holdings and people as they were')
   from first_load f;
+\echo '── the demo''s departments are made from starter setups (§5.2), and a reload''s setups add nothing'
+select t.ok((select jsonb_object_agg(d.name, core.setting_at(d.organization_id, 'department.setup', d.id) ->> 'setup') from core.departments d
+    where d.organization_id = demo.base('clinic') and d.work <> 'outside')
+  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy"}',
+  'each department records the setup it was made from');
+select t.ok((select count(*) from core.places where organization_id = demo.base('clinic') and department_id = demo.base('ward')
+    and id = core.setup_id(demo.base('ward'), 'place', 'bed_' || substr(name, 5))) = 8, 'the ward''s eight beds are the Ward setup''s, ids from their keys');
+select t.ok(not exists (select 1 from core.departments d, jsonb_array_elements(core.setup_parts(d.organization_id, core.setting_at(d.organization_id, 'department.setup', d.id) ->> 'setup', d.id)) x
+    where d.organization_id = demo.base('clinic') and d.work <> 'outside' and x ->> 'state' in ('add', 'blocked')), 'nothing of any setup is missing after the reload');
+select t.ok(core.department_uses(demo.base('clinic'), demo.id('pharmacy', 'department'), 'pharmacy')
+  and (select count(*) from core.settings_at(demo.base('clinic'), 'service') s where s.owner_id = demo.id('pharmacy', 'department')) = 1,
+  'the Pharmacy ticks its pack and has its one dispensing service, from its setup');
 select t.ok((select count(distinct full_name) from core.patients where organization_id = demo.base('clinic')) = 24, 'every patient''s name is their own');
 select t.ok(not exists (select 1 from core.patients p join core.users u on u.organization_id = p.organization_id and u.name ilike '%' || p.full_name || '%'
   where p.organization_id = demo.base('clinic')), 'no patient shares a name with the staff');
@@ -138,7 +150,12 @@ do $$
 declare p uuid; s uuid;
 begin
   for n in 3 .. 4 loop
-    p := demo.patient(gen_random_uuid(), array['Walk', 'In'], 'Patient ' || n, 'male', demo.born(50 + n), null); s := gen_random_uuid();
+    -- registered at the desk as the app does (the kit's demo.patient takes only the demo's own ids)
+    p := gen_random_uuid(); s := gen_random_uuid();
+    perform demo.as(demo.base('reception'));
+    perform public.save_patient(jsonb_build_object('department_id', demo.base('desk'), 'patient', jsonb_build_object('id', p, 'given', jsonb_build_array('Walk', 'In'),
+      'family', 'Patient ' || n, 'gender', 'male', 'birth_date', demo.born(50 + n))));
+    perform demo.use(p);
     perform demo.w(demo.base('doctor'), jsonb_build_array(demo.e('admitted', demo.base('ward'), s, null, jsonb_build_object('department_id', demo.base('ward'),
       'admit_source', 'outp', 'reason', 'admitted in the app', 'place_id', demo.bed(n)), s)));
   end loop;

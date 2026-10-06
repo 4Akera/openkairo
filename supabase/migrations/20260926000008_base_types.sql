@@ -816,6 +816,9 @@ select core.declare_setting('preset', 'base', 'organization', '{"type":"object",
   "properties":{"name":{"type":"string","minLength":1},"shortcut":{"type":["string","null"]},"lines":{"type":"array","items":{"type":"string"}},
     "services":{"type":"array","items":{"type":"string","format":"uuid"}},"department_id":{"type":["string","null"],"format":"uuid"}}}',
   null, true, '{"en":"Preset"}');
+-- the starter setup a department was made from (§5.2), kept by the setup door so Settings can compare the department with it
+select core.declare_setting('department.setup', 'base', 'department',
+  '{"type":"object","additionalProperties":false,"required":["setup"],"properties":{"setup":{"type":"string","minLength":1}}}', labels => '{"en":"Started from"}');
 select core.declare_setting('place.closed', 'base', 'place',
   '{"type":"object","additionalProperties":false,"required":["closed"],"properties":{"closed":{"type":"boolean"},"reason":{"type":"string"}}}', labels => '{"en":"Closed"}');
 
@@ -839,6 +842,45 @@ select core.declare_screen('base.desk', 'base', 'desk', '{"en":"Front desk"}', '
 select core.declare_screen('base.queue', 'base', 'visits', '{"en":"Queue"}', 'read:queue');
 select core.declare_screen('base.bench', 'base', 'bench', '{"en":"Bench"}', 'read:bench');
 select core.declare_screen('base.beds', 'base', 'stays', '{"en":"Bed board"}', 'read:queue');
+
+-- ── the base's starter setups (§5.2): what a clinic, a ward, a laboratory and a front desk start with. The setup door adds what is
+-- missing and never overwrites what staff changed; each thing's id comes from its key ──
+select core.declare_setup('clinic', 'base', 'visits', '{"en":"Clinic"}',
+  screens => '{"screens":["base.queue"],"opens":"base.queue"}',
+  settings => '{"department.patients_wait":{"wait":true},"department.review_results":{"level":"critical"},"department.after_done":{"after":"next"}}',
+  presets => '[{"name":"Follow-up visit","shortcut":"fu","lines":["Since the last visit:","Examination:","Plan:"]}]',
+  help => '{"en":"Patients are seen in visits: a queue, results waited for, critical ones to review."}');
+select core.declare_setup('ward', 'base', 'stays', '{"en":"Ward"}',
+  screens => '{"screens":["base.beds"],"opens":"base.beds"}',
+  settings => '{"department.encounter_class":{"class":"IMP"},"department.review_results":{"level":"critical"}}',
+  places => (select jsonb_agg(jsonb_build_object('key', 'bed_' || n, 'name', 'Bed ' || n, 'label', 'bed') order by n) from generate_series(1, 8) n),
+  presets => '[{"name":"Ward round","shortcut":"round","lines":["Overnight:","Examination:","Plan:"]}]',
+  help => '{"en":"Patients stay in beds: eight beds on the board, inpatient stays."}');
+select core.declare_setup('laboratory', 'base', 'bench', '{"en":"Laboratory"}',
+  screens => '{"screens":["base.bench"],"opens":"base.bench"}',
+  settings => '{"department.works_for":{"all":true}}',
+  services => $j$[
+  {"code":"cbc","name":"Complete blood count","section":"Haematology","coding":{"system":"loinc","code":"58410-2"},"answer":"result","steps":["collected","received"],"fields":[
+    {"key":"hb","name":"Haemoglobin","coding":{"system":"loinc","code":"718-7"},"kind":"number","unit":"g/dL","ucum":"g/dL","low":12,"high":16,"critical_low":7,"critical_high":20,
+     "ranges":[{"gender":"female","low":12,"high":15.5},{"gender":"male","low":13.5,"high":17.5}]},
+    {"key":"wbc","name":"WBC","coding":{"system":"loinc","code":"6690-2"},"kind":"number","unit":"10^9/L","ucum":"10*3/uL","low":4,"high":11,"critical_low":1,"critical_high":30},
+    {"key":"plt","name":"Platelets","coding":{"system":"loinc","code":"777-3"},"kind":"number","unit":"10^9/L","ucum":"10*3/uL","low":150,"high":400,"critical_low":50}]},
+  {"code":"hba1c","name":"HbA1c","section":"Chemistry","coding":{"system":"loinc","code":"4548-4"},"answer":"result","steps":["collected","received"],"fields":[
+    {"key":"hba1c","name":"HbA1c","coding":{"system":"loinc","code":"4548-4"},"kind":"number","unit":"%","ucum":"%","low":4,"high":5.6}]},
+  {"code":"creat","name":"Creatinine","section":"Chemistry","coding":{"system":"loinc","code":"2160-0"},"answer":"result","steps":["collected","received"],"fields":[
+    {"key":"creat","name":"Creatinine","coding":{"system":"loinc","code":"2160-0"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","low":0.6,"high":1.2,"critical_high":5}]},
+  {"code":"lipids","name":"Lipid panel","section":"Chemistry","coding":{"system":"loinc","code":"57698-3"},"answer":"result","steps":["collected","received"],"fields":[
+    {"key":"chol","name":"Total cholesterol","coding":{"system":"loinc","code":"2093-3"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","high":200},
+    {"key":"ldl","name":"LDL","coding":{"system":"loinc","code":"2089-1"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","high":100},
+    {"key":"hdl","name":"HDL","coding":{"system":"loinc","code":"2085-9"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","low":40},
+    {"key":"tg","name":"Triglycerides","coding":{"system":"loinc","code":"2571-8"},"kind":"number","unit":"mg/dL","ucum":"mg/dL","high":150}]},
+  {"code":"lithium","name":"Lithium level","section":"Chemistry","coding":{"system":"loinc","code":"14334-7"},"answer":"result","steps":["collected","received"],"fields":[
+    {"key":"li","name":"Lithium","coding":{"system":"loinc","code":"14334-7"},"kind":"number","unit":"mmol/L","ucum":"mmol/L","low":0.6,"high":1.2,"critical_high":2}]}]$j$,
+  help => '{"en":"Work others order: blood counts and chemistry, collected and received, then answered with results."}');
+select core.declare_setup('front_desk', 'base', 'desk', '{"en":"Front desk"}',
+  screens => '{"screens":["base.desk"],"opens":"base.desk"}',
+  settings => '{"department.checks_in_for":{"all":true}}',
+  help => '{"en":"Registers patients and checks them in for every clinic."}');
 
 -- ── built-in roles (fixed ids; read-only to organizations). Doctor and Nurse are everyday: where a department uses a pack, they hold its
 -- everyday actions (§5.2); a specialist a pack declares is built on one of them ──

@@ -7,6 +7,8 @@
 -- and sex. Today's minutes are demo.ago's, all after midnight however early it loads; a stay takes its bed when it is free
 -- (demo.w_bed). Run by npm run db:demo (supabase/demo/load.sql); a reload erases these patients first (demo.patient).
 
+select demo.layer('base');
+
 create or replace function pg_temp.pid(p_name text) returns uuid language sql immutable as $$ select demo.id('base', 'patient:' || p_name) $$;
 
 -- ── General Practice today: waiting, in consult ──

@@ -4,10 +4,12 @@
 -- hour), one prepared ten minutes ago to collect with a second still to prepare, and one given this morning. Times relative to the
 -- load; ids in the pack's namespace; a reload erases these patients first (demo.patient).
 
+select demo.layer('pharmacy');
+
 -- a prescription sent to the Pharmacy: the medicine and its order, as the chart's /rx … send writes them
 create or replace function pg_temp.rx(p_visit uuid, p_min int, p_med jsonb, p_order uuid) returns jsonb language sql as $$
   select jsonb_build_array(demo.gp('medication', p_visit, p_min, p_med, demo.id('pharmacy', 'med:' || p_order)),
-    demo.e('order', demo.base('gp'), p_visit, demo.ago(p_min), jsonb_build_object('service', jsonb_build_object('id', demo.id('pharmacy', 'service:dispense'),
+    demo.e('order', demo.base('gp'), p_visit, demo.ago(p_min), jsonb_build_object('service', jsonb_build_object('id', demo.thing(demo.id('pharmacy', 'department'), 'service', 'dispense'),
       'code', 'dispense', 'name', 'Dispensing'), 'department_id', demo.id('pharmacy', 'department'), 'priority', 'routine', 'status', 'active'),
       p_order, demo.id('pharmacy', 'med:' || p_order), 'about'))
 $$;

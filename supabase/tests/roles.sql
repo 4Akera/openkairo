@@ -36,11 +36,11 @@ select core.declare_pack('probe', 1, '{}', '{"en":"Probe"}');
 select core.create_pack('probe');
 select core.declare_action('write:probe.visit', 'probe', everyday => true, labels => '{"en":"Probe visit"}');
 select core.declare_action('read:probe.chart', 'probe', labels => '{"en":"Probe chart"}');
-select core.declare_role(:'specialist', 'probe_specialist', 'probe', 'Probe specialist', array['read:probe.chart'], '{"en":"Probe specialist"}', built_on => :'doctor');
+select core.declare_role(:'specialist', 'probe.specialist', 'probe', 'Probe specialist', array['read:probe.chart'], '{"en":"Probe specialist"}', built_on => :'doctor');
 select t.refuses($$select core.declare_action('write:later_everyday', 'base', everyday => true)$$, 'everyday_for_packs');
 select t.refuses($$select core.declare_action('read:probe.wide', 'probe', scope => 'organization', everyday => true)$$, 'everyday_for_department');
-select t.refuses($$select core.declare_role('00000000-0000-0000-0000-00000000cb02', 'probe_x', 'probe', 'X', '{}', built_on => '00000000-0000-0000-0000-00000000ca01')$$, 'unknown_role');
-select t.refuses($$select core.declare_role('00000000-0000-0000-0000-00000000cb03', 'probe_y', 'probe', 'Y', '{}', everyday => true)$$, 'everyday_for_base');
+select t.refuses($$select core.declare_role('00000000-0000-0000-0000-00000000cb02', 'probe.x', 'probe', 'X', '{}', built_on => '00000000-0000-0000-0000-00000000ca01')$$, 'unknown_role');
+select t.refuses($$select core.declare_role('00000000-0000-0000-0000-00000000cb03', 'probe.y', 'probe', 'Y', '{}', everyday => true)$$, 'everyday_for_base');
 select t.refuses($$select core.declare_role_action('probe', '00000000-0000-0000-0000-00000000c002', 'read:probe.chart')$$, 'other_layers_role');
 select t.refuses($$select core.declare_role('00000000-0000-0000-0000-00000000c002', 'doctor', 'probe', 'Doctor', '{}')$$, 'other_layers_role');
 select t.refuses($$select core.declare_role_action('probe', '00000000-0000-0000-0000-00000000cb01', 'write:pharmacy.dispense')$$, 'unknown_action');
@@ -57,7 +57,7 @@ select t.ok(not core.may(:'spec', 'read:later', :'im'), 'not yet: an action the 
 select core.declare_action('read:later', 'base', labels => '{"en":"Later"}');
 select core.declare_role_action('base', :'doctor', 'read:later');
 select t.ok(core.may(:'spec', 'read:later', :'im') and core.may(:'ali', 'read:later', :'im'), 'Doctor gains an action later: the specialist gains it too');
-select core.declare_role(:'specialist', 'probe_specialist', 'probe', 'Probe specialist', array['write:probe.visit'], '{"en":"Probe specialist"}', built_on => :'doctor');
+select core.declare_role(:'specialist', 'probe.specialist', 'probe', 'Probe specialist', array['write:probe.visit'], '{"en":"Probe specialist"}', built_on => :'doctor');
 select t.ok(core.may(:'spec', 'read:probe.chart', :'im') and exists (select 1 from core.role_actions where role_id = :'specialist' and action = 'write:probe.visit'),
   'declared again with one more action: added, nothing replaced');
 select t.ok(r ->> 'built_on' = :'doctor' and r -> 'own' = '["read:probe.chart", "write:probe.visit"]' and r -> 'actions' ? 'read:record' and r -> 'actions' ? 'read:later',

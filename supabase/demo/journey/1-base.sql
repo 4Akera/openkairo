@@ -4,6 +4,8 @@
 -- his medicines for home from the pharmacy (2-pharmacy.sql), and went home an hour ago with a follow-up booked (9-base.sql). Times
 -- relative to the load; a reload erases him first (demo.patient). The later files find him and his stay by demo.kept.
 
+select demo.layer('base');
+
 do $$
 declare
   gp uuid := demo.base('gp'); ward uuid := demo.base('ward'); doctor uuid := demo.base('doctor'); nurse uuid := demo.base('nurse');

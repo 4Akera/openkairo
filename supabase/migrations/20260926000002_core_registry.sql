@@ -302,22 +302,27 @@ begin
   end if;
 end $$;
 
-create function core.declare_layer(p_key text, p_role text, p_schema text, p_labels jsonb default '{}') returns void language plpgsql as $$
+create function core.declare_layer(p_key text, p_role text, p_schema text, p_labels jsonb default '{}', p_role_block text default null) returns void language plpgsql as $$
 #variable_conflict use_variable
 begin
-  insert into core.layers (key, role_name, schema_name, labels) values (p_key, p_role, p_schema, p_labels)
-  on conflict (key) do update set labels = excluded.labels;
+  insert into core.layers (key, role_name, schema_name, labels, role_block) values (p_key, p_role, p_schema, p_labels, p_role_block)
+  on conflict (key) do update set labels = excluded.labels, role_block = coalesce(core.layers.role_block, excluded.role_block);
 end $$;
 
-create function core.declare_pack(key text, version int, requires text[] default '{}', labels jsonb default '{}') returns void language plpgsql as $$
+-- a pack: its requires (no loop) and its block of role ids (§5.2), the one named or the next free from ca; a pack keeps the block it has
+create function core.declare_pack(key text, version int, requires text[] default '{}', labels jsonb default '{}', role_block text default null)
+returns void language plpgsql as $$
 #variable_conflict use_variable
-declare r text; loop_found boolean;
+declare r text; loop_found boolean; v_block text;
 begin
   foreach r in array requires loop
     if not exists (select 1 from core.layers l where l.key = r and l.is_pack) then perform core.refuse('unknown_pack', r); end if;
   end loop;
-  insert into core.layers (key, role_name, schema_name, version, requires, labels, is_pack)
-  values (declare_pack.key, 'pack_' || declare_pack.key, declare_pack.key, declare_pack.version, declare_pack.requires, declare_pack.labels, true)
+  v_block := coalesce((select l.role_block from core.layers l where l.key = declare_pack.key), role_block,
+    (select to_hex(n) from generate_series(202, 255) n where not exists (select 1 from core.layers l where l.role_block = to_hex(n)) order by n limit 1));
+  if exists (select 1 from core.layers l where l.role_block = v_block and l.key <> declare_pack.key) then perform core.refuse('block_taken', v_block); end if;
+  insert into core.layers (key, role_name, schema_name, version, requires, labels, is_pack, role_block)
+  values (declare_pack.key, 'pack_' || declare_pack.key, declare_pack.key, declare_pack.version, declare_pack.requires, declare_pack.labels, true, v_block)
   on conflict on constraint layers_pkey do update set version = excluded.version, requires = excluded.requires, labels = excluded.labels;
   -- requires may not loop
   with recursive dep(k, path) as (
@@ -360,19 +365,29 @@ begin
 end $$;
 
 -- a built-in role (§3.1, §5.2): built on a base role (it holds what that role holds, as it stands now, plus its own), or everyday (it
--- holds a pack's everyday actions where a department uses the pack). Its actions are added, never replaced.
+-- holds a pack's everyday actions where a department uses the pack). Its actions are added, never replaced. Like every declaration it
+-- sits inside its layer: its key in the layer's prefix, its id in the layer's reserved block; an id or a key another role holds is
+-- refused, never taken over
 create function core.declare_role(id uuid, key text, layer text, name text, actions text[], labels jsonb default '{}', every_action boolean default false,
   built_on uuid default null, everyday boolean default false) returns void language plpgsql as $$
 #variable_conflict use_variable
-declare a text;
+declare a text; v_block text := (select l.role_block from core.layers l where l.key = declare_role.layer);
 begin
+  if exists (select 1 from core.roles x where x.id = declare_role.id and x.layer is distinct from declare_role.layer) then
+    perform core.refuse('other_layers_role', format('%s may not declare %s', layer, key));
+  end if;
   if built_on is not null and not exists (select 1 from core.roles b where b.id = built_on and b.organization_id is null and b.layer = 'base'
                                             and not b.every_action and b.built_on is null) then
     perform core.refuse('unknown_role', format('%s is built on %s, which is no base role', key, built_on));
   end if;
   if everyday and layer <> 'base' then perform core.refuse('everyday_for_base', key); end if;
-  if exists (select 1 from core.roles x where x.id = declare_role.id and x.layer is distinct from declare_role.layer) then
-    perform core.refuse('other_layers_role', format('%s may not declare %s', layer, key));
+  perform core.check_prefix(layer, key);
+  if v_block is null then perform core.refuse('no_role_block', layer); end if;
+  if id::text !~ ('^00000000-0000-0000-0000-00000000' || v_block || '[0-9a-f]{2}$') then
+    perform core.refuse('outside_block', format('%s roles take ids 00000000-0000-0000-0000-00000000%s__, not %s', layer, v_block, id));
+  end if;
+  if exists (select 1 from core.roles x where x.organization_id is null and x.key = declare_role.key and x.id <> declare_role.id) then
+    perform core.refuse('key_taken', format('%s: another role holds the key %s', layer, key));
   end if;
   insert into core.roles (id, organization_id, layer, key, name, labels, every_action, built_on, everyday)
   values (declare_role.id, null, declare_role.layer, declare_role.key, declare_role.name, declare_role.labels, declare_role.every_action, declare_role.built_on, declare_role.everyday)
@@ -383,11 +398,16 @@ begin
   end loop;
 end $$;
 
+-- a code or identifier system: inside its layer's prefix, and never a key another layer holds
 create function core.declare_system(key text, layer text, kind text, uri text, version text default null, closed boolean default false,
   check_fn regprocedure default null, licence text default null, labels jsonb default '{}') returns void language plpgsql as $$
 #variable_conflict use_variable
 declare h jsonb := '{}';
 begin
+  perform core.check_prefix(layer, key);
+  if exists (select 1 from core.systems s where s.key = declare_system.key and s.layer <> declare_system.layer) then
+    perform core.refuse('outside_prefix', format('%s may not declare %s: another layer holds it', layer, key));
+  end if;
   if check_fn is not null then h := jsonb_build_object('check', core.check_fn(layer, check_fn, 's', 'system check')); end if;
   insert into core.systems (key, layer, kind, uri, version, closed, check_fn, licence, labels, hashes)
   values (declare_system.key, declare_system.layer, declare_system.kind, declare_system.uri, declare_system.version, declare_system.closed, declare_system.check_fn,
@@ -683,6 +703,92 @@ begin
   values (declare_screen.key, declare_screen.layer, declare_screen.work, declare_screen.action, coalesce(declare_screen.replaces, '{}'), declare_screen.labels)
   on conflict on constraint screens_pkey do update set work = excluded.work, action = excluded.action, replaces = excluded.replaces, labels = excluded.labels
   where core.screens.layer = excluded.layer;
+end $$;
+
+-- ── starter setups (§5.2) ──
+-- a thing a setup adds takes its id from the department and its key (a place's key, a service's code, a preset's shortcut), never from
+-- its place in the list, so the same setup on the same department always names the same things
+create function core.setup_id(p_department uuid, p_kind text, p_key text) returns uuid language sql immutable as $$
+  select core.uuid5(p_department, 'setup:' || p_kind || ':' || lower(trim(p_key)))
+$$;
+-- a row's value once in a list (by a field, compared as folded text)
+create function core.setup_once(p_rows jsonb, p_field text) returns boolean language sql immutable as $$
+  select count(*) = count(distinct lower(trim(x ->> p_field))) from jsonb_array_elements(p_rows) x where x ? p_field
+$$;
+
+-- a setup for a kind of department, checked once: its key inside its layer's prefix, its work, its words; the packs it ticks (its own
+-- layer's, or those it requires); one-per-department settings only (a clinic-wide key is on the pack's page, §5.1 rule 7), each of its
+-- layer, the base's or a pack it ticks, and in its shape; places, services and presets each with its match fields, once, in their shapes;
+-- a Screens line as the department's check would take it once the packs are ticked
+create function core.declare_setup(key text, layer text, work text, labels jsonb, packs text[] default '{}', screens jsonb default null,
+  places jsonb default '[]', services jsonb default '[]', presets jsonb default '[]', settings jsonb default '{}', help jsonb default '{}')
+returns void language plpgsql as $$
+#variable_conflict use_variable
+declare l core.layers; allowed text[]; k text; v jsonb; sk core.setting_keys; sc core.screens; v_line text[];
+begin
+  perform core.check_prefix(layer, key);
+  if exists (select 1 from core.setups s where s.key = declare_setup.key and s.layer <> declare_setup.layer) then perform core.refuse('outside_prefix', key); end if;
+  select * into l from core.layers x where x.key = declare_setup.layer;
+  if not found then perform core.refuse('unknown_layer', layer); end if;
+  if work is null or work not in ('desk', 'visits', 'stays', 'bench') then perform core.refuse('wrong_work', coalesce(work, '(none)')); end if;
+  if coalesce(trim(labels ->> 'en'), '') = '' then perform core.refuse('label_missing', key); end if;
+  allowed := case when l.is_pack then array[l.key] || l.requires else '{}' end;
+  foreach k in array coalesce(packs, '{}') loop
+    if not exists (select 1 from core.layers x where x.key = k and x.is_pack) then perform core.refuse('unknown_pack', k); end if;
+    if not (k = any (allowed)) then perform core.refuse('other_pack', format('%s may not tick %s', key, k)); end if;
+  end loop;
+  if cardinality(packs) <> (select count(distinct x) from unnest(packs) x) then perform core.refuse('duplicate', 'pack'); end if;
+  for k, v in select x.key, x.value from jsonb_each(coalesce(settings, '{}')) x loop
+    select * into sk from core.setting_keys x where x.key = k;
+    if not found then perform core.refuse('unknown_setting', k); end if;
+    if k in ('department.packs', 'department.screens', 'department.setup') then perform core.refuse('not_a_setting', format('%s: name it as the setup''s packs or screens', k)); end if;
+    if sk.owner_kind <> 'department' or sk.many then perform core.refuse('wrong_owner', format('%s is not one per department: a clinic-wide key is set on its pack''s page', k)); end if;
+    if not (sk.layer in ('core', 'base') or sk.layer = any (allowed)) then perform core.refuse('other_pack', k); end if;
+    if not extensions.jsonb_matches_schema(sk.shape::json, v) then perform core.refuse('bad_shape', k); end if;
+  end loop;
+  if jsonb_typeof(places) <> 'array' or jsonb_typeof(services) <> 'array' or jsonb_typeof(presets) <> 'array' then perform core.refuse('bad_setup', key); end if;
+  for v in select x from jsonb_array_elements(places) x loop
+    if coalesce(v ->> 'key', '') !~ '^[a-z0-9][a-z0-9_-]*$' or coalesce(trim(v ->> 'name'), '') = '' or coalesce(v ->> 'label', 'bed') not in ('bed', 'room', 'chair', 'cubicle')
+       or exists (select 1 from jsonb_object_keys(v) f where f not in ('key', 'name', 'label')) then
+      perform core.refuse('bad_place', v::text);
+    end if;
+  end loop;
+  if not (core.setup_once(places, 'key') and core.setup_once(places, 'name')) then perform core.refuse('duplicate', 'place'); end if;
+  select * into sk from core.setting_keys x where x.key = 'service';
+  for v in select x from jsonb_array_elements(services) x loop
+    if not extensions.jsonb_matches_schema(sk.shape::json, v) then perform core.refuse('bad_shape', 'service ' || coalesce(v ->> 'code', '?')); end if;
+  end loop;
+  if not (core.setup_once(services, 'code') and core.setup_once(services, 'name')) then perform core.refuse('duplicate', 'service'); end if;
+  select * into sk from core.setting_keys x where x.key = 'preset';
+  for v in select x from jsonb_array_elements(presets) x loop
+    -- a preset is matched by its shortcut; the department it is for is the one the setup runs on
+    if coalesce(v ->> 'shortcut', '') !~ '^[a-z0-9_-]+$' or v ? 'department_id' then perform core.refuse('bad_preset', coalesce(v ->> 'name', '?')); end if;
+    if not extensions.jsonb_matches_schema(sk.shape::json, v) then perform core.refuse('bad_shape', 'preset ' || coalesce(v ->> 'name', '?')); end if;
+  end loop;
+  if not (core.setup_once(presets, 'shortcut') and core.setup_once(presets, 'name')) then perform core.refuse('duplicate', 'preset'); end if;
+  if screens is not null then
+    if jsonb_typeof(screens -> 'screens') <> 'array' or jsonb_array_length(screens -> 'screens') = 0 or (screens ? 'opens' and jsonb_typeof(screens -> 'opens') <> 'string')
+       or exists (select 1 from jsonb_object_keys(screens) f where f not in ('screens', 'opens')) then
+      perform core.refuse('bad_screens', key);
+    end if;
+    v_line := array(select x from jsonb_array_elements_text(screens -> 'screens') x);
+    foreach k in array v_line loop
+      select * into sc from core.screens x where x.key = k;
+      if not found then perform core.refuse('unknown_screen', k); end if;
+      if sc.work not in (work, 'any') then perform core.refuse('wrong_work', k); end if;
+      if not (sc.layer = 'base' or sc.layer = any (packs)) then perform core.refuse('pack_not_used', k); end if;
+      if sc.replaces && v_line then perform core.refuse('replaced', k); end if;
+    end loop;
+    if cardinality(v_line) <> (select count(distinct x) from unnest(v_line) x) then perform core.refuse('duplicate', 'screen'); end if;
+    if work = 'stays' and not ('base.beds' = any (v_line)) then perform core.refuse('no_board', key); end if;
+    if screens ? 'opens' and not ((screens ->> 'opens') = any (v_line)) then perform core.refuse('opens_off_line', screens ->> 'opens'); end if;
+  end if;
+  insert into core.setups (key, layer, work, labels, help, packs, screens, places, services, presets, settings)
+  values (declare_setup.key, declare_setup.layer, declare_setup.work, declare_setup.labels, coalesce(declare_setup.help, '{}'), coalesce(declare_setup.packs, '{}'),
+          declare_setup.screens, declare_setup.places, declare_setup.services, declare_setup.presets, coalesce(declare_setup.settings, '{}'))
+  on conflict on constraint setups_pkey do update set work = excluded.work, labels = excluded.labels, help = excluded.help, packs = excluded.packs, screens = excluded.screens,
+     places = excluded.places, services = excluded.services, presets = excluded.presets, settings = excluded.settings
+  where core.setups.layer = excluded.layer;
 end $$;
 
 create function core.declare_listener(layer text, types text[], refresh regprocedure) returns void language plpgsql as $$

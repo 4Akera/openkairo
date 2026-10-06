@@ -74,8 +74,15 @@ export interface ServerMe {
     // action: what a user needs here to see its tab (null: anyone working there); replaces: the base screens a pack's stands in for
     screens: { key: string; layer: string; work: string; action: string | null; replaces: string[]; labels: Record<string, string> }[]
     packs: { key: string; version: number; requires: string[]; labels: Record<string, string>; used: boolean; stale: number }[]
-    setting_keys: SettingKey[]; datatypes: Record<string, Schema>; scores?: ScoreTable[] }
+    setting_keys: SettingKey[]; datatypes: Record<string, Schema>; scores?: ScoreTable[]; setups?: SetupInfo[] }
 }
+/** a starter setup (§5.2): what a kind of department starts with; counts of what it holds */
+export interface SetupInfo { key: string; layer: string; work: 'desk' | 'visits' | 'stays' | 'bench'; labels: Record<string, string>; help: Record<string, string>
+  packs: string[]; screens: { screens: string[]; opens?: string } | null; places: number; services: number; presets: number; settings: number }
+/** one part of a setup against a department: to add, the same, differs (staff changed it: kept), blocked (its pack is off) */
+export interface SetupPart { part: string; kind: 'pack' | 'setting' | 'place' | 'service' | 'preset' | 'screens'; key: string; name: string
+  state: 'add' | 'same' | 'differs' | 'blocked'; want?: unknown; have?: unknown; why?: string | null; id?: string }
+export interface SetupAnswer { setup: string; department_id: string | null; exists?: boolean; created?: boolean; applied?: string[]; parts: SetupPart[] }
 
 // ── the screens' view models (built in views.ts) ──
 export type Flag = 'normal' | 'low' | 'high' | 'abnormal' | 'critical'
@@ -135,6 +142,7 @@ export interface Department {
   serves: (string | null)[]; checks_in_for: (string | null)[]; patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; is_private: boolean; after_done: 'next' | 'queue'
   pack_cards: boolean; screens: string[]; opens: string | null; encounter_class: SettingData['department.encounter_class']['class'] | null
   packs: string[]   // the packs it uses: ticked here and on for the clinic (§5.1 rule 1)
+  setup: string | null   // the starter setup it was made from (§5.2)
 }
 export interface ServiceField { position: number; key: string; code: string; name: string; kind: 'number' | 'text' | 'choice'; unit: string | null; ucum: string | null; choices: string[] | null
   reference_low: number | null; reference_high: number | null; critical_low: number | null; critical_high: number | null; ranges: FieldRange[] }
@@ -154,6 +162,7 @@ export interface Organization {
   // every setting as it stands (with who changed it last), the declared keys with their forms, and the datatypes their shapes name
   settings: SettingRow[]; settingKeys: SettingKey[]; datatypes: Record<string, Schema>
   scores: ScoreTable[]   // every score table, each version (§5.1 rule 8)
+  setups: SetupInfo[]    // the starter setups of the layers on here (§5.2)
 }
 /** an entry in full: every version of its item, and what refers to it */
 export interface Entry extends Card {

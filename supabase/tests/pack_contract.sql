@@ -10,6 +10,11 @@ select t.ok(not exists (select 1 from core.types t join core.layers l on l.key =
   and not exists (select 1 from core.actions a join core.layers l on l.key = a.layer where l.is_pack and position(l.key || '.' in split_part(a.key, ':', 2)) <> 1)
   and not exists (select 1 from core.setting_keys k join core.layers l on l.key = k.layer where l.is_pack and position(l.key || '.' in k.key) <> 1)
   and not exists (select 1 from core.derived d join core.layers l on l.key = d.layer where l.is_pack and position(l.key || '.' in d.key) <> 1), 'every pack key sits inside its prefix');
+select t.ok(not exists (select 1 from core.systems x join core.layers l on l.key = x.layer where l.is_pack and position(l.key || '.' in x.key) <> 1)
+  and not exists (select 1 from core.setups x join core.layers l on l.key = x.layer where l.is_pack and position(l.key || '.' in x.key) <> 1)
+  and not exists (select 1 from core.roles r join core.layers l on l.key = r.layer where r.organization_id is null
+                    and ((l.is_pack and position(l.key || '.' in r.key) <> 1) or r.id::text !~ ('^00000000-0000-0000-0000-00000000' || l.role_block || '[0-9a-f]{2}$'))),
+  'its code systems, setups and roles too: each role''s id in its layer''s reserved block (§5.2)');
 
 \echo '── the hostile pack: a table fed by its own type (inline) and a listener on the base''s notes (after commit); a mode switch'
 select core.declare_pack('hostile', 1, '{}', '{"en":"Hostile fixture"}');

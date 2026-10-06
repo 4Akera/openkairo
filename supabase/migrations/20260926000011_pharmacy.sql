@@ -141,7 +141,7 @@ end $$;
 revoke all on function core.drain(int) from public, anon, authenticated;
 
 -- ── the pack ──
-select core.declare_pack('pharmacy', 1, '{}', '{"en":"Pharmacy","ar":"الصيدلية"}');
+select core.declare_pack('pharmacy', 1, '{}', '{"en":"Pharmacy","ar":"الصيدلية"}', role_block => 'ca');
 select core.create_pack('pharmacy');
 
 set role pack_pharmacy;
@@ -249,10 +249,10 @@ select core.declare_type('pharmacy.dispense', 1, 'pharmacy', '{"type":"object","
 select core.declare_listener('pharmacy', array['order', 'medication'], 'pharmacy.queue_refresh(uuid,uuid[])');
 -- its one screen for the work sent to a pharmacy: the bench's list and actions for dispensing, so it stands in for the bench (§5.1 rule 4)
 select core.declare_screen('pharmacy.dispensing', 'pharmacy', 'bench', '{"en":"Dispensing"}', 'read:pharmacy.queue', array['base.bench']);
-select core.declare_role('00000000-0000-0000-0000-00000000ca01', 'pharmacist', 'pharmacy', 'Pharmacist', array[
+select core.declare_role('00000000-0000-0000-0000-00000000ca01', 'pharmacy.pharmacist', 'pharmacy', 'Pharmacist', array[
   'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out'], '{"en":"Pharmacist"}');
 -- a plain role (§5.2): the store keeper sees what is to prepare and what waits, so the shelves keep up; it writes nothing
-select core.declare_role('00000000-0000-0000-0000-00000000ca02', 'store_keeper', 'pharmacy', 'Store keeper', array[
+select core.declare_role('00000000-0000-0000-0000-00000000ca02', 'pharmacy.store_keeper', 'pharmacy', 'Store keeper', array[
   'read:patients', 'read:bench', 'read:pharmacy.queue'], '{"en":"Store keeper"}');
 -- its settings (§5.1 rule 7), each drawn by the automatic form: how long a prepared dispense waits before Dispensing marks it late, per
 -- pharmacy (on the department's card); the counselling note shown when giving, for the clinic (on the pack's page)
@@ -266,3 +266,10 @@ select core.declare_setting('pharmacy.counselling', 'pharmacy', 'organization',
   'pharmacy.counselling_check(jsonb,jsonb)', labels => '{"en":"Counselling when giving"}', form => 'pack',
   fields => '[{"key":"show","labels":{"en":"Show a counselling note"},"help":{"en":"Shown to whoever gives, above Give."}},
     {"key":"note","labels":{"en":"Note"},"help":{"en":"What to tell the patient: how to take it, what to watch for."}}]');
+-- its starter setup (§5.2): a pharmacy ticks the pack, opens on Dispensing, sends its prescriptions through one step (prepared) and
+-- marks a prepared dispense late after half an hour; the counselling note is the clinic's, on the pack's page
+select core.declare_setup('pharmacy.pharmacy', 'pharmacy', 'bench', '{"en":"Pharmacy"}', packs => array['pharmacy'],
+  screens => '{"screens":["pharmacy.dispensing"],"opens":"pharmacy.dispensing"}',
+  settings => '{"pharmacy.late_after":{"minutes":30},"department.works_for":{"all":true}}',
+  services => '[{"code":"dispense","name":"Dispensing","answer":"pharmacy.dispense","steps":["prepared"]}]',
+  help => '{"en":"Dispenses what the clinics prescribe: prepared, then given."}');

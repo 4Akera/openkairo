@@ -211,7 +211,12 @@ select core.declare_screen  (key => 'pharmacy.dispensing', layer => 'pharmacy', 
 select core.declare_listener(layer => 'pharmacy', types => array['medication','order'], refresh => 'pharmacy.queue_refresh(uuid,uuid[])');
 select core.declare_pack    (key => 'pharmacy', version => 1, requires => '{}', labels => '{…}');
 select core.declare_role    (id, key, layer, name, actions, labels, every_action, built_on, everyday);   -- a built-in role (read-only
-                             -- to organizations): built_on a base role; everyday the base's only. Its actions are added, never replaced
+                             -- to organizations): built_on a base role; everyday the base's only. Its actions are added, never replaced;
+                             -- its key in the layer's prefix (pharmacy.pharmacist), its id in the layer's block (…ca01)
+select core.declare_setup   (key => 'ward', layer => 'base', work => 'stays', labels => '{…}', packs => '{}',
+                             screens => '{"screens":["base.beds"],"opens":"base.beds"}', places => '[{"key":"bed_1","name":"Bed 1","label":"bed"},…]',
+                             services => '[…service data…]', presets => '[…preset data, with a shortcut…]',
+                             settings => '{"department.encounter_class":{"class":"IMP"}}', help => '{…}');   -- a starter setup (§5.2)
 select core.declare_role_action(layer, role, action);  -- one action more, by the role's own layer: the core's, the base's or its own
 select core.declare_score   (key => 'gcs', layer => 'base', version => '1974', source => 'Teasdale G, Jennett B. Lancet 1974…',
                              items => '[{"key":"eye","labels":{…},"input":"choice","choices":[{"value":"4","points":4,"labels":{…}},…]},…]',
@@ -224,7 +229,19 @@ select core.retire_score    ('gcs', '1974');           -- new entries may no lon
 - Functions are stored as `regprocedure` OIDs with `md5(prosrc)` beside them. Each must be owned by the layer's role, be SECURITY
   DEFINER with `search_path=''`, and live in the layer's schema. Checks, lines, claims, rules and to_fhir must be STABLE (Postgres then
   refuses writes inside them); refreshes must be VOLATILE.
-- Keys must sit inside the layer's prefix: pharmacy cannot declare `note` or `obgyn.x`. `requires` may not form a loop.
+- Keys must sit inside the layer's prefix: pharmacy cannot declare `note` or `obgyn.x`, nor a code system, a role or a setup outside
+  `pharmacy.`; a code system another layer holds is refused (`outside_prefix`). `requires` may not form a loop.
+- Role ids: each layer has a reserved block (`core.layers.role_block`: the base's `c0`, pharmacy's `ca`, a later pack the next free
+  one, or the one it names: `declare_pack(…, role_block)`, `block_taken`), and a built-in role's id is `00000000-0000-0000-0000-00000000<block><nn>`
+  (`outside_block`; the core has none, `no_role_block`). An id another layer holds is refused (`other_layers_role`), and so is a key
+  another role holds (`key_taken`): a declaration never takes another layer's role over.
+- A setup (§5.2): its key in the prefix; a work of desk, visits, stays or bench (`wrong_work`); words (`label_missing`); the packs it
+  ticks are its own layer's or those it requires (`unknown_pack`, `other_pack`); settings only one-per-department keys (`wrong_owner`:
+  a clinic-wide key is set on its pack's page, §5.1 rule 7) of the core, the base or its packs (`other_pack`, `unknown_setting`), in
+  their shapes (`bad_shape`), never the packs, the line or the setup itself (`not_a_setting`); places each with a key, a name and a
+  label (`bad_place`), services and presets in the shapes of `service` and `preset` (a preset with a shortcut and no department,
+  `bad_preset`), keys and names once (`duplicate`); a Screens line as the department's check would take it once the packs are ticked
+  (`bad_screens`, `unknown_screen`, `wrong_work`, `pack_not_used`, `replaced`, `no_board`, `opens_off_line`).
 - A screen's action is the core's, the base's or its own layer's (`unknown_action`); what it replaces are base screens of its work
   (`unknown_screen`), never the bed board (`board_is_base`, §5.1 rule 4).
 - A setting's fields: each names a node of the shape by its path (`rows.dose`, through objects and arrays of objects), once
@@ -332,7 +349,8 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 `my_users` (the live users of this login, one per organization, to choose from), `choose_user`, `create_organization` (a login with no user makes the first organization and becomes its owner), `save(what, row)` and
 `remove(what, id)` for `organization` · `site` · `department` · `place` · `user` · `role` (remove only what nothing ever used;
 anything used is refused `in_use` and retired instead), `save_patient` (register or change identity), `merge_patients`,
-`write_setting`, `erase_patient`, `redact`. Every change is a row in `core.audit` (an AuditEvent).
+`write_setting`, `setup` (a starter setup on a new or an existing department, §5.2), `erase_patient`, `redact`. Every change is a
+row in `core.audit` (an AuditEvent).
 
 ---
 
@@ -476,7 +494,7 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   entries), `department.private`, `department.encounter_class`, `department.after_done` (next · queue), `department.patients_wait`,
   `department.review_results`, `department.works_for` (a bench: department ids, or all), `department.checks_in_for` (a desk: the
   clinics it checks in for, or all), `department.packs` (the packs used here, §5.1 rule 1: each a known pack, on for the clinic, once:
-  `unknown_pack`, `pack_off`, `duplicate`), `department.screens` (the Screens line: its tabs in order and which opens first; each
+  `unknown_pack`, `pack_off`, `duplicate`), `department.setup` (the starter setup it was made from, kept by the setup door, §5.2), `department.screens` (the Screens line: its tabs in order and which opens first; each
   screen declared, the base's or of a pack this department uses, of its work, once, never beside a base screen one of them replaces,
   a department of places keeping its bed board, and opens on the line: `unknown_screen`, `pack_off`, `pack_not_used`, `wrong_work`,
   `replaced`, `duplicate`, `no_board`, `opens_off_line`), `service` (owner = the performing department: code, name, section, LOINC coding,
@@ -687,24 +705,26 @@ it works ("/x is used in: …").
   command reloads it. No pack writes on another pack's patients, except one shared journey patient (GP → ER → ward → ICU → ward →
   home, follow-up booked) whose steps the packs add in order. The demo passes the packs' fit tests (rule 2): no adult values on a
   baby. *Built 2026-10-06:* `npm run db:demo` (`scripts/demo.sh`) loads `supabase/demo/load.sql` in one transaction: the kit
-  (`supabase/seeds/demo_kit.sql`), the base's seed (`seeds/dev.sql`: the clinic, departments, beds, services, presets, a person for
-  each of its roles) and day (`demo/base.sql`), each pack's seed and day (`seeds/pharmacy.sql`, `demo/pharmacy.sql`), then the
+  (`supabase/seeds/demo_kit.sql`), the base's seed (`seeds/dev.sql`: the clinic, departments made from the base's setups, what the clinic changed since,
+  presets, a person for each of its roles) and day (`demo/base.sql`), each pack's seed and day (`seeds/pharmacy.sql`, `demo/pharmacy.sql`), then the
   shared journey (GP → ward → home with a follow-up booked), one file per layer's step in its order (`demo/journey/1-base.sql`,
   `2-pharmacy.sql`, `9-base.sql`; a pack's step names only its own ids and is skipped while the pack is off). A reset
   runs the seeds (`seeds/*.sql`). Everything is written through the doors as the user each step names (`demo.w` stops the load on a
   refusal or a flagged entry); only the logins are the auth service's own rows. Run again, it reloads: the seeds add only what is
-  missing (`demo.grant` a holding, `demo.tick` a pack, `demo.screen` a tab on the Screens line, `demo.setting` written once) and
+  missing (`demo.setup` a department from its setup, `demo.grant` a holding, `demo.tick` a pack, `demo.screen` a tab on the Screens line,
+  `demo.setting` written once) and
   each demo patient is erased through the eraser's door and written again, so it leaves a working day; each stay takes its bed
   when it is free, else the ward's next free one as the writer finds them (`demo.w_bed`), so a patient admitted in the app never
   stops a reload. Every
   time is minutes, days or years before the load (`demo.ago`, `demo.born`, through the kit's one clock `demo.now`; the scan in
   `npm run test:demo` refuses a calendar date, a year or `now()` in any demo file). Today's day spans the five hours before the
   load; loaded before 05:00 those minutes are squeezed in proportion into the time since midnight, so every visit stays today's
-  and in order. Ids: the base keeps its fixed ones, a pack's are `demo.id(<pack>, <name>)` (uuid v5 in its namespace). The
+  and in order. Ids: the base keeps its fixed ones, a pack's are `demo.id(<pack>, <name>)` (uuid v5 in its namespace), and a
+  row outside the file's layer is refused (§5.2); a setup's things take their ids from their keys (`demo.bed(n)`, `demo.service`). The
   sign-in page lists the people grouped by department from `src/core/shell/logins.generated.ts`, which `npm run gen:logins`
   writes from the seeded people and the kit's one password (`demo.password()`) and `db:test` checks like the shapes; a click
   opens that department. Pharmacy's: the Pharmacy
-  department, its settings and service, Dr. Reem Hamdy (Pharmacist) and Hesham Ragab (Store keeper); its three patients (one
+  department (from its setup: the tick, the line, its service and late mark), the clinic's counselling note, Dr. Reem Hamdy (Pharmacist) and Hesham Ragab (Store keeper); its three patients (one
   prepared 55 minutes ago and late, one prepared 10 minutes ago to collect with a second to prepare, one given) and the journey's
   medicines for home. The base's: a waiting room (the longest 40 minutes, a four-year-old urgent), one in consult, the morning
   done (a pregnant woman at 24 weeks, a breastfeeding mother and her three-month-old, a sample on its way, a result back), two
@@ -772,13 +792,44 @@ it works ("/x is used in: …").
   on an existing department it never overwrites what staff changed and shows the difference instead. A pack declares only inside its
   prefix: types, settings, actions, roles, code systems, demo ids. A table that reads age or sex says so, and only those are
   refreshed when identity changes. Nothing fails silently: a pack's failed background work shows in Settings → Packs with Retry.
+  *Built 2026-10-06 (piece 9a):* a layer declares setups (`core.declare_setup`, §3.8, `core.setups`): the base's Clinic (the queue;
+  patients wait, critical results to review, Next after Done; a Follow-up visit preset `/fu`), Ward (the bed board; eight beds,
+  `bed_1`–`bed_8`; inpatient; a Ward round preset `/round`), Laboratory (the bench; works for all; CBC, HbA1c, creatinine, lipids,
+  lithium with their steps and ranges) and Front desk (checks in for all); pharmacy's Pharmacy (ticks pharmacy; opens on Dispensing;
+  its dispensing service with one step, prepared; late after 30 minutes; works for all; the counselling note is the clinic's, on the
+  pack's page). One door, `public.setup({setup, department_id, name?, site_id?, position?, apply?})` (needs `manage:places` held
+  everywhere): without `apply` it answers the parts against the department as it stands (a department not yet made: as if empty); with
+  `apply` (`true`: every part to add; or a list of parts) it makes the department when new (the setup's work), then adds the accepted
+  parts in order (the packs ticked, appended to what is ticked; the settings; the places; the services; the presets, for this
+  department; the Screens line), each through its own door (`save`, `write_setting`), so each is checked and audited as if staff had
+  typed it, then one `setup` AuditEvent, and keeps `department.setup`. Each part is *to add* (missing), *the same*, *differs* (staff
+  changed it: the answer shows here and the setup's, and applying it is refused `would_overwrite`) or *blocked* (its pack is off for
+  the clinic: `pack_off`); something staff retired, deleted (a place: its delete in the audit, by its id or its name here) or unticked (a pack this
+  department ticked once) differs and is never added again. A row is found by its id, else its key
+  (a place's key, a service's code, a preset's shortcut), else its name, case aside; a preset for all departments with that shortcut or
+  name serves here too. A thing's id comes from the department and its key (`core.setup_id(department, kind, key)`, uuid v5), never
+  its place in the list. With no line set, a department's default line that is already the setup's is the same (none is written).
+  Run twice, it adds nothing: not a setting row, a place or an audit row. Read `me` lists the setups of the layers on here.
+  Settings → Departments: a new department starts **from a setup** or blank (chips; the setup's words, its name and site, and what it
+  will add, asked of the door), and a department's **Compare with its setup** (the one it was made from while still of its work, else
+  one of its work to pick) folds out under its row: the difference in one line ("would add 2 beds, 1 preset; your Screens line differs"), then each part (to add
+  with **Apply**, what differs with here and the setup's, what waits, the same folded), and **Apply all n missing** (`setup.ts`, pure); Apply waits while the department's editor holds unsaved changes,
+  and a clean editor follows what was applied. Made from a setup, the new department's card closes.
+  The guards: `declare_system` and `declare_role` check the prefix like every declaration; a role's id sits in its layer's reserved
+  block and an id or key another role holds is refused (§3.8); pharmacy's roles are `pharmacy.pharmacist` and `pharmacy.store_keeper`.
+  The demo's ids per layer (piece 8) are checked as they are written: each seed and day says its layer first (`demo.layer`), every id
+  `demo.id` gives is kept with its layer (`demo.ids`), and a department, place, setting's thing, person or patient a seed writes outside
+  its layer's namespace is refused `outside_namespace` (the base's fixed ids and `demo.id('base', …)`; a pack's `demo.id(<pack>, …)`;
+  the journey's patient, any layer's). The demo's departments are made from setups (`demo.setup`): Front desk, General Practice and
+  Psychiatry (Clinic), the Medical Ward (Ward), the Laboratory and pharmacy's Pharmacy; what the clinic changed since (Psychiatry
+  private, the chest X-ray and the psychiatry consult, the clinic's presets) is written after, as staff would.
 - **Reference data.** Licensed lists come in by import script (rule 7); the demo loads a small sample of each, labelled "demo sample,
   not the full list".
 - **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
   each tab needs; the fit test, chip words and Summary lines; banner words with their rank; the pregnant and breastfeeding facts;
   setting shapes with labels and units, and the form drawn from them; the board tile line and buttons and the marks on the lists; score
-  tables and a read that scores while typing; the demo loader with relative times, logins per role and ids per pack; the rest not
-  yet): a department's packs used here; the fit test; chip words and Summary lines;
+  tables and a read that scores while typing; the demo loader with relative times, logins per role and ids per pack; starter setups
+  and the guards; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -1225,4 +1276,45 @@ types, parked pack calls with per-call Retry, Postgres enums.
     `now()` in a demo file, the journey's files in order with each pack's step naming only its ids, the password from the
     generated file and named once in the kit). 22 suites, 779 checks; `test:composer` 15, `test:chart` 22 + 9, `test:screens` 10,
     `test:sections` 19, `test:banner` 13, `test:settings` 11, `test:board` 12, `test:demo` 7; typecheck, eslint and the build clean.
+- 2026-10-06: platform piece 9a — starter setups and the registry's guards (§5.2 "Setup and guards"; §3.8, §3.12, §4.6, §5.1 rule 9).
+  - **Server**: `core.setups` and `core.declare_setup` with its refusals; the base's Clinic, Ward, Laboratory and Front desk and
+    pharmacy's Pharmacy; `core.setup_id`; `core.setup_parts` (to add, the same, differs, blocked) and the door `public.setup`
+    (preview, or apply all or a list of parts, through `save` and `write_setting`; `would_overwrite`, `unknown_part`, `unknown_setup`,
+    `wrong_work`, `pack_off`), `department.setup`, read `me` lists the setups. Guards: `declare_system` checks the prefix and refuses a
+    key another layer holds; `core.layers.role_block` (base `c0`, pharmacy `ca`, the next pack the next free), `declare_role` checks the
+    prefix, the block (`outside_block`, `no_role_block`) and refuses another role's key (`key_taken`); pharmacy's roles renamed
+    `pharmacy.pharmacist`, `pharmacy.store_keeper`.
+  - **Demo**: every department made from a setup (`demo.setup`); beds and lab services take their setups' ids (`demo.bed`,
+    `demo.service`, `demo.thing`); `demo.layer`, `demo.ids` and `demo.mine` refuse a seed row outside its layer's namespace.
+  - **Client**: Settings → Departments starts a department from a setup or blank, and compares a department with its setup with Apply
+    for each missing part (`settings/Setups.tsx`, pure `settings/setup.ts`); `runSetup`; `Department.setup`, `Organization.setups`.
+  - **Tests changed where the contract changed**: `roles` declares its probe roles inside the probe's prefix (`probe.specialist`);
+    `boundary` names the new door; `demo` registers its two app patients through `save_patient` (the kit takes only the demo's ids).
+  - **Tests**: new `setups` (104: the five setups and read `me`; every refusal of a bad declaration; a setup asked about, then run, on a
+    new department, each thing's id from its key, audited; run twice, nothing; the same rows in another order name the same things; the
+    fixture's changed ward (its own beds matched by name, a retired bed and a changed kind of encounter differ and are refused
+    `would_overwrite`, one part accepted, then the rest); the fixture's pharmacy ticked with its service kept; the lab's changed CBC,
+    line and works-for kept while the missing services are added; a pack off, the wrong work, an unknown setup, someone who may not;
+    the code-system and role guards; a demo seed row outside its namespace refused); `demo` +4 (every department records its setup,
+    the ward's beds are the setup's, nothing missing after a reload, the Pharmacy's pack and one service); `pack_contract` +1
+    (systems, setups and roles in prefix and block); `tenancy` +2 (the setup door across clinics). `npm run test:setups` (new), 9
+    groups — the spec's summary line, counts by kind, ticks and the line, differences named never offered, run twice, a pack off,
+    the rows' order and Apply, what a difference says, values in words; `test:demo` 8 (+1: each file says its layer first, the kit
+    checks the namespace, departments from setups). 24 suites, 988 checks; `test:composer` 15, `test:chart` 23 + 9, `test:screens`
+    10, `test:sections` 19, `test:banner` 13, `test:settings` 11, `test:board` 12, `test:scores` 7, `test:demo` 8, `test:setups` 9;
+    typecheck, eslint and the build clean.
+  - **Review** (7 findings, all fixed): a bed staff deleted (`remove('place')`, no row left) counted as to add, so Apply all or the
+    next demo reload made it again; a place with no row is now matched against its delete in the audit (by its id, or its name in
+    this department) and differs ("removed here; not added again"). A pack staff unticked counted as to add and was ticked again
+    (Apply all, the demo's `demo.setup`); a pack this department ticked once, or whose list staff retired, now differs ("unticked here;
+    not ticked again", "your Pharmacy tick differs"). Compare's Apply under an open department editor left its draft stale, so the next
+    Save wrote the old packs and line back: Apply waits while the editor holds changes, and a clean draft follows the department as
+    it stands (`useDraft.refresh`). A department whose work changed since its setup was stuck on `wrong_work`; it compares with its
+    own setup only while that is of its work, else one to pick (`compareChoice`, pure). Making a department from a setup ended in
+    "Discard your unsaved changes?" over a department already made; made, the card closes (`onMade`), and only Cancel asks. Tests:
+    `setups` 104 → 112 (a setup bed deleted differs, is refused `would_overwrite` and not made by Apply all; staff's own bed by the
+    setup's name, deleted, the same; a pack unticked differs, refused, and stays unticked); `test:setups` 9 → 11 (removed and
+    unticked in words and never offered; which setup a department compares with). 24 suites, 996 checks; `test:composer` 15,
+    `test:chart` 23 + 9, `test:screens` 10, `test:sections` 19, `test:banner` 13, `test:settings` 11, `test:board` 12, `test:scores`
+    7, `test:demo` 8, `test:setups` 11; typecheck, eslint and the build clean.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

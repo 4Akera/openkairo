@@ -76,6 +76,22 @@ test('a pack writes in its own namespace and only through the kit: ids are demo.
   for (const f of journeyFiles.filter((x) => layerOf(x) === 'base')) assert.ok(named(f).every((l) => l === 'journey'), `${f} names no pack's ids: ${named(f)}`)
   for (const f of order.filter((x) => x.startsWith('supabase/demo/'))) assert.doesNotMatch(read(f), /\binsert\s+into\b|\bupdate\s+\w+\.\w+\s+set\b|\bdelete\s+from\b/i, `${f}: no table written`)
 })
+test('each seed and day says its layer first (demo.layer), so the kit refuses a row outside that layer\'s namespace; departments come from setups', () => {
+  const layerOfFile = (f: string) => layerOf(f) ?? (/\/(dev|base)\.sql$/.test(f) ? 'base' : f.split('/').at(-1)!.replace('.sql', ''))
+  for (const f of order.filter((x) => !x.endsWith('demo_kit.sql'))) {
+    const first = read(f).split('\n').find((l) => l.trim() && !l.trimStart().startsWith('--'))
+    assert.equal(first?.trim(), `select demo.layer('${layerOfFile(f)}');`, `${f} says whose it is first`)
+  }
+  const kit = read('supabase/seeds/demo_kit.sql')
+  for (const fn of ['person', 'department', 'place', 'setting', 'patient', 'setup']) {
+    assert.match(kit, new RegExp(`function demo\\.${fn}\\([^$]*\\$\\$\\s*begin\\s*perform demo\\.mine\\(`), `demo.${fn} checks the namespace first`)
+  }
+  // a department is made from a starter setup (§5.2), never row by row
+  for (const f of seedFiles.filter((x) => !x.endsWith('demo_kit.sql'))) {
+    assert.doesNotMatch(read(f), /demo\.(department|place|tick|screen)\(/, `${f} makes its departments from setups`)
+    assert.match(read(f), /demo\.setup\(/, `${f} runs a setup`)
+  }
+})
 test('the sign-in page lists the generated logins, grouped by department, and types none itself', () => {
   assert.ok(DEMO_GROUPS.length > 1 && DEMO_GROUPS.every((g) => g.people.length > 0), 'every group has people')
   assert.equal(DEMO_GROUPS[0].departmentId, null, 'held everywhere first')

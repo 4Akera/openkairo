@@ -457,6 +457,164 @@ begin
   return jsonb_build_object('id', v_id, 'thing_id', v_thing, 'key', k.key);
 end $$;
 
+-- ── starter setups (§5.2): one door runs a setup on a new department or an existing one ──
+-- the setup's parts against the department as it stands, in the order they are applied (the packs it ticks, its settings, places,
+-- services, presets, then the Screens line, whose check reads the packs): each is to add (missing), the same, differs (staff changed it:
+-- shown, never overwritten) or blocked (its pack is off for the clinic). A row is matched by its id (from its key), its key or its name;
+-- something staff retired, deleted or unticked is a change of theirs, so it differs and is never added again
+create function core.setup_parts(p_org uuid, p_setup text, p_dept uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare st core.setups; out jsonb := '[]'; k text; v jsonb; r record; v_id uuid; v_on text[] := core.packs_used(p_org); v_packs text[]; v_use text[];
+        v_state text; v_have jsonb; v_default jsonb; i int := 0; v_gone boolean;
+begin
+  select * into st from core.setups x where x.key = p_setup;
+  if not found then return '[]'; end if;
+  v_packs := array(select x from jsonb_array_elements_text(coalesce(core.setting_at(p_org, 'department.packs', p_dept) -> 'packs', '[]')) x);
+  -- a pack this department ticked once (or whose list staff retired) and does not tick now was unticked by staff: it differs
+  v_gone := coalesce((select s.retired from core.settings s where s.organization_id = p_org and s.key = 'department.packs' and s.thing_id = p_dept
+    order by s.recorded_at desc, s.id desc limit 1), false);
+  foreach k in array st.packs loop
+    v_state := case when k = any (v_packs) then 'same'
+      when v_gone or exists (select 1 from core.settings s where s.organization_id = p_org and s.key = 'department.packs' and s.thing_id = p_dept and s.data -> 'packs' ? k) then 'differs'
+      when not (k = any (v_on)) then 'blocked' else 'add' end;
+    out := out || jsonb_build_object('part', 'pack:' || k, 'kind', 'pack', 'key', k, 'name', coalesce((select l.labels ->> 'en' from core.layers l where l.key = k), k),
+      'state', v_state, 'why', case when v_state = 'blocked' then 'pack_off' end,
+      'want', jsonb_build_object('packs', to_jsonb(v_packs) || to_jsonb(k)), 'have', case when v_state = 'differs' then jsonb_build_object('packs', to_jsonb(v_packs), 'unticked', true) end);
+  end loop;
+  for k, v in select x.key, x.value from jsonb_each(st.settings) x order by x.key loop
+    select s.data, s.retired into r from core.settings s where s.organization_id = p_org and s.key = k and s.thing_id = p_dept order by s.recorded_at desc, s.id desc limit 1;
+    v_state := case when r is null then 'add' when r.retired or r.data <> v then 'differs' else 'same' end;
+    out := out || jsonb_build_object('part', 'setting:' || k, 'kind', 'setting', 'key', k, 'name', coalesce((select x.labels ->> 'en' from core.setting_keys x where x.key = k), k),
+      'state', v_state, 'want', v, 'have', case when not (r is null) and not r.retired then r.data end);
+    r := null;
+  end loop;
+  for v in select x from jsonb_array_elements(st.places) x loop
+    i := i + 1;
+    v_id := core.setup_id(p_dept, 'place', v ->> 'key');
+    select p.* into r from core.places p where p.organization_id = p_org and (p.id = v_id or (p.department_id = p_dept and lower(trim(p.name)) = lower(trim(v ->> 'name'))))
+     order by p.id = v_id desc, p.retired_at is not null, p.position limit 1;
+    -- none here: one staff deleted (its delete in the audit, by its id or its name in this department) is not added again
+    if r is null then
+      select jsonb_build_object('id', a.thing_id, 'name', a.before ->> 'name', 'label', a.before ->> 'label', 'removed', true) into v_have from core.audit a
+       where a.organization_id = p_org and a.action = 'delete' and a.what = 'place'
+         and (a.thing_id = v_id or (a.before ->> 'department_id' = p_dept::text and lower(trim(a.before ->> 'name')) = lower(trim(v ->> 'name'))))
+       order by a.at desc limit 1;
+    end if;
+    v_state := case when r is null and v_have is not null then 'differs' when r is null then 'add'
+      when r.retired_at is not null or r.department_id <> p_dept or r.name <> v ->> 'name' or r.label <> coalesce(v ->> 'label', 'bed') then 'differs' else 'same' end;
+    out := out || jsonb_build_object('part', 'place:' || (v ->> 'key'), 'kind', 'place', 'key', v ->> 'key', 'name', v ->> 'name', 'state', v_state,
+      'want', jsonb_build_object('id', v_id, 'name', v ->> 'name', 'label', coalesce(v ->> 'label', 'bed'), 'position', i),
+      'have', case when not (r is null) then jsonb_build_object('id', r.id, 'name', r.name, 'label', r.label, 'retired', r.retired_at is not null) else v_have end);
+    r := null; v_have := null;
+  end loop;
+  for v in select x from jsonb_array_elements(st.services) x loop
+    v_id := core.setup_id(p_dept, 'service', v ->> 'code');
+    select x.* into r from (select distinct on (s.thing_id) s.thing_id, s.data, s.retired from core.settings s
+        where s.organization_id = p_org and s.key = 'service' and s.owner_id = p_dept order by s.thing_id, s.recorded_at desc, s.id desc) x
+     where x.thing_id = v_id or lower(x.data ->> 'code') = lower(v ->> 'code') or lower(trim(x.data ->> 'name')) = lower(trim(v ->> 'name'))
+     order by x.thing_id = v_id desc, x.retired limit 1;
+    out := out || jsonb_build_object('part', 'service:' || (v ->> 'code'), 'kind', 'service', 'key', v ->> 'code', 'name', v ->> 'name',
+      'state', case when r is null then 'add' when r.retired or r.data <> v then 'differs' else 'same' end,
+      'want', v, 'id', coalesce(r.thing_id, v_id), 'have', case when not (r is null) and not r.retired then r.data end);
+    r := null;
+  end loop;
+  -- a preset is the clinic's, for this department or for all: one for all with the same shortcut or name already serves here
+  for v in select x from jsonb_array_elements(st.presets) x loop
+    v_id := core.setup_id(p_dept, 'preset', v ->> 'shortcut');
+    select x.* into r from (select distinct on (s.thing_id) s.thing_id, s.data, s.retired from core.settings s
+        where s.organization_id = p_org and s.key = 'preset' order by s.thing_id, s.recorded_at desc, s.id desc) x
+     where (x.thing_id = v_id or ((x.data ->> 'department_id' is null or x.data ->> 'department_id' = p_dept::text)
+            and (lower(x.data ->> 'shortcut') = lower(v ->> 'shortcut') or lower(trim(x.data ->> 'name')) = lower(trim(v ->> 'name')))))
+     order by x.thing_id = v_id desc, x.retired limit 1;
+    out := out || jsonb_build_object('part', 'preset:' || (v ->> 'shortcut'), 'kind', 'preset', 'key', v ->> 'shortcut', 'name', v ->> 'name',
+      'state', case when r is null then 'add' when r.retired or (r.data - 'department_id') <> v then 'differs' else 'same' end,
+      'want', v || jsonb_build_object('department_id', p_dept), 'id', coalesce(r.thing_id, v_id), 'have', case when not (r is null) and not r.retired then r.data end);
+    r := null;
+  end loop;
+  -- the Screens line: one set by staff is theirs; with none set, the department's default line (with the setup's packs ticked) may
+  -- already be the setup's
+  if st.screens is not null then
+    select s.data, s.retired into r from core.settings s where s.organization_id = p_org and s.key = 'department.screens' and s.thing_id = p_dept
+     order by s.recorded_at desc, s.id desc limit 1;
+    v_use := array(select x from unnest(v_packs || st.packs) x where x = any (v_on));
+    v_default := (select coalesce(jsonb_agg(s.key order by s.layer <> 'base', s.key), '[]') from core.screens s
+      where s.work = st.work and (s.layer = 'base' or s.layer = any (v_use))
+        and not exists (select 1 from core.screens x where x.work = st.work and s.key = any (x.replaces) and (x.layer = 'base' or x.layer = any (v_use))));
+    v_state := case
+      when not (r is null) then case when r.retired or r.data -> 'screens' <> st.screens -> 'screens'
+                                     or coalesce(r.data ->> 'opens', r.data -> 'screens' ->> 0) <> coalesce(st.screens ->> 'opens', st.screens -> 'screens' ->> 0) then 'differs' else 'same' end
+      when exists (select 1 from jsonb_array_elements_text(st.screens -> 'screens') x join core.screens y on y.key = x where y.layer <> 'base' and not (y.layer = any (v_on))) then 'blocked'
+      when v_default = st.screens -> 'screens' and coalesce(st.screens ->> 'opens', v_default ->> 0) = v_default ->> 0 then 'same'
+      else 'add' end;
+    out := out || jsonb_build_object('part', 'screens', 'kind', 'screens', 'key', 'department.screens', 'name', 'Screens line', 'state', v_state, 'want', st.screens,
+      'have', case when not (r is null) and not r.retired then r.data else jsonb_build_object('screens', v_default) end, 'why', case when v_state = 'blocked' then 'pack_off' end);
+  end if;
+  return out;
+end $$;
+
+-- run a setup (§5.2). Without apply it only answers what it would do (parts). With apply (true: every part to add; or a list of parts),
+-- it makes the department first when it is new, then adds the parts accepted, in order, each through its own door (save, write_setting),
+-- so each is checked and audited as if staff had typed it. A part that differs is never applied (would_overwrite); one the same is
+-- nothing to do. Run again, it adds nothing. The setup a department was made from is kept (department.setup), so Settings can compare
+create function public.setup(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare me core.users := core.me(); v_org uuid := me.organization_id; st core.setups; d core.departments; v_dept uuid := (p ->> 'department_id')::uuid;
+        v_apply jsonb := p -> 'apply'; parts jsonb; x jsonb; v_want text[]; v_applied text[] := '{}'; v_new boolean := false; k text;
+begin
+  if not core.may(me.id, 'manage:places', null) then perform core.refuse('not_allowed', 'manage:places'); end if;
+  select * into st from core.setups s where s.key = p ->> 'setup';
+  if not found then perform core.refuse('unknown_setup', p ->> 'setup'); end if;
+  if v_dept is not null then
+    select * into d from core.departments x where x.organization_id = v_org and x.id = v_dept;
+    if d.id is null and exists (select 1 from core.departments x where x.id = v_dept) then perform core.refuse('not_found', 'department'); end if;
+    if d.id is not null and d.work <> st.work then perform core.refuse('wrong_work', format('%s is for %s, not %s', st.key, st.work, d.work)); end if;
+    if d.retired_at is not null then perform core.refuse('retired', 'department'); end if;
+  end if;
+  if v_apply is null then
+    return jsonb_build_object('setup', st.key, 'department_id', v_dept, 'exists', d.id is not null, 'parts', core.setup_parts(v_org, st.key, v_dept));
+  end if;
+  if not core.layer_on(v_org, st.layer) then perform core.refuse('pack_off', st.layer); end if;
+  if d.id is null then
+    v_dept := coalesce(v_dept, core.uuid7());
+    perform public.save('department', jsonb_strip_nulls(jsonb_build_object('id', v_dept, 'name', coalesce(nullif(trim(p ->> 'name'), ''), st.labels ->> 'en'), 'work', st.work,
+      'site_id', p ->> 'site_id', 'position', (p ->> 'position')::int)));
+    v_new := true;
+  end if;
+  parts := core.setup_parts(v_org, st.key, v_dept);
+  if jsonb_typeof(v_apply) = 'boolean' then
+    v_want := case when v_apply = 'true' then array(select y ->> 'part' from jsonb_array_elements(parts) y where y ->> 'state' = 'add') else '{}' end;
+  elsif jsonb_typeof(v_apply) = 'array' then
+    v_want := array(select jsonb_array_elements_text(v_apply));
+    foreach k in array v_want loop
+      select y into x from jsonb_array_elements(parts) y where y ->> 'part' = k;
+      if x is null then perform core.refuse('unknown_part', k); end if;
+      if x ->> 'state' = 'differs' then perform core.refuse('would_overwrite', format('%s: staff changed it here', k)); end if;
+      if x ->> 'state' = 'blocked' then perform core.refuse(coalesce(x ->> 'why', 'pack_off'), k); end if;
+      x := null;
+    end loop;
+  else
+    perform core.refuse('bad_request', 'apply');
+  end if;
+  for x in select y from jsonb_array_elements(parts) y where y ->> 'state' = 'add' and y ->> 'part' = any (v_want) loop
+    case x ->> 'kind'
+      when 'pack' then
+        perform public.write_setting(jsonb_build_object('key', 'department.packs', 'owner_id', v_dept, 'data', jsonb_build_object('packs',
+          coalesce(core.setting_at(v_org, 'department.packs', v_dept) -> 'packs', '[]') || to_jsonb(x ->> 'key'))));
+      when 'setting' then perform public.write_setting(jsonb_build_object('key', x ->> 'key', 'owner_id', v_dept, 'data', x -> 'want'));
+      when 'place' then perform public.save('place', jsonb_build_object('id', x -> 'want' ->> 'id', 'department_id', v_dept, 'label', x -> 'want' ->> 'label',
+                          'name', x -> 'want' ->> 'name', 'position', (x -> 'want' ->> 'position')::int));
+      when 'service' then perform public.write_setting(jsonb_build_object('key', 'service', 'owner_id', v_dept, 'thing_id', x ->> 'id', 'data', x -> 'want'));
+      when 'preset' then perform public.write_setting(jsonb_build_object('key', 'preset', 'thing_id', x ->> 'id', 'data', x -> 'want'));
+      when 'screens' then perform public.write_setting(jsonb_build_object('key', 'department.screens', 'owner_id', v_dept, 'data', x -> 'want'));
+    end case;
+    v_applied := v_applied || (x ->> 'part');
+  end loop;
+  if (v_new or cardinality(v_applied) > 0)
+     and not exists (select 1 from core.settings s where s.organization_id = v_org and s.key = 'department.setup' and s.thing_id = v_dept) then
+    perform public.write_setting(jsonb_build_object('key', 'department.setup', 'owner_id', v_dept, 'data', jsonb_build_object('setup', st.key)));
+  end if;
+  if cardinality(v_applied) > 0 then perform core.audit(me, 'setup', 'department', v_dept, null, jsonb_build_object('setup', st.key, 'applied', to_jsonb(v_applied))); end if;
+  return jsonb_build_object('setup', st.key, 'department_id', v_dept, 'created', v_new, 'applied', to_jsonb(v_applied), 'parts', core.setup_parts(v_org, st.key, v_dept));
+end $$;
+
 -- ── the two exceptions (§3.11): owned by core_eraser, the only role the permanence trigger lets through ──
 grant usage, create on schema core to core_eraser;   -- to own its two functions; CREATE is taken back below
 create function core.erase(p_org uuid, p_user uuid, p_patient uuid, p_reason text) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
@@ -579,7 +737,7 @@ alter default privileges in schema public revoke execute on functions from publi
 grant execute on function core.may_listen(text) to authenticated;
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
   public.save(text, jsonb), public.remove(text, uuid), public.save_patient(jsonb), public.merge_patients(jsonb), public.write_setting(jsonb),
-  public.erase_patient(jsonb), public.redact(jsonb) to authenticated;
+  public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb) to authenticated;
 -- the base and the packs call these core helpers from their own definer functions
 grant execute on function core.may(uuid, text, uuid), core.may_somewhere(uuid, text), core.setting_at(uuid, text, uuid, timestamptz),
   core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.uuid7(),

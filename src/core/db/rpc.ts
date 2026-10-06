@@ -3,6 +3,7 @@
 import { db } from './client'
 import type { Json } from './types.generated'
 import type { EntryData, SettingData } from './shapes.generated'
+import type { SetupAnswer } from './types'
 
 // the words for refusal and finding codes (the codes are the API; the client only says them)
 const WORDS: Record<string, string> = {
@@ -29,6 +30,8 @@ const WORDS: Record<string, string> = {
   note_missing: 'Write the note to show, or turn it off',
   unknown_score: 'Not a score declared here', score_retired: 'That version of the score is retired — fill it again', score_mismatch: 'The total is not the server\'s — fill the score again',
   score_incomplete: 'Every item of the score needs an answer', bad_input: 'An answer the score cannot take', already_signed: 'Already signed off for this clinic', pack_not_used: 'That pack is not used in this department',
+  would_overwrite: 'Staff changed it here: it stays as they set it', unknown_setup: 'Not a setup this clinic has', unknown_part: 'Not a part of that setup',
+  retired: 'It is retired',
   allergy_clash: 'Allergy', allergy_caution: 'Caution', duplicate_medication: 'Already on this medicine', duplicate_class: 'Another medicine of the same class', already_on_list: 'Already on the list',
 }
 const USED: Record<string, string> = { record: 'the record points at it', services: 'it has services', people: 'people hold roles there', signed_in: 'this person has signed in', places: 'it has beds or rooms', outside: 'every organization keeps one' }
@@ -87,6 +90,10 @@ export const mergePatients = (p: Record<string, unknown>) => call<{ survivor: st
 /** a setting's data is its key's declared shape (shapes.generated.ts) */
 export const writeSetting = <K extends keyof SettingData>(p: { key: K; owner_id?: string | null; thing_id?: string | null; data?: SettingData[K]; retired?: boolean }) =>
   call<{ id: string; thing_id: string }>('write_setting', { p: p as unknown as Json })
+/** a starter setup on a department (§5.2): without apply, the parts it would add and how the department differs; with apply (true:
+ *  every part to add, or a list), it makes the department when new and adds those, never overwriting what staff changed */
+export const runSetup = (p: { setup: string; department_id?: string; name?: string; site_id?: string | null; position?: number; apply?: true | string[] }) =>
+  call<SetupAnswer>('setup', { p: p as unknown as Json })
 export const myUsers = () => call<{ id: string; organization_id: string; organization: string; name: string }[]>('my_users', {})
 export const chooseUser = (userId: string) => call<{ user_id: string; organization_id: string }>('choose_user', { p_user_id: userId })
 export const erasePatient = (p: { patient_id: string; reason: string }) => call('erase_patient', { p: p as unknown as Json })

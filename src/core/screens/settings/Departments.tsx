@@ -11,6 +11,7 @@ import { useSave } from './save'
 import { baseLine, lineForPacks, lineHere } from '../line'
 import { PacksAndScreens } from './DepartmentScreens'
 import { PackCards } from './PackSettings'
+import { CompareSetup, StartFrom } from './Setups'
 
 const WORKS: [Department['work'], string, string][] = [['visits', 'Clinics', 'Patients are seen here in visits.'], ['stays', 'Wards', 'Patients stay here, in beds.'],
   ['desk', 'Front desks', 'Checks patients in for the clinics it serves.'], ['bench', 'Benches', 'Does work others order: a lab, imaging, a pharmacy.'],
@@ -55,6 +56,13 @@ export function DepartmentsPage({ org }: { org: Organization }) {
   const every = (w: string) => w === 'desk' ? 'every clinic' : 'every department'
   const nameOf = (id: string | null, w: string) => id === null ? every(w) : org.departments.find((x) => x.id === id)?.name ?? '?'
   const open = (id: string, d: DeptDraft, isNew = false) => { save.reset(); retire.reset(); e.toggle(id, d, isNew) }
+  // the draft of a department as it stands; the line as the department shows it (a pack screen not used here is back to what it stood in for)
+  const draftOf = (d: Department): DeptDraft => { const line = lineHere(d, org.screens); const serves = d.work === 'desk' ? d.checks_in_for : d.serves
+    return { name: d.name, work: d.work, site_id: d.site_id, serves: served(serves), patients_wait: d.patients_wait, review_results: d.review_results, is_private: d.is_private,
+      after_done: d.after_done ?? 'next', encounter_class: d.encounter_class ?? classFor(d.work), packs: d.packs, screens: line.screens, opens: line.opens ?? '' } }
+  // a setup applied under the open row changes its packs, line or rules: a clean draft follows, so a later Save never writes the old ones back
+  const opened = !e.isNew ? org.departments.find((x) => x.id === e.id) : undefined
+  if (opened && !e.dirty && JSON.stringify(draftOf(opened)) !== JSON.stringify(e.initial)) e.refresh(draftOf(opened))
   const add = (work: Department['work'] = 'visits') => open(newId(), { name: '', work, site_id: null, serves: [null], patients_wait: true, review_results: 'critical', is_private: false, after_done: 'next',
     encounter_class: classFor(work), packs: [], screens: baseLine(work, org.screens), opens: baseLine(work, org.screens)[0] ?? '' }, true)
   const screenName = (k: string) => org.screens.find((s) => s.key === k)?.labels.en ?? `${k} (pack off)`
@@ -100,22 +108,20 @@ export function DepartmentsPage({ org }: { org: Organization }) {
       </Fieldset>}
       <PacksAndScreens org={org} d={d} set={(x) => e.set(x)} changed={(k) => e.changed(k)} />
     </EditPanel>
+    {existing && existing.work !== 'outside' && <CompareSetup org={org} dept={existing} locked={e.dirty} />}
     {existing && existing.work !== 'outside' && <PlacesEditor org={org} dept={existing} />}
     {existing && <PackCards org={org} dept={existing} />}</> }
 
   return <div className="grid gap-4">
-    <PageHead title="Departments" hint="Where patients are seen and where work is done. Open one to rename it or change its rules, its screens and its places." right={<Button size="sm" onClick={() => add()}><Plus className="h-3.5 w-3.5" />Department</Button>} />
-    {e.isNew && <NewCard title="New department">{editor()}</NewCard>}
+    <PageHead title="Departments" hint="Where patients are seen and where work is done. Start one from a setup or blank; open one to change its rules, its screens and its places, or to compare it with its setup." right={<Button size="sm" onClick={() => add()}><Plus className="h-3.5 w-3.5" />Department</Button>} />
+    {e.isNew && <NewCard title="New department"><StartFrom org={org} blank={editor} onMade={e.done} onCancel={e.cancel} /></NewCard>}
     {mayIn(org, 'manage:places', null) && <SitesSection org={org} />}
     {WORKS.map(([w, label]) => { const ds = org.departments.filter((d) => d.work === w); if (!ds.length) return null
       return <Section flush key={w} id={`dept.${w}`} title={label} count={ds.length} summary={ds.map((d) => d.name).join(', ')}
         right={w !== 'outside' && <IconButton title={`Add to ${label.toLowerCase()}`} onClick={() => add(w)}><Plus className="h-3.5 w-3.5" /></IconButton>}>
         <ul className="divide-y divide-line">{ds.map((d) => { const serves = d.work === 'desk' ? d.checks_in_for : d.serves
-          // the line as the department shows it: a pack screen not used here is back to what it stood in for, so it can be saved
           const line = lineHere(d, org.screens)
-          return <Row key={d.id} open={e.id === d.id && !e.isNew} editor={editor}
-          onToggle={() => open(d.id, { name: d.name, work: d.work, site_id: d.site_id, serves: served(serves), patients_wait: d.patients_wait, review_results: d.review_results, is_private: d.is_private,
-            after_done: d.after_done ?? 'next', encounter_class: d.encounter_class ?? classFor(d.work), packs: d.packs, screens: line.screens, opens: line.opens ?? '' })}>
+          return <Row key={d.id} open={e.id === d.id && !e.isNew} editor={editor} onToggle={() => open(d.id, draftOf(d))}>
           <span className="w-48 truncate font-medium">{d.name}</span>
           {d.site_name && <span className="text-12 text-faint">{d.site_name}</span>}
           {d.is_visited && <span className="flex flex-wrap gap-1">

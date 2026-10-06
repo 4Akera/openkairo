@@ -33,6 +33,7 @@ export type Database = {
       remove: { Args: { p_id: string; p_what: string }; Returns: Json }
       save: { Args: { p_row: Json; p_what: string }; Returns: Json }
       save_patient: { Args: { p: Json }; Returns: Json }
+      setup: { Args: { p: Json }; Returns: Json }
       write: { Args: { p_set: Json }; Returns: Json }
       write_setting: { Args: { p: Json }; Returns: Json }
     }

@@ -15,5 +15,7 @@ export function useDraft<T>() {
     changed: (k: keyof T) => !!s && !s.isNew && JSON.stringify(s.initial[k]) !== JSON.stringify(s.draft[k]),
     cancel: () => { if (leave()) setS(null) },
     done: () => setS(null),
+    /** the open row's rows changed elsewhere (a setup applied): a clean draft starts again from them; one with edits is left alone */
+    refresh: (initial: T) => setS((x) => x && !x.isNew && JSON.stringify(x.initial) === JSON.stringify(x.draft) ? { ...x, initial, draft: initial } : x),
   }
 }

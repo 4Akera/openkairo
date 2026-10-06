@@ -10,10 +10,25 @@ revoke all on schema demo from public;
 -- local development only: settings changes, erase and redact without a second factor
 update core.server_settings set value = 'off' where key = 'require_mfa';
 
--- ── ids ──
-create or replace function demo.id(p_layer text, p_name text) returns uuid language sql immutable as $$
-  select core.uuid5(core.uuid5('6d656d6f-6f70-5e63-a172-6564656d6f00', p_layer), p_name)
-$$;
+-- ── ids: each layer's own (§5.2). A seed or a day says whose it is (demo.layer); every id demo.id gives is kept with its layer, and a row
+-- a seed adds (a department, a place, a service, a person, a patient) is refused outside_namespace unless its id is its layer's: the
+-- base's fixed ids or demo.id('base', …); a pack's demo.id(<pack>, …); the shared journey's patient, any layer's ──
+create table if not exists demo.ids (layer text not null, name text not null, id uuid not null unique, primary key (layer, name));
+create or replace function demo.id(p_layer text, p_name text) returns uuid language plpgsql volatile as $$
+declare v uuid := core.uuid5(core.uuid5('6d656d6f-6f70-5e63-a172-6564656d6f00', p_layer), p_name);
+begin
+  if not exists (select 1 from demo.ids where id = v) then insert into demo.ids values (p_layer, p_name, v) on conflict do nothing; end if;
+  return v;
+end $$;
+-- the layer whose seed or day runs now (each file says so first); unset, the base's
+create or replace function demo.layer(p_layer text) returns text language sql as $$ select set_config('demo.layer', p_layer, false) $$;
+create or replace function demo.mine(p_id uuid, p_shared boolean default false) returns void language plpgsql as $$
+declare l text := coalesce(nullif(current_setting('demo.layer', true), ''), 'base');
+begin
+  if p_id is null or (l = 'base' and p_id::text like '00000000-0000-0000-0000-%') then return; end if;
+  if exists (select 1 from demo.ids x where x.id = p_id and (x.layer = l or (p_shared and x.layer = 'journey'))) then return; end if;
+  raise exception using message = 'outside_namespace', detail = format('%s is not in %s''s namespace', p_id, l), errcode = 'P0001';
+end $$;
 -- the base's clinic: fixed ids from before the kit (the seed's own namespace), which a pack's demo writes with
 create or replace function demo.base(p_name text) returns uuid language sql immutable as $$
   select (case p_name
@@ -27,8 +42,12 @@ create or replace function demo.base(p_name text) returns uuid language sql immu
     when 'role:nurse' then '00000000-0000-0000-0000-00000000c003' when 'role:reception' then '00000000-0000-0000-0000-00000000c004'
     when 'role:lab_technician' then '00000000-0000-0000-0000-00000000c005' end)::uuid
 $$;
+-- a ward bed and a lab service as the base's setups name them (core.setup_id: from the department and the row's key)
 create or replace function demo.bed(n int) returns uuid language sql immutable as $$
-  select ('00000000-0000-0000-0000-0000000b0' || lpad(n::text, 3, '0'))::uuid
+  select core.setup_id(demo.base('ward'), 'place', 'bed_' || n)
+$$;
+create or replace function demo.thing(p_department uuid, p_kind text, p_key text) returns uuid language sql immutable as $$
+  select core.setup_id(p_department, p_kind, p_key)
 $$;
 -- an id one file keeps for a later one (the shared journey's patient and stay, each step in its own file), until the load ends
 create or replace function demo.keep(p_name text, p_id uuid) returns uuid language sql as $$ select set_config('demo.' || p_name, p_id::text, true)::uuid $$;
@@ -85,6 +104,7 @@ end $$;
 -- a person with a login (the user's id is the login's)
 create or replace function demo.person(p_id uuid, p_email text, p_name text, p_title text default null) returns void language plpgsql as $$
 begin
+  perform demo.mine(p_id);
   perform demo.login(p_id, p_email);
   if exists (select 1 from core.users where organization_id = demo.base('clinic') and id = p_id) then return; end if;
   perform demo.as(demo.base('owner'));
@@ -104,14 +124,24 @@ begin
 end $$;
 
 -- ── places and settings: added when missing, never overwritten (staff may have changed them since) ──
+-- a department made from a starter setup (§5.2), through the setup door: made when new, then every part it is missing added; run
+-- again, nothing (what staff changed since stays theirs)
+create or replace function demo.setup(p_id uuid, p_setup text, p_name text, p_position int) returns void language plpgsql as $$
+begin
+  perform demo.mine(p_id);
+  perform demo.as(demo.base('owner'));
+  perform public.setup(jsonb_build_object('setup', p_setup, 'department_id', p_id, 'name', p_name, 'position', p_position, 'apply', true));
+end $$;
 create or replace function demo.department(p_id uuid, p_name text, p_work text, p_position int) returns void language plpgsql as $$
 begin
+  perform demo.mine(p_id);
   if exists (select 1 from core.departments where organization_id = demo.base('clinic') and id = p_id) then return; end if;
   perform demo.as(demo.base('owner'));
   perform public.save('department', jsonb_build_object('id', p_id, 'name', p_name, 'work', p_work, 'position', p_position));
 end $$;
 create or replace function demo.place(p_id uuid, p_department uuid, p_label text, p_name text, p_position int) returns void language plpgsql as $$
 begin
+  perform demo.mine(p_id);
   if exists (select 1 from core.places where organization_id = demo.base('clinic') and id = p_id) then return; end if;
   perform demo.as(demo.base('owner'));
   perform public.save('place', jsonb_build_object('id', p_id, 'department_id', p_department, 'label', p_label, 'name', p_name, 'position', p_position));
@@ -119,6 +149,7 @@ end $$;
 -- a setting written once: its thing is the owner (one per owner), the clinic (an organization key) or the thing named (many)
 create or replace function demo.setting(p_key text, p_owner uuid, p_thing uuid, p_data jsonb) returns void language plpgsql as $$
 begin
+  perform demo.mine(coalesce(p_thing, p_owner));
   if exists (select 1 from core.settings where organization_id = demo.base('clinic') and key = p_key
                and thing_id = coalesce(p_thing, p_owner, demo.base('clinic'))) then
     return;
@@ -159,6 +190,7 @@ create or replace function demo.born(p_years int, p_days int default 0) returns 
 $$;
 create or replace function demo.patient(p_id uuid, p_given text[], p_family text, p_gender text, p_born date, p_phone text default null) returns uuid language plpgsql as $$
 begin
+  perform demo.mine(p_id, true);
   if exists (select 1 from core.patients where organization_id = demo.base('clinic') and id = p_id) then
     perform demo.as(demo.base('owner'));
     perform public.erase_patient(jsonb_build_object('patient_id', p_id, 'reason', 'demo reload'));
@@ -261,8 +293,7 @@ returns jsonb language sql immutable as $$
 $$;
 -- the base's lab services, as an order names them and a result answers them (ranges by sex where the service has them)
 create or replace function demo.service(p_code text) returns jsonb language sql immutable as $$
-  select jsonb_build_object('id', ('00000000-0000-0000-0000-00000000' || case p_code when 'cbc' then 'c001' when 'hba1c' then 'c002' when 'creat' then 'c003'
-    when 'lipids' then 'c004' when 'lithium' then 'c006' end)::uuid, 'code', p_code,
+  select jsonb_build_object('id', core.setup_id(demo.base('lab'), 'service', p_code), 'code', p_code,
     'name', case p_code when 'cbc' then 'Complete blood count' when 'hba1c' then 'HbA1c' when 'creat' then 'Creatinine' when 'lipids' then 'Lipid panel' when 'lithium' then 'Lithium level' end)
 $$;
 create or replace function demo.lab_order(p_code text, p_dept uuid, p_visit uuid, p_at timestamptz, p_id uuid, p_priority text default 'routine') returns jsonb language sql as $$

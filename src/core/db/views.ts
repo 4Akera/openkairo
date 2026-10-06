@@ -47,7 +47,8 @@ export function directory(m: ServerMe): Organization {
       is_outside: d.work === 'outside', site_id: d.site_id, site_name: site(d.site_id), position: d.position, serves: ids(s.one('department.works_for', d.id)), checks_in_for: ids(s.one('department.checks_in_for', d.id)),
       patients_wait: s.one('department.patients_wait', d.id)?.wait ?? true, review_results: s.one('department.review_results', d.id)?.level ?? 'critical',
       is_private: !!s.one('department.private', d.id)?.private, after_done: s.one('department.after_done', d.id)?.after ?? 'next', pack_cards: true,
-      screens: d.screens ?? [], opens: d.opens ?? d.screens?.[0] ?? null, packs: d.packs ?? [], encounter_class: s.one('department.encounter_class', d.id)?.class ?? null }
+      screens: d.screens ?? [], opens: d.opens ?? d.screens?.[0] ?? null, packs: d.packs ?? [], encounter_class: s.one('department.encounter_class', d.id)?.class ?? null,
+      setup: s.one('department.setup', d.id)?.setup ?? null }
   })
   const live = all.filter((d) => !m.departments.find((x) => x.id === d.id)?.retired_at)
   const services: Service[] = s.many('service').map((r) => ({ id: r.thing_id, department_id: r.owner_id, section_name: r.data.section ?? null, code: r.data.code,
@@ -71,6 +72,7 @@ export function directory(m: ServerMe): Organization {
     actions: m.actions.map((a) => ({ key: a.key, layer: a.layer, label: a.labels.en ?? a.key, everyday: !!a.everyday })), types: m.registry.types, screens: m.registry.screens,
     parked_pack_calls: m.registry.packs.reduce((n, p) => n + p.stale, 0), loginUsers: m.users_of_login,
     settings: m.settings, settingKeys: m.registry.setting_keys ?? [], datatypes: m.registry.datatypes ?? {}, scores: m.registry.scores ?? [],
+    setups: m.registry.setups ?? [],
   }
 }
 /** may I do this here, as the server's may answers it (a role held here or everywhere; a pack's actions only where the department uses

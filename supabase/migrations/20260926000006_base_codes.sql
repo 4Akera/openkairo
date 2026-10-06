@@ -4,7 +4,7 @@
 
 set client_min_messages = warning;
 
-select core.declare_layer('base', 'base_role', 'base', '{"en":"Base"}');
+select core.declare_layer('base', 'base_role', 'base', '{"en":"Base"}', 'c0');
 create schema base authorization base_role;
 comment on schema base is 'openCare base: every entry type, presence, privacy, checks, derived tables, the review loop, settings keys, FHIR mappings.';
 revoke all on schema base from public;

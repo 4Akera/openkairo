@@ -444,6 +444,10 @@ export interface DepartmentScreensSetting {
   opens?: string
   screens: string[]
 }
+/** setting department.setup (base; owner department) */
+export interface DepartmentSetupSetting {
+  setup: string
+}
 /** setting department.works_for (base; owner department) */
 export interface DepartmentWorksForSetting {
   all?: boolean
@@ -573,6 +577,7 @@ export interface SettingData {
   'department.private': DepartmentPrivateSetting
   'department.review_results': DepartmentReviewResultsSetting
   'department.screens': DepartmentScreensSetting
+  'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting

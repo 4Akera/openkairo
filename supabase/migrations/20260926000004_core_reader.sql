@@ -164,6 +164,10 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
           'fields', k.fields, 'form', k.form, 'action', k.action) order by k.key) from core.setting_keys k), '[]'),
       -- every score table, each version (a retired one marked): the composer's cards and Settings → Scores (§5.1 rule 8)
       'scores', coalesce((select jsonb_agg(to_jsonb(x) - 'position' order by x.key, x.position) from core.scores x), '[]'),
+      -- the starter setups (§5.2): what each kind of department starts with; a pack's, only while the clinic has it on
+      'setups', coalesce((select jsonb_agg(jsonb_build_object('key', x.key, 'layer', x.layer, 'work', x.work, 'labels', x.labels, 'help', x.help, 'packs', x.packs,
+          'screens', x.screens, 'places', jsonb_array_length(x.places), 'services', jsonb_array_length(x.services), 'presets', jsonb_array_length(x.presets),
+          'settings', (select count(*) from jsonb_object_keys(x.settings))) order by x.position) from core.setups x where core.layer_on(me.organization_id, x.layer)), '[]'),
       'datatypes', core.datatypes(),
       'packs', coalesce((select jsonb_agg(jsonb_build_object('key', l.key, 'version', l.version, 'requires', l.requires, 'labels', l.labels,
           'used', l.key = any (core.packs_used(me.organization_id)),

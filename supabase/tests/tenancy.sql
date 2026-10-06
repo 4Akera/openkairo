@@ -38,5 +38,7 @@ select t.refuses($q$select public.save_patient('{"department_id":"00000000-0000-
 select t.refuses($q$select public.save('user', '{"id":"00000000-0000-0000-0000-0000000000b1","name":"Taken"}')$q$, 'not_found');
 select t.refuses($q$select public.remove('department', '00000000-0000-0000-0000-0000000000d1')$q$, 'not_found');
 select t.refuses($q$select public.write_setting('{"key":"service","owner_id":"00000000-0000-0000-0000-0000000000d2","data":{"code":"x","name":"x"}}')$q$, 'not_found');
+select t.refuses($q$select public.setup('{"setup":"ward","department_id":"00000000-0000-0000-0000-0000000000d6"}')$q$, 'not_found');
+select t.refuses($q$select public.setup('{"setup":"ward","department_id":"00000000-0000-0000-0000-0000000000d6","apply":true}')$q$, 'not_found');
 select t.refuses($q$select public.merge_patients('{"department_id":"00000000-0000-0000-0000-0000000000e0","from":"00000000-0000-0000-0000-0000000000f1","into":"00000000-0000-0000-0000-0000000000f1","reason":"x"}')$q$, 'not_found');
 select t.ok(not core.may_listen('record:00000000-0000-0000-0000-0000000000f1') and not core.may_listen('organization:00000000-0000-0000-0000-0000000000a1'), 'no live channel of ours');

@@ -223,6 +223,8 @@ create table core.layers (
   requires    text[] not null default '{}',
   labels      jsonb not null default '{}',
   is_pack     boolean not null default false,
+  -- its reserved block of built-in role ids (§5.2): 00000000-0000-0000-0000-00000000<block><nn>; the base's c0, pharmacy's ca
+  role_block  text unique check (role_block ~ '^[0-9a-f]{2}$'),
   declared_at timestamptz not null default now()
 );
 create table core.types (
@@ -306,6 +308,23 @@ create table core.screens (
   action      text references core.actions,          -- what a user needs here to see its tab; null: anyone working in the department
   replaces    text[] not null default '{}',          -- a pack screen stands in for these base screens (a list of work is one screen, §5.1 rule 4)
   labels      jsonb not null default '{}'
+);
+-- a starter setup (§5.2): what a kind of department starts with, declared by a layer: the packs it ticks, its Screens line, places,
+-- services, presets and one-per-department settings. Each row is matched by its key (its code, its shortcut) or its name, and a thing's
+-- id comes from its key (core.setup_id), never from its place in the list
+create table core.setups (
+  key         text primary key check (key ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$'),
+  layer       text not null references core.layers,
+  work        text not null check (work in ('desk', 'visits', 'stays', 'bench')),
+  labels      jsonb not null default '{}',
+  help        jsonb not null default '{}',              -- what it is for, in words
+  packs       text[] not null default '{}',             -- the packs it ticks: its own layer's, or those it requires
+  screens     jsonb,                                    -- {screens, opens}; null: the department's default line
+  places      jsonb not null default '[]',              -- [{key, name, label}] in order
+  services    jsonb not null default '[]',              -- [service data], each matched by its code or its name
+  presets     jsonb not null default '[]',              -- [preset data], each matched by its shortcut or its name
+  settings    jsonb not null default '{}',              -- {key: data} of one-per-department keys
+  position    int generated always as identity
 );
 -- a score's points table (§5.1 rule 8): one row per version, never changed; a new version is a new row and old ones stay. The server
 -- alone adds it up (core.score); an entry keeps the version it used
