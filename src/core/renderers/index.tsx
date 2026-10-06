@@ -14,11 +14,12 @@ const registry = new Map<string, Renderer>()
 export const registerRenderer = (type: string, r: Renderer) => registry.set(type, r)
 export const rendererFor = (type: string) => registry.get(type)
 
-/** a pack's words for its bench: "To give" · "Given today" in place of "To collect" · "Done today" */
-export interface BenchWords { todo?: string; done?: string }
+/** a pack's words for the bench in a department that uses it (spec §5.1 rule 1): "To collect" · "Collected today" in place of the
+ *  base's general "To do" · "Done today"; the first pack the department uses that has words gives them */
+export interface BenchWords { todo?: string; done?: string; older?: string }
 const benchWords = new Map<string, BenchWords>()
-export const registerBenchWords = (departmentType: string, words: BenchWords) => benchWords.set(departmentType, words)
-export const benchWordsFor = (departmentType: string): BenchWords => benchWords.get(departmentType) ?? {}
+export const registerBenchWords = (pack: string, words: BenchWords) => benchWords.set(pack, words)
+export const benchWordsFor = (packs: string[]): BenchWords => packs.map((p) => benchWords.get(p)).find(Boolean) ?? {}
 
 /** A pack's answer form for the answer type of a service (spec/openCare.md §5): the bench shows it in place of the value grid and writes
  *  what toWrite returns in the same set as every other answer. The client fills the id, patient, department and the link to the order. */

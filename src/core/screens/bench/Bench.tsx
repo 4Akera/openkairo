@@ -19,9 +19,10 @@ import { ageSex, groupByPatient, matches, nextSteps, phaseOf, splitByDay, stepNa
 type Segment = Phase | 'done'
 
 /** The bench (base.bench): whose sample is next, and what is waiting on us. Scan or type, then one row per patient in three views,
- *  counted in the toolbar — to collect (not started), in progress, done today — today's work only; older open requests fold at the bottom. */
+ *  counted in the toolbar — to do (not started), in progress, done today; a pack the department uses may give its own words (the lab's
+ *  "To collect") — today's work only; older open requests fold at the bottom. */
 export function Bench({ dept }: ScreenProps) {
-  const departmentId = dept.id; const type = dept.type
+  const departmentId = dept.id
   const q = useRequestQueue(departmentId); const navigate = useNavigate(); const { org, can } = useDepartment()
   const [stepping, setStepping] = useState(false)
   const [find, setFind] = useState(''); const [section, setSection] = useState<string | null>(null); const [seg, setSeg] = useState<Segment>('todo')
@@ -29,7 +30,7 @@ export function Bench({ dept }: ScreenProps) {
   const [kbd, setKbd] = useState(false)                  // the keys are in use (arrows, a scan, typing): no hover; the mouse never moves the cursor
   const [arrows, setArrows] = useState(false)            // the arrows moved the cursor: show it as a bar (typed, only a ↵ beside the name)
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t) }, [])   // waits and the day move on their own
-  const words = benchWordsFor(type); const marks = useRowMarks('bench', dept); const qc = useQueryClient(); const [quickBusy, setQuickBusy] = useState<string | null>(null)
+  const words = benchWordsFor(dept.packs); const marks = useRowMarks('bench', dept); const qc = useQueryClient(); const [quickBusy, setQuickBusy] = useState<string | null>(null)
   const box = useRef<HTMLInputElement>(null); const list = useRef<HTMLUListElement>(null)
   const rows = useMemo(() => q.data?.requests ?? [], [q.data])
   const recent = q.data?.recent ?? []
@@ -40,7 +41,7 @@ export function Bench({ dept }: ScreenProps) {
   const byPhase = (p: Phase) => splitByDay(groupByPatient(shown.filter((r) => phaseOf(r.request?.step) === p), today).filter((g) => matches(g.patient, f)))
   const todo = byPhase('todo'); const doing = byPhase('doing')
   const done = recent.filter((r) => inSection(r.section_name) && matches(r.patient, f))
-  const first = words.todo ?? 'To collect'
+  const first = words.todo ?? 'To do'
   const segs: [Segment, string, number][] = [['todo', first, todo.today.length], ['doing', 'In progress', doing.today.length], ['done', words.done ?? 'Done today', done.length]]
   const lists = seg === 'todo' ? todo : seg === 'doing' ? doing : null
   const oldOpen = showOld || !!f   // a scan finds a patient from an older day too
@@ -93,7 +94,7 @@ export function Bench({ dept }: ScreenProps) {
       selected={i === c && arrows} enter={i === c && !arrows && !!f} hover={!kbd} className={i === c ? 'bench-cursor' : undefined} onOpen={() => open(g.patient.id)} />
   }
 
-  // the frame's toolbar: the three views counted (to collect in a state colour while any wait), the sections, the scan box
+  // the frame's toolbar: the three views counted (the first in a state colour while any wait), the sections, the scan box
   const views: ScreenView<Segment>[] = segs.map(([id, label, count]) => ({ id, label, count, ...(id === 'todo' ? { needs: 'warn' as const } : {}) }))
   const scan = <div className="relative w-full sm:w-80"><ScanLine className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
     <Input ref={box} autoFocus value={find} onChange={(e) => { setFind(e.target.value); setCursor(0); setKbd(!!e.target.value); setArrows(false) }} onKeyDown={onKey} placeholder="Scan or type a record number or name"
@@ -104,7 +105,7 @@ export function Bench({ dept }: ScreenProps) {
     {q.isLoading ? <Spinner label="Loading requests" /> : <Card><ul ref={list} onMouseMove={(e) => { if (kbd && movedMouse(e)) { setKbd(false); setArrows(false) } }}>
       {lists ? <>
         {lists.today.length ? lists.today.map((g, i) => row(g, i, false)) : f && lists.older.length ? null : none(seg === 'todo' ? `Nobody ${first.toLowerCase()} today.` : 'Nothing in progress today.')}
-        {lists.older.length > 0 && <ListSection title={seg === 'doing' ? 'In progress, older days' : words.todo ? `${first}, older days` : 'Not collected, older days'}
+        {lists.older.length > 0 && <ListSection title={seg === 'doing' ? 'In progress, older days' : words.older ?? 'Not started, older days'}
           count={lists.older.length} folded={!oldOpen} onToggle={f ? undefined : () => setShowOld(!showOld)}>{lists.older.map((g, j) => row(g, lists.today.length + j, true))}</ListSection>}
       </> : done.length ? done.map((r, i) => <Released key={r.id} r={r} marks={marks(benchMarkRow({ patient: r.patient, rows: [r] }))} next={i === c && (kbd || !!f)} onCorrect={() => navigate(`/bench/correct/${r.id}`)} />)
         : none('Nothing released in the last 24 hours.')}

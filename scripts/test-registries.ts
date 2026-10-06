@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { PLAIN_SEND, registerSend, sendTarget, sendWordsOf, sendsTo } from '../src/core/screens/visit/send'
 import { lineOf } from '../src/core/screens/visit/parse'
 import { draftEntries } from '../src/core/db/entries'
-import { registerReplyForm, replyDetails, replyFormFor } from '../src/core/renderers'
+import { benchWordsFor, registerBenchWords, registerReplyForm, replyDetails, replyFormFor } from '../src/core/renderers'
 import { FINAL_STEP } from '../src/core/screens/chart/model/labels'
 import { registerWords, words } from '../src/core/db/words'
 import { workOf } from '../src/core/screens/settings/packWork'
@@ -79,5 +79,12 @@ test('Settings → Packs: catching up with its progress; failures and parked wor
   const parked = workOf(work({ stale: 1, parked: 1 })); assert.deepEqual(parked.lines[0], { text: '1 refresh failed five times and stopped', tone: 'danger' }); assert.equal(parked.retry, true)
   assert.equal(workOf(work({ stale: 1, waiting: 3 })).retry, false, 'stale with work waiting: it will run')
   assert.equal(workOf(work({ stale: 1 })).retry, true, 'stale with nothing waiting: Retry queues it again')
+})
+test("the bench speaks generally; a pack's own words show only where its department uses it", () => {
+  assert.deepEqual(benchWordsFor([]), {}, 'no pack: the base\'s own words (To do · In progress · Done today)')
+  registerBenchWords('probe_lab', { todo: 'To collect', done: 'Collected today', older: 'Not collected, older days' })
+  assert.equal(benchWordsFor(['probe_lab']).todo, 'To collect', 'a department that uses the pack gets its words')
+  assert.deepEqual(benchWordsFor(['pharmacy']), {}, 'a department that does not use it keeps the general words')
+  assert.equal(benchWordsFor(['pharmacy', 'probe_lab']).older, 'Not collected, older days', 'the first used pack with words gives them')
 })
 console.log(`registries: ${n} groups passed`)

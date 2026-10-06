@@ -34,7 +34,7 @@ export const stepLabel = (s = 'sent') => STEP_LABEL[s] ?? s.replace(/_/g, ' ')
 /** a step key as a button: collected → Collected */
 export const stepName = (key: string) => key[0].toUpperCase() + key.slice(1).replace(/_/g, ' ')
 
-/** where an open request stands: nothing done yet (sent: the first segment, "To collect") or being worked ("In progress":
+/** where an open request stands: nothing done yet (sent: the first segment, "To do") or being worked ("In progress":
  *  started, held, a preliminary reply, a step of its service such as collected or prepared) */
 export type Phase = 'todo' | 'doing'
 export const phaseOf = (step: string | undefined): Phase => (step ?? 'sent') === 'sent' ? 'todo' : 'doing'

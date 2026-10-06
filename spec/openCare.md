@@ -1404,4 +1404,7 @@ types, parked pack calls with per-call Retry, Postgres enums.
     refusals' words, the no-pack-name scan of every core file and of each way of writing one, Settings → Packs' words and Retry.
     `test:board` 12 (one word coloured, drawn), `test:composer` 15, `test:chart` 23 + 9, `test:screens` 10, `test:sections` 19,
     `test:banner` 13, `test:settings` 11, `test:scores` 7, `test:demo` 7; typecheck, eslint and the build clean.
+- 2026-10-07: **the bench speaks generally** (the owner): the base bench's views are To do · In progress · Done today and its older work
+  "Not started, older days"; a pack the department uses may give its own words (the lab's "To collect"), registered by pack, never by
+  a department type. `test:registries` 8 groups.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
