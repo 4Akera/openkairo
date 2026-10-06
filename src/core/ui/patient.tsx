@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import type { PatientBanner } from '../db/types'
 import { TONE, cn, flagMark, flagTone, flagWord, type Flag } from './tone'
-import { Card, Kbd } from './display'
+import { Card, Kbd, Tag } from './display'
 import { IconButton } from './controls'
 
 type BannerProps = {
@@ -71,9 +71,10 @@ const waitWords = (m: number) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` $
 // enter: what ↵ opens while a filter is typed, a small ↵ beside the name and nothing more, so it never reads as hover.
 // The mouse never moves the selection: hover only shades the row under it, and not while the keys are in use (typing
 // shifts the list under a still mouse, and a shaded row would read as a second selection).
-export function ListRow({ number, name, age, status, who, minutes, next, selected, enter, muted, onOpen, actions, className, hover = true }: {
+// marks: the packs' words for this row (§5.1 rule 4), drawn in one place, after what is happening.
+export function ListRow({ number, name, age, status, who, minutes, next, selected, enter, muted, onOpen, actions, marks, className, hover = true }: {
   number: ReactNode; name: ReactNode; age: ReactNode; status?: ReactNode; who?: ReactNode; minutes?: number | null
-  next?: boolean; selected?: boolean; enter?: boolean; muted?: boolean; onOpen?: () => void; actions?: ReactNode; className?: string; hover?: boolean
+  next?: boolean; selected?: boolean; enter?: boolean; muted?: boolean; onOpen?: () => void; actions?: ReactNode; marks?: RowMark[]; className?: string; hover?: boolean
 }) {
   return <li aria-selected={selected || undefined} className={cn('group border-t border-line first:border-t-0', next && 'bg-accent-soft/70', selected && 'rail', selected && !next && 'bg-hover', className)}>
     <div role={onOpen ? 'button' : undefined} tabIndex={onOpen ? -1 : undefined} onClick={onOpen}
@@ -81,11 +82,19 @@ export function ListRow({ number, name, age, status, who, minutes, next, selecte
       <span className="font-mono text-12 text-faint tnum">{number}</span>
       <span className={cn('truncate max-sm:min-w-0 max-sm:flex-1', next ? 'font-semibold text-fg' : 'font-medium')}>{name}{enter && <Kbd className="ms-1.5 align-[1px] text-accent">↵</Kbd>}</span>
       <span className="text-12 text-muted tnum">{age}</span>
-      <span className={cn('flex min-w-0 items-center gap-1.5 truncate text-13 max-sm:order-last max-sm:basis-full max-sm:ps-[3.5rem]', muted ? 'text-faint' : 'text-fg')}>{status}</span>
+      <span className={cn('flex min-w-0 items-center gap-1.5 truncate text-13 max-sm:order-last max-sm:basis-full max-sm:ps-[3.5rem]', muted ? 'text-faint' : 'text-fg')}>{status}<RowMarks marks={marks} /></span>
       <span className="flex items-center justify-end gap-2 text-12 text-faint" onClick={(e) => actions && e.stopPropagation()}>{actions ?? who}</span>
       <span className={cn('text-end text-12 tnum', minutes == null ? '' : minutes >= 60 ? 'font-medium text-danger' : minutes >= 30 ? 'text-warn' : 'text-faint')}>{minutes == null ? '' : waitWords(minutes)}</span>
     </div>
   </li>
+}
+
+/** a pack's word on a row: a colour only for a state (ok, info, warn, danger), never a pack's own */
+export interface RowMark { key: string; word: string; tone?: 'ok' | 'info' | 'warn' | 'danger' }
+/** a row's pack marks, in one place: one small word each, after what the row says */
+export function RowMarks({ marks, className }: { marks?: RowMark[]; className?: string }) {
+  if (!marks?.length) return null
+  return <span className={cn('ms-auto flex shrink-0 items-center gap-1', className)}>{marks.map((m) => <Tag key={m.key} tone={m.tone ?? 'neutral'}>{m.word}</Tag>)}</span>
 }
 
 /** a list's section heading, or a folded section with its count */

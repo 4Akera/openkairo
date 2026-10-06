@@ -1,7 +1,8 @@
 -- how a pack shows up (spec §5.1 rules 1, 4 and 6): a department ticks the packs it uses (department.packs), only packs the clinic has
 -- on; core.department_uses answers "does this department use the layer"; the Screens line (department.screens) holds only screens
 -- of the department's work from the base or a pack it uses, never beside a base screen one of them stands in for, and opens on one of
--- them; the directory carries each department's packs and line, and each screen's action and what it replaces
+-- them; no pack screen stands in for the bed board, and a ward's line keeps it; the directory carries each department's packs and
+-- line, and each screen's action and what it replaces
 \set org  '00000000-0000-0000-0000-0000000000a1'
 \set im   '00000000-0000-0000-0000-0000000000d1'
 \set lab  '00000000-0000-0000-0000-0000000000d2'
@@ -21,6 +22,10 @@ select t.refuses($$select core.declare_screen('spare.board', 'spare', 'bench', '
 select t.refuses($$select core.declare_screen('spare.board', 'spare', 'bench', '{}', null, array['base.queue'])$$, 'unknown_screen');
 select t.refuses($$select core.declare_screen('spare.board', 'spare', 'bench', '{}', null, array['pharmacy.dispensing'])$$, 'unknown_screen');
 select core.declare_screen('spare.board', 'spare', 'bench', '{"en":"Board"}', null, array['base.bench']);
+-- one board per place (§5.1 rule 4): a pack may list work that is not places, never stand in for the bed board
+select t.refuses($$select core.declare_screen('spare.beds', 'spare', 'stays', '{"en":"Beds"}', null, array['base.beds'])$$, 'board_is_base');
+select t.refuses($$select core.declare_screen('spare.beds', 'spare', 'stays', '{"en":"Beds"}', null, array['base.beds', 'base.queue'])$$, 'board_is_base');
+select t.ok(not exists (select 1 from core.screens where key = 'spare.beds'), 'no pack board for places was declared');
 select t.ok(action is null and replaces = array['base.bench'], 'a screen with no action shows to anyone working there') from core.screens where key = 'spare.board';
 
 \echo '── department.packs: known packs, on for the clinic, each once'
@@ -52,6 +57,7 @@ select t.refuses(format($$select public.write_setting('{"key":"department.screen
 select t.refuses(format($$select public.write_setting('{"key":"department.screens","owner_id":"%s","data":{"screens":["pharmacy.dispensing","base.bench"]}}')$$, :'ph'), 'replaced');
 select t.refuses(format($$select public.write_setting('{"key":"department.screens","owner_id":"%s","data":{"screens":["base.bench","base.bench"]}}')$$, :'lab'), 'duplicate');
 select t.refuses(format($$select public.write_setting('{"key":"department.screens","owner_id":"%s","data":{"screens":["base.bench"],"opens":"base.queue"}}')$$, :'lab'), 'opens_off_line');
+select t.refuses(format($$select public.write_setting('{"key":"department.screens","owner_id":"%s","data":{"screens":[]}}')$$, :'ward'), 'no_board');
 
 \echo '── the Screens line: what lands'
 select t.ok(public.write_setting(jsonb_build_object('key', 'department.screens', 'owner_id', :'lab', 'data', '{"screens":["base.bench"],"opens":"base.bench"}'::jsonb)) ->> 'key' = 'department.screens', 'the lab: its bench');

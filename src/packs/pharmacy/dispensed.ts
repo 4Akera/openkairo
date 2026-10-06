@@ -4,7 +4,9 @@
 // its order (the base's orders) is about that medication (the base's lists). Fit: anyone. Pure.
 import type { ChipWord, Own } from '@core/screens/chart/sections'
 import type { BannerWord } from '@core/screens/chart/words'
+import type { MarkCtx, MarkRow, MarkWord } from '@core/screens/marks'
 import type { Rec } from '@core/screens/chart/model/record'
+import type { OrderRow } from '@core/db/types'
 import { shortDate } from '@core/ui/time'
 
 type Q = { value?: string; unit?: string }
@@ -53,4 +55,16 @@ export function suppliedLine(rows: Supplied[]): string | null {
 export function collectWords(rows: Supplied[]): BannerWord[] {
   const n = rows.filter((r) => r.state === 'prepared').length
   return n ? [{ word: `${n} to collect`, rank: 1 }] : []
+}
+/** an order to the pharmacy waits to collect when it is open and started, whatever its service calls its steps: the Dispensing
+ *  screen's Prepared, the banner's "to collect" */
+export const waitsToCollect = (o: Pick<OrderRow, 'status' | 'step_key'>) => o.status === 'in-progress' || (o.status === 'active' && o.step_key != null)
+/** a row's mark on the clinic queue where the department uses the pharmacy: the visit's prescriptions prepared at the pharmacy and
+ *  not yet given, "Rx to collect". A mark sees only the orders its reader may read (read:bench where the list is read), so the desk,
+ *  whose Reception reads no orders, carries none; nor does the bench, whose In progress says it */
+export function collectMark(row: MarkRow, ctx: MarkCtx): MarkWord | null {
+  if (ctx.list !== 'queue') return null
+  const ours = (serviceId: string | null) => !!serviceId && ctx.org?.services.find((s) => s.id === serviceId)?.reply_type === 'pharmacy.dispense'
+  const n = row.orders.filter((o) => ours(o.service_id) && waitsToCollect(o)).length
+  return n ? { word: n > 1 ? `${n} Rx to collect` : 'Rx to collect' } : null
 }

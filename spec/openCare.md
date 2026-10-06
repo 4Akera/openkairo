@@ -220,7 +220,7 @@ select core.declare_role_action(layer, role, action);  -- one action more, by th
   refuses writes inside them); refreshes must be VOLATILE.
 - Keys must sit inside the layer's prefix: pharmacy cannot declare `note` or `obgyn.x`. `requires` may not form a loop.
 - A screen's action is the core's, the base's or its own layer's (`unknown_action`); what it replaces are base screens of its work
-  (`unknown_screen`).
+  (`unknown_screen`), never the bed board (`board_is_base`, §5.1 rule 4).
 - A setting's fields: each names a node of the shape by its path (`rows.dose`, through objects and arrays of objects), once
   (`unknown_field`, `duplicate`), with words (`label_missing`); a unit only on a number or a list of numbers (`unit_not_number`),
   choices only of its enum or its list's items' enum, matched as text so a numeric enum's too (`unknown_choice`). A form is only a
@@ -452,7 +452,8 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   clinics it checks in for, or all), `department.packs` (the packs used here, §5.1 rule 1: each a known pack, on for the clinic, once:
   `unknown_pack`, `pack_off`, `duplicate`), `department.screens` (the Screens line: its tabs in order and which opens first; each
   screen declared, the base's or of a pack this department uses, of its work, once, never beside a base screen one of them replaces,
-  and opens on the line: `unknown_screen`, `pack_off`, `pack_not_used`, `wrong_work`, `replaced`, `duplicate`, `opens_off_line`), `service` (owner = the performing department: code, name, section, LOINC coding,
+  a department of places keeping its bed board, and opens on the line: `unknown_screen`, `pack_off`, `pack_not_used`, `wrong_work`,
+  `replaced`, `duplicate`, `no_board`, `opens_off_line`), `service` (owner = the performing department: code, name, section, LOINC coding,
   answer type, steps (in order; keys such as `collected`, `received`), fields with LOINC, UCUM units, ranges by sex and age, critical
   ranges, choices), `preset` (name, shortcut, lines, services, department or all), `place.closed`.
 - Actions: `write:<type>` for every type; `read:patients`, `read:record`, `read:queue`, `read:bench`, `read:review`, `read:log`,
@@ -460,7 +461,8 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
 - Built-in roles (fixed ids): Owner `…c001` (every action, held everywhere), Doctor `…c002`, Nurse `…c003`, Reception `…c004`, Lab
   technician `…c005`. A pack may ship its own (Pharmacist `…ca01`).
 - Default screens: front desk (`base.desk`, work `desk`, tab for `read:patients`), queue (`base.queue`, `visits`, `read:queue`), bench
-  (`base.bench`, `bench`, `read:bench`), bed board (`base.beds`, `stays`, `read:queue`); then the patient's chart, composer,
+  (`base.bench`, `bench`, `read:bench`), bed board (`base.beds`, `stays`, `read:queue`; the one board of every department of places,
+  §5.1 rule 4); then the patient's chart, composer,
   settings, the style guide (`/design`). All of them write and read through the same two doors.
 - **A department's screens** (§5.1 rules 5 and 6): the client draws each declared screen with the component registered under its key
   (`registerScreen(key, Component)`, `src/core/screens/registry.ts`; the base's four in `screens/base.ts`). The department's Screens
@@ -508,7 +510,7 @@ One system for core and packs (`src/core/ui`, imported as `@core/ui`): **tokens*
 each (canvas, surface, raised, sunken, paper; fg, muted, faint; line, line-strong, hover, focus, selection, overlay, band; accent and danger, warn, ok,
 info, each with `-soft`, `-line` and `-fg`; text 11–22, radii sm–xl, shadows xs–md, the layers, `split` 640 px); the theme is the
 user's choice (System, Light, Dark; per browser, no flash). **The kit** builds every screen: buttons, fields, chips, tags and badges,
-callouts, sections, tabs, rows, the banner, the split frame, KV, the analyte table, steps, stat, sparkline and line chart, and a
+callouts, sections, tabs, rows (a pack's marks in one place on each, `ListRow` `marks`), the banner, the split frame, KV, the analyte table, steps, stat, sparkline and line chart, and a
 department's frame (`ui/frame.tsx`: `ScreenTabs`, `ScreenFrame` with its one toolbar, `NotForRole`, a line inside a list at `sm`;
 `Empty` for nothing here). **The rule**
 `opencare/tokens-only` (ESLint) refuses raw palette classes, literal colours, off-scale sizes and `dark:` anywhere outside the kit;
@@ -588,7 +590,26 @@ it works ("/x is used in: …").
   "6 cm · past alert line") and at most 2 buttons of its own, after the base buttons; Admit, Move and Discharge are always the base's,
   in the same place. A list of work that is not places (the theatre list, the radiology worklist, dispensing) may be the pack's own
   screen: then it is the department's only screen for that work, never a second tab beside the base one, and it does the base
-  actions (call, start, done) itself.
+  actions (call, start, done) itself. *Built 2026-10-06:* every tile of the board (`ward/BedBoard.tsx`, `ward/Tile.tsx`) is the
+  base's part on top (the bed; who is in it, sex and age; the stay's day, 1 the admission's; the responsible clinician; the reason),
+  then one pack line, then the buttons at its foot. A pack registers its words once (`registerTileLine(pack, (row, ctx) → {words,
+  tone})`, `ward/tiles.ts`) and at most two buttons (`registerTileButton(pack, {label, show(row), onClick or path})`; a third is
+  refused, and so is a base button's word: Admit, Admit here, Move, Discharge); only the packs the department uses (its
+  `department.packs` through the directory) speak, each in turn on the one line in the department's pack order, and a pack whose
+  words fail says nothing. The base's Admit here (a free bed), Move and Discharge (a taken one) come first and always hold their
+  place: for whoever may not admit they are drawn off ("not for your role"), never left out; then at most two pack buttons on a
+  taken bed, in the department's pack order. A stay admitted with no bed here is a tile too, with the packs' line and buttons (the
+  base's move and discharge are a bed's). A pack word takes a colour only for a state (ok, info, warn, danger); any other tone is
+  dropped. **Marks on the lists** are the same idea: `registerRowMark(pack, (row, ctx) → {word, tone})` (`screens/marks.ts`), one
+  per pack, read from the row's patient, visit and orders, drawn in one place on each row (after what it says) of the desk, the
+  queue and its requests, and the bench, only from the packs the department uses, in its pack order. A mark sees only what its
+  reader may read: a row carries its visit's orders only for whoever holds `read:bench` where the list is read (a Doctor; not a
+  Nurse, nor the desk's Reception). No pack screen stands in for the board: `declare_screen` refuses one that replaces `base.beds`
+  (`board_is_base`), and a department of places keeps the board on its line (`no_board`; the client draws it first should a line
+  leave it out, and Settings cannot take it off). Pharmacy's mark: "Rx to collect" on the clinic queue, for whoever reads its
+  orders, while a prescription waits prepared at the pharmacy (open and started, whatever the service calls its steps, as its
+  Dispensing screen's Prepared and its banner word); none on the desk, whose Reception reads no orders, nor on the bench, whose In
+  progress says it.
 - **Rule 5 · one frame for every screen.** The platform draws it for base and pack screens alike: the department's tab row, then one
   toolbar (the screen's views on the left; search, date and the main action on the right), then the content, at one width with one
   margin everywhere. No heading under the tabs: the selected tab is the title. The pack fills only the content; empty and "not for
@@ -692,7 +713,8 @@ it works ("/x is used in: …").
   not the full list".
 - **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
   each tab needs; the fit test, chip words and Summary lines; banner words with their rank; the pregnant and breastfeeding facts;
-  setting shapes with labels and units, and the form drawn from them; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
+  setting shapes with labels and units, and the form drawn from them; the board tile line and buttons and the marks on the lists; the rest
+  not yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -1041,4 +1063,32 @@ types, parked pack calls with per-call Retry, Postgres enums.
     `test:settings` 11 groups (a numeric choice, errors placed, a whole item's error, the dropped key, a key's own `$defs`).
     After the fixes: 21 suites, 718 checks; `test:composer` 15 groups, `test:chart` 22 + 9, `test:screens` 9, `test:sections` 19,
     `test:banner` 13, `test:settings` 11; typecheck, eslint and the build clean.
+- 2026-10-06: platform piece 6 — one board per place, the tile line and buttons, and pack marks on the lists (§5.1 rule 4, rule 1's
+  marks), proven with a test-only probe pack and on pharmacy.
+  - **Server**: `declare_screen` refuses a pack screen that stands in for `base.beds` (`board_is_base`); the Screens line of a
+    department of places keeps the board (`no_board`).
+  - **Client**: the tile registry (`registerTileLine`, `registerTileButton`, `ward/tiles.ts`: one line a pack, at most two buttons a
+    pack and on a tile) and the one tile (`ward/Tile.tsx`: the bed; who, sex and age, the stay's day, the responsible clinician; the
+    packs' one line; the base's Admit here, Move and Discharge first at the foot, then the packs'); the row marks (`registerRowMark`,
+    `screens/marks.ts`, one a pack), drawn by the kit's `ListRow` (`marks`) and the desk's lines, on the desk, the queue and its
+    requests, and the bench; only the packs the department uses speak, a colour only for a state. The Screens line keeps the board
+    (drawn first should a stored line leave it out; Settings cannot take it off). The queue's rows carry their visit's orders.
+    Pharmacy's mark "Rx to collect" (the clinic queue, a prescription prepared). `/design` shows the board with a probe pack's line
+    and buttons, and a queue row with a mark.
+  - **Reviewed** (find, then an adversarial check of each finding): pharmacy's mark counted only a step named `prepared`, so a
+    dispensing service whose steps are named otherwise (`ready`, `counted`) showed the order under Prepared and "1 to collect" on the
+    banner but no mark; it now counts an order to the pharmacy that is open and started, as Dispensing and the banner do. The mark
+    claimed the desk, but the desk's rows carry orders only for a reader with `read:bench` there, which Reception never holds (nor a
+    Nurse on the queue): a mark sees only what its reader may read, so pharmacy marks the clinic queue only, and the spec says so. A
+    pack could register a tile button named Admit, Move or Discharge; refused. For whoever may not admit, the base's buttons were
+    left out and the packs' moved into their place; they are drawn off ("not for your role") and keep it. A stay with no bed here
+    had the packs' line but never their buttons; it has them. `/design`'s board sample centred its tiles, so their buttons did not
+    line up at the foot as on the board; they stretch.
+  - **Tests**: 20 suites, 674 checks (`screens` 45: +4, a pack board for places refused twice and never declared, a ward's line
+    without the board); `npm run test:board` (new), 12 groups — the probe's registrations (a third button, a second line or mark,
+    the base and its button words refused), its line only where used, one line in the department's pack order, a failing or blank pack silent, state
+    tones only, the base's buttons first and in place (off, not left out, for whoever may not admit), a stay with no bed (the packs'
+    buttons), at most two pack buttons in pack order with show(), a button's click and path, the marks (used here, one a pack, order,
+    tone), a row as a mark reads it, pharmacy's mark (the queue only; any step name); `test:screens` 10 groups (the board
+    kept), `test:composer` 15, `test:chart` 22 + 9, `test:sections` 19, `test:banner` 13.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

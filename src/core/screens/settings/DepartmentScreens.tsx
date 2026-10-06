@@ -25,7 +25,7 @@ export function PacksAndScreens({ org, d, set, changed }: { org: Organization; d
     set({ packs, screens: line.screens, opens: line.opens ?? line.screens[0] }) }
   const choices = screenChoices(d.work, org.screens, d.packs, d.screens)
   const keys = [...choices.map((s) => s.key), ...d.screens.filter((k) => !choices.some((s) => s.key === k))]
-  // at least one screen stays; the one it opens on is always among them
+  // at least one screen stays, and a ward's bed board always; the one it opens on is always among them
   const flip = (k: string) => { const line = flipScreen({ screens: d.screens, opens: d.opens }, k, org.screens, d.packs); if (line) set({ screens: line.screens, opens: line.opens ?? line.screens[0] }) }
   return <>
     {d.work !== 'outside' && <Fieldset title="Packs used here">
@@ -36,7 +36,7 @@ export function PacksAndScreens({ org, d, set, changed }: { org: Organization; d
           <span className="text-12 text-faint">brings {brings(p.key, d.work, org.screens)}</span></li>)}</ul>}
       </FormRow></Fieldset>}
     {keys.length > 0 && <Fieldset title="Screens">
-      <FormRow label="Screens" changed={changed('screens')} hint="The tabs of the people who work here, in this order. A pack ticked here may add its own; at least one stays.">
+      <FormRow label="Screens" changed={changed('screens')} hint="The tabs of the people who work here, in this order. A pack ticked here may add its own; at least one stays, and a ward keeps its bed board.">
         <div className="flex flex-wrap gap-1.5">{keys.map((k) => <Chip variant="check" shape="pill" key={k} on={d.screens.includes(k)} onClick={() => flip(k)}>{screenName(k)}</Chip>)}</div></FormRow>
       {d.screens.length > 1 && <FormRow label="Opens first" changed={changed('opens')} hint="The tab the department opens on.">
         <Segmented value={d.opens} onChange={(v) => set({ opens: v })} options={d.screens.map((k): [string, string] => [k, screenName(k)])} /></FormRow>}

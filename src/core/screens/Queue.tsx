@@ -7,6 +7,8 @@ import { useDepartment } from '../hooks/organization'
 import type { QueueRow } from '../db/types'
 import { Card, Empty, Input, ListRow, ListSection, Spinner, Tag, minutesSince, movedMouse } from '../ui'
 import { ageSex, backIn, matches, nextPatient, pendingWords, since, yearsOld } from './clinic/words'
+import { benchMarkRow, visitMarkRow } from './marks'
+import { useRowMarks } from './useMarks'
 
 
 /** The clinic's list (spec 05): who is next, and who needs me. Next · Back · Waiting · With a doctor, then Waiting for
@@ -17,7 +19,7 @@ export function QueueList({ departmentId, compact = false, keys = false, frame }
   frame?: (search: ReactNode, list: ReactNode) => ReactNode   // the screen's frame: the filter goes in its toolbar, the list under it
 }) {
   const q = useVisitQueue(departmentId); const navigate = useNavigate()
-  const { org, can } = useDepartment(); const visits = useVisitActions()
+  const { org, can } = useDepartment(); const visits = useVisitActions(); const marks = useRowMarks('queue')
   const [filter, setFilter] = useState(''); const [cursorId, setCursorId] = useState<string | null>(null); const [showPending, setShowPending] = useState(false)
   const [kbd, setKbd] = useState(false)                  // the keys are in use (arrows, typing): no hover
   const [arrows, setArrows] = useState(false)            // the arrows moved the cursor: show it as a bar
@@ -72,7 +74,7 @@ export function QueueList({ departmentId, compact = false, keys = false, frame }
   const row = (r: QueueRow, isNext: boolean) => { const n = at.get(r.id) ?? -1; return <ListRow key={r.id} number={r.patient.record_number}
     name={<>{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ms-1.5 inline h-3.5 w-3.5 text-danger" aria-label="allergies" />}</>}
     age={ageSex(r.patient.age, r.patient.sex)} status={<Status r={r} />} who={r.band === 'back' || r.band === 'consult' ? r.assignee_name : null}
-    minutes={minutesSince(since(r))} next={isNext} muted={r.band === 'pending'} onOpen={() => open(r)} selected={keys && n === c && arrows} enter={keys && n === c && !arrows && !!f} hover={!kbd}
+    minutes={minutesSince(since(r))} marks={marks(visitMarkRow(r))} next={isNext} muted={r.band === 'pending'} onOpen={() => open(r)} selected={keys && n === c && arrows} enter={keys && n === c && !arrows && !!f} hover={!kbd}
     actions={r.band === 'pending' && can('write:not_here') ? <button type="button" disabled={visits.present.isPending} title="The patient left: results go to the doctor's review list"
       onClick={() => visits.present.mutate({ visit: r.visit, is_present: false })}
       className="rounded-md px-2 py-0.5 text-11 text-faint ring-1 ring-line hover:bg-surface hover:text-danger hover:ring-danger-line">Gone</button> : undefined} /> }
@@ -99,7 +101,7 @@ function Status({ r }: { r: QueueRow }) {
 
 /** Requests addressed to a clinic (consults): one row per request. Departments that offer services use the bench instead. */
 export function RequestList({ departmentId }: { departmentId: string }) {
-  const q = useRequestQueue(departmentId); const navigate = useNavigate()
+  const q = useRequestQueue(departmentId); const navigate = useNavigate(); const marks = useRowMarks('queue')
   if (q.isLoading) return <Spinner label="Loading requests" />
   if (q.error) return <p className="text-14 text-danger">{q.error.message}</p>
   const rows = q.data?.requests ?? []
@@ -108,5 +110,5 @@ export function RequestList({ departmentId }: { departmentId: string }) {
     number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(yearsOld(r.patient.born_on), r.patient.sex)}
     status={<>{p && p !== 'routine' && <Tag tone="danger">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-faint"> — “{r.question_text}”</span>}</span>
       {step && <span className="shrink-0 text-12 text-faint">{step}</span>}{r.patient.here && <Tag tone="ok">here</Tag>}</>}
-    who={r.from_department_name} minutes={minutesSince(r.occurred_at)} onOpen={() => navigate(`/request/${r.id}`)} /> })}</ul></Card>
+    who={r.from_department_name} minutes={minutesSince(r.occurred_at)} marks={marks(benchMarkRow({ patient: r.patient, rows: [r] }))} onOpen={() => navigate(`/request/${r.id}`)} /> })}</ul></Card>
 }

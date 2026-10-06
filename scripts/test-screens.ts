@@ -1,7 +1,7 @@
-// The department's tab row and the Screens line editor (spec/openCare.md §5.1 rules 1, 5 and 6): pure, no browser, no database.
+// The department's tab row and the Screens line editor (spec/openCare.md §5.1 rules 1, 4, 5 and 6): pure, no browser, no database.
 // npm run test:screens
 import assert from 'node:assert/strict'
-import { baseLine, flipScreen, lineForPacks, lineHere, screenChoices, screensOf, tabRow, tabSearch, TAB_LIMIT, type Declared } from '../src/core/screens/line'
+import { BOARD, baseLine, flipScreen, lineForPacks, lineHere, screenChoices, screensOf, tabRow, tabSearch, TAB_LIMIT, type Declared } from '../src/core/screens/line'
 import type { Department } from '../src/core/db/types'
 
 const S = (key: string, work: string, action: string | null = null, replaces: string[] = []): Declared =>
@@ -95,5 +95,12 @@ test('the editor starts from the line as the department shows it: a pack screen 
   assert.deepEqual(lineHere({ ...ph, packs: ['pharmacy'] }, declared), { screens: ['pharmacy.dispensing'], opens: 'pharmacy.dispensing' }, 'used here: as stored')
   assert.deepEqual(lineHere(dept({ screens: ['base.bench', 'base.xa'], opens: 'base.xa' }), many), { screens: ['base.bench', 'base.xa'], opens: 'base.xa' })
   assert.deepEqual(lineHere(dept({ screens: ['base.gone'] }), declared), { screens: ['base.bench'], opens: 'base.bench' }, 'nothing left: the base\'s line')
+})
+test('one board per place: a ward\'s line keeps the bed board, and a line that left it out still draws it first', () => {
+  const list = [...declared, S('icu.fluids', 'stays')]
+  assert.equal(flipScreen({ screens: [BOARD, 'icu.fluids'], opens: BOARD }, BOARD, list, ['icu']), null, 'the board cannot be taken off')
+  assert.deepEqual(flipScreen({ screens: [BOARD], opens: BOARD }, 'icu.fluids', list, ['icu']), { screens: [BOARD, 'icu.fluids'], opens: BOARD }, 'a pack list of other work sits beside it')
+  assert.deepEqual(keys(screensOf(dept({ work: 'stays', screens: ['icu.fluids'], packs: ['icu'] }), list, all)), [BOARD, 'icu.fluids'])
+  assert.deepEqual(keys(screensOf(dept({ work: 'stays', screens: [] }), list, all)), [BOARD])
 })
 console.log(`screens: ${n} groups passed`)

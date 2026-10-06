@@ -7,6 +7,8 @@ type Work = Department['work']
 type Line = { screens: string[]; opens: string | null }
 /** at most this many tabs, then More · n */
 export const TAB_LIMIT = 5
+/** the one board of places: no pack screen stands in for it, and a department of places never drops it */
+export const BOARD = 'base.beds'
 
 const isBase = (s: Declared) => s.layer === 'core' || s.layer === 'base'
 const fits = (s: Declared, work: Work) => s.work === work || s.work === 'any'
@@ -29,7 +31,10 @@ export function screensOf(d: Pick<Department, 'work' | 'screens' | 'packs'>, dec
   // a pack screen not used here (unticked, or the pack off) gives back the base screens it stood in for, in its place
   const usable = [...new Set(d.screens.flatMap((k) => ok(at(k)) ? [k] : at(k)?.replaces ?? []))].map(at).filter(ok)
   const keys = unreplaced(usable.map((s) => s.key), declared, d.packs)
-  return usable.filter((s) => keys.includes(s.key))
+  const line = usable.filter((s) => keys.includes(s.key))
+  // a department of places always has its one board (§5.1 rule 4), first when the line left it out
+  const board = at(BOARD)
+  return d.work === 'stays' && ok(board) && !line.includes(board) ? [board, ...line] : line
 }
 
 export interface Tab { key: string; label: string }
@@ -82,8 +87,10 @@ export function lineForPacks(line: Line, work: Work, declared: Declared[], befor
   // it opens where it did; when that screen left, on the pack's screen that took its place
   return withOpens(screens, screens.includes(line.opens ?? '') ? line.opens : added.find((k) => screens.includes(k)) ?? null)
 }
-/** one screen on or off the line: on, the base screens it stands in for leave; at least one stays (null: that was the last) */
+/** one screen on or off the line: on, the base screens it stands in for leave; at least one stays, and the bed board always (null:
+ *  it stays as it is) */
 export function flipScreen(line: Line, key: string, declared: Declared[], packs: string[]): Line | null {
+  if (key === BOARD && line.screens.includes(key)) return null
   const next = line.screens.includes(key) ? line.screens.filter((k) => k !== key) : unreplaced([...line.screens, key], declared, packs)
   return next.length ? withOpens(next, line.opens) : null
 }

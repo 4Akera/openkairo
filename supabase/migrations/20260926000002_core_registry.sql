@@ -510,6 +510,10 @@ begin
   if action is not null and not exists (select 1 from core.actions a where a.key = action and a.layer in ('core', 'base', declare_screen.layer)) then
     perform core.refuse('unknown_action', action);
   end if;
+  -- one board per place (§5.1 rule 4): beds, chairs and cubicles show on the base's board only; a pack adds its tile line and buttons
+  if 'base.beds' = any (coalesce(replaces, '{}')) then
+    perform core.refuse('board_is_base', format('%s may not stand in for base.beds: a pack adds a line and buttons to its tiles', key));
+  end if;
   foreach r in array coalesce(replaces, '{}') loop
     if not exists (select 1 from core.screens s where s.key = r and s.layer = 'base' and (s.work = declare_screen.work or s.work = 'any')) then
       perform core.refuse('unknown_screen', format('%s replaces %s, which is no base screen of its work', key, r));

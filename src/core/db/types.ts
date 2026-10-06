@@ -107,6 +107,7 @@ export interface QueueRow {
   arrived_at: string; present_at: string | null; seen_at: string | null; request_id: string | null; request_open: boolean
   called_at: string | null; missed_calls: number; has_vitals: boolean; present: boolean
   requests: { request_id: string; service_name: string | null; to_department_name: string | null; step: RequestStep; is_holding: boolean; type: string; replied: boolean }[]
+  orders: OrderRow[]   // the visit's orders as read (a pack's row mark reads them)
   visit: VisitRow
 }
 export interface VisitQueue { rows: QueueRow[]; done_today: number; away: number }

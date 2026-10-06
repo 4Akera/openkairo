@@ -1,6 +1,7 @@
 // /design · Components (design-system.md §4, §7): every kit export, variant × size × state. Hover and focus are drawn with the
 // classes the pointer and the keyboard turn on, so every state shows at once; everything else is live and can be tried.
-// The controls are here; words, notices and tables in Content, frames and menus in Layout, the patient and editing in Rows.
+// The controls are here; words, notices and tables in Content, frames and menus in Layout, the patient and editing in Rows, the bed
+// board and the row marks in Board.
 import { useState } from 'react'
 import { Check, Plus, Trash2, X } from 'lucide-react'
 import { Button, Chip, Field, IconButton, Input, NumberInput, SearchInput, Segmented, Select, Switch, Textarea, ThemeToggle } from '../../ui'
@@ -8,6 +9,7 @@ import { Columns, Group, Sample } from './Frame'
 import { Content } from './Content'
 import { Layout } from './Layout'
 import { Rows } from './Rows'
+import { Board } from './Board'
 import { FREQUENCIES, REASONS } from './fixtures'
 
 type Variant = 'primary' | 'soft' | 'outline' | 'ghost' | 'danger' | 'danger-ghost'
@@ -20,7 +22,7 @@ const STATES: [string, (v: Variant) => { className?: string; disabled?: boolean;
 const noop = () => {}
 
 export function Components({ side }: { side: boolean }) {
-  return <Columns side={side}><div className="grid gap-6"><Actions /><Fields /><Choices /><Content /><Layout /><Rows /></div></Columns>
+  return <Columns side={side}><div className="grid gap-6"><Actions /><Fields /><Choices /><Content /><Layout /><Rows /><Board /></div></Columns>
 }
 
 function Actions() {

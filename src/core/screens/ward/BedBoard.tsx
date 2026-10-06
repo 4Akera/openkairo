@@ -4,20 +4,24 @@ import { useDepartment } from '../../hooks/organization'
 import { usePatientSearch, useStays } from '../../hooks/reads'
 import { newId, useWrite } from '../../hooks/writes'
 import { move, oneSet } from '../../db/entries'
-import { banner } from '../../db/views'
-import type { Identity, Place, PresenceRow, TableRead } from '../../db/types'
+import { banner, userName } from '../../db/views'
+import type { Place, PresenceRow, TableRead } from '../../db/types'
 import type { ScreenProps } from '../registry'
-import { startOf } from '../chart/model/encounter'
-import { Badge, Button, Card, Empty, Input, ScreenFrame, Select, Spinner, cn, errorText, shortDate, type ScreenView } from '../../ui'
+import { startOf, stayDay } from '../chart/model/encounter'
+import { Button, Card, Empty, Input, ScreenFrame, Select, Spinner, errorText, type ScreenView } from '../../ui'
 import { DISPOSITION } from './words'
+import { BedTile, type Occupant } from './Tile'
+import { noBedActions, tileActions, tileButtonDefs, tileLineDefs, tileLineOf, type TileAction, type TileCtx } from './tiles'
 
 type Open = { bed: string; what: 'admit' | 'move' | 'discharge' } | null
 type View = 'all' | 'in' | 'free' | 'closed'
 
-/** A ward's bed board (base.beds, spec/openCare.md §4.2): its beds (all, in, free and closed as counted views), who is in each since when; admit to a free bed, move, discharge — each one entry
- *  that changes the stay's latest version, so two people moving one patient at once are told to look again. */
+/** A department's board of places (base.beds, spec/openCare.md §4.2, §5.1 rule 4): one board, the same in every ward, ICU, labour
+ *  ward, dialysis unit and ER, whatever packs it uses. Its beds (all, in, free and closed as counted views), each a tile: who is in
+ *  it, the packs' line, the base's buttons then the packs'. Admit, move, discharge — each one entry that changes the stay's latest
+ *  version, so two people moving one patient at once are told to look again. */
 export function BedBoard({ dept }: ScreenProps) {
-  const { org, can } = useDepartment()
+  const { org, can } = useDepartment(); const navigate = useNavigate()
   const stays = useStays(dept.id)
   const w = useWrite()
   const [open, setOpen] = useState<Open>(null); const [view, setView] = useState<View>('all')
@@ -34,34 +38,41 @@ export function BedBoard({ dept }: ScreenProps) {
   const views: ScreenView<View>[] = [{ id: 'all', label: 'All beds', count: beds.length }, { id: 'in', label: 'In', count: inBed.size + noBed.length }, { id: 'free', label: 'Free', count: free.length },
     ...(closed.length ? [{ id: 'closed' as const, label: 'Closed', count: closed.length }] : [])]
   const shown = beds.filter((b) => view === 'all' || (view === 'in' ? inBed.has(b.id) : view === 'free' ? free.includes(b) : b.closed))
+  const read = stays.data
+  const ctxOf = (r: PresenceRow, place: Place | null): TileCtx => ({ dept, place, identity: read?.patients[r.patient_id] ?? null, day: stayDay(startOf(r, read)), can })
+  const who = (r: PresenceRow): Occupant => occupant(r, read, userName(org, r.assigned_id), () => navigate(`/visit/${r.item}`))
+  // a base button opens its form inline; a pack's does its own thing, or opens its path
+  const act = (b: Place | null, r: PresenceRow | undefined) => (a: TileAction) => {
+    if (a.base) { if (b && !a.off) setOpen({ bed: b.id, what: a.key }); return }
+    if (!r) return
+    const ctx = ctxOf(r, b)
+    try { if (a.def.onClick) a.def.onClick(r, ctx); else if (a.def.path) navigate(a.def.path(r, ctx)) } catch (e) { console.error(`openCare: the tile button ${a.key} failed`, e) }
+  }
   return <ScreenFrame views={views} view={view} onView={setView} notice={w.error && <p className="text-14 text-danger">{errorText(w.error)}</p>}>
     {stays.isLoading ? <Spinner /> : beds.length === 0 ? <Card><Empty>No beds yet — add them in Settings.</Empty></Card>
     : !shown.length ? (view === 'in' && noBed.length ? null : <Card><Empty>No beds here.</Empty></Card>)
     : <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{shown.map((b) => { const r = inBed.get(b.id); const here = open?.bed === b.id ? open.what : null
-      return <Card key={b.id} className={cn('grid gap-2 p-3', b.closed && 'opacity-60')}>
-        <div className="flex items-center gap-2"><span className="text-14 font-semibold">{b.name}</span>{b.closed && <Badge>closed</Badge>}
-          {!r && !b.closed && may && !here && <Button size="sm" variant="outline" className="ml-auto" onClick={() => setOpen({ bed: b.id, what: 'admit' })}>Admit</Button>}</div>
-        {r && <Occupant row={r} read={stays.data!} />}
-        {r && !here && may && <div className="flex gap-1.5">
-          <Button size="sm" variant="ghost" onClick={() => setOpen({ bed: b.id, what: 'move' })} disabled={!free.length}>Move</Button>
-          <Button size="sm" variant="ghost" onClick={() => setOpen({ bed: b.id, what: 'discharge' })}>Discharge</Button></div>}
+      const taken = r ? { row: r, ctx: ctxOf(r, b) } : null
+      return <BedTile key={b.id} name={b.name} closed={b.closed} who={r ? who(r) : null} line={taken ? tileLineOf(tileLineDefs(), taken.row, taken.ctx) : []}
+        actions={here ? null : tileActions(tileButtonDefs(), b, taken, may)} onAction={act(b, r)} disabled={(a) => a.key === 'move' && !free.length}>
         {here === 'admit' && <Admit bed={b} onCancel={() => setOpen(null)} busy={w.isPending}
           onAdmit={(patientId, reason) => { const id = newId(); w.mutate(oneSet([{ id, type: 'admitted', patient_id: patientId, department_id: dept.id, visit_id: id, data: { admit_source: 'outp', place_id: b.id, ...(reason ? { reason } : {}) } }]), done) }} />}
         {here === 'move' && r && <Choose label="To" options={free.map((x) => [x.id, x.name])} go="Move" busy={w.isPending} onCancel={() => setOpen(null)}
           onGo={(place) => w.mutate(oneSet([move('moved', { id: r.item, patient_id: r.patient_id, latest_entry: r.latest_entry }, dept.id, { place_id: place })]), done)} />}
         {here === 'discharge' && r && <Choose label="To" options={DISPOSITION} go="Discharge" busy={w.isPending} onCancel={() => setOpen(null)}
           onGo={(disposition) => w.mutate(oneSet([move('discharged', { id: r.item, patient_id: r.patient_id, latest_entry: r.latest_entry }, dept.id, { disposition })]), done)} />}
-      </Card> })}</div>}
-    {noBed.length > 0 && view !== 'free' && view !== 'closed' && <Card className="grid gap-2 p-3"><p className="text-12 font-medium text-faint">Admitted, no bed here</p>{noBed.map((r) => <Occupant key={r.item} row={r} read={stays.data!} />)}</Card>}
+      </BedTile> })}</div>}
+    {noBed.length > 0 && view !== 'free' && view !== 'closed' && <section className="grid gap-2"><p className="text-12 font-medium text-faint">Admitted, no bed here</p>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{noBed.map((r) => { const taken = { row: r, ctx: ctxOf(r, null) }
+        return <BedTile key={r.item} name="No bed" closed={false} who={who(r)} line={tileLineOf(tileLineDefs(), r, taken.ctx)} actions={noBedActions(tileButtonDefs(), taken, may)} onAction={act(null, r)} /> })}</div></section>}
   </ScreenFrame>
 }
 
-/** who is in the bed, since the stay's clinical start (the admission as it happened, as the chart dates it) */
-function Occupant({ row, read }: { row: PresenceRow; read: TableRead<PresenceRow> }) {
-  const navigate = useNavigate(); const i: Identity | undefined = read.patients[row.patient_id]; const p = i ? banner(i) : null
-  return <button type="button" onClick={() => navigate(`/visit/${row.item}`)} className="grid text-left hover:underline">
-    <span className="text-13 font-medium">{p ? `${p.given_name} ${p.family_name}` : 'Patient'}{p && <span className="ml-1.5 text-12 font-normal text-faint">{p.sex[0]?.toUpperCase()} {p.age}</span>}</span>
-    <span className="text-12 text-faint">since {shortDate(startOf(row, read))}{row.reason ? ` · ${row.reason}` : ''}{row.urgent ? ' · urgent' : ''}</span></button>
+/** who is in the bed, from the stay's row: the day counts from its clinical start (the admission as it happened, as the chart dates it) */
+function occupant(row: PresenceRow, read: TableRead<PresenceRow> | undefined, clinician: string | null, onOpen: () => void): Occupant {
+  const i = read?.patients[row.patient_id]; const p = i ? banner(i) : null
+  return { name: p ? `${p.given_name} ${p.family_name}` : 'Patient', sexAge: p ? `${p.sex[0]?.toUpperCase() ?? ''} ${p.age}`.trim() : '', day: stayDay(startOf(row, read)),
+    clinician, reason: row.reason, urgent: row.urgent, onOpen }
 }
 
 /** admit to this bed: find the patient, a reason if one is known */

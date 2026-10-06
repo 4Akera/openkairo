@@ -10,8 +10,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { write, type EntryIn } from '../../db/rpc'
 import { answerEntry, oneSet, stepEntry } from '../../db/entries'
 import type { RequestQueueRow } from '../../db/types'
-import { Button, Card, Chip, Empty, Input, Kbd, ListRow, ListSection, ScreenFrame, Spinner, Tag, cn, minutesSince, movedMouse, hm, shortDate, type ScreenView } from '../../ui'
+import { Button, Card, Chip, Empty, Input, Kbd, ListRow, ListSection, ScreenFrame, Spinner, Tag, cn, minutesSince, movedMouse, hm, shortDate, type RowMark, type ScreenView } from '../../ui'
 import type { ScreenProps } from '../registry'
+import { benchMarkRow } from '../marks'
+import { useRowMarks } from '../useMarks'
 import { ageSex, groupByPatient, matches, nextSteps, phaseOf, splitByDay, stepName, stepWords, testsLine, todayYmd, type DayGroup, type Phase } from './shared'
 
 type Segment = Phase | 'done'
@@ -27,7 +29,7 @@ export function Bench({ dept }: ScreenProps) {
   const [kbd, setKbd] = useState(false)                  // the keys are in use (arrows, a scan, typing): no hover; the mouse never moves the cursor
   const [arrows, setArrows] = useState(false)            // the arrows moved the cursor: show it as a bar (typed, only a ↵ beside the name)
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t) }, [])   // waits and the day move on their own
-  const words = benchWordsFor(type); const qc = useQueryClient(); const [quickBusy, setQuickBusy] = useState<string | null>(null)
+  const words = benchWordsFor(type); const marks = useRowMarks('bench', dept); const qc = useQueryClient(); const [quickBusy, setQuickBusy] = useState<string | null>(null)
   const box = useRef<HTMLInputElement>(null); const list = useRef<HTMLUListElement>(null)
   const rows = useMemo(() => q.data?.requests ?? [], [q.data])
   const recent = q.data?.recent ?? []
@@ -87,7 +89,7 @@ export function Bench({ dept }: ScreenProps) {
     const where = <>{g.patient.here != null && <span className={g.patient.here ? 'font-medium text-accent' : 'text-faint'}>{g.patient.here ? 'here' : 'gone'}</span>}{old && <span className="tnum">{shortDate(g.oldest)}</span>}</>
     return <ListRow key={g.patient.id} number={g.patient.record_number} name={`${g.patient.given_name} ${g.patient.family_name}`} age={ageSex(g.patient)}
       status={<>{g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{seg === 'doing' && stepWords(g.rows).map((w) => <Tag key={w} tone={w === 'reopened' ? 'warn' : 'neutral'}>{w}</Tag>)}<span className="truncate">{testsLine(g.rows)}</span></>}
-      who={where} actions={steps.length ? <>{where}{steps}</> : undefined} minutes={g.since ? minutesSince(g.since) : null} muted={old}
+      who={where} actions={steps.length ? <>{where}{steps}</> : undefined} marks={marks(benchMarkRow(g))} minutes={g.since ? minutesSince(g.since) : null} muted={old}
       selected={i === c && arrows} enter={i === c && !arrows && !!f} hover={!kbd} className={i === c ? 'bench-cursor' : undefined} onOpen={() => open(g.patient.id)} />
   }
 
@@ -104,7 +106,7 @@ export function Bench({ dept }: ScreenProps) {
         {lists.today.length ? lists.today.map((g, i) => row(g, i, false)) : f && lists.older.length ? null : none(seg === 'todo' ? `Nobody ${first.toLowerCase()} today.` : 'Nothing in progress today.')}
         {lists.older.length > 0 && <ListSection title={seg === 'doing' ? 'In progress, older days' : words.todo ? `${first}, older days` : 'Not collected, older days'}
           count={lists.older.length} folded={!oldOpen} onToggle={f ? undefined : () => setShowOld(!showOld)}>{lists.older.map((g, j) => row(g, lists.today.length + j, true))}</ListSection>}
-      </> : done.length ? done.map((r, i) => <Released key={r.id} r={r} next={i === c && (kbd || !!f)} onCorrect={() => navigate(`/bench/correct/${r.id}`)} />)
+      </> : done.length ? done.map((r, i) => <Released key={r.id} r={r} marks={marks(benchMarkRow({ patient: r.patient, rows: [r] }))} next={i === c && (kbd || !!f)} onCorrect={() => navigate(`/bench/correct/${r.id}`)} />)
         : none('Nothing released in the last 24 hours.')}
     </ul></Card>}
   </ScreenFrame>
@@ -116,9 +118,9 @@ function Nothing({ text, others, onPick }: { text: string; others: [Segment, str
 }
 
 /** one result released in the last day, newest first; Correct replaces it (the record keeps both, the doctor is asked to look again) */
-function Released({ r, next, onCorrect }: { r: RecentRow; next: boolean; onCorrect: () => void }) {
+function Released({ r, marks, next, onCorrect }: { r: RecentRow; marks: RowMark[]; next: boolean; onCorrect: () => void }) {
   const flagged = !!r.request?.reply_flag && r.request.reply_flag !== 'normal'
-  return <ListRow number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(r.patient)} selected={next} className={next ? 'bench-cursor' : undefined}
+  return <ListRow number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(r.patient)} marks={marks} selected={next} className={next ? 'bench-cursor' : undefined}
     status={<>{r.request?.status === 'cancelled' && <Tag>not done</Tag>}<span className={cn('truncate', flagged && 'text-warn')}>{r.request?.reply_line ?? r.service_name}</span></>}
     actions={<><span className="tnum">{r.reply?.author_name}{r.reply && ` · ${hm(r.reply.recorded_at)}`}</span><Button size="sm" variant="outline" onClick={onCorrect} disabled={!r.reply}>Correct</Button></>} />
 }

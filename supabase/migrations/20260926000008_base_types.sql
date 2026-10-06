@@ -557,8 +557,9 @@ begin
   return '[]';
 end $$;
 
--- the Screens line (§4.6, §5.1 rules 1 and 6): each screen declared, the base's or a pack this department uses, of the department's
--- work, once; never beside a base screen it stands in for; and it opens on one of them
+-- the Screens line (§4.6, §5.1 rules 1, 4 and 6): each screen declared, the base's or a pack this department uses, of the
+-- department's work, once; never beside a base screen it stands in for; a department of places keeps the bed board; and it opens on
+-- one of them
 create function base.department_screens_check(p_where jsonb, p_data jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_org uuid := (p_where ->> 'organization_id')::uuid; v_dept uuid := (p_where ->> 'owner_id')::uuid; v_work text; k text; s core.screens;
         v_line text[] := array(select x from jsonb_array_elements_text(coalesce(p_data -> 'screens', '[]')) x);
@@ -575,6 +576,8 @@ begin
     end if;
   end loop;
   if cardinality(v_line) <> (select count(distinct x) from unnest(v_line) x) then return jsonb_build_array(base.find('duplicate', 'refuse', 'screen')); end if;
+  -- a department of places always has its one board (§5.1 rule 4)
+  if v_work = 'stays' and not ('base.beds' = any (v_line)) then return jsonb_build_array(base.find('no_board', 'refuse', 'base.beds')); end if;
   if p_data ? 'opens' and not ((p_data ->> 'opens') = any (v_line)) then return jsonb_build_array(base.find('opens_off_line', 'refuse', p_data ->> 'opens')); end if;
   return '[]';
 end $$;

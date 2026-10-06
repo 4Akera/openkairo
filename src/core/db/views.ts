@@ -143,7 +143,7 @@ export function queueRows(read: TableRead<PresenceRow>, o: Organization | undefi
     return { id: p.item, patient: { id: p.patient_id, record_number: b.record_number, given_name: b.given_name, family_name: b.family_name, sex: b.sex, age: b.age, has_allergies: allergic.has(p.patient_id) },
       status: v.status, band: bandOf(p), priority: v.priority, is_first: v.is_first, assignee_id: v.assignee_id, assignee_name: userName(o, v.assignee_id), arrived_at: p.checked_in_at,
       present_at: presentNow(p) ? (p.called_at ?? p.checked_in_at) : null, seen_at: p.seen_at, request_id: p.for_order, request_open: !!p.for_order, called_at: p.called_at, missed_calls: p.missed,
-      has_vitals: p.has_vitals, present: presentNow(p), visit: v,
+      has_vitals: p.has_vitals, present: presentNow(p), visit: v, orders: reqs,
       requests: reqs.map((x) => ({ request_id: x.item, service_name: x.service_name, to_department_name: nameOf(o, x.to_department_id), step: stepOf(x),
         is_holding: OPEN.has(x.status), type: 'order', replied: x.answers.length > 0 || x.status === 'completed' })) }
   }).sort((a, b) => order[a.priority === 'routine' ? 'routine' : 'urgent'] - order[b.priority === 'routine' ? 'routine' : 'urgent'] || Date.parse(a.arrived_at) - Date.parse(b.arrived_at))
