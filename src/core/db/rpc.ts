@@ -27,6 +27,8 @@ const WORDS: Record<string, string> = {
   already_recorded: 'Already recorded by someone else — look again and change that one', dates_not_pregnant: 'Not pregnant takes no dates', lmp_or_weeks: 'The LMP or the weeks, not both',
   lmp_future: 'The LMP is after the day written', bad_lmp: 'The LMP is not a day', lmp_long_ago: 'The LMP is more than 44 weeks back', sex_male: 'Recorded pregnant, but the patient is male',
   note_missing: 'Write the note to show, or turn it off',
+  unknown_score: 'Not a score declared here', score_retired: 'That version of the score is retired — fill it again', score_mismatch: 'The total is not the server\'s — fill the score again',
+  score_incomplete: 'Every item of the score needs an answer', bad_input: 'An answer the score cannot take', already_signed: 'Already signed off for this clinic', pack_not_used: 'That pack is not used in this department',
   allergy_clash: 'Allergy', allergy_caution: 'Caution', duplicate_medication: 'Already on this medicine', duplicate_class: 'Another medicine of the same class', already_on_list: 'Already on the list',
 }
 const USED: Record<string, string> = { record: 'the record points at it', services: 'it has services', people: 'people hold roles there', signed_in: 'this person has signed in', places: 'it has beds or rooms', outside: 'every organization keeps one' }

@@ -22,6 +22,7 @@ import { Prescription } from './Prescription'
 import { Problems } from './Problem'
 import { Procedure } from './Procedure'
 import { Result } from './Result'
+import { Score } from './Score'
 import { Vitals } from './Vitals'
 import type { GroupProps } from './env'
 
@@ -32,7 +33,7 @@ const CORE: Partial<Record<Family, ComponentType<BlockProps>>> = { note: Note, v
   observation: Observation, alert: Alert, died: Died }
 
 /** the base facts drawn in the observation family with a block of their own */
-const BY_BASE: Record<string, ComponentType<BlockProps>> = { pregnancy: Fact, breastfeeding: Fact }
+const BY_BASE: Record<string, ComponentType<BlockProps>> = { pregnancy: Fact, breastfeeding: Fact, score: Score }
 /** a type's body: its pack's Block, its pack's Full, its base type's block, the Fallback (a lookup, never a component made in render) */
 export function blockFor(type: string, types: Types): { Body: ComponentType<BlockProps> } {
   const r = rendererFor(type)

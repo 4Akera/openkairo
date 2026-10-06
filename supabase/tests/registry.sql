@@ -26,7 +26,7 @@ select t.ok(not exists (select 1 from core.types where may_be_private and resour
 select t.ok(not exists (select 1 from core.types t join core.layers l on l.key = t.layer where l.is_pack and position(l.key || '.' in t.key) <> 1), 'pack types sit inside their prefix');
 select t.ok(not exists (select 1 from core.types t join core.layers l on l.key = t.layer where not l.is_pack and t.key like '%.%'), 'base types have no prefix');
 select t.ok(not exists (select 1 from core.derived d where not exists (select 1 from pg_attribute a where a.attrelid = d.relation and a.attname = 'source_entries')), 'every derived table keeps its source entries');
-select t.ok((select count(*) from core.types where layer = 'base') = 36, 'the base declares 36 types: ' || (select count(*) from core.types where layer = 'base'));
+select t.ok((select count(*) from core.types where layer = 'base') = 37, 'the base declares 37 types: ' || (select count(*) from core.types where layer = 'base'));
 select t.ok(not exists (select 1 from core.types t where t.layer = 'base' and not exists (select 1 from core.actions a where a.key = 'write:' || t.key)), 'every type has its write action');
 
 \echo '── every key read from entry or setting data is one a declared shape names (a misspelled or drifted key reads NULL, silently)'

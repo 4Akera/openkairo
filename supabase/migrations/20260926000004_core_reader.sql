@@ -161,7 +161,9 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
       'setting_keys', coalesce((select jsonb_agg(jsonb_build_object('key', k.key, 'layer', k.layer, 'owner_kind', k.owner_kind, 'many', k.many, 'labels', k.labels,
           'shape', (k.shape - '$defs') || coalesce((select jsonb_build_object('$defs', jsonb_object_agg(d.k, d.v)) from jsonb_each(k.shape -> '$defs') d(k, v)
             where core.datatypes() -> d.k is distinct from d.v having count(*) > 0), '{}'),
-          'fields', k.fields, 'form', k.form) order by k.key) from core.setting_keys k), '[]'),
+          'fields', k.fields, 'form', k.form, 'action', k.action) order by k.key) from core.setting_keys k), '[]'),
+      -- every score table, each version (a retired one marked): the composer's cards and Settings → Scores (§5.1 rule 8)
+      'scores', coalesce((select jsonb_agg(to_jsonb(x) - 'position' order by x.key, x.position) from core.scores x), '[]'),
       'datatypes', core.datatypes(),
       'packs', coalesce((select jsonb_agg(jsonb_build_object('key', l.key, 'version', l.version, 'requires', l.requires, 'labels', l.labels,
           'used', l.key = any (core.packs_used(me.organization_id)),
@@ -391,6 +393,12 @@ begin
   end loop;
 end $$;
 
+-- a score worked out while the clinician types (§5.1 rule 8): each item's points, the total and its band, by the server alone; no
+-- patient data, not logged
+create function core.read_score(me core.users, q jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select core.score(q ->> 'score', q ->> 'version', coalesce(q -> 'inputs', '{}')) where me.id is not null
+$$;
+
 -- the one door out. FHIR (shape fhir) is added by the base's export migration through core.read_fhir.
 create function core.read_fhir(me core.users, q jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 begin
@@ -417,6 +425,7 @@ begin
     when 'audit'    then core.read_audit(me, p_query)
     when 'codes'    then core.read_codes(me, p_query)
     when 'reference' then core.read_reference(me)
+    when 'score'    then core.read_score(me, p_query)
     else null end;
 end $$;
 revoke all on function public.read(jsonb) from public, anon;

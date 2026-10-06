@@ -398,16 +398,19 @@ begin
   select * into k from core.setting_keys x where x.key = p ->> 'key';
   if not found then perform core.refuse('unknown_setting', p ->> 'key'); end if;
   if not core.layer_on(v_org, k.layer) then perform core.refuse('pack_off', k.layer); end if;
+  -- a key's own action (sign:score) is a person's act, held in any department for an organization key; manage:settings is held everywhere
   if k.owner_kind = 'organization' then
     v_owner := v_org;
-    if not core.may(me.id, 'manage:settings', null) then perform core.refuse('not_allowed', 'manage:settings'); end if;
+    if not (case when k.action is null then core.may(me.id, 'manage:settings', null) else core.may_somewhere(me.id, k.action) end) then
+      perform core.refuse('not_allowed', coalesce(k.action, 'manage:settings'));
+    end if;
   elsif k.owner_kind = 'department' then
     if not exists (select 1 from core.departments x where x.organization_id = v_org and x.id = v_owner) then perform core.refuse('not_found', 'department'); end if;
-    if not core.may(me.id, 'manage:settings', v_owner) then perform core.refuse('not_allowed', 'manage:settings'); end if;
+    if not core.may(me.id, coalesce(k.action, 'manage:settings'), v_owner) then perform core.refuse('not_allowed', coalesce(k.action, 'manage:settings')); end if;
   else
     if not exists (select 1 from core.places x where x.organization_id = v_org and x.id = v_owner) then perform core.refuse('not_found', 'place'); end if;
-    if not core.may(me.id, 'manage:settings', (select x.department_id from core.places x where x.organization_id = v_org and x.id = v_owner)) then
-      perform core.refuse('not_allowed', 'manage:settings');
+    if not core.may(me.id, coalesce(k.action, 'manage:settings'), (select x.department_id from core.places x where x.organization_id = v_org and x.id = v_owner)) then
+      perform core.refuse('not_allowed', coalesce(k.action, 'manage:settings'));
     end if;
   end if;
   v_thing := case when k.many then coalesce((p ->> 'thing_id')::uuid, core.uuid7()) else v_owner end;
@@ -567,7 +570,7 @@ grant usage on schema storage to core_eraser;
 grant select, delete on storage.objects to core_eraser;
 grant select on core.entries, core.types, core.layers, core.settings, core.setting_keys, core.codes, core.systems, core.users, core.holdings, core.holding_ends,
   core.roles, core.role_actions, core.actions, core.departments, core.places, core.sites, core.patients, core.organizations, core.redactions, core.canon,
-  core.screens to base_role;
+  core.screens, core.scores to base_role;
 
 revoke all on all functions in schema core from public, anon, authenticated;
 revoke all on all functions in schema public from public, anon;
@@ -583,6 +586,6 @@ grant execute on function core.may(uuid, text, uuid), core.may_somewhere(uuid, t
   core.kinds(text), core.base_of(text), core.type_latest(text), core.holders_in(uuid, text, uuid), core.live_holdings(uuid), core.hint(text),
   core.refuse(text, text), core.fold(text), core.packs_used(uuid, timestamptz), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text),
   core.codings(jsonb), core.nodes(jsonb),
-  core.next_number(uuid, text, text, date), core.role_actions_of(uuid, uuid) to base_role, core_eraser;
+  core.next_number(uuid, text, text, date), core.role_actions_of(uuid, uuid), core.score(text, text, jsonb) to base_role, core_eraser;
 grant execute on function core.run_refresh(regprocedure, uuid, uuid[]) to core_eraser;   -- a redact refreshes what it touched
 grant execute on function core.pack_hidden(uuid, uuid[]) to base_role;   -- the base's identity door for packs is masked like the core's

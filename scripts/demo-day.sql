@@ -306,7 +306,8 @@ begin
     pg_temp.e('observation', ward, st, d1 + interval '16 hours', pg_temp.obs('10157-6', 'History of family member diseases', '{"text":"father: type 2 diabetes, heart attack at 62; mother: hypertension"}')),
     pg_temp.lab_order('c001', 'Complete blood count', ward, st, d1 + interval '16 hours', o5), pg_temp.lab_order('c002', 'HbA1c', ward, st, d1 + interval '16 hours', o6)));
   perform pg_temp.as_user(nurse);
-  perform pg_temp.w(jsonb_build_array(pg_temp.e('vitals', ward, st, d1 + interval '18 hours', pg_temp.vitals(146, 92, 98, 37.6, 96, 18))));
+  perform pg_temp.w(jsonb_build_array(pg_temp.e('vitals', ward, st, d1 + interval '18 hours', pg_temp.vitals(146, 92, 98, 37.6, 96, 18)),
+    pg_temp.e('score', ward, st, d1 + interval '18 hours', '{"score":"gcs","version":"1974","inputs":{"eye":"4","verbal":"5","motor":"6"},"total":15,"band":"mild"}')));
   r1 := pg_temp.lab(o5, d1 + interval '17 hours', pg_temp.cbc(8.2, 7.9, 231));
   r2 := pg_temp.lab(o6, d1 + interval '17 hours', pg_temp.a1c(8.1));
   perform pg_temp.as_user(doctor);

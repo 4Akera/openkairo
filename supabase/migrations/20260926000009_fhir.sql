@@ -405,6 +405,29 @@ create function base.breastfeeding_fhir(p jsonb) returns jsonb language sql stab
   from (select base.fhir_own(p) o) x
 $$;
 
+-- a score: an Observation of its total (the table's coding, else its name), its band in words, a component per item with its points from
+-- the version the entry used (a table never changes, so these are the points it was written with)
+create function base.score_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_array(base.fhir_head(p, 'Observation') || jsonb_strip_nulls(jsonb_build_object(
+    'status', case when base.fhir_gone(p) then 'entered-in-error' when (base.fhir_latest(p) ->> 'item_version')::int > 1 then 'amended' else 'final' end,
+    'category', jsonb_build_array(core.fhir_code('hl7.observation-category', 'survey', 'Survey', (p ->> 'org')::uuid)),
+    'code', case when s.coding is not null then core.fhir_code(s.coding ->> 'system', s.coding ->> 'code', s.labels ->> 'en', (p ->> 'org')::uuid)
+                 else jsonb_build_object('text', coalesce(s.labels ->> 'en', o -> 'data' ->> 'score')) end,
+    'subject', base.fhir_subject(p), 'encounter', base.fhir_ref('Encounter', o ->> 'visit_id'),
+    'effectiveDateTime', core.fhir_date((o ->> 'occurred_at')::timestamptz, o ->> 'precision', (p ->> 'org')::uuid),
+    'valueInteger', (o -> 'data' ->> 'total')::int,
+    'interpretation', (select jsonb_build_array(jsonb_build_object('text', b -> 'labels' ->> 'en')) from jsonb_array_elements(s.bands) b where b ->> 'key' = o -> 'data' ->> 'band'),
+    'method', jsonb_build_object('text', coalesce(s.labels ->> 'en', o -> 'data' ->> 'score') || ', ' || (o -> 'data' ->> 'version')),
+    'performer', jsonb_build_array(base.fhir_ref('PractitionerRole', o ->> 'author_id')),
+    'component', (select jsonb_agg(jsonb_build_object('code', case when i ? 'coding' then core.fhir_code(i -> 'coding' ->> 'system', i -> 'coding' ->> 'code', i -> 'labels' ->> 'en', (p ->> 'org')::uuid)
+                                                                 else jsonb_build_object('text', i -> 'labels' ->> 'en') end,
+                                                  'valueInteger', (c ->> 'points')::int) order by n)
+                  from jsonb_array_elements(s.items) with ordinality y(i, n)
+                  join jsonb_array_elements(core.score(s.key, s.version, o -> 'data' -> 'inputs') -> 'items') c on c ->> 'key' = i ->> 'key'
+                 where jsonb_typeof(c -> 'points') = 'number'))))
+  from (select base.fhir_own(p) o) x left join core.scores s on s.key = o -> 'data' ->> 'score' and s.version = o -> 'data' ->> 'version'
+$$;
+
 -- death is not a resource: it patches the Patient (core merges it in)
 create function base.died_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select case when base.fhir_gone(p) then '[]'::jsonb else jsonb_build_array(jsonb_build_object('patch', 'Patient',
@@ -457,6 +480,7 @@ select core.declare_fhir('reviewed', 1, 'base.reviewed_fhir(jsonb)');
 select core.declare_fhir('alert', 1, 'base.alert_fhir(jsonb)');
 select core.declare_fhir('pregnancy', 1, 'base.pregnancy_fhir(jsonb)');
 select core.declare_fhir('breastfeeding', 1, 'base.breastfeeding_fhir(jsonb)');
+select core.declare_fhir('score', 1, 'base.score_fhir(jsonb)');
 select core.declare_fhir('died', 1, 'base.died_fhir(jsonb)');
 select core.declare_fhir('checked_in', 1, 'base.encounter_fhir(jsonb)');
 select core.declare_fhir('admitted', 1, 'base.encounter_fhir(jsonb)');

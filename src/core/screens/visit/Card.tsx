@@ -8,6 +8,7 @@ import { KIND_TONE, NOTE_KINDS } from './kinds'
 import { lineOf, partialDate, type Ctx, type Parsed } from './parse'
 import { cardFor } from './commands'
 import { FactCard } from './FactCards'
+import { ScoreCard } from './ScoreCard'
 
 const FREQS = ['OD', 'BD', 'TDS', 'QDS', 'q6h', 'q8h', 'q12h', 'weekly', 'monthly', 'once', 'stat']
 const ROUTES = ['oral', 'sc', 'im', 'iv', 'sl', 'topical', 'inhaled', 'nasal', 'pr', 'pv']
@@ -33,6 +34,7 @@ export function CardItem({ item, ctx, onChange, onRemove, onLongNote, warnings, 
     : item.function === 'order' ? <Req q={q} set={set} ctx={ctx} />
     : item.function === 'note' ? <Note q={q} set={set} onLong={onLongNote} />
     : FACTS.has(item.function) ? <FactCard fn={item.function} q={q} set={set} />
+    : item.function === 'score' ? <ScoreCard q={q} set={set} ctx={ctx} />
     : null
   const compact = item.function === 'order' && !!q.service_id || item.function === 'list_review'
   if (compact) return <div className="flex items-center gap-2 px-3 py-1.5 text-13">

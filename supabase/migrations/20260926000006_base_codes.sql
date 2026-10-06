@@ -124,6 +124,8 @@ insert into core.codes (system, code, labels, props) select 'loinc', c, jsonb_bu
   ('49051-6', 'Gestational age in weeks', '{"ucum":"wk"}'), ('63895-7', 'Breastfeeding status', '{}'), ('LA15173-0', 'Pregnant', '{}'), ('LA26683-5', 'Not pregnant', '{}'),
   ('10157-6', 'History of family member diseases', '{}'), ('11331-6', 'History of alcohol use', '{}'), ('11341-5', 'History of occupation', '{}'),
   ('71802-3', 'Housing status', '{}'),
+  ('9269-2', 'Glasgow coma score total', '{}'), ('9267-6', 'Glasgow coma score eye opening', '{}'), ('9270-0', 'Glasgow coma score verbal', '{}'),
+  ('9268-4', 'Glasgow coma score motor', '{}'),
   ('11506-3', 'Progress note', '{"note":"progress"}'), ('34117-2', 'History and physical note', '{"note":"history_physical"}'), ('11488-4', 'Consult note', '{"note":"consult"}'),
   ('34111-1', 'Emergency department note', '{"note":"emergency"}'), ('28570-0', 'Procedure note', '{"note":"procedure"}'), ('18842-5', 'Discharge summary', '{"note":"discharge"}'),
   ('18776-5', 'Plan of care note', '{"note":"plan"}'), ('57133-1', 'Referral note', '{"note":"referral"}'), ('34109-9', 'Note', '{"note":"other"}'),

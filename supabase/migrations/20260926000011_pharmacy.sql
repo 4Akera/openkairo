@@ -20,7 +20,7 @@ begin
     core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.kinds(text), core.base_of(text),
     core.refuse(text, text), core.hint(text), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text),
     core.pack_kind(uuid, uuid, text, jsonb), core.pack_visit(uuid, uuid, text), core.pack_rows(uuid, text, jsonb), core.pack_codes(text, text[]),
-    core.pack_department(uuid, uuid), core.pack_staff(uuid, uuid[]), base.pack_identity(uuid, uuid, timestamptz) to %I', r);
+    core.pack_department(uuid, uuid), core.pack_staff(uuid, uuid[]), base.pack_identity(uuid, uuid, timestamptz), core.score(text, text, jsonb) to %I', r);
 end $$;
 
 -- ── what a pack may read (§5.2): core doors, never core tables. Masked by default: in a check or any read made for a person, the reader

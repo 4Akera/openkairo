@@ -57,7 +57,7 @@ export const offersFor = (departmentType: string) => overrides.some((o) => o.dep
 //    or its department type's card for a core one (never the clinic's) ──
 export interface CardEditorProps { q: Record<string, any>; set: (patch: Record<string, unknown>) => void; ctx: Ctx }   // eslint-disable-line @typescript-eslint/no-explicit-any
 export interface CardRegistration { function: string; Editor: ComponentType<CardEditorProps>; line?: (params: Record<string, unknown>) => string; pack: string; departmentType?: string }
-const CORE = new Set(['vitals', 'medication', 'problem', 'allergy', 'order', 'note', 'list_review'])
+const CORE = new Set(['vitals', 'medication', 'problem', 'allergy', 'order', 'note', 'list_review', 'score'])
 const cards: CardRegistration[] = []
 export function registerCard(r: CardRegistration) {
   if (CORE.has(r.function) && !r.departmentType) { console.error(`openCare: a pack cannot replace the ${r.function} card for the whole clinic — give it its department type`); return }

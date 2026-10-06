@@ -3,6 +3,7 @@ import type { Template } from '../../db/types'
 import { suggestAllergens, suggestDrugs, suggestProblems } from './catalog'
 import { allowed, commandNamed, commandsFor, usedWhere } from './commands'
 import { lineOf, parse, splitCommand, type Ctx, type Parsed, type Result } from './parse'
+import { aliasLine } from './score'
 
 /** errors stop the line; skipped are a preset's lines this patient's record cannot take — the rest of the preset still goes in */
 /** hint: a card that is not an error — a pack's command typed where its pack is not used says where it is (§5.1 rule 1) */
@@ -28,7 +29,7 @@ export function expand(text: string, ctx: Ctx, presets: Template[]): Expanded | 
   const wrap = (r: Result): Expanded | null => !r ? null : 'error' in r ? { items: [], errors: [r.error] } : { items: r.ok, errors: [] }
   if (s.startsWith('#')) return preset(s.slice(1).trim().split(/\s+/)[0].toLowerCase(), ctx, presets)
   if (!s.startsWith('/')) return wrap(parse(s, ctx))
-  const [word, rest] = splitCommand(s); if (!word) return null
+  const [word, rest] = aliasLine(splitCommand(s), ctx, !!commandNamed(splitCommand(s)[0], ctx)); if (!word) return null   // /gcs … is /score gcs …
   const cmd = commandNamed(word, ctx)
   if (!cmd && presets.some((x) => x.shortcut === word.toLowerCase())) return { items: [], errors: [`${word} is a preset — type #${word.toLowerCase()}`] }
   if (cmd) {

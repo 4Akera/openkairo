@@ -23,10 +23,13 @@ export interface Ctx {
   packCards?: boolean                                 // does this department use its packs' cards (departments.pack_cards)
   canSend?: boolean                                   // a pharmacy here answers prescriptions: /rx … send
   facts?: StandingFacts                               // the pregnancy, breastfeeding and alerts standing now: /preg, /bf, /alert change or end them
+  scores?: ScoreTable[]                               // the score tables (read 'me'): /score and each score's alias (/gcs)
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
 import { allowed, commandNamed, registerCommand, usedWhere } from './commands'
 import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, factLine, pregnancy, type StandingFacts } from './facts'
+import { aliasLine, emptyScore, parseScore, scoreLine, type ScoreParams } from './score'
+import type { ScoreTable } from '../../db/types'
 
 /** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
 export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string; action?: string }
@@ -217,7 +220,7 @@ export const splitCommand = (s: string): [string, string] => { const m = s.trim(
 export function parse(input: string, ctx: Ctx): Result {
   const s = input.trim(); if (!s) return null
   if (!s.startsWith('/')) return { ok: [noteLine(s, ctx)] }                               // no slash: note text, never an order
-  const [word, rest] = splitCommand(s)
+  const [word, rest] = aliasLine(splitCommand(s), ctx, !!commandNamed(splitCommand(s)[0], ctx))   // /gcs … is /score gcs …
   const cmd = commandNamed(word, ctx)
   if (!cmd) return { error: `No command /${word} — type / to see them` }
   // the department before the role: a pack's command here says where it works (a preset's line too)
@@ -247,6 +250,7 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'>): 
     }
     case 'note': return String(q.text ?? '')
     case 'pregnancy': case 'breastfeeding': case 'alert': return factLine(p)
+    case 'score': return scoreLine(q as ScoreParams)
     default: return p.line
   }
 }
@@ -282,3 +286,6 @@ registerCommand({ name: 'bf', aliases: ['breastfeeding'], label: 'Breastfeeding 
   parse: (rest, ctx) => breastfeeding(rest, ctx), empty: emptyBreastfeeding })
 registerCommand({ name: 'alert', label: 'Alert — DNR, isolation (HBV, HCV), fall risk', example: '/alert dnr · /alert hbv · /alert fall · /alert end dnr', action: 'write:alert', writes: ['alert'],
   parse: (rest, ctx) => alert(rest, ctx), empty: emptyAlert })
+// a score, worked out by the server as the card fills (score.ts); each score's alias too (/gcs)
+registerCommand({ name: 'score', label: 'Score — GCS and the rest, added up by the server', example: '/score gcs 4 5 6 · /gcs e4 v5 m6', action: 'write:score', writes: ['score'],
+  parse: (rest, ctx) => parseScore(rest, ctx), empty: emptyScore })

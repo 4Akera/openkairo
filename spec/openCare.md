@@ -18,7 +18,7 @@ deployment, so nothing here needs a data migration.
  │ PACKS   pharmacy.* …  own types (often extending a base type), checks, visibility rules (hide only), │
  │         settings, screens. React to other layers' types after commit.                               │
  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
- │ BASE    all meaning: 36 types, presence, privacy, checks, derived tables, the review loop,         │
+ │ BASE    all meaning: 37 types, presence, privacy, checks, derived tables, the review loop,         │
  │         code systems and their rows, settings keys, FHIR mappings. Always on; released with core.  │
  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
  │ CORE    people · patients · places · registry · settings · codes · counters · files · datatypes    │
@@ -132,7 +132,8 @@ configuration tables of their own. `core.department_uses(organization, departmen
 the core and the base always, a pack only while it is on for the clinic and ticked in the department's `department.packs`, as of now
 (granted to the base's and every pack's role).
 Written only by `public.write_setting`, which checks `may(user, 'manage:settings', owner department)` (or held everywhere for an
-organization key), the shape and the key's check; every change is an AuditEvent. A refusal names the field it is about when it can
+organization key; a key that declares its own action needs that one instead, held in any department for an organization key:
+`score.signed_off` is `sign:score`, a clinician's act, §5.1 rule 8), the shape and the key's check; every change is an AuditEvent. A refusal names the field it is about when it can
 (the error's hint: the shape's, worked out by `core.shape_field` as a path with an array's index, `rows.2.dose`; a check's, by its
 finding's `field`), so the form shows it there. A key may declare what its automatic form needs (§3.8, §5.1 rule 7): its fields in
 order, each with its words, help, unit and choices' words, and where the form shows (`pack`: the pack's page, a clinic-wide setting;
@@ -212,6 +213,11 @@ select core.declare_pack    (key => 'pharmacy', version => 1, requires => '{}', 
 select core.declare_role    (id, key, layer, name, actions, labels, every_action, built_on, everyday);   -- a built-in role (read-only
                              -- to organizations): built_on a base role; everyday the base's only. Its actions are added, never replaced
 select core.declare_role_action(layer, role, action);  -- one action more, by the role's own layer: the core's, the base's or its own
+select core.declare_score   (key => 'gcs', layer => 'base', version => '1974', source => 'Teasdale G, Jennett B. Lancet 1974…',
+                             items => '[{"key":"eye","labels":{…},"input":"choice","choices":[{"value":"4","points":4,"labels":{…}},…]},…]',
+                             bands => '[{"key":"severe","labels":{…},"min":3,"max":8,"tone":"danger"},…]',
+                             labels => '{…}', short => 'GCS', alias => 'gcs', coding => '{"system":"loinc","code":"9269-2"}');
+select core.retire_score    ('gcs', '1974');           -- new entries may no longer use that version; its entries keep it
 ```
 
 **Enforced when something is declared**
@@ -226,6 +232,14 @@ select core.declare_role_action(layer, role, action);  -- one action more, by th
   choices only of its enum or its list's items' enum, matched as text so a numeric enum's too (`unknown_choice`). A form is only a
   pack's (`not_a_pack`): on its page an organization key, on a department's card a department key (`wrong_owner`), one value per owner
   (`form_many`), and every node it draws has its words (`field_unlabelled`).
+- A score (§5.1 rule 8): its key inside its layer's prefix (`outside_prefix`), a source (`source_missing`; stored trimmed), words
+  (`label_missing`); items (`no_items`), each once (`duplicate`) with a key, words and an input: `choice` (its choices once, each a
+  non-empty text value (`bad_choice`) with words and whole points: `no_choices`, `bad_points`), `yes_no` (points for yes and no) or
+  `number` (a unit (`unit_missing`), `decimals` 0–4, a plausible `min`/`max`: numbers at the step, min ≤ max (`bad_number`), and
+  ranges in order with whole points and numeric bounds, inclusive, touching at the number's step: `no_ranges`, `ranges_open`,
+  `ranges_gap`, `ranges_overlap`, `bad_number`); bands over the total in order, touching and covering every total the items can reach (`no_bands`, `bad_band`,
+  `bands_gap`, `bands_overlap`, `bands_cover`), each with words and a state tone or none (`unknown_tone`); an alias no other score has
+  (`alias_taken`); a declared version never changes (`version_exists`: a changed table is a new version, and the old row stays).
 - `may_be_private` is refused for a type whose resources include MedicationRequest, MedicationStatement, MedicationAdministration,
   Immunization or AllergyIntolerance, pack types included.
 - Every derived table has `organization_id, patient_id, item, source_entries uuid[]`, so the reader can mask it, and erase and rebuild
@@ -280,7 +294,7 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 
 | shape | returns | needs |
 |---|---|---|
-| `me` | the login's users, the chosen user, the organization, departments (each with the packs it uses and its Screens line: the one set, else its work's screens of the base and of the packs it uses, the base's first, without a base screen one of those stands in for), sites, places, users, roles, actions, current settings, the registry the client needs (every screen with its action and what it replaces), stale counts | a live user |
+| `me` | the login's users, the chosen user, the organization, departments (each with the packs it uses and its Screens line: the one set, else its work's screens of the base and of the packs it uses, the base's first, without a base screen one of those stands in for), sites, places, users, roles, actions, current settings, the registry the client needs (every screen with its action and what it replaces; every score table, each version), stale counts | a live user |
 | `patients` | search hits: identity and open visits | `read:patients` somewhere |
 | `patient` | one patient's identity (the banner) | `read:patients` somewhere |
 | `record` | banner, lists, visits, a page of entries (filters: types, visits, departments, before), key values, hidden counts | `read:record` in the department |
@@ -291,6 +305,7 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 | `log` | the read log, opened-anyway and privacy changes | `read:log` |
 | `audit` | settings and admin changes; `what` and `thing_id` narrow it to one setting's history | `manage:settings` |
 | `reference` | the licensed lists loaded here: each system's latest load (version, source, licence, sample or not, codes, when) | a live user |
+| `score` | a score worked out by the server while the clinician types (`core.score(score, version, inputs)`: each item's points, the points so far, and once every item is answered the total and its band; a value it cannot score is a problem of its item, never a raise); no version: the latest in use; not logged | a live user |
 
 - It collects the source entry ids of every row and calls each visibility rule once as `rule(reader, ids[]) → hidden ids[]`. Rules only
   hide and combine with OR over hidden (AND over visible); a rule that raises means hidden, and is logged. Base rules apply to every
@@ -347,6 +362,7 @@ FHIR's own code wherever the meaning matches, so the mapping is identity and the
 | `pregnancy` | pregnant or not, a base fact (§5.1 rule 3) · status (current · ended), pregnant, LMP (partial date) or weeks (0–45), reason (why it ended), note; ended by a version that `changes` it, once | Observation 82810-3 (LA15173-0 Pregnant · LA26683-5 Not pregnant; LMP 8665-2 or 49051-6 weeks as a component; ended: effectivePeriod) | LOINC |
 | `breastfeeding` | breastfeeding or not, a base fact · status (current · ended), breastfeeding, note | Observation 63895-7, valueBoolean | LOINC |
 | `died` | death · time with precision, cause | Patient.deceasedDateTime | WHO ICD-10 |
+| `score` | a score worked out by the server (§5.1 rule 8) · score (a declared table's key), version (the one it used, kept), inputs (by item: a choice's value, yes/no, a number as a decimal string), total, band | Observation (the table's coding or its name; valueInteger the total; the band in words; a component per item with its points) | LOINC (GCS 9269-2, 9267-6, 9270-0, 9268-4) |
 | `crossed_out` | "this should not be here" · reason (typo · wrong value · wrong patient · late information · other), text | the target's next version, entered-in-error; Provenance NULLIFY | local reasons |
 
 Corrections: `replaces` gives the next version (Observation and DiagnosticReport status `corrected`). A requester's cancel or hold is
@@ -424,6 +440,10 @@ again, or when it was corrected after being seen.
   pregnancy's dates only when pregnant (`dates_not_pregnant`), an LMP or weeks, not both (`lmp_or_weeks`), an LMP a real day
   (`bad_lmp`) never after the day written (`lmp_future`); a warning for a current pregnancy's LMP more than 44 weeks back
   (`lmp_long_ago`; an end written after the delivery is not warned) and for a man recorded pregnant (`sex_male`).
+- **Scores** (`base.score_check`, §5.1 rule 8): the server adds the inputs up again with the version the entry names and refuses a
+  total or band that differs (`score_mismatch`); a score or version not declared (`unknown_score`) or retired (`score_retired`), an item
+  unanswered (`score_incomplete`), a value it cannot score (`bad_input`); a pack's score where the department does not use the pack
+  (`pack_not_used`). Nothing ever recomputes an old entry.
 - **Warnings** (inline cards): allergy clash and duplicate therapy (by ATC ingredient and class), a dose above the usual, a problem
   already on the list.
 - **Flags**: an unknown code, a unit that is not UCUM, a late conflict, a stale correction, a critical result (LL, HH, AA).
@@ -446,7 +466,8 @@ the patient was still waiting in the ordering visit and saw it there (then only 
 latest version clears it. Flagged entries raise a review row for the entry's department.
 
 ### 4.6 Settings keys, actions, roles and screens
-- Settings keys: `organization.time_zone` and `organization.packs_used` (declared by the core), `organization.record_view` (visits ·
+- Settings keys: `organization.time_zone`, `organization.packs_used` and `score.signed_off` (declared by the core; the last written by
+  `sign:score`, §5.1 rule 8), `organization.record_view` (visits ·
   entries), `department.private`, `department.encounter_class`, `department.after_done` (next · queue), `department.patients_wait`,
   `department.review_results`, `department.works_for` (a bench: department ids, or all), `department.checks_in_for` (a desk: the
   clinics it checks in for, or all), `department.packs` (the packs used here, §5.1 rule 1: each a known pack, on for the clinic, once:
@@ -457,7 +478,8 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   answer type, steps (in order; keys such as `collected`, `received`), fields with LOINC, UCUM units, ranges by sex and age, critical
   ranges, choices), `preset` (name, shortcut, lines, services, department or all), `place.closed`.
 - Actions: `write:<type>` for every type; `read:patients`, `read:record`, `read:queue`, `read:bench`, `read:review`, `read:log`,
-  `export:fhir`, `manage:patients`, `manage:settings`, `manage:users`, `manage:roles`, `manage:places`, `erase:patient`.
+  `export:fhir`, `manage:patients`, `manage:settings`, `manage:users`, `manage:roles`, `manage:places`, `erase:patient`, `sign:score` (the
+  core's: sign a score's version off for the clinic; the Doctor holds it).
 - Built-in roles (fixed ids): Owner `…c001` (every action, held everywhere), Doctor `…c002`, Nurse `…c003`, Reception `…c004`, Lab
   technician `…c005`. A pack may ship its own (Pharmacist `…ca01`).
 - Default screens: front desk (`base.desk`, work `desk`, tab for `read:patients`), queue (`base.queue`, `visits`, `read:queue`), bench
@@ -522,7 +544,8 @@ pack builds against.
 The composer turns typed lines into one set. `/v 120/80 88` becomes `vitals` with codings by stable key; `/dx` a `problem`; `/rx` a
 `medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s; `/preg 12w` (or `lmp 2026-08-01`, `no`,
 `end delivered`) a `pregnancy`, `/bf` (`no`, `end`) a `breastfeeding` and `/alert dnr · hbv · hcv · fall · <words>` (`end dnr`) an
-`alert`, each with its card, changing or ending the fact that stands (an alert never names HIV); a plain line a `note`; `!` a `private`
+`alert`, each with its card, changing or ending the fact that stands (an alert never names HIV); `/score gcs 4 5 6` (or a score's
+alias, `/gcs e4 v5 m6`) a `score`, its card asking the server as it fills (§5.1 rule 8); a plain line a `note`; `!` a `private`
 entry about the line's entry; `#preset` expands the preset's lines. Warnings come back as inline cards below the line. Done is one set
 that includes `seen` (when not yet seen) and `done`; drafts live in the browser (IndexedDB per user, patient and department), cleared
 at sign-out. The drafts are drawn under the line as the blocks they will be (the exact type and data the set will write), and
@@ -640,7 +663,19 @@ it works ("/x is used in: …").
   table with a version and its source, and the server is the only place that adds it up: a card asks the server while the user
   types, and the record, the board tile and the review list all show that one result. An entry keeps the version it used ("NEWS2 6,
   2017"); a new version applies to new entries only, and nothing is recomputed. Settings → Scores shows every table read-only, with
-  its version, its source and the clinician who signed it off for this clinic.
+  its version, its source and the clinician who signed it off for this clinic. *Built 2026-10-06:* `core.declare_score(key, layer,
+  version, source, items, bands, labels, short, alias, coding)` (§3.8) keeps one row per version in `core.scores`; an item is a choice
+  (points per choice), yes/no (points for each) or a number with its unit and decimals (points per inclusive range); the bands over
+  the total carry words and a state tone or none (GCS: 3–8 severe in danger, 9–12 moderate in warn, 13–15 mild). `core.score(key,
+  version, inputs)` is the one sum, granted to the base and every pack role, and the API reaches it through the `score` read. The base
+  type `score` keeps `{score, version, inputs, total, band}`, and its check adds it up again with that version (§4.4); `core.retire_score`
+  closes a version to new entries. The composer's `/score` (and each score's alias) opens an inline card: chips with the table's points,
+  yes/no, a number with its unit; while it fills, the card asks the server (debounced, a late answer to older inputs dropped) and shows
+  each item's points, the total and the band in its words; Done waits for the server's answer to what the card holds and writes it. A
+  pack's score is offered and written only where the department uses the pack. Signing a version off is the setting
+  `score.signed_off` (`sign:score`, which the Doctor holds; who and when are the setting's); Settings → Scores shows each table, the
+  sign-off or "not signed off for this clinic" (the score still works), Sign off and Withdraw, and earlier versions folded. The base's
+  score is the Glasgow Coma Scale (1974, LOINC 9269-2), which every department uses.
 - **Rule 9 · each pack brings its own demo.** Its own 2–3 patients for its main path, with real-sounding, unique names and believable
   values; a demo login for each role it declares, on the sign-in page grouped by department, so every screen is checked as the person
   who uses it (never as Admin). Times are relative to the moment the demo loads ("arrived 40 min ago", "admitted 2 days ago"); one
@@ -713,8 +748,8 @@ it works ("/x is used in: …").
   not the full list".
 - **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
   each tab needs; the fit test, chip words and Summary lines; banner words with their rank; the pregnant and breastfeeding facts;
-  setting shapes with labels and units, and the form drawn from them; the board tile line and buttons and the marks on the lists; the rest
-  not yet): a department's packs used here; the fit test; chip words and Summary lines;
+  setting shapes with labels and units, and the form drawn from them; the board tile line and buttons and the marks on the lists; score
+  tables and a read that scores while typing; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -1091,4 +1126,33 @@ types, parked pack calls with per-call Retry, Postgres enums.
     buttons), at most two pack buttons in pack order with show(), a button's click and path, the marks (used here, one a pack, order,
     tone), a row as a mark reads it, pharmacy's mark (the queue only; any step name); `test:screens` 10 groups (the board
     kept), `test:composer` 15, `test:chart` 22 + 9, `test:sections` 19, `test:banner` 13.
+- 2026-10-06: platform piece 7 — a score is worked out once (§5.1 rule 8; §3.4, §3.8, §3.10, §4.1, §4.4, §4.6, §4.7), proven on the
+  base's Glasgow Coma Scale and a test-only probe score.
+  - **Server**: `core.scores` (one row per version, never changed) and `core.declare_score` with its refusals; `core.retire_score`;
+    `core.score(key, version, inputs)`, the one sum (each item's points, the points so far, the total and its band once complete; a
+    value it cannot score is its item's problem), granted to the base and every pack role and reached by the API through the `score`
+    read; read `me` sends every table. The base type `score` (37 in all) with `base.score_check` (`score_mismatch`, `unknown_score`,
+    `score_retired`, `score_incomplete`, `bad_input`, `pack_not_used`), its line ("GCS 14, 1974 · Mild") and its FHIR Observation;
+    the Doctor and the Nurse write it. GCS 1974 with LOINC 9269-2, 9267-6, 9270-0, 9268-4. A setting key may name its own action
+    (`declare_setting(…, action)`): `score.signed_off` by the core's `sign:score`, which the Doctor holds (one live sign-off per
+    version, `already_signed`). The demo day's Nadia Kamel has a GCS 15 on admission.
+  - **Client**: `/score` and each score's alias (`/gcs e4 v5 m6`) in the composer, a pack's score only where the department uses the
+    pack; the score's inline card (`visit/ScoreCard.tsx`, pure model `visit/score.ts`): chips with the table's points, yes/no, a number
+    with its unit, the server asked as it fills (debounced; an answer to older inputs dropped; a failed ask says so with Try again),
+    each item's points, the total and the band in its words and state tone, "not signed off for this clinic" when so; Done waits for
+    the server's answer to what the card holds and writes its total. A score counts and filters under the Whole record's Other. The record's score block; Settings → Scores (each table read-only, its source and version, the
+    sign-off with who and when, Sign off and Withdraw for `sign:score`, earlier versions folded).
+  - **Tests**: new `scores` (98: GCS declared, every refusal of a bad declaration (a number with no unit or a bad min/max, a choice
+    whose value is not a text), the probe's every kind of input at its boundaries
+    and each problem, the bands, the read, the check refusing a mismatch, an unknown, incomplete or bad input and a retired version, a
+    pack's score where unused, an old entry keeping its version, line and total after a new version is declared, FHIR, the sign-off:
+    who may, once per version, withdrawn and signed again, its history; the same table again with its source padded); `registry` counts
+    37 base types; `npm run test:scores` (new), 7 groups — /score and the alias, /score alone, the card's state only from the server's
+    answer for these inputs, what a draft needs, its line and its entry, the debounced preview with fake timers, a failed preview,
+    Settings' words; `test:chart` checks every type a kind counts is one its filter reads. 22 suites, 820 checks; `test:composer` 15,
+    `test:chart` 23 + 9, `test:screens` 10, `test:sections` 19, `test:banner` 13, `test:settings` 11, `test:board` 12.
+  - **Review** (fixed): the Whole record's Other filter did not read scores, though Other counted them; a number item's unit and
+    min/max were not checked, so a bad min made `core.score` raise; a choice's value could be a number, which the card and the record
+    cannot match; the same declaration with a padded source refused `version_exists`; a failed preview left the card "Working out the
+    total…" with no way to ask again.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

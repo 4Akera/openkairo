@@ -44,7 +44,14 @@ export type Schema = { [k: string]: unknown }
 export interface FieldDecl { key: string; labels: Record<string, string>; help?: Record<string, string>; unit?: string; choices?: Record<string, Record<string, string>> }
 /** a declared setting key, with what its automatic form needs; form: where it shows (the pack's page, the department's card), or null */
 export interface SettingKey { key: string; layer: string; owner_kind: 'organization' | 'department' | 'place'; many: boolean; labels: Record<string, string>
-  shape: Schema; fields: FieldDecl[]; form: 'pack' | 'department' | null }
+  shape: Schema; fields: FieldDecl[]; form: 'pack' | 'department' | null; action?: string | null }
+/** a score's points table, one version (§5.1 rule 8): its items in order, each with how it scores, and the bands over the total */
+export interface ScoreItem { key: string; labels: Record<string, string>; input: 'number' | 'choice' | 'yes_no'; coding?: { system: string; code: string }
+  unit?: string; decimals?: number; min?: number; max?: number; ranges?: { min?: number; max?: number; points: number }[]
+  choices?: { value: string; points: number; labels: Record<string, string> }[]; points?: { yes: number; no: number } }
+export interface ScoreBand { key: string; labels: Record<string, string>; min: number; max: number; tone?: 'ok' | 'info' | 'warn' | 'danger' | null }
+export interface ScoreTable { key: string; version: string; layer: string; labels: Record<string, string>; short: string; alias: string | null; source: string
+  coding: { system: string; code: string } | null; items: ScoreItem[]; bands: ScoreBand[]; retired_at: string | null; declared_at: string }
 export interface ServerMe {
   // may: what I may do in each department ('' for held everywhere), as the server's may answers it: a pack's actions only where it is used
   me: { id: string; name: string; title: string | null; kind: string; organization_id: string; holdings: { department_id: string | null; role_id: string; actions: string[] }[]
@@ -67,7 +74,7 @@ export interface ServerMe {
     // action: what a user needs here to see its tab (null: anyone working there); replaces: the base screens a pack's stands in for
     screens: { key: string; layer: string; work: string; action: string | null; replaces: string[]; labels: Record<string, string> }[]
     packs: { key: string; version: number; requires: string[]; labels: Record<string, string>; used: boolean; stale: number }[]
-    setting_keys: SettingKey[]; datatypes: Record<string, Schema> }
+    setting_keys: SettingKey[]; datatypes: Record<string, Schema>; scores?: ScoreTable[] }
 }
 
 // ── the screens' view models (built in views.ts) ──
@@ -146,6 +153,7 @@ export interface Organization {
   parked_pack_calls: number; loginUsers: ServerMe['users_of_login']
   // every setting as it stands (with who changed it last), the declared keys with their forms, and the datatypes their shapes name
   settings: SettingRow[]; settingKeys: SettingKey[]; datatypes: Record<string, Schema>
+  scores: ScoreTable[]   // every score table, each version (§5.1 rule 8)
 }
 /** an entry in full: every version of its item, and what refers to it */
 export interface Entry extends Card {

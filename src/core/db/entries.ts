@@ -5,6 +5,7 @@ import type { EntryBody, EntryIn, EntryOf, SetIn } from './rpc'
 import type { EntryData, PartialDate, Quantity, Timing } from './shapes.generated'
 import type { Organization, RecordView, RequestQueueRow, ServiceField, VisitRow } from './types'
 import { findAllergen, findDrug } from '../screens/visit/catalog'
+import { scoreData, type ScoreParams } from '../screens/visit/score'
 
 export const newId = () => uuid()
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -119,6 +120,8 @@ export function draftEntries(d: Draft, w: Where): EntryIn[] {
     }
     case 'pregnancy': case 'breastfeeding': case 'alert':
       return [{ ...base, id: d.id, type: d.function, data: factData(d.function, q), ...(q.entry_id ? { refers_to: String(q.entry_id), relation: 'changes' as const } : {}) } as EntryIn]
+    // a score: the inputs and the server's total and band, with the version it used (§5.1 rule 8)
+    case 'score': return [{ ...base, id: d.id, type: 'score', data: scoreData(q as ScoreParams) }]
     // another type's draft (the composer makes none today): its params are that type's data, which the writer checks
     default: return [{ ...base, id: d.id, type: d.function, data: q } as EntryIn]
   }

@@ -12,6 +12,7 @@ import { CardItem, WarningItem } from './Card'
 import { lineOf, type Ctx, type Parsed } from './parse'
 import { commandsFor } from './commands'
 import { factMissing, standingOf } from './facts'
+import { scoreMissing, tableOf, type ScoreParams } from './score'
 import { useFacts } from '../../hooks/chart'
 import { replyFormFor } from '../../renderers'
 
@@ -46,7 +47,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     canSend: canSendPrescriptions(org, departmentId) && can('write:medication'),   // a pharmacy answers prescriptions here
     departmentType: org?.departments.find((x) => x.id === departmentId)?.type, packCards: org?.departments.find((x) => x.id === departmentId)?.pack_cards ?? true,
     problems: [...r.problems.map((p) => ({ id: p.id, name: p.name })), ...drafts.filter((d) => d.function === 'problem' && d.params.action === 'add').map((d) => ({ id: d.id, name: String(d.params.name) }))],
-    facts: standingOf(facts.data, org?.types, ymd(new Date().toISOString())),
+    facts: standingOf(facts.data, org?.types, ymd(new Date().toISOString())), scores: org?.scores ?? [],
   }), [org, presets, departmentId, r.problems, drafts, can, facts.data])
 
   // what the lists hold once this visit's drafts are signed: warnings check against these
@@ -96,6 +97,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       case 'order': return q.service_id ? null : !q.to_department_id ? 'Choose the department' : !String(q.question_text ?? '').trim() ? 'Type the question' : null
       case 'note': return String(q.text ?? '').trim() ? null : 'The note is empty'
       case 'pregnancy': case 'breastfeeding': case 'alert': return factMissing(p, ymd(new Date().toISOString()))
+      case 'score': return scoreMissing(q as ScoreParams, tableOf(ctx.scores, q.score, q.version))
       case 'list_review': return q.list === 'allergies' && q.outcome === 'none_known' && allergies.length ? `Allergies are recorded (${allergies.map((a) => a.substance_name).join(', ')}), so not “no known allergies”` : null
     }
     return null

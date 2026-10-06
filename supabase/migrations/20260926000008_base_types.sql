@@ -132,6 +132,12 @@ create function base.breastfeeding_line(e jsonb) returns text language sql stabl
     case when (e -> 'data' ->> 'breastfeeding')::boolean then 'Breastfeeding' else 'Not breastfeeding' end ||
     coalesce(' · ' || nullif(e -> 'data' ->> 'note', ''), '')
 $$;
+-- a recorded score (§5.1 rule 8): "GCS 14, 1974 · Mild", its short name and its band's words from the version it used
+create function base.score_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
+  select coalesce(s.short, e -> 'data' ->> 'score') || ' ' || (e -> 'data' ->> 'total') || ', ' || (e -> 'data' ->> 'version') ||
+    coalesce(' · ' || (select b -> 'labels' ->> 'en' from jsonb_array_elements(s.bands) b where b ->> 'key' = e -> 'data' ->> 'band'), '')
+  from (select 1) one left join core.scores s on s.key = e -> 'data' ->> 'score' and s.version = e -> 'data' ->> 'version'
+$$;
 create function base.died_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
   select 'Died' || coalesce(' · ' || (e -> 'data' -> 'cause' ->> 'text'), '')
 $$;
@@ -430,6 +436,33 @@ begin
   return out;
 end $$;
 
+-- a recorded score is the server's sum (§5.1 rule 8): worked out again with the version the entry names, which must be declared and in
+-- use; a total or band that differs is refused (score_mismatch). An entry keeps its version: nothing recomputes an old one
+create function base.score_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare d jsonb := p_entry -> 'data'; f jsonb := base.same_kind(p_entry, p_set); r jsonb; s core.scores;
+begin
+  if jsonb_array_length(f) > 0 then return f; end if;
+  select * into s from core.scores x where x.key = d ->> 'score' and x.version = d ->> 'version';
+  if not found then return jsonb_build_array(base.find('unknown_score', 'refuse', concat_ws(' ', d ->> 'score', d ->> 'version'))); end if;
+  if s.retired_at is not null then return jsonb_build_array(base.find('score_retired', 'refuse', s.key || ' ' || s.version)); end if;
+  -- a pack's score is written where the department uses the pack (§5.1 rule 1); a correction follows its entry
+  if p_entry ->> 'replaces' is null and p_entry ->> 'relation' is distinct from 'changes'
+     and not core.department_uses((p_entry ->> 'organization_id')::uuid, (p_entry ->> 'department_id')::uuid, s.layer) then
+    return jsonb_build_array(base.find('pack_not_used', 'refuse', s.layer));
+  end if;
+  r := core.score(s.key, s.version, d -> 'inputs');
+  if jsonb_array_length(r -> 'problems') > 0 then
+    return jsonb_build_array(base.find('bad_input', 'refuse', (select string_agg((x ->> 'item') || ': ' || (x ->> 'code'), ', ') from jsonb_array_elements(r -> 'problems') x)));
+  end if;
+  if not (r ->> 'complete')::boolean then
+    return jsonb_build_array(base.find('score_incomplete', 'refuse', (select string_agg(x, ', ') from jsonb_array_elements_text(r -> 'missing') x)));
+  end if;
+  if (r ->> 'total')::int is distinct from (d ->> 'total')::int or r -> 'band' ->> 'key' is distinct from d ->> 'band' then
+    return jsonb_build_array(base.find('score_mismatch', 'refuse', format('the server adds it up to %s (%s)', r ->> 'total', r -> 'band' ->> 'key')));
+  end if;
+  return '[]';
+end $$;
+
 -- crossing out: of the author's own entry or one the writer may write there; never an order someone already answered
 create function base.crossed_out_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_org uuid := (p_entry ->> 'organization_id')::uuid; t core.entries; v_by uuid := (p_entry ->> 'author_id')::uuid;
@@ -689,6 +722,10 @@ begin
   perform core.declare_type('breastfeeding', 1, 'base', '{"type":"object","additionalProperties":false,"required":["status","breastfeeding"],
       "properties":{"status":{"enum":["current","ended"]},"breastfeeding":{"type":"boolean"},"note":{"type":"string"}}}'::jsonb,
     'base.breastfeeding_line(jsonb)', array['Observation'], checks => array['base.fact_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Breastfeeding","ar":"الرضاعة الطبيعية"}');
+  perform core.declare_type('score', 1, 'base', '{"type":"object","additionalProperties":false,"required":["score","version","inputs","total","band"],
+      "properties":{"score":{"type":"string","minLength":1},"version":{"type":"string","minLength":1},
+        "inputs":{"type":"object","additionalProperties":{"type":["string","number","boolean"]}},"total":{"type":"integer"},"band":{"type":"string"},"note":{"type":"string"}}}'::jsonb,
+    'base.score_line(jsonb)', array['Observation'], checks => array['base.score_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Score","ar":"مقياس"}');
   perform core.declare_type('died', 1, 'base', format('{"type":"object","additionalProperties":false,"properties":{"cause":%1$s,"note":{"type":"string"}}}', concept)::jsonb,
     'base.died_line(jsonb)', array['Patient'], checks => array['base.kind_check(jsonb,jsonb)']::regprocedure[],
     feeds => array['base.deceased'], labels => '{"en":"Died"}');
@@ -782,6 +819,21 @@ select core.declare_setting('preset', 'base', 'organization', '{"type":"object",
 select core.declare_setting('place.closed', 'base', 'place',
   '{"type":"object","additionalProperties":false,"required":["closed"],"properties":{"closed":{"type":"boolean"},"reason":{"type":"string"}}}', labels => '{"en":"Closed"}');
 
+-- ── the base's score (§5.1 rule 8): every department uses it. Teasdale and Jennett's scale, its motor response of six (1974–1976) ──
+select core.declare_score('gcs', 'base', '1974', 'Teasdale G, Jennett B. Assessment of coma and impaired consciousness: a practical scale. Lancet 1974;2(7872):81–84',
+  '[{"key":"eye","labels":{"en":"Eye opening"},"input":"choice","coding":{"system":"loinc","code":"9267-6"},"choices":[
+      {"value":"4","points":4,"labels":{"en":"Spontaneously"}},{"value":"3","points":3,"labels":{"en":"To speech"}},
+      {"value":"2","points":2,"labels":{"en":"To pain"}},{"value":"1","points":1,"labels":{"en":"None"}}]},
+    {"key":"verbal","labels":{"en":"Verbal response"},"input":"choice","coding":{"system":"loinc","code":"9270-0"},"choices":[
+      {"value":"5","points":5,"labels":{"en":"Oriented"}},{"value":"4","points":4,"labels":{"en":"Confused"}},{"value":"3","points":3,"labels":{"en":"Inappropriate words"}},
+      {"value":"2","points":2,"labels":{"en":"Incomprehensible sounds"}},{"value":"1","points":1,"labels":{"en":"None"}}]},
+    {"key":"motor","labels":{"en":"Motor response"},"input":"choice","coding":{"system":"loinc","code":"9268-4"},"choices":[
+      {"value":"6","points":6,"labels":{"en":"Obeys commands"}},{"value":"5","points":5,"labels":{"en":"Localises to pain"}},{"value":"4","points":4,"labels":{"en":"Withdraws from pain"}},
+      {"value":"3","points":3,"labels":{"en":"Abnormal flexion"}},{"value":"2","points":2,"labels":{"en":"Extension"}},{"value":"1","points":1,"labels":{"en":"None"}}]}]',
+  '[{"key":"severe","labels":{"en":"Severe"},"min":3,"max":8,"tone":"danger"},{"key":"moderate","labels":{"en":"Moderate"},"min":9,"max":12,"tone":"warn"},
+    {"key":"mild","labels":{"en":"Mild"},"min":13,"max":15,"tone":null}]',
+  '{"en":"Glasgow Coma Scale","ar":"مقياس غلاسكو للغيبوبة"}', 'GCS', 'gcs', '{"system":"loinc","code":"9269-2"}');
+
 -- ── default screens (§4.6): each tab shows to whoever holds its action in the department ──
 select core.declare_screen('base.desk', 'base', 'desk', '{"en":"Front desk"}', 'read:patients');
 select core.declare_screen('base.queue', 'base', 'visits', '{"en":"Queue"}', 'read:queue');
@@ -794,13 +846,13 @@ select core.declare_role('00000000-0000-0000-0000-00000000c001', 'owner', 'base'
 select core.declare_role('00000000-0000-0000-0000-00000000c002', 'doctor', 'base', 'Doctor', array[
   'read:patients', 'read:record', 'read:queue', 'read:review', 'read:bench', 'export:fhir',
   'write:note', 'write:vitals', 'write:observation', 'write:problem', 'write:allergy', 'write:medication', 'write:given', 'write:list_review', 'write:order',
-  'write:result', 'write:procedure', 'write:reviewed', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:died', 'write:crossed_out',
+  'write:result', 'write:procedure', 'write:reviewed', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:score', 'sign:score', 'write:died', 'write:crossed_out',
   'write:here', 'write:not_here', 'write:called', 'write:seen', 'write:back_to_waiting', 'write:away', 'write:urgent', 'write:assigned', 'write:left', 'write:done',
   'write:transferred', 'write:admitted', 'write:moved', 'write:discharged', 'write:private', 'write:not_private', 'write:opened_anyway'], '{"en":"Doctor"}',
   everyday => true);
 select core.declare_role('00000000-0000-0000-0000-00000000c003', 'nurse', 'base', 'Nurse', array[
   'read:patients', 'read:record', 'read:queue', 'write:note', 'write:vitals', 'write:observation', 'write:allergy', 'write:given', 'write:list_review',
-  'write:procedure', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:crossed_out', 'write:here', 'write:not_here', 'write:called', 'write:back_to_waiting', 'write:away', 'write:urgent',
+  'write:procedure', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:score', 'write:crossed_out', 'write:here', 'write:not_here', 'write:called', 'write:back_to_waiting', 'write:away', 'write:urgent',
   'write:assigned', 'write:moved', 'write:private'], '{"en":"Nurse"}', everyday => true);
 select core.declare_role('00000000-0000-0000-0000-00000000c004', 'reception', 'base', 'Reception', array[
   'read:patients', 'read:queue', 'manage:patients', 'write:checked_in', 'write:here', 'write:not_here', 'write:away', 'write:urgent', 'write:transferred',

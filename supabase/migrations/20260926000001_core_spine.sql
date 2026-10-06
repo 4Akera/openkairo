@@ -296,6 +296,7 @@ create table core.setting_keys (
   -- what the automatic form needs (§5.1 rule 7): each field in order, {key (a path through properties), labels, help, unit, choices}
   fields      jsonb not null default '[]',
   form        text check (form in ('pack', 'department')),   -- where its form shows: the pack's page, the department's card; null: an editor of the core's
+  action      text,                                 -- the action that writes it (null: manage:settings); its own is held anywhere (sign:score)
   hashes      jsonb not null default '{}'
 );
 create table core.screens (
@@ -305,6 +306,24 @@ create table core.screens (
   action      text references core.actions,          -- what a user needs here to see its tab; null: anyone working in the department
   replaces    text[] not null default '{}',          -- a pack screen stands in for these base screens (a list of work is one screen, §5.1 rule 4)
   labels      jsonb not null default '{}'
+);
+-- a score's points table (§5.1 rule 8): one row per version, never changed; a new version is a new row and old ones stay. The server
+-- alone adds it up (core.score); an entry keeps the version it used
+create table core.scores (
+  key         text not null check (key ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$'),
+  version     text not null check (version ~ '^[0-9A-Za-z][0-9A-Za-z._-]*$'),
+  layer       text not null references core.layers,
+  labels      jsonb not null default '{}',          -- its name in words ({"en": "Glasgow Coma Scale"})
+  short       text not null,                        -- the short name on a line ("GCS")
+  alias       text check (alias ~ '^[a-z][a-z0-9]*$'),   -- /gcs in the composer, beside /score gcs
+  source      text not null,                        -- where the table comes from (the paper, the guideline)
+  coding      jsonb,                                -- the total's coding (LOINC 9269-2), for FHIR
+  items       jsonb not null,                       -- [{key, labels, input: number|choice|yes_no, …, points}] in order
+  bands       jsonb not null,                       -- [{key, labels, min, max, tone}] over the total, in order
+  retired_at  timestamptz,                          -- retired: new entries may no longer use it; old ones keep it
+  position    int generated always as identity,     -- declaration order: the latest version is the last declared
+  declared_at timestamptz not null default now(),
+  primary key (key, version)
 );
 create table core.listeners (
   layer       text not null references core.layers,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Building2, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Palette, Plus, Puzzle, Users, X } from 'lucide-react'
+import { BookOpen, Building2, Calculator, Eye, FlaskConical, KeyRound, LayoutGrid, ListChecks, Palette, Plus, Puzzle, Users, X } from 'lucide-react'
 import { read, remove, save as saveRow, writeSetting } from '../db/rpc'
 import { useDepartment } from '../hooks/organization'
 import { newId } from '../hooks/writes'
@@ -9,26 +9,27 @@ import type { Organization } from '../db/types'
 import { Avatar, Badge, Button, Callout, Centered, DeleteButton, EditPanel, Empty, Field, Fieldset, FormRow, IconButton, Input, NavItem, NewCard, PageHead, Row, SaveState, SearchInput, Section, Segmented, Select, Spinner, Switch, dateTime, errorText, useDraft } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
-import { PAGE_ACTION, useMfaNeeded, useSave } from './settings/save'
+import { PAGE_ACTION, mayOpen, useMfaNeeded, useSave } from './settings/save'
 import { RolesPage } from './settings/Roles'
 import { ReadsPage } from './settings/Reads'
 import { DepartmentsPage } from './settings/Departments'
 import { TemplatesPage } from './settings/Presets'
 import { PackPage, hasSettings } from './settings/PackSettings'
 import { ReferencePage } from './settings/Reference'
+import { ScoresPage } from './settings/Scores'
 
 const PAGES = [['organization', 'Organization', Building2], ['departments', 'Departments', LayoutGrid], ['services', 'Services', FlaskConical], ['users', 'Users', Users],
-  ['roles', 'Roles', KeyRound], ['templates', 'Presets', ListChecks], ['packs', 'Packs', Puzzle], ['reference', 'Reference lists', BookOpen], ['reads', 'Record reads', Eye]] as const
+  ['roles', 'Roles', KeyRound], ['templates', 'Presets', ListChecks], ['packs', 'Packs', Puzzle], ['scores', 'Scores', Calculator], ['reference', 'Reference lists', BookOpen], ['reads', 'Record reads', Eye]] as const
 
 /** Settings (spec 02/05): the practice builds its own clinic here, a page per kind of thing, every list folds and every row edits in place. Owners only. */
 export function SettingsScreen() {
   const { org, can } = useDepartment()
   const mfaNeeded = useMfaNeeded((s) => s.needed)
   if (!org) return <Centered><Spinner /></Centered>
-  const pages = PAGES.filter(([k]) => can(PAGE_ACTION[k]))
+  const pages = PAGES.filter(([k]) => mayOpen(k, can))
   if (!pages.length) return <Centered><p className="text-14 text-faint">Settings need a role that manages something here.</p></Centered>
   const counts: Record<string, number | string> = { departments: org.departments.length, services: org.services.length, users: org.users.filter((u) => !u.retired_at).length, roles: org.roles.length,
-    templates: org.templates.length, packs: `${org.packs.filter((p) => p.enabled).length}/${org.packs.length}` }
+    templates: org.templates.length, packs: `${org.packs.filter((p) => p.enabled).length}/${org.packs.length}`, scores: new Set(org.scores.map((s) => s.key)).size }
   return <div className="mx-auto grid max-w-6xl gap-6 p-4 md:grid-cols-[200px_1fr]">
     <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:grid md:content-start md:gap-0.5 md:overflow-visible md:px-0 print:hidden">
       <p className="hidden px-3 pb-2 text-11 font-semibold uppercase tracking-[0.08em] text-faint md:block">Settings</p>
@@ -45,6 +46,7 @@ export function SettingsScreen() {
       <Route path="templates" element={can(PAGE_ACTION.templates) ? <TemplatesPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
       <Route path="packs" element={can(PAGE_ACTION.packs) ? <PacksPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
       <Route path="packs/:key" element={can(PAGE_ACTION.packs) ? <PackPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
+      <Route path="scores" element={mayOpen('scores', can) ? <ScoresPage org={org} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
       <Route path="reference" element={can(PAGE_ACTION.reference) ? <ReferencePage /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
       <Route path="reads" element={can(PAGE_ACTION.reads) ? <ReadsPage orgId={org.organization.id} /> : <Navigate to={`/settings/${pages[0][0]}`} replace />} />
     </Routes></div>

@@ -2,7 +2,7 @@
 // npm run test:chart   (no browser, no database; the clinic's time zone is Cairo, as the demo clinic's)
 import assert from 'node:assert/strict'
 import { setClinicTimeZone } from '../src/core/ui/time'
-import { countKinds, draftItems, filterKind, groupBlocks, itemsOf, kindOf } from '../src/core/screens/chart/model/items'
+import { FAMILY, KIND_TYPES, countKinds, draftItems, filterKind, groupBlocks, itemsOf, kindOf } from '../src/core/screens/chart/model/items'
 import { byDay, bySet, encounterItems, movesOf, outsideOf, sinceDigest, stayDay, startOf } from '../src/core/screens/chart/model/encounter'
 import { alertsOf, allergiesOf, changeText, historyOf, medLine, medicinesOf, problemsOf, visitsOf, waitingOf } from '../src/core/screens/chart/model/record'
 import { keyResults, resultsByKind, vitalsNow } from '../src/core/screens/chart/model/values'
@@ -74,6 +74,13 @@ test('kinds: counts, the filter, a list review goes with its list', () => {
   const items = itemsOf([E('note'), E('note'), E('result'), E('medication'), E('given'), E('list_review', { data: { list: 'medications', outcome: 'reviewed' } }), E('procedure')], { types })
   const c = countKinds(items); assert.equal(c.all, 7); assert.equal(c.notes, 2); assert.equal(c.medicines, 3); assert.equal(c.other, 1); assert.equal(c.vitals, 0)
   assert.equal(filterKind(items, 'medicines').length, 3); assert.equal(filterKind(items, 'all').length, 7); assert.equal(kindOf(items.find((i) => i.family === 'review')!), 'medicines')
+})
+test('kinds: every base type a kind counts is one the Whole record reads for that kind (a score under Other)', () => {
+  for (const t of Object.keys(FAMILY)) {
+    const [i] = itemsOf([E(t, t === 'list_review' ? { data: { list: 'problems', outcome: 'reviewed' } } : {})], { types })
+    assert.ok(KIND_TYPES[kindOf(i)].includes(t), `${t} counts under ${kindOf(i)} but the filter does not read it`)
+  }
+  assert.equal(kindOf(itemsOf([E('score')], { types })[0]), 'other')
 })
 test('a stay: day 1 is the admission day in the clinic time zone; every day listed; since yesterday by clinical day', () => {
   const adm = T('24T22:30:00')                                    // 25 Sep in Cairo (the 24th in UTC)

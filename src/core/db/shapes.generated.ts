@@ -358,6 +358,15 @@ export interface Reviewed {
   action?: string
   note?: string
 }
+/** score v1 (base) */
+export interface Score {
+  band: string
+  inputs: Record<string, string | number | boolean>
+  note?: string
+  score: string
+  total: number
+  version: string
+}
 /** seen v1 (base) */
 export interface Seen {
   note?: string
@@ -474,6 +483,12 @@ export interface PresetSetting {
   services?: string[]
   shortcut?: string | null
 }
+/** setting score.signed_off (core; owner organization, many) */
+export interface ScoreSignedOffSetting {
+  note?: string
+  score: string
+  version: string
+}
 /** setting service (base; owner department, many) */
 export interface ServiceSetting {
   answer?: string
@@ -541,6 +556,7 @@ export interface EntryData {
   'procedure': Procedure
   'result': Result
   'reviewed': Reviewed
+  'score': Score
   'seen': Seen
   'step': Step
   'transferred': Transferred
@@ -565,5 +581,6 @@ export interface SettingData {
   'pharmacy.late_after': PharmacyLateAfterSetting
   'place.closed': PlaceClosedSetting
   'preset': PresetSetting
+  'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
 }

@@ -483,8 +483,9 @@ begin
   end if;
 end $$;
 
+-- action: what writes it, when not manage:settings (score.signed_off: sign:score, a clinician's act, held in any department)
 create function core.declare_setting(key text, layer text, owner text, shape jsonb, check_fn regprocedure default null, many boolean default false, labels jsonb default '{}',
-  fields jsonb default '[]', form text default null)
+  fields jsonb default '[]', form text default null, action text default null)
 returns void language plpgsql as $$
 #variable_conflict use_variable
 declare s jsonb := shape || jsonb_build_object('$defs', core.datatypes() || coalesce(shape -> '$defs', '{}'));
@@ -492,11 +493,170 @@ begin
   perform core.check_prefix(layer, key);
   if not extensions.jsonschema_is_valid(s::json) then perform core.refuse('bad_schema', key); end if;
   perform core.check_fields(key, layer, owner, many, s, coalesce(fields, '[]'), form);
-  insert into core.setting_keys (key, layer, owner_kind, shape, check_fn, many, labels, fields, form, hashes)
+  if action is not null and not exists (select 1 from core.actions a where a.key = action and a.layer in ('core', 'base', declare_setting.layer)) then
+    perform core.refuse('unknown_action', action);
+  end if;
+  insert into core.setting_keys (key, layer, owner_kind, shape, check_fn, many, labels, fields, form, action, hashes)
   values (declare_setting.key, declare_setting.layer, owner, s, declare_setting.check_fn, declare_setting.many, declare_setting.labels, coalesce(declare_setting.fields, '[]'), declare_setting.form,
+          declare_setting.action,
           case when declare_setting.check_fn is null then '{}' else jsonb_build_object('check', core.check_fn(layer, declare_setting.check_fn, 's', 'setting check')) end)
   on conflict on constraint setting_keys_pkey do update set shape = excluded.shape, check_fn = excluded.check_fn, many = excluded.many, labels = excluded.labels,
-     fields = excluded.fields, form = excluded.form, hashes = excluded.hashes where core.setting_keys.layer = excluded.layer;
+     fields = excluded.fields, form = excluded.form, action = excluded.action, hashes = excluded.hashes where core.setting_keys.layer = excluded.layer;
+end $$;
+
+-- ── scores (§5.1 rule 8): a declared points table with a version and its source; the server is the only place that adds it up ──
+-- an integer, as a points or a band's bound must be
+create function core.is_int(v jsonb) returns boolean language sql immutable as $$
+  select jsonb_typeof(v) = 'number' and (v #>> '{}')::numeric = trunc((v #>> '{}')::numeric)
+$$;
+-- one item's points for one value: {points}, or {problem} (unknown_choice, not_yes_no, not_a_number, too_precise, out_of_range)
+create function core.score_points(p_item jsonb, p_value jsonb) returns jsonb language plpgsql immutable as $$
+declare v text := p_value #>> '{}'; n numeric; r jsonb;
+begin
+  if p_item ->> 'input' = 'choice' then
+    select c into r from jsonb_array_elements(p_item -> 'choices') c where jsonb_typeof(p_value) in ('string', 'number') and c ->> 'value' = v limit 1;
+    return case when r is null then '{"problem":"unknown_choice"}' else jsonb_build_object('points', (r ->> 'points')::int) end;
+  end if;
+  if p_item ->> 'input' = 'yes_no' then
+    if jsonb_typeof(p_value) <> 'boolean' then return '{"problem":"not_yes_no"}'; end if;
+    return jsonb_build_object('points', (p_item -> 'points' ->> case when v = 'true' then 'yes' else 'no' end)::int);
+  end if;
+  if jsonb_typeof(p_value) not in ('string', 'number') or v !~ '^-?[0-9]+(\.[0-9]+)?$' then return '{"problem":"not_a_number"}'; end if;
+  if coalesce(length(substring(v from '\.([0-9]+)$')), 0) > coalesce((p_item ->> 'decimals')::int, 0) then return '{"problem":"too_precise"}'; end if;
+  n := v::numeric;
+  if n < coalesce((p_item ->> 'min')::numeric, n) or n > coalesce((p_item ->> 'max')::numeric, n) then return '{"problem":"out_of_range"}'; end if;
+  select x into r from jsonb_array_elements(p_item -> 'ranges') x where n >= coalesce((x ->> 'min')::numeric, n) and n <= coalesce((x ->> 'max')::numeric, n) limit 1;
+  return case when r is null then '{"problem":"out_of_range"}' else jsonb_build_object('points', (r ->> 'points')::int) end;
+end $$;
+
+-- the lowest and highest points of one item (the bands must cover every total)
+create function core.score_item_span(p_item jsonb) returns int[] language sql immutable as $$
+  select array[min(p), max(p)] from (
+    select (c ->> 'points')::int p from jsonb_array_elements(case when p_item ->> 'input' = 'choice' then p_item -> 'choices' when p_item ->> 'input' = 'number' then p_item -> 'ranges' else '[]' end) c
+    union all select (p_item -> 'points' ->> x)::int from unnest(array['yes', 'no']) x where p_item ->> 'input' = 'yes_no') q
+$$;
+
+-- a score's table (§5.1 rule 8), checked once: a key inside its layer's prefix, its source, its items (each with its words, its input
+-- and how it scores: points per choice, per yes and no, per range of a number, ranges in order and touching at the number's step) and
+-- the total's bands (in order, touching, covering every total, each with its words and a state tone or none). A version once declared
+-- never changes (version_exists); a new version is a new row and the old stay
+create function core.declare_score(key text, layer text, version text, source text, items jsonb, bands jsonb, labels jsonb default '{}', short text default null,
+  alias text default null, coding jsonb default null) returns void language plpgsql as $$
+#variable_conflict use_variable
+declare it jsonb; x jsonb; prev jsonb; v_step numeric; v_lo int := 0; v_hi int := 0; v_span int[]; old core.scores; n int;
+begin
+  source := btrim(source, E' \t\r\n');   -- stored trimmed (spaces and line ends): the same call again finds the same row
+  perform core.check_prefix(layer, key);
+  if exists (select 1 from core.scores s where s.key = declare_score.key and s.layer <> declare_score.layer) then perform core.refuse('outside_prefix', key); end if;
+  if coalesce(trim(source), '') = '' then perform core.refuse('source_missing', key); end if;
+  if coalesce(labels ->> 'en', '') = '' then perform core.refuse('label_missing', key); end if;
+  if alias is not null and exists (select 1 from core.scores s where s.alias = declare_score.alias and s.key <> declare_score.key) then perform core.refuse('alias_taken', alias); end if;
+  if coding is not null and not exists (select 1 from core.systems s where s.key = coding ->> 'system') then perform core.refuse('unknown_system', coding ->> 'system'); end if;
+  if jsonb_typeof(items) is distinct from 'array' or jsonb_array_length(items) = 0 then perform core.refuse('no_items', key); end if;
+  if (select count(*) <> count(distinct i ->> 'key') from jsonb_array_elements(items) i) then perform core.refuse('duplicate', key || ': item'); end if;
+  for it in select i from jsonb_array_elements(items) i loop
+    if coalesce(it ->> 'key', '') !~ '^[a-z][a-z0-9_]*$' then perform core.refuse('bad_item', key || ': ' || coalesce(it ->> 'key', '(no key)')); end if;
+    if coalesce(it -> 'labels' ->> 'en', '') = '' then perform core.refuse('label_missing', key || ': ' || (it ->> 'key')); end if;
+    if it ? 'coding' and not exists (select 1 from core.systems s where s.key = it -> 'coding' ->> 'system') then perform core.refuse('unknown_system', it -> 'coding' ->> 'system'); end if;
+    if it ->> 'input' = 'choice' then
+      if jsonb_typeof(it -> 'choices') is distinct from 'array' or jsonb_array_length(it -> 'choices') = 0 then perform core.refuse('no_choices', key || ': ' || (it ->> 'key')); end if;
+      if (select count(*) <> count(distinct c ->> 'value') from jsonb_array_elements(it -> 'choices') c) then perform core.refuse('duplicate', key || ': ' || (it ->> 'key') || ' choice'); end if;
+      -- a choice's value is a text (the card and the record match it as one)
+      if exists (select 1 from jsonb_array_elements(it -> 'choices') c where jsonb_typeof(c -> 'value') is distinct from 'string' or c ->> 'value' = '') then
+        perform core.refuse('bad_choice', key || ': ' || (it ->> 'key') || ' choice');
+      end if;
+      if exists (select 1 from jsonb_array_elements(it -> 'choices') c where coalesce(c -> 'labels' ->> 'en', '') = '') then
+        perform core.refuse('label_missing', key || ': ' || (it ->> 'key') || ' choice');
+      end if;
+      if exists (select 1 from jsonb_array_elements(it -> 'choices') c where not core.is_int(c -> 'points')) then perform core.refuse('bad_points', key || ': ' || (it ->> 'key')); end if;
+    elsif it ->> 'input' = 'yes_no' then
+      if not (core.is_int(it -> 'points' -> 'yes') and core.is_int(it -> 'points' -> 'no')) then perform core.refuse('bad_points', key || ': ' || (it ->> 'key')); end if;
+    elsif it ->> 'input' = 'number' then
+      if it ? 'decimals' and not (core.is_int(it -> 'decimals') and (it ->> 'decimals')::int between 0 and 4) then perform core.refuse('bad_number', key || ': ' || (it ->> 'key')); end if;
+      if jsonb_typeof(it -> 'ranges') is distinct from 'array' or jsonb_array_length(it -> 'ranges') = 0 then perform core.refuse('no_ranges', key || ': ' || (it ->> 'key')); end if;
+      v_step := power(10::numeric, -coalesce((it ->> 'decimals')::int, 0)); prev := null; n := 0;
+      -- a plausible min and max: numbers, at the number's step, min ≤ max (core.score compares a value with them)
+      if exists (select 1 from unnest(array['min', 'max']) k where it ? k
+                 and case when jsonb_typeof(it -> k) <> 'number' then true else (it ->> k)::numeric / v_step <> trunc((it ->> k)::numeric / v_step) end) then
+        perform core.refuse('bad_number', key || ': ' || (it ->> 'key') || ' min/max');
+      end if;
+      if (it ->> 'min')::numeric > (it ->> 'max')::numeric then perform core.refuse('bad_number', key || ': ' || (it ->> 'key') || ' min above max'); end if;
+      for x in select r from jsonb_array_elements(it -> 'ranges') r loop
+        n := n + 1;
+        if not core.is_int(x -> 'points') then perform core.refuse('bad_points', key || ': ' || (it ->> 'key')); end if;
+        if exists (select 1 from unnest(array['min', 'max']) k where x ? k and jsonb_typeof(x -> k) <> 'number') then perform core.refuse('bad_number', key || ': ' || (it ->> 'key')); end if;
+        -- a bound at the number's own step (35.0 with one decimal, never 35.05)
+        if exists (select 1 from unnest(array[(x ->> 'min')::numeric, (x ->> 'max')::numeric]) v where v / v_step <> trunc(v / v_step)) then
+          perform core.refuse('bad_number', key || ': ' || (it ->> 'key'));
+        end if;
+        if (n > 1 and not x ? 'min') or (n < jsonb_array_length(it -> 'ranges') and not x ? 'max') or (x ->> 'min')::numeric > (x ->> 'max')::numeric then
+          perform core.refuse('ranges_open', key || ': ' || (it ->> 'key'));
+        end if;
+        if prev is not null and (x ->> 'min')::numeric < (prev ->> 'max')::numeric + v_step then perform core.refuse('ranges_overlap', key || ': ' || (it ->> 'key')); end if;
+        if prev is not null and (x ->> 'min')::numeric > (prev ->> 'max')::numeric + v_step then perform core.refuse('ranges_gap', key || ': ' || (it ->> 'key')); end if;
+        prev := x;
+      end loop;
+      if jsonb_typeof(it -> 'unit') is distinct from 'string' or trim(it ->> 'unit') = '' then perform core.refuse('unit_missing', key || ': ' || (it ->> 'key')); end if;
+    else
+      perform core.refuse('unknown_input', key || ': ' || (it ->> 'key'));
+    end if;
+    v_span := core.score_item_span(it); v_lo := v_lo + v_span[1]; v_hi := v_hi + v_span[2];
+  end loop;
+  if jsonb_typeof(bands) is distinct from 'array' or jsonb_array_length(bands) = 0 then perform core.refuse('no_bands', key); end if;
+  if (select count(*) <> count(distinct b ->> 'key') from jsonb_array_elements(bands) b) then perform core.refuse('duplicate', key || ': band'); end if;
+  prev := null;
+  for x in select b from jsonb_array_elements(bands) b loop
+    if coalesce(x ->> 'key', '') !~ '^[a-z][a-z0-9_]*$' or coalesce(x -> 'labels' ->> 'en', '') = '' then perform core.refuse('label_missing', key || ': band'); end if;
+    if not (core.is_int(x -> 'min') and core.is_int(x -> 'max')) or (x ->> 'min')::int > (x ->> 'max')::int then perform core.refuse('bad_band', key || ': ' || (x ->> 'key')); end if;
+    if x ? 'tone' and jsonb_typeof(x -> 'tone') <> 'null' and not (x ->> 'tone' in ('ok', 'info', 'warn', 'danger')) then perform core.refuse('unknown_tone', key || ': ' || (x ->> 'tone')); end if;
+    if prev is not null and (x ->> 'min')::int <= (prev ->> 'max')::int then perform core.refuse('bands_overlap', key || ': ' || (x ->> 'key')); end if;
+    if prev is not null and (x ->> 'min')::int > (prev ->> 'max')::int + 1 then perform core.refuse('bands_gap', key || ': ' || (x ->> 'key')); end if;
+    prev := x;
+  end loop;
+  if (bands -> 0 ->> 'min')::int > v_lo or (prev ->> 'max')::int < v_hi then perform core.refuse('bands_cover', format('%s: the totals run %s to %s', key, v_lo, v_hi)); end if;
+  select * into old from core.scores s where s.key = declare_score.key and s.version = declare_score.version;
+  if found then
+    if (old.items, old.bands, old.source, old.labels, old.short, old.alias, old.coding) is distinct from (items, bands, source, labels, coalesce(short, labels ->> 'en'), alias, coding) then
+      perform core.refuse('version_exists', format('%s %s is declared: a changed table is a new version', key, version));
+    end if;
+    return;
+  end if;
+  insert into core.scores (key, version, layer, labels, short, alias, source, coding, items, bands)
+  values (declare_score.key, declare_score.version, declare_score.layer, declare_score.labels, coalesce(declare_score.short, declare_score.labels ->> 'en'),
+          declare_score.alias, declare_score.source, declare_score.coding, declare_score.items, declare_score.bands);
+end $$;
+-- a version retired: new entries may no longer use it (score_retired); its entries keep it
+create function core.retire_score(p_key text, p_version text) returns void language plpgsql as $$
+begin
+  update core.scores set retired_at = coalesce(retired_at, now()) where key = p_key and version = p_version;
+  if not found then perform core.refuse('unknown_score', p_key || ' ' || p_version); end if;
+end $$;
+
+-- the one place a score is added up: each item's points, the total and its band once every item is answered. No version: the latest
+-- in use. A value it cannot score is a problem of its item, never a raise, so a card can ask while the clinician types
+create function core.score(p_key text, p_version text, p_inputs jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare s core.scores; it jsonb; r jsonb; v_in jsonb := coalesce(p_inputs, '{}'); v_items jsonb := '[]'; v_total int := 0; v_missing text[] := '{}';
+        v_problems jsonb := '[]'; v_done boolean; b jsonb;
+begin
+  select * into s from core.scores x where x.key = p_key and (x.version = p_version or (p_version is null and x.retired_at is null)) order by x.position desc limit 1;
+  if not found then perform core.refuse('unknown_score', p_key || coalesce(' ' || p_version, '')); end if;
+  if jsonb_typeof(v_in) <> 'object' then perform core.refuse('bad_input', 'the inputs are an object by item'); end if;
+  select coalesce(jsonb_agg(jsonb_build_object('item', k, 'code', 'unknown_item')), '[]') into v_problems from jsonb_object_keys(v_in) k
+   where not exists (select 1 from jsonb_array_elements(s.items) i where i ->> 'key' = k);
+  for it in select i from jsonb_array_elements(s.items) i loop
+    if coalesce(jsonb_typeof(v_in -> (it ->> 'key')), 'null') = 'null' then
+      v_missing := v_missing || (it ->> 'key'); v_items := v_items || jsonb_build_object('key', it ->> 'key', 'points', null);
+      continue;
+    end if;
+    r := core.score_points(it, v_in -> (it ->> 'key'));
+    if r ? 'problem' then v_problems := v_problems || jsonb_build_object('item', it ->> 'key', 'code', r ->> 'problem');
+    else v_total := v_total + (r ->> 'points')::int; end if;
+    v_items := v_items || jsonb_build_object('key', it ->> 'key', 'value', v_in -> (it ->> 'key'), 'points', r -> 'points');
+  end loop;
+  v_done := cardinality(v_missing) = 0 and jsonb_array_length(v_problems) = 0;
+  if v_done then select x into b from jsonb_array_elements(s.bands) x where v_total between (x ->> 'min')::int and (x ->> 'max')::int limit 1; end if;
+  return jsonb_build_object('score', s.key, 'version', s.version, 'retired', s.retired_at is not null, 'items', v_items, 'so_far', v_total,
+    'total', case when v_done then v_total end, 'complete', v_done, 'band', b, 'missing', to_jsonb(v_missing), 'problems', v_problems);
 end $$;
 
 -- a screen: its work, the action its tab needs (the core's, the base's or its own layer's; null: anyone working there) and, for a pack's,
@@ -612,6 +772,22 @@ select core.declare_setting('organization.time_zone', 'core', 'organization',
   '{"type":"object","required":["zone"],"additionalProperties":false,"properties":{"zone":{"type":"string"}}}', labels => '{"en":"Time zone"}');
 select core.declare_setting('organization.packs_used', 'core', 'organization',
   '{"type":"object","required":["packs"],"additionalProperties":false,"properties":{"packs":{"type":"array","items":{"type":"string"}}}}', labels => '{"en":"Packs used"}');
+
+-- a score signed off for this clinic (§5.1 rule 8): who and when are the setting's; a version unsigned still works. One live sign-off
+-- per score version; written by sign:score (a clinician's act, held in any department), never by manage:settings
+select core.declare_action('sign:score', 'core', 'organization', '{"en":"Sign off a score for the clinic"}');
+create function core.score_signed_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select case
+    when not exists (select 1 from core.scores s where s.key = p_data ->> 'score' and s.version = p_data ->> 'version')
+      then jsonb_build_array(jsonb_build_object('code', 'unknown_score', 'level', 'refuse', 'field', 'version'))
+    when exists (select 1 from core.settings_at((p_where ->> 'organization_id')::uuid, 'score.signed_off') x
+                  where x.thing_id <> (p_where ->> 'thing_id')::uuid and x.data ->> 'score' = p_data ->> 'score' and x.data ->> 'version' = p_data ->> 'version')
+      then jsonb_build_array(jsonb_build_object('code', 'already_signed', 'level', 'refuse', 'field', 'version'))
+    else '[]'::jsonb end
+$$;
+select core.declare_setting('score.signed_off', 'core', 'organization',
+  '{"type":"object","required":["score","version"],"additionalProperties":false,"properties":{"score":{"type":"string"},"version":{"type":"string"},"note":{"type":"string"}}}',
+  'core.score_signed_check(jsonb,jsonb)', true, '{"en":"Score signed off"}', action => 'sign:score');
 
 -- a type version's FHIR mapping, declared after the type (the base's mappings live in their own migration)
 create function core.declare_fhir(key text, version int, to_fhir regprocedure) returns void language plpgsql as $$
