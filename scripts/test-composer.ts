@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { lineOf, parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
 import { expand, suggest } from '../src/core/screens/visit/expand'
+import { registerCommand } from '../src/core/screens/visit/commands'
 import { drugWarnings, allergyWarnings, doseWarnings, duplicateProblem, findDrug } from '../src/core/screens/visit/catalog'
 import type { Allergy, Medication, Organization, Problem, Template } from '../src/core/db/types'
 import { draftEntries } from '../src/core/db/entries'
@@ -152,5 +153,27 @@ test('drafts become entries: codings and quantities (spec §4.7)', () => {
   const dx = one('/dx hypertension')[0].data as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
   assert.equal(dx.concept.codings[0].system, 'icd10'); assert.equal(dx.clinical_status, 'active')
   const o = one('/order cbc')[0]; assert.equal(o.type, 'order'); assert.equal((o.data as { department_id: string }).department_id, 'lab')
+})
+test('a pack\'s command only where the department uses its pack; elsewhere the card says where (spec §5.1 rule 1)', () => {
+  // a test-only pack command: the one pack, pharmacy, has none
+  registerCommand({ name: 'tpk', label: 'Test pack line', example: '/tpk 3', action: 'write:testpack.line', pack: 'testpack',
+    parse: (rest) => ({ ok: [{ function: 'testpack.line', kind: 'note', params: { text: rest }, line: `Test ${rest}` }] }) })
+  const usedIn = (pack: string) => pack === 'testpack' ? ['ObGyn clinic', 'Labour ward'] : []
+  const here = { ...ctx, packs: ['testpack'], usedIn }, there = { ...ctx, packs: [], usedIn }
+  assert.equal(expand('/tpk 3', here, [])?.items[0].function, 'testpack.line')
+  assert.ok(suggest('/tp', here, [], new Set())?.items.some((s) => s.label === '/tpk'), 'offered after /')
+  const e = expand('/tpk 3', there, [])!
+  assert.deepEqual(e.items, []); assert.deepEqual(e.errors, []); assert.equal(e.hint, '/tpk is used in: ObGyn clinic, Labour ward')
+  assert.equal(suggest('/tp', there, [], new Set()), null, 'not offered after /')
+  assert.equal(suggest('tpk 3', there, [], new Set()), null, 'nor offered for the word without its slash')
+  assert.match(expand('/tpk', { ...ctx, packs: [], usedIn: () => [] }, [])!.hint!, /not used in any department here/)
+  assert.equal(expand('/tpk 3', ctx, [])?.items.length, 1, 'no department in the context (tests, previews): every command')
+  assert.equal(expand('/rx metformin 500 bd', there, [])?.items.length, 1, 'the base\'s commands everywhere')
+  // a preset's line too: skipped for the department, not the role, and it says where it works
+  const tp: Template = { ...preset, id: 't3', shortcut: 'tp', items: [], lines: ['/tpk 3', '/rx metformin 500 bd'] }
+  const pe = expand('#tp', { ...there, can: () => true }, [tp])!
+  assert.deepEqual(pe.items.map((x) => x.function), ['medication']); assert.deepEqual(pe.skipped, ['“/tpk 3”: /tpk is used in: ObGyn clinic, Labour ward'])
+  assert.equal(expand('#tp', here, [tp])!.items.length, 2, 'in a department that uses it, the preset writes both')
+  assert.deepEqual(parse('/tpk 3', there), { error: '/tpk is used in: ObGyn clinic, Labour ward' }, 'parse checks the department before the role')
 })
 console.log(`composer: ${n} groups passed`)

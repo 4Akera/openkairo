@@ -1,6 +1,6 @@
 import { Plus } from 'lucide-react'
 import { remove, save as saveRow, writeSetting } from '../../db/rpc'
-import { DEFAULT_SCREEN, mayIn } from '../../db/views'
+import { mayIn } from '../../db/views'
 import { newId } from '../../hooks/writes'
 import type { Department, Organization } from '../../db/types'
 import type { SettingData } from '../../db/shapes.generated'
@@ -8,6 +8,8 @@ import { Badge, Button, Card, Chip, DeleteButton, EditPanel, Empty, Field, Field
 import { PlacesCount, PlacesEditor } from './Places'
 import { SitesSection } from './Sites'
 import { useSave } from './save'
+import { baseLine, lineForPacks, lineHere } from '../line'
+import { PacksAndScreens } from './DepartmentScreens'
 
 const WORKS: [Department['work'], string, string][] = [['visits', 'Clinics', 'Patients are seen here in visits.'], ['stays', 'Wards', 'Patients stay here, in beds.'],
   ['desk', 'Front desks', 'Checks patients in for the clinics it serves.'], ['bench', 'Benches', 'Does work others order: a lab, imaging, a pharmacy.'],
@@ -18,7 +20,7 @@ type EncounterClass = SettingData['department.encounter_class']['class']
 const CLASSES: [EncounterClass, string][] = [['AMB', 'Outpatient'], ['EMER', 'Emergency'], ['IMP', 'Inpatient'], ['OBSENC', 'Observation'], ['SS', 'Short stay'], ['VR', 'Virtual'], ['HH', 'Home health']]
 const classFor = (work: Department['work']): EncounterClass => work === 'stays' ? 'IMP' : 'AMB'
 type DeptDraft = { name: string; work: Department['work']; site_id: string | null; serves: (string | null)[]; patients_wait: boolean; review_results: Department['review_results']; is_private: boolean
-  after_done: Department['after_done']; encounter_class: EncounterClass; screens: string[]; opens: string }
+  after_done: Department['after_done']; encounter_class: EncounterClass; packs: string[]; screens: string[]; opens: string }
 const everyOrSome = (ids: (string | null)[]) => !ids.length || ids.includes(null) ? { all: true } : { departments: ids as string[] }
 
 /** a department is a row (save) and its rules are department.* settings (write_setting), each written only when it changed */
@@ -38,7 +40,8 @@ async function saveDepartment(a: { id: string; d: DeptDraft; was: Department | u
     const kind = (was?.encounter_class ?? classFor(d.work)) === d.encounter_class
     if (!kind) await writeSetting({ key: 'department.encounter_class', owner_id: id, data: { class: d.encounter_class } })
   }
-  // the Screens line (§4.6); a department whose work changed writes its new work's line
+  // the packs used here, then the Screens line (§4.6, §5.1 rule 1), whose check reads them; a department whose work changed writes its new work's line
+  if (d.work !== 'outside' && (was ? JSON.stringify(was.packs) !== JSON.stringify(d.packs) : d.packs.length > 0)) await writeSetting({ key: 'department.packs', owner_id: id, data: { packs: d.packs } })
   if (d.screens.length) await one('department.screens', { screens: d.screens, opens: d.opens },
     !!was && was.work === d.work && JSON.stringify(was.screens) === JSON.stringify(d.screens) && was.opens === d.opens)
 }
@@ -52,22 +55,18 @@ export function DepartmentsPage({ org }: { org: Organization }) {
   const nameOf = (id: string | null, w: string) => id === null ? every(w) : org.departments.find((x) => x.id === id)?.name ?? '?'
   const open = (id: string, d: DeptDraft, isNew = false) => { save.reset(); retire.reset(); e.toggle(id, d, isNew) }
   const add = (work: Department['work'] = 'visits') => open(newId(), { name: '', work, site_id: null, serves: [null], patients_wait: true, review_results: 'critical', is_private: false, after_done: 'next',
-    encounter_class: classFor(work), screens: [DEFAULT_SCREEN[work]], opens: DEFAULT_SCREEN[work] }, true)
-  // the screens a department may use: its work's, from the core, the base or a pack that is on (the registry, §3.8)
-  const choices = (w: Department['work']) => org.screens.filter((s) => (s.work === w || s.work === 'any') && (s.layer === 'core' || s.layer === 'base' || org.packs.some((p) => p.key === s.layer && p.enabled)))
+    encounter_class: classFor(work), packs: [], screens: baseLine(work, org.screens), opens: baseLine(work, org.screens)[0] ?? '' }, true)
   const screenName = (k: string) => org.screens.find((s) => s.key === k)?.labels.en ?? `${k} (pack off)`
+  const packName = (k: string) => org.packs.find((p) => p.key === k)?.name ?? k
 
   const editor = () => { const d = e.draft!; const saved = e.initial!; const rules = d.work === 'visits' || d.work === 'stays'; const flow = d.work !== 'desk' && d.work !== 'outside'; const existing = org.departments.find((x) => x.id === e.id)
     const clients = org.departments.filter((x) => x.is_visited && x.id !== e.id)   // where patients are seen and orders written
     const sites = org.sites.filter((s) => !s.retired_at || s.id === d.site_id)
-    const screens = choices(d.work); const keys = [...screens.map((s) => s.key), ...d.screens.filter((k) => !screens.some((s) => s.key === k))]
-    // another work starts from that work's own screen and kind of encounter; back to the saved work, from what was saved
+    // another work starts from that work's own screens (and the ticked packs' of that work) and kind of encounter; back to the saved work, from what was saved
+    const lineOf = (w: Department['work']) => lineForPacks({ screens: baseLine(w, org.screens), opens: null }, w, org.screens, [], d.packs)
     const setWork = (w: Department['work']) => e.set(w === saved.work ? { work: w, screens: saved.screens, opens: saved.opens, encounter_class: saved.encounter_class }
-      : { work: w, screens: [DEFAULT_SCREEN[w]], opens: DEFAULT_SCREEN[w], encounter_class: d.encounter_class === classFor(d.work) ? classFor(w) : d.encounter_class })
-    // at least one screen stays; the one it opens on is always among them
-    const flip = (k: string) => { const on = d.screens.includes(k); const next = on ? d.screens.filter((x) => x !== k) : [...d.screens, k]
-      if (next.length) e.set({ screens: next, opens: next.includes(d.opens) ? d.opens : next[0] }) }
-    return <><EditPanel dirty={e.dirty} saving={save.isPending} error={save.error ?? retire.error ?? del.error} canSave={!!d.name.trim() && d.screens.length > 0} onCancel={e.cancel}
+      : { work: w, screens: lineOf(w).screens, opens: lineOf(w).opens ?? '', encounter_class: d.encounter_class === classFor(d.work) ? classFor(w) : d.encounter_class })
+    return <><EditPanel dirty={e.dirty} saving={save.isPending} error={save.error ?? retire.error ?? del.error} canSave={!!d.name.trim() && (d.screens.length > 0 || d.work === 'outside')} onCancel={e.cancel}
       onSave={() => save.mutate({ id: e.id!, d, was: existing }, { onSuccess: e.done })}
       aside={existing && <><RetireButton what={existing.name} onRetire={() => retire.mutate(existing.id, { onSuccess: e.done })} /><DeleteButton what={existing.name} onDelete={() => del.mutate(existing.id, { onSuccess: e.done })} /></>}>
       <div className={cn('grid gap-3', sites.length ? 'sm:grid-cols-[1fr_11rem_11rem]' : 'sm:grid-cols-[1fr_11rem]')}>
@@ -98,12 +97,7 @@ export function DepartmentsPage({ org }: { org: Organization }) {
         <FormRow label="Kind of encounter" changed={e.changed('encounter_class')} hint={`What its ${d.work === 'stays' ? 'stays' : 'visits'} are called in a FHIR export (Encounter.class). Unless set, ${d.work === 'stays' ? 'a ward\'s are inpatient' : 'a clinic\'s are outpatient'}.`}>
           <Select value={d.encounter_class} onChange={(x) => e.set({ encounter_class: x.target.value as EncounterClass })} className="max-w-60">{CLASSES.map(([k, l]) => <option key={k} value={k}>{l} · {k}</option>)}</Select></FormRow></>}
       </Fieldset>}
-      {screens.length > 0 && <Fieldset title="Screens">
-        <FormRow label="Screens" changed={e.changed('screens')} hint="What the people here work in. A pack that is on may add its own; at least one stays.">
-          <div className="flex flex-wrap gap-1.5">{keys.map((k) => <Chip variant="check" shape="pill" key={k} on={d.screens.includes(k)} onClick={() => flip(k)}>{screenName(k)}</Chip>)}</div></FormRow>
-        {d.screens.length > 1 && <FormRow label="Opens first" changed={e.changed('opens')} hint="The screen the department opens on.">
-          <Segmented value={d.opens} onChange={(v) => e.set({ opens: v })} options={d.screens.map((k): [string, string] => [k, screenName(k)])} /></FormRow>}
-      </Fieldset>}
+      <PacksAndScreens org={org} d={d} set={(x) => e.set(x)} changed={(k) => e.changed(k)} />
     </EditPanel>
     {existing && existing.work !== 'outside' && <PlacesEditor org={org} dept={existing} />}</> }
 
@@ -115,16 +109,19 @@ export function DepartmentsPage({ org }: { org: Organization }) {
       return <Section flush key={w} id={`dept.${w}`} title={label} count={ds.length} summary={ds.map((d) => d.name).join(', ')}
         right={w !== 'outside' && <IconButton title={`Add to ${label.toLowerCase()}`} onClick={() => add(w)}><Plus className="h-3.5 w-3.5" /></IconButton>}>
         <ul className="divide-y divide-line">{ds.map((d) => { const serves = d.work === 'desk' ? d.checks_in_for : d.serves
+          // the line as the department shows it: a pack screen not used here is back to what it stood in for, so it can be saved
+          const line = lineHere(d, org.screens)
           return <Row key={d.id} open={e.id === d.id && !e.isNew} editor={editor}
           onToggle={() => open(d.id, { name: d.name, work: d.work, site_id: d.site_id, serves: served(serves), patients_wait: d.patients_wait, review_results: d.review_results, is_private: d.is_private,
-            after_done: d.after_done ?? 'next', encounter_class: d.encounter_class ?? classFor(d.work), screens: d.screens, opens: d.opens ?? d.screens[0] ?? DEFAULT_SCREEN[d.work] })}>
+            after_done: d.after_done ?? 'next', encounter_class: d.encounter_class ?? classFor(d.work), packs: d.packs, screens: line.screens, opens: line.opens ?? '' })}>
           <span className="w-48 truncate font-medium">{d.name}</span>
           {d.site_name && <span className="text-12 text-faint">{d.site_name}</span>}
           {d.is_visited && <span className="flex flex-wrap gap-1">
             <Badge>{d.patients_wait ? 'Patient waits' : 'Goes home'}</Badge><Badge>Review: {REVIEW.find(([k]) => k === d.review_results)?.[1].toLowerCase()}</Badge>{d.is_private && <Badge tone="warn">Private department</Badge>}
             {d.encounter_class && d.encounter_class !== classFor(d.work) && <Badge>{CLASSES.find(([k]) => k === d.encounter_class)?.[1] ?? d.encounter_class}</Badge>}</span>}
           {d.after_done === 'queue' && d.work !== 'desk' && d.work !== 'outside' && <Badge>Then: queue</Badge>}
-          {d.screens.some((k) => k !== DEFAULT_SCREEN[d.work]) && <Badge tone="info">{d.screens.map(screenName).join(' · ')}</Badge>}
+          {d.packs.length > 0 && <Badge>Uses {d.packs.map(packName).join(', ')}</Badge>}
+          {JSON.stringify(line.screens) !== JSON.stringify(baseLine(d.work, org.screens)) && <Badge>{line.screens.map(screenName).join(' · ')}</Badge>}
           {(d.work === 'desk' || d.work === 'bench') && <span className="text-12 text-faint">{d.work === 'desk' ? 'checks in for' : 'works for'} {served(serves).map((x) => nameOf(x, d.work)).join(', ')}</span>}
           <PlacesCount places={org.places.filter((p) => p.department_id === d.id)} />
         </Row> })}</ul>

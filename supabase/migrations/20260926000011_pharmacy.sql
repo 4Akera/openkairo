@@ -18,7 +18,7 @@ begin
   execute format('alter default privileges for role %I revoke execute on functions from public', r);   -- global: a per-schema default cannot take it away
   execute format('grant execute on function core.pack_entries(uuid, uuid[]), core.may(uuid, text, uuid), core.setting_at(uuid, text, uuid, timestamptz),
     core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.kinds(text), core.base_of(text),
-    core.refuse(text, text), core.hint(text), core.layer_on(uuid, text) to %I', r);
+    core.refuse(text, text), core.hint(text), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text) to %I', r);
 end $$;
 -- the entries of these items (every version), the entries that refer to them and the entries they refer to: a pack's only way to
 -- read the record
@@ -151,6 +151,7 @@ select core.declare_type('pharmacy.dispense', 1, 'pharmacy', '{"type":"object","
   'pharmacy.dispense_line(jsonb)', array['Task'], base_type => 'step', checks => array['pharmacy.dispense_check(jsonb,jsonb)']::regprocedure[],
   feeds => array['pharmacy.queue'], labels => '{"en":"Dispense","ar":"صرف"}');
 select core.declare_listener('pharmacy', array['order', 'medication'], 'pharmacy.queue_refresh(uuid,uuid[])');
-select core.declare_screen('pharmacy.dispensing', 'pharmacy', 'bench', '{"en":"Dispensing"}');
+-- its one screen for the work sent to a pharmacy: the bench's list and actions for dispensing, so it stands in for the bench (§5.1 rule 4)
+select core.declare_screen('pharmacy.dispensing', 'pharmacy', 'bench', '{"en":"Dispensing"}', 'read:pharmacy.queue', array['base.bench']);
 select core.declare_role('00000000-0000-0000-0000-00000000ca01', 'pharmacist', 'pharmacy', 'Pharmacist', array[
   'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out'], '{"en":"Pharmacist"}');

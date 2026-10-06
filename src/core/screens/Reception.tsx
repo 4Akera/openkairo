@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Search as SearchIcon } from 'lucide-react'
+import { Plus, Search as SearchIcon } from 'lucide-react'
 import { usePatientSearch } from '../hooks/reads'
 import { useDepartment } from '../hooks/organization'
 import { useVisitActions } from '../hooks/writes'
 import { rememberPatient } from '../hooks/recent'
 import type { PatientHit } from '../db/types'
-import { Callout, Card, Input, Kbd, cn, errorText, movedMouse } from '../ui'
+import { Button, Callout, Card, Input, Kbd, ScreenFrame, cn, errorText, movedMouse } from '../ui'
+import type { ScreenProps } from './registry'
 import { NewPatient } from '../shell/NewPatient'
 import { Clinics, LastSent, NeedsYou, Today } from './reception/Lists'
 import { PatientCard, type CardHandle } from './reception/PatientCard'
 import { ageSex, fullName, readLastClinic, useClinicRows, useDoneToday, writeLastClinic } from './reception/words'
 
-/** Reception (spec 05). Left: find, then act on one patient card (already here → where, Move · Urgent · Left · Edit;
+/** Reception (base.desk, spec 05). The search sits in the frame's toolbar, with New patient. Left: find, then act on one patient card (already here → where, Move · Urgent · Left · Edit;
  *  not here → Send, ↵ the clinic this desk used last, a letter for another, ⇧↵ urgent; not found → register and send).
  *  Idle, the left shows Today's five numbers. Right: clinics, what needs you (only when something does), the last few
  *  sent with Undo. */
-export function ReceptionScreen({ departmentId }: { departmentId: string }) {
+export function ReceptionScreen({ dept }: ScreenProps) {
+  const departmentId = dept.id
   const orgId = null
   const { org, can } = useDepartment()
   const visits = useVisitActions()
@@ -80,15 +82,16 @@ export function ReceptionScreen({ departmentId }: { departmentId: string }) {
     box.current?.focus()
   }
 
+  const searchBox = <div className="relative w-full sm:w-96"><SearchIcon className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+    <Input ref={box} autoFocus value={q} onChange={(e) => { setQ(e.target.value); setCursor(0); setKbd(true) }} onKeyDown={onKey} aria-label="Find a patient"
+      placeholder="Name, phone, national ID or number" className="ps-9" /></div>
   return (
-    <div className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
+    <ScreenFrame search={!creating && searchBox} action={canCreate && !creating && <Button variant="outline" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New patient</Button>}
+      notice={said && <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout>}>
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
       <div className="grid min-w-0 content-start gap-3">
-        {said && <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout>}
-        {!creating && <Card className="p-3">
-          <div className="relative"><SearchIcon className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
-            <Input ref={box} autoFocus value={q} onChange={(e) => { setQ(e.target.value); setCursor(0); setKbd(true) }} onKeyDown={onKey} aria-label="Find a patient"
-              placeholder="Name, phone, national ID or number" className="h-11 ps-9 text-16" /></div>
-          {searching && <div className="mt-2 flex flex-wrap gap-1.5" role="listbox" aria-label="Patients found" onMouseMove={(e) => kbd && movedMouse(e) && setKbd(false)}>
+        {searching && <Card className="p-3">
+          <div className="flex flex-wrap gap-1.5" role="listbox" aria-label="Patients found" onMouseMove={(e) => kbd && movedMouse(e) && setKbd(false)}>
             {list.map((p, i) => <button key={p.id} type="button" tabIndex={-1} role="option" aria-selected={i === c} onClick={() => { setCursor(i); card.current?.focus() }}
               className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-13 ring-1 transition-colors',
                 i === c ? 'bg-accent-soft text-accent ring-accent' : cn('text-muted ring-line', !kbd && 'hover:ring-line-strong'))}>
@@ -98,7 +101,7 @@ export function ReceptionScreen({ departmentId }: { departmentId: string }) {
             {canCreate && !q.trim().startsWith('#') && <button type="button" tabIndex={-1} onClick={() => setCreating(true)}
               className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-13 ring-1', nobody ? 'bg-accent-soft font-medium text-accent ring-accent' : cn('text-accent ring-line', !kbd && 'hover:ring-line-strong'))}>
               + New patient “{q.trim()}”{nobody && <Kbd>↵</Kbd>}</button>}
-          </div>}
+          </div>
           {nobody && <p className="mt-2 px-1 text-14 text-faint">Nobody found for “{d.trim()}”.</p>}
           {hits.error && <p className="mt-2 px-1 text-14 text-danger">{errorText(hits.error)}</p>}
           {list.length > 0 && <p className="mt-2 flex flex-wrap items-center gap-1 px-1 text-11 text-faint"><Kbd>↑</Kbd><Kbd>↓</Kbd> choose
@@ -125,5 +128,6 @@ export function ReceptionScreen({ departmentId }: { departmentId: string }) {
         <LastSent rows={rows} onDone={setSaid} />
       </div>
     </div>
+    </ScreenFrame>
   )
 }

@@ -23,8 +23,6 @@ export function banner(i: Identity, deceased?: DeceasedRow | null): PatientBanne
 
 // ── the directory: the organization, its departments, services, presets, people and roles ──
 const WORK_TYPE: Record<string, string> = { desk: 'reception', visits: 'clinic', stays: 'ward', bench: 'ancillary', outside: 'outside' }
-/** a department's default screen, by its work */
-export const DEFAULT_SCREEN: Record<string, string> = { desk: 'base.desk', visits: 'base.queue', stays: 'base.beds', bench: 'base.bench', outside: 'base.bench' }
 /** the settings as they stand, each read in its key's declared shape (shapes.generated.ts; write_setting checked it against that shape) */
 function current(settings: SettingRow[]) {
   const by = new Map<string, SettingRow>()
@@ -43,13 +41,13 @@ const fieldOf = (f: NonNullable<SettingData['service']['fields']>[number], i: nu
 export function directory(m: ServerMe): Organization {
   const s = current(m.settings)
   const site = (id: string | null) => m.sites.find((x) => x.id === id)?.name ?? null
+  // the Screens line and the packs used here come with the department (read 'me'): the client never guesses them
   const all: Department[] = m.departments.map((d) => {
-    const screens = s.one('department.screens', d.id)?.screens ?? [DEFAULT_SCREEN[d.work]]
-    return { id: d.id, name: d.name, work: d.work, type: d.work === 'bench' && screens.some((x) => x.startsWith('pharmacy.')) ? 'pharmacy' : WORK_TYPE[d.work], is_visited: d.work === 'visits' || d.work === 'stays',
+    return { id: d.id, name: d.name, work: d.work, type: WORK_TYPE[d.work], is_visited: d.work === 'visits' || d.work === 'stays',
       is_outside: d.work === 'outside', site_id: d.site_id, site_name: site(d.site_id), position: d.position, serves: ids(s.one('department.works_for', d.id)), checks_in_for: ids(s.one('department.checks_in_for', d.id)),
       patients_wait: s.one('department.patients_wait', d.id)?.wait ?? true, review_results: s.one('department.review_results', d.id)?.level ?? 'critical',
       is_private: !!s.one('department.private', d.id)?.private, after_done: s.one('department.after_done', d.id)?.after ?? 'next', pack_cards: true,
-      screens, opens: s.one('department.screens', d.id)?.opens ?? screens[0] ?? null, encounter_class: s.one('department.encounter_class', d.id)?.class ?? null }
+      screens: d.screens ?? [], opens: d.opens ?? d.screens?.[0] ?? null, packs: d.packs ?? [], encounter_class: s.one('department.encounter_class', d.id)?.class ?? null }
   })
   const live = all.filter((d) => !m.departments.find((x) => x.id === d.id)?.retired_at)
   const services: Service[] = s.many('service').map((r) => ({ id: r.thing_id, department_id: r.owner_id, section_name: r.data.section ?? null, code: r.data.code,

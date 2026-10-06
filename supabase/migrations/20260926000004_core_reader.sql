@@ -110,7 +110,17 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
     'organization', (select jsonb_build_object('id', o.id, 'name', o.name, 'time_zone', coalesce(core.setting_at(o.id, 'organization.time_zone', o.id) ->> 'zone', 'Africa/Cairo'),
         'packs_used', to_jsonb(core.packs_used(o.id))) from core.organizations o where o.id = me.organization_id),
     'sites', coalesce((select jsonb_agg(to_jsonb(s) - 'organization_id') from core.sites s where s.organization_id = me.organization_id), '[]'),
-    'departments', coalesce((select jsonb_agg(to_jsonb(d) - 'organization_id' order by d.position, d.name) from core.departments d where d.organization_id = me.organization_id), '[]'),
+    -- each department with the packs it uses (ticked and on, §5.1 rule 1) and its Screens line: the one set, else the screens of its work
+    -- from the base and the packs it uses, the base's first, without a base screen one of those stands in for (one tick brings the tabs)
+    'departments', coalesce((select jsonb_agg(to_jsonb(d) - 'organization_id'
+        || jsonb_build_object('packs', coalesce((select jsonb_agg(x) from jsonb_array_elements_text(coalesce(core.setting_at(d.organization_id, 'department.packs', d.id) -> 'packs', '[]')) x
+                                                  where core.department_uses(d.organization_id, d.id, x)), '[]'))
+        || coalesce(core.setting_at(d.organization_id, 'department.screens', d.id),
+                    jsonb_build_object('screens', coalesce((select jsonb_agg(s.key order by s.layer <> 'base', s.key) from core.screens s
+                      where s.layer <> 'core' and s.work = d.work and core.department_uses(d.organization_id, d.id, s.layer)
+                        and not exists (select 1 from core.screens x where x.work = d.work and s.key = any (x.replaces)
+                                          and core.department_uses(d.organization_id, d.id, x.layer))), '[]')))
+        order by d.position, d.name) from core.departments d where d.organization_id = me.organization_id), '[]'),
     'places', coalesce((select jsonb_agg(to_jsonb(p) - 'organization_id' order by p.position, p.name) from core.places p where p.organization_id = me.organization_id), '[]'),
     'users', coalesce((select jsonb_agg(jsonb_build_object('id', u.id, 'name', u.name, 'title', u.title, 'kind', u.kind, 'retired_at', u.retired_at,
           'signed_in_at', u.signed_in_at, 'has_login', u.login_id is not null) order by u.name) from core.users u where u.organization_id = me.organization_id), '[]'),
@@ -130,7 +140,8 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
     'registry', jsonb_build_object(
       'types', coalesce((select jsonb_agg(jsonb_build_object('key', t.key, 'version', t.version, 'layer', t.layer, 'base_type', t.base_type, 'resources', t.resources,
           'in_record', t.in_record, 'may_be_private', t.may_be_private, 'labels', t.labels) order by t.key, t.version) from core.types t), '[]'),
-      'screens', coalesce((select jsonb_agg(to_jsonb(s) order by s.key) from core.screens s where core.layer_on(me.organization_id, s.layer)), '[]'),
+      -- every screen, a pack's off included: a line naming one whose pack is not used shows the base screens it stands in for
+      'screens', coalesce((select jsonb_agg(to_jsonb(s) order by s.key) from core.screens s), '[]'),
       'setting_keys', coalesce((select jsonb_agg(jsonb_build_object('key', k.key, 'layer', k.layer, 'owner_kind', k.owner_kind, 'many', k.many, 'labels', k.labels)) from core.setting_keys k), '[]'),
       'packs', coalesce((select jsonb_agg(jsonb_build_object('key', l.key, 'version', l.version, 'requires', l.requires, 'labels', l.labels,
           'used', l.key = any (core.packs_used(me.organization_id)),

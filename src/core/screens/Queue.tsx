@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { useRequestQueue, useVisitQueue } from '../hooks/reads'
 import { useVisitActions } from '../hooks/writes'
 import { useDepartment } from '../hooks/organization'
 import type { QueueRow } from '../db/types'
-import { Card, Input, ListRow, ListSection, Spinner, Tag, minutesSince, movedMouse } from '../ui'
+import { Card, Empty, Input, ListRow, ListSection, Spinner, Tag, minutesSince, movedMouse } from '../ui'
 import { ageSex, backIn, matches, nextPatient, pendingWords, since, yearsOld } from './clinic/words'
 
 
@@ -13,7 +13,9 @@ import { ageSex, backIn, matches, nextPatient, pendingWords, since, yearsOld } f
  *  results (folded) and Done today. Typing filters (name or record number; every letter, so a name may start with N),
  *  ↑↓ move, ↵ opens (with nothing typed or moved, the Next row), Esc clears. `compact` is the plain list another screen
  *  shows (no filter, no Next). */
-export function QueueList({ departmentId, compact = false, keys = false }: { departmentId: string; compact?: boolean; keys?: boolean }) {
+export function QueueList({ departmentId, compact = false, keys = false, frame }: { departmentId: string; compact?: boolean; keys?: boolean
+  frame?: (search: ReactNode, list: ReactNode) => ReactNode   // the screen's frame: the filter goes in its toolbar, the list under it
+}) {
   const q = useVisitQueue(departmentId); const navigate = useNavigate()
   const { org, can } = useDepartment(); const visits = useVisitActions()
   const [filter, setFilter] = useState(''); const [cursorId, setCursorId] = useState<string | null>(null); const [showPending, setShowPending] = useState(false)
@@ -62,9 +64,11 @@ export function QueueList({ departmentId, compact = false, keys = false }: { dep
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   })
 
-  if (q.isLoading) return <Spinner label="Loading queue" />
-  if (q.error) return <p className="text-14 text-danger">{q.error.message}</p>
-  if (compact && !all.length) return <Card className="p-6 text-center text-14 text-faint">Nobody here yet.</Card>
+  const search = !compact && <Input ref={input} value={filter} onChange={(e) => setText(e.target.value)} onKeyDown={onInputKey} aria-label="Filter the list"
+    placeholder="Type a name or number — ↵ takes the next patient" className={frame ? 'w-full sm:w-80' : undefined} />
+  const wait = q.isLoading ? <Spinner label="Loading queue" /> : q.error ? <p className="text-14 text-danger">{q.error.message}</p> : null
+  if (wait) return frame ? <>{frame(search, wait)}</> : wait
+  if (compact && !all.length) return <Card><Empty>Nobody here yet.</Empty></Card>
   const row = (r: QueueRow, isNext: boolean) => { const n = at.get(r.id) ?? -1; return <ListRow key={r.id} number={r.patient.record_number}
     name={<>{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ms-1.5 inline h-3.5 w-3.5 text-danger" aria-label="allergies" />}</>}
     age={ageSex(r.patient.age, r.patient.sex)} status={<Status r={r} />} who={r.band === 'back' || r.band === 'consult' ? r.assignee_name : null}
@@ -72,17 +76,14 @@ export function QueueList({ departmentId, compact = false, keys = false }: { dep
     actions={r.band === 'pending' && can('write:not_here') ? <button type="button" disabled={visits.present.isPending} title="The patient left: results go to the doctor's review list"
       onClick={() => visits.present.mutate({ visit: r.visit, is_present: false })}
       className="rounded-md px-2 py-0.5 text-11 text-faint ring-1 ring-line hover:bg-surface hover:text-danger hover:ring-danger-line">Gone</button> : undefined} /> }
-  return <div className="grid gap-2">
-    {!compact && <Input ref={input} value={filter} onChange={(e) => setText(e.target.value)} onKeyDown={onInputKey} aria-label="Filter the list"
-      placeholder="Type a name or number — ↵ takes the next patient" />}
-    <Card className="overflow-hidden"><ul ref={list} onMouseMove={(e) => { if (kbd && movedMouse(e)) { setKbd(false); setArrows(false) } }}>
+  const body = <Card className="overflow-hidden"><ul ref={list} onMouseMove={(e) => { if (kbd && movedMouse(e)) { setKbd(false); setArrows(false) } }}>
       {sections.map((s) => s.rows.length > 0 && <ListSection key={s.key} title={s.title} count={s.key === 'next' ? undefined : s.rows.length}
         folded={s.fold ? folded : undefined} onToggle={s.fold ? () => setShowPending(!showPending) : undefined}>{s.rows.map((r) => row(r, s.key === 'next'))}</ListSection>)}
-      {!all.length && <li className="px-4 py-5 text-center text-14 text-faint">Nobody waiting.</li>}
-      {all.length > 0 && f && !sections.some((s) => s.rows.length) && <li className="px-4 py-5 text-center text-14 text-faint">No one matches “{f}”.</li>}
+      {!all.length && <li><Empty>Nobody waiting.</Empty></li>}
+      {all.length > 0 && f && !sections.some((s) => s.rows.length) && <li><Empty>No one matches “{f}”.</Empty></li>}
       {!compact && !f && <ListSection title="Done today" count={q.data?.done_today ?? 0} />}
     </ul></Card>
-  </div>
+  return frame ? <>{frame(search, body)}</> : <div className="grid gap-2">{search}{body}</div>
 }
 
 /** what is happening, in words: back with what came in; urgent, 1st visit, vitals taken, not here; with whom; waiting for what.
@@ -102,7 +103,7 @@ export function RequestList({ departmentId }: { departmentId: string }) {
   if (q.isLoading) return <Spinner label="Loading requests" />
   if (q.error) return <p className="text-14 text-danger">{q.error.message}</p>
   const rows = q.data?.requests ?? []
-  if (!rows.length) return <Card className="p-6 text-center text-14 text-faint">No open requests.</Card>
+  if (!rows.length) return <Card><Empty>No open requests.</Empty></Card>
   return <Card className="overflow-hidden"><ul>{rows.map((r) => { const p = r.request?.priority; const step = r.request?.step; return <ListRow key={r.id}
     number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(yearsOld(r.patient.born_on), r.patient.sex)}
     status={<>{p && p !== 'routine' && <Tag tone="danger">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-faint"> — “{r.question_text}”</span>}</span>

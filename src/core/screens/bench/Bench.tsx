@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RecentRow } from '../../db/types'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, ScanLine } from 'lucide-react'
+import { ScanLine } from 'lucide-react'
 import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue } from '../../hooks/reads'
 import { refresh } from '../../hooks/writes'
@@ -10,14 +10,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import { write, type EntryIn } from '../../db/rpc'
 import { answerEntry, oneSet, stepEntry } from '../../db/entries'
 import type { RequestQueueRow } from '../../db/types'
-import { Button, Card, Chip, Input, Kbd, ListRow, ListSection, Spinner, Tag, cn, minutesSince, movedMouse, hm, shortDate } from '../../ui'
+import { Button, Card, Chip, Empty, Input, Kbd, ListRow, ListSection, ScreenFrame, Spinner, Tag, cn, minutesSince, movedMouse, hm, shortDate, type ScreenView } from '../../ui'
+import type { ScreenProps } from '../registry'
 import { ageSex, groupByPatient, matches, nextSteps, phaseOf, splitByDay, stepName, stepWords, testsLine, todayYmd, type DayGroup, type Phase } from './shared'
 
 type Segment = Phase | 'done'
 
-/** The bench: whose sample is next, and what is waiting on us. Scan or type, then one row per patient in three segments —
- *  to collect (not started), in progress, done today — today's work only; older open requests fold at the bottom. */
-export function Bench({ departmentId, name, type }: { departmentId: string; name: string; type: string }) {
+/** The bench (base.bench): whose sample is next, and what is waiting on us. Scan or type, then one row per patient in three views,
+ *  counted in the toolbar — to collect (not started), in progress, done today — today's work only; older open requests fold at the bottom. */
+export function Bench({ dept }: ScreenProps) {
+  const departmentId = dept.id; const type = dept.type
   const q = useRequestQueue(departmentId); const navigate = useNavigate(); const { org, can } = useDepartment()
   const [stepping, setStepping] = useState(false)
   const [find, setFind] = useState(''); const [section, setSection] = useState<string | null>(null); const [seg, setSeg] = useState<Segment>('todo')
@@ -89,18 +91,14 @@ export function Bench({ departmentId, name, type }: { departmentId: string; name
       selected={i === c && arrows} enter={i === c && !arrows && !!f} hover={!kbd} className={i === c ? 'bench-cursor' : undefined} onOpen={() => open(g.patient.id)} />
   }
 
-  return <div className="mx-auto grid max-w-5xl gap-3 p-4">
-    <h1 className="flex items-center gap-2 text-18 font-semibold tracking-tight"><ClipboardList className="h-5 w-5 text-accent" />{name}</h1>
-    <div className="relative"><ScanLine className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
-      <Input ref={box} autoFocus value={find} onChange={(e) => { setFind(e.target.value); setCursor(0); setKbd(!!e.target.value); setArrows(false) }} onKeyDown={onKey} placeholder="Scan or type a record number or name" className="h-11 ps-9 text-16" />
-      <span className="absolute end-3 top-1/2 -translate-y-1/2 text-faint"><Kbd>/</Kbd></span></div>
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <div role="tablist" className="inline-flex rounded-lg bg-sunken p-0.5 text-14">{segs.map(([k, l, m]) =>
-        <button key={k} role="tab" aria-selected={seg === k} onClick={() => pick(k)} className={cn('rounded-md px-3 py-1.5 font-medium transition-colors', seg === k ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg')}>
-          {l} <span className={cn('ms-0.5 tnum', seg === k ? 'text-faint' : 'text-faint')}>{m}</span></button>)}</div>
-      {(sections.length > 1 || section) && <div className="flex flex-wrap gap-1 text-12">{sections.map((s) => <Chip key={s} shape="pill" on={section === s} onClick={() => { setSection(section === s ? null : s); setCursor(0) }}>{s}</Chip>)}</div>}
-      <span className="ms-auto hidden text-11 text-faint sm:block">↑↓ move · ↵ open · Esc clear</span>
-    </div>
+  // the frame's toolbar: the three views counted (to collect in a state colour while any wait), the sections, the scan box
+  const views: ScreenView<Segment>[] = segs.map(([id, label, count]) => ({ id, label, count, ...(id === 'todo' ? { needs: 'warn' as const } : {}) }))
+  const scan = <div className="relative w-full sm:w-80"><ScanLine className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+    <Input ref={box} autoFocus value={find} onChange={(e) => { setFind(e.target.value); setCursor(0); setKbd(!!e.target.value); setArrows(false) }} onKeyDown={onKey} placeholder="Scan or type a record number or name"
+      aria-label="Scan or type a record number or name — ↑↓ move · ↵ open · Esc clear" className="ps-9 pe-8" />
+    <span className="absolute end-3 top-1/2 -translate-y-1/2 text-faint"><Kbd>/</Kbd></span></div>
+  const chips = (sections.length > 1 || section) && <div className="flex flex-wrap gap-1 text-12">{sections.map((s) => <Chip key={s} shape="pill" on={section === s} onClick={() => { setSection(section === s ? null : s); setCursor(0) }}>{s}</Chip>)}</div>
+  return <ScreenFrame views={views} view={seg} onView={pick} filters={chips} search={scan}>
     {q.isLoading ? <Spinner label="Loading requests" /> : <Card><ul ref={list} onMouseMove={(e) => { if (kbd && movedMouse(e)) { setKbd(false); setArrows(false) } }}>
       {lists ? <>
         {lists.today.length ? lists.today.map((g, i) => row(g, i, false)) : f && lists.older.length ? null : none(seg === 'todo' ? `Nobody ${first.toLowerCase()} today.` : 'Nothing in progress today.')}
@@ -109,12 +107,12 @@ export function Bench({ departmentId, name, type }: { departmentId: string; name
       </> : done.length ? done.map((r, i) => <Released key={r.id} r={r} next={i === c && (kbd || !!f)} onCorrect={() => navigate(`/bench/correct/${r.id}`)} />)
         : none('Nothing released in the last 24 hours.')}
     </ul></Card>}
-  </div>
+  </ScreenFrame>
 }
 /** an empty list; while scanning, where the patient is instead */
 function Nothing({ text, others, onPick }: { text: string; others: [Segment, string, number][]; onPick: (s: Segment) => void }) {
-  return <li className="px-4 py-6 text-center text-14 text-faint">{text}
-    {others.length > 0 && <> Found in {others.map(([k, l, m], j) => <span key={k}>{j > 0 && ', '}<button onClick={() => onPick(k)} className="rounded-sm font-medium text-accent hover:underline focus-ring">{l} {m}</button></span>)}.</>}</li>
+  return <li><Empty>{text}
+    {others.length > 0 && <> Found in {others.map(([k, l, m], j) => <span key={k}>{j > 0 && ', '}<button onClick={() => onPick(k)} className="rounded-sm font-medium text-accent hover:underline focus-ring">{l} {m}</button></span>)}.</>}</Empty></li>
 }
 
 /** one result released in the last day, newest first; Correct replaces it (the record keeps both, the doctor is asked to look again) */

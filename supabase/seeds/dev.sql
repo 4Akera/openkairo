@@ -20,7 +20,9 @@ select public.save('department', '{"id":"00000000-0000-0000-0000-00000000d004","
 -- a private department (spec §4.3): every note and result written there is private
 select public.write_setting('{"key":"department.private","owner_id":"00000000-0000-0000-0000-00000000d005","data":{"private":true}}');
 select public.write_setting('{"key":"department.encounter_class","owner_id":"00000000-0000-0000-0000-00000000d006","data":{"class":"IMP"}}');
-select public.write_setting('{"key":"department.screens","owner_id":"00000000-0000-0000-0000-00000000d004","data":{"screens":["pharmacy.dispensing","base.bench"],"opens":"pharmacy.dispensing"}}');
+-- the packs each department uses (§5.1 rule 1): the pharmacy ticks pharmacy, and its Dispensing stands in for the bench
+select public.write_setting('{"key":"department.packs","owner_id":"00000000-0000-0000-0000-00000000d004","data":{"packs":["pharmacy"]}}');
+select public.write_setting('{"key":"department.screens","owner_id":"00000000-0000-0000-0000-00000000d004","data":{"screens":["pharmacy.dispensing"],"opens":"pharmacy.dispensing"}}');
 -- the ward's beds
 select public.save('place', jsonb_build_object('id', ('00000000-0000-0000-0000-0000000b0' || lpad(n::text, 3, '0'))::uuid, 'department_id', '00000000-0000-0000-0000-00000000d006',
   'label', 'bed', 'name', 'Bed ' || n, 'position', n)) from generate_series(1, 8) n;

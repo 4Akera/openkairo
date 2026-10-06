@@ -1,7 +1,7 @@
 // The composer's commands and cards (spec 05, 06): "/" starts a command; anything else is note text.
 // Core registers its commands here the same way a pack registers its own (in src/packs/<key>): a pack's command
 // writes the pack's own type through its own write function. The "/" menu lists the commands the reader's role
-// may write in this department, and a pack's only while the pack is on in this organization.
+// may write in this department, and a pack's only where this department uses the pack (§5.1 rule 1; elsewhere typing it says where).
 // A pack never takes a command over for the whole clinic: a name that is taken is refused. It may give its own
 // department type its own version of a core command (overrideCommand) and its own card (registerCard) — which still
 // write what the core command writes, so the record keeps one medication list, one problem list — and each
@@ -15,7 +15,7 @@ export interface Command {
   label: string                     // what it writes, in the clinic's words
   example: string                   // a line that shows how it is typed
   action: string                    // the action a role needs to see it, e.g. write:prescription
-  pack?: string                     // a pack's command shows only while the pack is on
+  pack?: string                     // a pack's command shows only in a department that uses the pack
   writes?: string[]                 // the write functions its drafts call: a department's version must call the same
   /** the text after the command → drafts (null: nothing typed yet) */
   parse: (rest: string, ctx: Ctx) => Result
@@ -44,8 +44,11 @@ function resolve(c: Command, w?: Where): Command {
 }
 /** "rx", "RX", "plan:" → the command (this department's version), if one is registered under that name or alias */
 export const commandNamed = (word: string, w?: Where) => { const n = names.get(word.toLowerCase().replace(/:$/, '')); const c = n ? commands.get(n) : undefined; return c ? resolve(c, w) : undefined }
-/** may this reader use it here: their role holds its action, and its pack is on (no ctx.can: every command, as in tests and previews) */
+/** may this reader use it here: their role holds its action, and this department uses its pack (no ctx.can: every command, as in tests and previews) */
 export const allowed = (c: Command, ctx: Pick<Ctx, 'can' | 'packs'>) => (!ctx.can || ctx.can(c.action)) && (!c.pack || !ctx.packs || ctx.packs.includes(c.pack))
+/** where a pack's command works, for a department that does not use its pack */
+export const usedWhere = (name: string, departments: string[]) => departments.length ? `/${name} is used in: ${departments.join(', ')}`
+  : `/${name} is not used in any department here — a department ticks its pack in Settings → Departments`
 export const commandsFor = (ctx: Pick<Ctx, 'can' | 'packs' | 'departmentType' | 'packCards'>) => [...commands.values()].filter((c) => allowed(c, ctx)).map((c) => resolve(c, ctx))
 /** does any pack offer this department type its own commands or cards (Settings shows the switch only then) */
 export const offersFor = (departmentType: string) => overrides.some((o) => o.departmentType === departmentType) || cards.some((c) => c.departmentType === departmentType)

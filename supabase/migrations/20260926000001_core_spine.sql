@@ -296,6 +296,8 @@ create table core.screens (
   key         text primary key,
   layer       text not null references core.layers,
   work        text not null check (work in ('desk', 'visits', 'stays', 'bench', 'outside', 'any')),
+  action      text references core.actions,          -- what a user needs here to see its tab; null: anyone working in the department
+  replaces    text[] not null default '{}',          -- a pack screen stands in for these base screens (a list of work is one screen, §5.1 rule 4)
   labels      jsonb not null default '{}'
 );
 create table core.listeners (

@@ -399,6 +399,10 @@ export interface DepartmentChecksInForSetting {
 export interface DepartmentEncounterClassSetting {
   class: 'AMB' | 'EMER' | 'IMP' | 'OBSENC' | 'SS' | 'VR' | 'HH'
 }
+/** setting department.packs (base; owner department) */
+export interface DepartmentPacksSetting {
+  packs: string[]
+}
 /** setting department.patients_wait (base; owner department) */
 export interface DepartmentPatientsWaitSetting {
   wait: boolean
@@ -522,6 +526,7 @@ export interface SettingData {
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
+  'department.packs': DepartmentPacksSetting
   'department.patients_wait': DepartmentPatientsWaitSetting
   'department.private': DepartmentPrivateSetting
   'department.review_results': DepartmentReviewResultsSetting

@@ -1,19 +1,30 @@
+import { createElement, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDepartment } from '../hooks/organization'
-import { Centered, Spinner } from '../ui'
-import { ReceptionScreen } from './Reception'
-import { Bench } from './bench/Bench'
-import { ClinicHome } from './clinic/ClinicHome'
-import { BedBoard } from './ward/BedBoard'
+import { Centered, Empty, Card, FRAME, NotForRole, ScreenTabs, Spinner } from '../ui'
+import { drawable, screenFor } from './registry'
+import { screensOf, tabRow, tabSearch } from './line'
+import './base'
 
-/** The department's home (spec/openCare.md §4.6): the screen it opens on, by its work — the desk checks in, a clinic works its
- *  queue, a ward its beds, a bench (lab, imaging, a pharmacy's dispensing) its worklist. */
+/** The department's home (spec/openCare.md §5.1 rules 5 and 6): its Screens line as the one row of tabs — only the tabs this user's
+ *  role here opens, at most five then More · n — and the selected screen under it, in the kit's frame. It opens on the line's
+ *  opens; the selected tab is kept in the link (?tab=) and is the screen's title. */
 export function DepartmentScreen() {
-  const { dept, org } = useDepartment()
+  const { dept, org, can } = useDepartment()
+  const [params] = useSearchParams(); const navigate = useNavigate(); const { pathname, search } = useLocation()
+  // More is opened for one department: the next one starts folded (no effect resets it)
+  const [more, setMore] = useState<string | null>(null)
   if (!dept || !org) return <Centered><Spinner /></Centered>
-  const screen = dept.opens ?? ''
-  if (screen === 'base.desk' || dept.work === 'desk') return <ReceptionScreen departmentId={dept.id} />
-  if (screen === 'base.beds' || dept.work === 'stays') return <BedBoard dept={dept} />
-  const offers = org.services.some((s) => s.department_id === dept.id)
-  if (dept.work === 'bench' || dept.work === 'outside') return <Bench departmentId={dept.id} name={dept.name} type={dept.type} />
-  return <ClinicHome dept={dept} offers={offers} />
+  const row = tabRow(dept, org.screens, can, drawable, params.get('tab'), more === dept.id)
+  const Screen = row.current ? screenFor(row.current) : undefined
+  // nothing to show: screens this role does not open here, or none on the line
+  if (!row.first.length) return <div className={`${FRAME} py-6`}>{screensOf(dept, org.screens, drawable).length ? <NotForRole>{dept.name}'s screens are not for your role.</NotForRole>
+    : <Card><Empty>{dept.name} has no screen yet — choose its screens in Settings → Departments.</Empty></Card>}</div>
+  return <>
+    <ScreenTabs label={`${dept.name}: screens`} first={row.first} rest={row.rest} value={row.current} open={row.open}
+      onMore={row.pinned ? undefined : () => setMore(row.open ? null : dept.id)}
+      onChange={(key) => navigate({ pathname, search: tabSearch(search, key, dept.opens) }, { replace: true })} />
+    {/* the registered screen for the selected tab (the registry's, so drawn by createElement, never defined here) */}
+    {Screen && createElement(Screen, { key: `${dept.id}|${row.current}`, dept })}
+  </>
 }

@@ -89,6 +89,12 @@ $$;
 create function core.layer_on(p_org uuid, p_layer text) returns boolean language sql stable security definer set search_path = '' as $$
   select p_layer in ('core', 'base') or p_layer = any (core.packs_used(p_org))
 $$;
+-- does this department use the layer (§5.1 rule 1): the core and the base always; a pack only while the clinic has it on and the
+-- department ticks it (department.packs, the base's key), as of now
+create function core.department_uses(p_org uuid, p_department uuid, p_layer text) returns boolean language sql stable security definer set search_path = '' as $$
+  select p_layer in ('core', 'base') or (p_layer = any (core.packs_used(p_org))
+    and exists (select 1 from jsonb_array_elements_text(coalesce(core.setting_at(p_org, 'department.packs', p_department) -> 'packs', '[]')) x where x = p_layer))
+$$;
 
 -- ── may (§3.1): a null department matches only roles held everywhere. A holding dated no later than its grant counts once
 -- committed, one dated later from core.now_safe(); an end is dated by its own insert (a planned end is valid_until), so it counts
@@ -358,12 +364,26 @@ begin
      hashes = excluded.hashes where core.setting_keys.layer = excluded.layer;
 end $$;
 
-create function core.declare_screen(key text, layer text, work text, labels jsonb default '{}') returns void language plpgsql as $$
+-- a screen: its work, the action its tab needs (the core's, the base's or its own layer's; null: anyone working there) and, for a pack's,
+-- the base screens of the same work it stands in for (pharmacy.dispensing replaces base.bench, §5.1 rules 4 and 6)
+create function core.declare_screen(key text, layer text, work text, labels jsonb default '{}', action text default null, replaces text[] default '{}')
+returns void language plpgsql as $$
 #variable_conflict use_variable
+declare r text;
 begin
   if split_part(key, '.', 1) <> layer then perform core.refuse('outside_prefix', format('%s may not declare screen %s', layer, key)); end if;
-  insert into core.screens (key, layer, work, labels) values (declare_screen.key, declare_screen.layer, declare_screen.work, declare_screen.labels)
-  on conflict on constraint screens_pkey do update set work = excluded.work, labels = excluded.labels where core.screens.layer = excluded.layer;
+  if action is not null and not exists (select 1 from core.actions a where a.key = action and a.layer in ('core', 'base', declare_screen.layer)) then
+    perform core.refuse('unknown_action', action);
+  end if;
+  foreach r in array coalesce(replaces, '{}') loop
+    if not exists (select 1 from core.screens s where s.key = r and s.layer = 'base' and (s.work = declare_screen.work or s.work = 'any')) then
+      perform core.refuse('unknown_screen', format('%s replaces %s, which is no base screen of its work', key, r));
+    end if;
+  end loop;
+  insert into core.screens (key, layer, work, action, replaces, labels)
+  values (declare_screen.key, declare_screen.layer, declare_screen.work, declare_screen.action, coalesce(declare_screen.replaces, '{}'), declare_screen.labels)
+  on conflict on constraint screens_pkey do update set work = excluded.work, action = excluded.action, replaces = excluded.replaces, labels = excluded.labels
+  where core.screens.layer = excluded.layer;
 end $$;
 
 create function core.declare_listener(layer text, types text[], refresh regprocedure) returns void language plpgsql as $$

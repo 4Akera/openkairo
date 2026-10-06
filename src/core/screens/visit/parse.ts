@@ -16,14 +16,15 @@ export interface Ctx {
   departmentId: string                                // this department: its own services are not requested from here
   now?: Date
   can?: (action: string) => boolean                   // the reader's role here: commands it lacks are not offered
-  packs?: string[]                                    // the packs on in this organization
+  packs?: string[]                                    // the packs this department uses (ticked here, and on for the clinic): only theirs are offered
+  usedIn?: (pack: string) => string[]                 // the departments that use a pack, for "/x is used in: …"
   noteKind?: string                                   // what an unlabelled line is: 'progress', or 'nurse' for a nurse
   departmentType?: string                             // this department's type: a pack may give it its own version of a command
   packCards?: boolean                                 // does this department use its packs' cards (departments.pack_cards)
   canSend?: boolean                                   // a pharmacy here answers prescriptions: /rx … send
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
-import { allowed, commandNamed, registerCommand } from './commands'
+import { allowed, commandNamed, registerCommand, usedWhere } from './commands'
 
 /** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
 export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string; action?: string }
@@ -217,6 +218,8 @@ export function parse(input: string, ctx: Ctx): Result {
   const [word, rest] = splitCommand(s)
   const cmd = commandNamed(word, ctx)
   if (!cmd) return { error: `No command /${word} — type / to see them` }
+  // the department before the role: a pack's command here says where it works (a preset's line too)
+  if (cmd.pack && ctx.packs && !ctx.packs.includes(cmd.pack)) return { error: usedWhere(cmd.name, ctx.usedIn?.(cmd.pack) ?? []) }
   if (!allowed(cmd, ctx)) return { error: `/${cmd.name} is not open to your role here` }
   const r = cmd.parse(rest, ctx)
   return r && 'ok' in r ? { ok: r.ok.map((p) => ({ action: cmd.action, ...p })) } : r     // a draft carries the action its command needs

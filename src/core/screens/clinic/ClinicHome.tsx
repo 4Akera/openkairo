@@ -1,37 +1,34 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDepartment } from '../../hooks/organization'
-import { useToReview, useVisitQueue } from '../../hooks/reads'
+import { useRequestQueue, useToReview, useVisitQueue } from '../../hooks/reads'
 import { useWrite } from '../../hooks/writes'
 import { oneSet, reviewed } from '../../db/entries'
 import type { Card as EntryCard, Department, Flag } from '../../db/types'
-import { Button, Card, ListSection, Tag, cn, flagClass, flagMark, shortDate, type Tone } from '../../ui'
+import type { ScreenProps } from '../registry'
+import { Button, Card, Empty, ListSection, ScreenFrame, Tag, cn, flagClass, flagMark, shortDate, type ScreenView, type Tone } from '../../ui'
 import { QueueList, RequestList } from '../Queue'
 
-/** A clinic's home (spec 05): one line of counts, "N to review" only when something waits, then the list. Departments
- *  without visits show the requests addressed to them. */
-export function ClinicHome({ dept, offers }: { dept: Department; offers: boolean }) {
-  const { can } = useDepartment()
+type View = 'queue' | 'requests' | 'review'
+/** A clinic's queue (base.queue, spec/openCare.md §4.6): its views are counted filters in the toolbar — the queue, the requests sent
+ *  to it when it offers services, and "To review" (in a state colour while results wait) — the queue's filter on the right. */
+export function ClinicHome({ dept }: ScreenProps) {
+  const { org, can } = useDepartment()
+  const offers = !!org?.services.some((s) => s.department_id === dept.id)
   const review = useToReview(null, can('write:reviewed'))
   const q = useVisitQueue(dept.is_visited ? dept.id : null)
-  const [reviewing, setReviewing] = useState(false)
-  const rows = q.data?.rows ?? []
-  const count = (b: string) => rows.filter((r) => r.band === b).length
-  const waitingForResults = count('pending'); const withDoctor = count('consult')
-  const counts = dept.is_visited && q.data ? [`${count('waiting')} waiting`, withDoctor > 0 && `${withDoctor} with a doctor`,
-    waitingForResults > 0 && `${waitingForResults} waiting for results`, `${q.data.done_today} done`].filter(Boolean).join(' · ') : null
+  const requests = useRequestQueue(!dept.is_visited || offers ? dept.id : null)
   const toReview = can('write:reviewed') ? review.data ?? [] : []
-  return <div className="mx-auto grid max-w-5xl gap-3 p-4">
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h1 className="text-18 font-semibold tracking-tight">{dept.name}</h1>
-      {counts && <p className="text-14 text-faint tnum">{counts}</p>}
-      {toReview.length > 0 && <button type="button" onClick={() => setReviewing(!reviewing)} aria-expanded={reviewing}
-        className="ms-auto rounded-md text-14 font-medium text-danger hover:underline focus-ring">{toReview.length} to review</button>}
-    </div>
-    {reviewing && toReview.length > 0 && <ToReview cards={toReview} rule={dept.review_results} departmentId={dept.id} />}
-    {dept.is_visited && <QueueList departmentId={dept.id} keys />}
-    {(!dept.is_visited || offers) && <section className="grid gap-1.5"><h2 className="px-1 text-11 font-medium text-faint">Requests for us</h2><RequestList departmentId={dept.id} /></section>}
-  </div>
+  const views: ScreenView<View>[] = [
+    ...(dept.is_visited ? [{ id: 'queue' as const, label: 'Queue', count: (q.data?.rows ?? []).length }] : []),
+    ...(!dept.is_visited || offers ? [{ id: 'requests' as const, label: 'Requests for us', count: requests.data?.requests.length }] : []),
+    ...(can('write:reviewed') ? [{ id: 'review' as const, label: 'To review', count: toReview.length, needs: 'danger' as const }] : [])]
+  const [chosen, setView] = useState<View | null>(null)
+  const view = views.find((v) => v.id === chosen)?.id ?? views[0]?.id ?? 'queue'
+  const frame = (search: ReactNode, content: ReactNode) => <ScreenFrame views={views.length > 1 ? views : undefined} view={view} onView={setView} search={search}>{content}</ScreenFrame>
+  if (view === 'queue') return <QueueList departmentId={dept.id} keys frame={frame} />
+  return frame(null, view === 'requests' ? <RequestList departmentId={dept.id} />
+    : toReview.length ? <ToReview cards={toReview} rule={dept.review_results} departmentId={dept.id} /> : <Card><Empty>Nothing to review.</Empty></Card>)
 }
 
 const REASON: Record<string, [Tone, string]> = { critical: ['danger', 'critical'], abnormal: ['warn', 'abnormal'], not_seen: ['info', 'patient not seen'], corrected: ['warn', 'corrected'], result: ['neutral', 'result'], rejected: ['warn', 'not done'], flag: ['warn', 'flagged'] }

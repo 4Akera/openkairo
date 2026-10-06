@@ -122,7 +122,9 @@ the registry with an owner kind (`organization` · `department` · `place`), a J
 row (settings are never dated ahead, and the clock may step back), and a row records after the thing's row before it. **Checks and
 refreshes read settings as of each entry's `recorded_at`**, so a later range change never alters an old flag and a rebuild stays
 identical. Services, presets, department rules, the packs used here and the Screens line are all settings rows; packs need no
-configuration tables of their own.
+configuration tables of their own. `core.department_uses(organization, department, layer)` answers whether a department uses a layer:
+the core and the base always, a pack only while it is on for the clinic and ticked in the department's `department.packs`, as of now
+(granted to the base's and every pack's role).
 Written only by `public.write_setting`, which checks `may(user, 'manage:settings', owner department)` (or held everywhere for an
 organization key), the shape and the key's check; every change is an AuditEvent.
 
@@ -184,7 +186,9 @@ select core.declare_table   (key => 'base.lists', layer => 'base', refresh => 'b
 select core.declare_rule    (key => 'base.private', layer => 'base', hidden => 'base.private_hidden(uuid,uuid[])');
 select core.declare_action  (key => 'write:note', layer => 'base', scope => 'department', labels => '{…}');
 select core.declare_setting (key => 'department.private', layer => 'base', owner => 'department', shape => '{…}', check_fn => null, many => false);
-select core.declare_screen  (key => 'base.queue', layer => 'base', work => 'visits', labels => '{…}');
+select core.declare_screen  (key => 'pharmacy.dispensing', layer => 'pharmacy', work => 'bench', labels => '{…}',
+                             action => 'read:pharmacy.queue',  -- what a user needs in the department to see its tab; null: anyone working there
+                             replaces => array['base.bench']); -- a pack screen: the base screens of its work it stands in for
 select core.declare_listener(layer => 'pharmacy', types => array['medication','order'], refresh => 'pharmacy.queue_refresh(uuid,uuid[])');
 select core.declare_pack    (key => 'pharmacy', version => 1, requires => '{}', labels => '{…}');
 select core.declare_role    (id, key, layer, actions, labels);   -- a built-in role (read-only to organizations)
@@ -195,6 +199,8 @@ select core.declare_role    (id, key, layer, actions, labels);   -- a built-in r
   DEFINER with `search_path=''`, and live in the layer's schema. Checks, lines, claims, rules and to_fhir must be STABLE (Postgres then
   refuses writes inside them); refreshes must be VOLATILE.
 - Keys must sit inside the layer's prefix: pharmacy cannot declare `note` or `obgyn.x`. `requires` may not form a loop.
+- A screen's action is the core's, the base's or its own layer's (`unknown_action`); what it replaces are base screens of its work
+  (`unknown_screen`).
 - `may_be_private` is refused for a type whose resources include MedicationRequest, MedicationStatement, MedicationAdministration,
   Immunization or AllergyIntolerance, pack types included.
 - Every derived table has `organization_id, patient_id, item, source_entries uuid[]`, so the reader can mask it, and erase and rebuild
@@ -246,7 +252,7 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 
 | shape | returns | needs |
 |---|---|---|
-| `me` | the login's users, the chosen user, the organization, departments, sites, places, users, roles, actions, current settings, the registry the client needs, stale counts | a live user |
+| `me` | the login's users, the chosen user, the organization, departments (each with the packs it uses and its Screens line: the one set, else its work's screens of the base and of the packs it uses, the base's first, without a base screen one of those stands in for), sites, places, users, roles, actions, current settings, the registry the client needs (every screen with its action and what it replaces), stale counts | a live user |
 | `patients` | search hits: identity and open visits | `read:patients` somewhere |
 | `patient` | one patient's identity (the banner) | `read:patients` somewhere |
 | `record` | banner, lists, visits, a page of entries (filters: types, visits, departments, before), key values, hidden counts | `read:record` in the department |
@@ -400,16 +406,26 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
 - Settings keys: `organization.time_zone` and `organization.packs_used` (declared by the core), `organization.record_view` (visits ·
   entries), `department.private`, `department.encounter_class`, `department.after_done` (next · queue), `department.patients_wait`,
   `department.review_results`, `department.works_for` (a bench: department ids, or all), `department.checks_in_for` (a desk: the
-  clinics it checks in for, or all), `department.screens` (the Screens line: the default
-  screen or a pack screen, and which opens first), `service` (owner = the performing department: code, name, section, LOINC coding,
+  clinics it checks in for, or all), `department.packs` (the packs used here, §5.1 rule 1: each a known pack, on for the clinic, once:
+  `unknown_pack`, `pack_off`, `duplicate`), `department.screens` (the Screens line: its tabs in order and which opens first; each
+  screen declared, the base's or of a pack this department uses, of its work, once, never beside a base screen one of them replaces,
+  and opens on the line: `unknown_screen`, `pack_off`, `pack_not_used`, `wrong_work`, `replaced`, `duplicate`, `opens_off_line`), `service` (owner = the performing department: code, name, section, LOINC coding,
   answer type, steps (in order; keys such as `collected`, `received`), fields with LOINC, UCUM units, ranges by sex and age, critical
   ranges, choices), `preset` (name, shortcut, lines, services, department or all), `place.closed`.
 - Actions: `write:<type>` for every type; `read:patients`, `read:record`, `read:queue`, `read:bench`, `read:review`, `read:log`,
   `export:fhir`, `manage:patients`, `manage:settings`, `manage:users`, `manage:roles`, `manage:places`, `erase:patient`.
 - Built-in roles (fixed ids): Owner `…c001` (every action, held everywhere), Doctor `…c002`, Nurse `…c003`, Reception `…c004`, Lab
   technician `…c005`. A pack may ship its own (Pharmacist `…ca01`).
-- Default screens: front desk (work `desk`), queue and visit (work `visits`), bench (work `bench`), bed board (work `stays`), the
-  patient's chart, composer, settings, the style guide (`/design`). All of them write and read through the same two doors.
+- Default screens: front desk (`base.desk`, work `desk`, tab for `read:patients`), queue (`base.queue`, `visits`, `read:queue`), bench
+  (`base.bench`, `bench`, `read:bench`), bed board (`base.beds`, `stays`, `read:queue`); then the patient's chart, composer,
+  settings, the style guide (`/design`). All of them write and read through the same two doors.
+- **A department's screens** (§5.1 rules 5 and 6): the client draws each declared screen with the component registered under its key
+  (`registerScreen(key, Component)`, `src/core/screens/registry.ts`; the base's four in `screens/base.ts`). The department's Screens
+  line is its one row of tabs: only the tabs whose action the user holds there, at most five in the line's order, then **More · n**,
+  which opens the rest in the row (and stays open, with no Fewer, while the selected tab is one of them; each department starts
+  folded); it opens on the line's `opens`, keeps the selected tab in the link (`?tab=`), and the selected tab is the title. A pack
+  screen whose pack is not used there gives back the base screens it replaces, and Settings edits the line as it shows. A screen that
+  replaces the bench lists every request sent to the department. Every screen sits in the kit's frame.
 - **The chart** is the patient screen: the clinic visit and the ward stay (`/visit/:id`) and the record with no encounter
   (`/patient/:id`). Whose visit it is: the queue row, else who-is-where (`base.presence`), else the patient of the link.
   - *Banner* (sticky, one row; no queue line above it: the queue is the clinic's home): name, age, sex, number, phone, deceased; the
@@ -440,7 +456,9 @@ One system for core and packs (`src/core/ui`, imported as `@core/ui`): **tokens*
 each (canvas, surface, raised, sunken, paper; fg, muted, faint; line, line-strong, hover, focus, selection, overlay, band; accent and danger, warn, ok,
 info, each with `-soft`, `-line` and `-fg`; text 11–22, radii sm–xl, shadows xs–md, the layers, `split` 640 px); the theme is the
 user's choice (System, Light, Dark; per browser, no flash). **The kit** builds every screen: buttons, fields, chips, tags and badges,
-callouts, sections, tabs, rows, the banner, the split frame, KV, the analyte table, steps, stat, sparkline and line chart. **The rule**
+callouts, sections, tabs, rows, the banner, the split frame, KV, the analyte table, steps, stat, sparkline and line chart, and a
+department's frame (`ui/frame.tsx`: `ScreenTabs`, `ScreenFrame` with its one toolbar, `NotForRole`, a line inside a list at `sm`;
+`Empty` for nothing here). **The rule**
 `opencare/tokens-only` (ESLint) refuses raw palette classes, literal colours, off-scale sizes and `dark:` anywhere outside the kit;
 colour marks state, never type, and never alone (a glyph or a word goes with it). **`/design`** shows every token with its live
 contrast (all pairs AA in both themes), every component and state, the record's blocks and the charts; it is the one reference a
@@ -453,7 +471,8 @@ entry about the line's entry; `#preset` expands the preset's lines. Warnings com
 that includes `seen` (when not yet seen) and `done`; drafts live in the browser (IndexedDB per user, patient and department), cleared
 at sign-out. The drafts are drawn under the line as the blocks they will be (the exact type and data the set will write), and
 `/note` alone, a card's long note or a long draft's edit open the long note inline under the line (⌘↵ adds, Esc closes), so the
-record stays in view.
+record stays in view. A pack's command is offered only in a department that uses its pack; typed elsewhere, an inline card says where
+it works ("/x is used in: …").
 
 ---
 
@@ -471,7 +490,8 @@ record stays in view.
 - **Off** (not in `organization.packs_used`): its types refuse new entries except corrections and cross-outs, and its visibility
   rules keep applying. **On again**: its tables are refreshed for the organization before its screens show. There is no removal while
   its entries exist.
-- A pack screen may look nothing like the base's and may replace a department's default screen, but it calls the same actions. It is
+- A pack screen may look nothing like the base's and may replace a department's default screen (declared with `replaces`, registered
+  with `registerScreen`), but it calls the same actions. It is
   built from the kit (`@core/ui`) and the tokens only (`opencare/tokens-only`, §4.6 Design system), so it reads natively in both
   themes; a record block of its own type goes through `registerRenderer(type, { Block })`, drawn inside the chart's shell. A colour
   the tokens lack is asked for in core, never invented in the pack.
@@ -556,7 +576,8 @@ record stays in view.
   refreshed when identity changes. Nothing fails silently: a pack's failed background work shows in Settings → Packs with Retry.
 - **Reference data.** Licensed lists come in by import script (rule 7); the demo loads a small sample of each, labelled "demo sample,
   not the full list".
-- **What the base adds for §5.1** (none of it exists yet): a department's packs used here; the fit test; chip words and Summary lines;
+- **What the base adds for §5.1** (built 2026-10-06: a department's packs used here, and the frame, toolbar and tab row with the action
+  each tab needs; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -773,4 +794,26 @@ types, parked pack calls with per-call Retry, Postgres enums.
   - **Empty until something writes them** (designed places and empty states, no writer yet): reported medicines, alerts, procedures,
     family and social history, documents (no uploader). History's LOINC codes (10157-6, 11331-6, 11341-5, 71802-3) are in the base
     codes. The demo day's Nadia Kamel fills the chart: two past visits and a three-day stay.
+- 2026-10-06: platform piece 1 — departments tick packs; one frame; one tab row (§5.1 rules 1, 5 and 6), proven on pharmacy.
+  - **Server**: `department.packs` (base; `unknown_pack`, `pack_off`, `duplicate`); `core.department_uses` (granted to `base_role` and
+    every pack role); `core.screens` gains `action` and `replaces` (`declare_screen` checks both); `department.screens` gets its check
+    (`unknown_screen`, `pack_off`, `pack_not_used`, `wrong_work`, `replaced`, `duplicate`, `opens_off_line`); read `me` carries each
+    department's packs used here and its line, and every screen's action and replaces. `pharmacy.dispensing` replaces `base.bench`.
+  - **Client**: the screen registry (`registerScreen`); `Department.tsx` draws the line as the one tab row (role filter, five then More ·
+    n in place, `?tab=`); the kit's frame (`ScreenTabs`, `ScreenFrame`, `NotForRole`), adopted by the desk, the queue (Queue · Requests
+    for us · To review as views), the bench (to collect · in progress · done today as views, sections beside them) and the bed board
+    (all · in · free · closed); pharmacy's Dispensing (To give · Prepared · Given today; Prepared, Give all, the form folded out under
+    the row; every request sent here, Answer for the bench's page; the bench's keys) is the Pharmacy department's only screen; the composer offers a pack's command only where its pack is used and says where
+    otherwise; Settings → Departments: Packs used here, and a Screens line of the base's screens of the work and the ticked packs'. Gone
+    from the core client: the department type guessed from a `pharmacy.` screen and the work-based default screen.
+  - **Demo**: the Pharmacy ticks pharmacy; its line is `[pharmacy.dispensing]`.
+  - **Reviewed** (find, then an adversarial check of each finding): read `me` builds a department's default line from its ticked packs
+    too (one tick brings the tab, with no line stored); Settings edits the line as the department shows it (a pack screen off or
+    unticked is back to the bench, and replaces nothing in the choices), so it can always be corrected; Dispensing lists every request
+    sent to the department (a lab that ticks pharmacy loses none of its work) and has the bench's keys (↑↓, ↵ folds the row, `/`,
+    Esc); Fewer is not offered while the selected tab is behind More, and More starts folded in each department; a preset's pack line
+    says where the command works, not "not for your role"; the bed board's In counts what it shows; every empty and not-for-role
+    state is the kit's `Empty` or `NotForRole`.
+  - **Tests**: 17 suites, 529 checks (new `screens`: 41); `npm run test:screens` (new), 9 groups; `test:composer` 13 groups; `test:chart`
+    22 + 9 groups.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

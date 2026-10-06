@@ -480,6 +480,42 @@ begin
   return '[]';
 end $$;
 
+-- the packs a department uses (§5.1 rule 1): each a known pack, on for the clinic, once
+create function base.department_packs_check(p_where jsonb, p_data jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p_where ->> 'organization_id')::uuid; k text;
+begin
+  for k in select x from jsonb_array_elements_text(coalesce(p_data -> 'packs', '[]')) x loop
+    if not exists (select 1 from core.layers l where l.key = k and l.is_pack) then return jsonb_build_array(base.find('unknown_pack', 'refuse', k)); end if;
+    if not (k = any (core.packs_used(v_org))) then return jsonb_build_array(base.find('pack_off', 'refuse', k)); end if;
+  end loop;
+  if (select count(*) <> count(distinct x) from jsonb_array_elements_text(coalesce(p_data -> 'packs', '[]')) x) then
+    return jsonb_build_array(base.find('duplicate', 'refuse', 'pack'));
+  end if;
+  return '[]';
+end $$;
+
+-- the Screens line (§4.6, §5.1 rules 1 and 6): each screen declared, the base's or a pack this department uses, of the department's
+-- work, once; never beside a base screen it stands in for; and it opens on one of them
+create function base.department_screens_check(p_where jsonb, p_data jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p_where ->> 'organization_id')::uuid; v_dept uuid := (p_where ->> 'owner_id')::uuid; v_work text; k text; s core.screens;
+        v_line text[] := array(select x from jsonb_array_elements_text(coalesce(p_data -> 'screens', '[]')) x);
+begin
+  select d.work into v_work from core.departments d where d.organization_id = v_org and d.id = v_dept;
+  foreach k in array v_line loop
+    select * into s from core.screens x where x.key = k;
+    if not found then return jsonb_build_array(base.find('unknown_screen', 'refuse', k)); end if;
+    if s.layer not in ('core', 'base') and not core.layer_on(v_org, s.layer) then return jsonb_build_array(base.find('pack_off', 'refuse', s.layer)); end if;
+    if not core.department_uses(v_org, v_dept, s.layer) then return jsonb_build_array(base.find('pack_not_used', 'refuse', s.layer)); end if;
+    if s.work not in (v_work, 'any') then return jsonb_build_array(base.find('wrong_work', 'refuse', k)); end if;
+    if s.replaces && v_line then
+      return jsonb_build_array(base.find('replaced', 'refuse', format('%s stands in for %s', k, (select string_agg(r, ', ') from unnest(s.replaces) r where r = any (v_line)))));
+    end if;
+  end loop;
+  if cardinality(v_line) <> (select count(distinct x) from unnest(v_line) x) then return jsonb_build_array(base.find('duplicate', 'refuse', 'screen')); end if;
+  if p_data ? 'opens' and not ((p_data ->> 'opens') = any (v_line)) then return jsonb_build_array(base.find('opens_off_line', 'refuse', p_data ->> 'opens')); end if;
+  return '[]';
+end $$;
+
 reset role;
 
 -- ── the declarations ──
@@ -649,8 +685,12 @@ select core.declare_setting('department.works_for', 'base', 'department',
   '{"type":"object","additionalProperties":false,"properties":{"all":{"type":"boolean"},"departments":{"type":"array","items":{"type":"string","format":"uuid"}}}}', labels => '{"en":"Works for"}');
 select core.declare_setting('department.checks_in_for', 'base', 'department',
   '{"type":"object","additionalProperties":false,"properties":{"all":{"type":"boolean"},"departments":{"type":"array","items":{"type":"string","format":"uuid"}}}}', labels => '{"en":"Checks in for"}');
+select core.declare_setting('department.packs', 'base', 'department',
+  '{"type":"object","additionalProperties":false,"required":["packs"],"properties":{"packs":{"type":"array","items":{"type":"string"}}}}',
+  'base.department_packs_check(jsonb,jsonb)', labels => '{"en":"Packs used here"}');
 select core.declare_setting('department.screens', 'base', 'department',
-  '{"type":"object","additionalProperties":false,"required":["screens"],"properties":{"screens":{"type":"array","items":{"type":"string"}},"opens":{"type":"string"}}}', labels => '{"en":"Screens"}');
+  '{"type":"object","additionalProperties":false,"required":["screens"],"properties":{"screens":{"type":"array","items":{"type":"string"}},"opens":{"type":"string"}}}',
+  'base.department_screens_check(jsonb,jsonb)', labels => '{"en":"Screens"}');
 select core.declare_setting('service', 'base', 'department', '{"type":"object","additionalProperties":false,"required":["code","name"],
   "properties":{"code":{"type":"string","minLength":1},"name":{"type":"string","minLength":1},"section":{"type":"string"},"coding":{"$ref":"#/$defs/coding"},
     "answer":{"type":"string"},"autoverify":{"type":"boolean"},"steps":{"type":"array","items":{"type":"string","pattern":"^[a-z][a-z0-9_]*$"}},
@@ -669,11 +709,11 @@ select core.declare_setting('preset', 'base', 'organization', '{"type":"object",
 select core.declare_setting('place.closed', 'base', 'place',
   '{"type":"object","additionalProperties":false,"required":["closed"],"properties":{"closed":{"type":"boolean"},"reason":{"type":"string"}}}', labels => '{"en":"Closed"}');
 
--- ── default screens (§4.6) ──
-select core.declare_screen('base.desk', 'base', 'desk', '{"en":"Front desk"}');
-select core.declare_screen('base.queue', 'base', 'visits', '{"en":"Queue"}');
-select core.declare_screen('base.bench', 'base', 'bench', '{"en":"Bench"}');
-select core.declare_screen('base.beds', 'base', 'stays', '{"en":"Bed board"}');
+-- ── default screens (§4.6): each tab shows to whoever holds its action in the department ──
+select core.declare_screen('base.desk', 'base', 'desk', '{"en":"Front desk"}', 'read:patients');
+select core.declare_screen('base.queue', 'base', 'visits', '{"en":"Queue"}', 'read:queue');
+select core.declare_screen('base.bench', 'base', 'bench', '{"en":"Bench"}', 'read:bench');
+select core.declare_screen('base.beds', 'base', 'stays', '{"en":"Bed board"}', 'read:queue');
 
 -- ── built-in roles (fixed ids; read-only to organizations) ──
 select core.declare_role('00000000-0000-0000-0000-00000000c001', 'owner', 'base', 'Owner', '{}', '{"en":"Owner"}', every_action => true);

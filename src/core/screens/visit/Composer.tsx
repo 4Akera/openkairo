@@ -5,7 +5,7 @@ import { canSendPrescriptions } from './send'
 import { useDrafts, useDraftsFor } from '../../hooks/drafts'
 import { useComposer, type Seed } from '../../hooks/composer'
 import type { Allergy, Medication, RecordView } from '../../db/types'
-import { Button, Card, Input, Kbd, cn } from '../../ui'
+import { Button, Callout, Card, Input, Kbd, cn } from '../../ui'
 import { ALLERGENS, DRUGS, PROBLEMS, allergyWarnings, doseWarnings, drugWarnings, duplicateMedication, duplicateProblem, type Warning } from './catalog'
 import { expand, suggest, type Expanded, type Suggestion } from './expand'
 import { CardItem, WarningItem } from './Card'
@@ -37,7 +37,8 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     // a service another write creates (a pack's dispensing, from a prescription) is not ordered by hand
     // …and one whose department does not work for this one is refused (not_served), so it is not offered
     services: (org?.services ?? []).filter((x) => !replyFormFor(x.reply_type)?.automatic && worksFor(org, x.department_id, departmentId)), templates: presets, departments: org?.departments ?? [], departmentId,
-    can, packs: (org?.packs ?? []).filter((p) => p.enabled).map((p) => p.key),
+    // a pack's commands only where this department uses the pack; typed elsewhere, the card says where (§5.1 rule 1)
+    can, packs: org?.departments.find((x) => x.id === departmentId)?.packs ?? [], usedIn: (pack: string) => (org?.departments ?? []).filter((x) => x.packs.includes(pack)).map((x) => x.name),
     noteKind: can('write:medication') ? 'progress' : can('write:vitals') ? 'nurse' : 'progress',   // a nurse's lines are nurse notes
     canSend: canSendPrescriptions(org, departmentId) && can('write:medication'),   // a pharmacy answers prescriptions here
     departmentType: org?.departments.find((x) => x.id === departmentId)?.type, packCards: org?.departments.find((x) => x.id === departmentId)?.pack_cards ?? true,
@@ -189,6 +190,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
         {base?.errors.map((e) => <p key={e} className="px-3 pt-2 text-13 text-danger">{e}</p>)}
         {base?.skipped?.map((e) => <p key={e} className="px-3 pt-2 text-12 text-warn">Left out {e}</p>)}
         {refused && <p className="px-3 pt-2 text-13 text-danger">Your role cannot write a {refused.kind}.</p>}
+        {base?.hint && <Callout tone="info" className="mx-3 mt-2">{base.hint}</Callout>}
         {base?.label && !seed && <p className="px-3 pt-2 text-12 font-medium text-faint">{base.label}{base.drawer && ' — Enter opens it under the line'}</p>}
         {!sugg && <div className="divide-y divide-line">{items.map((p, i) => <CardItem key={`${key}:${i}`} item={p} ctx={ctx} warnings={warningsOf(p)}
           onChange={(n) => setItems(items.map((x, j) => j === i ? n : x))} onRemove={items.length > 1 ? () => setItems(items.filter((_, j) => j !== i)) : undefined}
@@ -198,7 +200,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
             {dup && <Button size="sm" variant="outline" onClick={() => changeDup(dup)}>Change its dose instead</Button>}
             {dupProblem && <Button size="sm" variant="outline" onClick={() => updateDup(dupProblem)}>Update {dupProblem.name}</Button>}
           </div> : undefined} />)}</div>}
-        {!sugg && !items.length && !base?.drawer && !base?.errors.length && <p className="px-3 py-2 text-12 text-warn">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
+        {!sugg && !items.length && !base?.drawer && !base?.errors.length && !base?.hint && <p className="px-3 py-2 text-12 text-warn">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
         {!sugg && (items.length > 0 || base?.drawer) && <div className="flex items-center gap-3 border-t border-line px-3 py-2 text-11 text-faint">
           {footer ?? <span className="inline-flex items-center gap-1"><CornerDownLeft className="h-3 w-3" />{seed?.draftId ? 'save' : base?.drawer && !items.length ? 'open' : `add${items.length > 1 ? ` ${items.length}` : ''}`}</span>}
           <span><Kbd>tab</Kbd> edit fields</span><span><Kbd>esc</Kbd> {seed ? 'cancel' : 'clear'}</span>

@@ -43,7 +43,9 @@ export interface ServerMe {
   users_of_login: { id: string; organization_id: string; organization: string; name: string }[]
   organization: { id: string; name: string; time_zone: string; packs_used: string[] }
   sites: { id: string; name: string; retired_at: string | null }[]
-  departments: { id: string; name: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; site_id: string | null; position: number; retired_at: string | null }[]
+  // packs: the packs it uses (ticked and on); screens, opens: its Screens line, or the base's screens of its work until one is set
+  departments: { id: string; name: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; site_id: string | null; position: number; retired_at: string | null
+    packs: string[]; screens: string[]; opens?: string }[]
   places: { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; retired_at: string | null }[]
   users: { id: string; name: string; title: string | null; kind: string; retired_at: string | null; signed_in_at: string | null; has_login: boolean }[]
   holdings: { id: string; user_id: string; role_id: string; department_id: string | null }[]
@@ -51,7 +53,8 @@ export interface ServerMe {
   actions: { key: string; layer: string; scope: string; labels: Record<string, string> }[]
   settings: SettingRow[]
   registry: { types: { key: string; version: number; layer: string; base_type: string | null; in_record: boolean; may_be_private: boolean; labels: Record<string, string> }[]
-    screens: { key: string; layer: string; work: string; labels: Record<string, string> }[]
+    // action: what a user needs here to see its tab (null: anyone working there); replaces: the base screens a pack's stands in for
+    screens: { key: string; layer: string; work: string; action: string | null; replaces: string[]; labels: Record<string, string> }[]
     packs: { key: string; version: number; requires: string[]; labels: Record<string, string>; used: boolean; stale: number }[] }
 }
 
@@ -111,6 +114,7 @@ export interface Department {
   id: string; name: string; type: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; is_visited: boolean; is_outside?: boolean; site_id: string | null; site_name: string | null; position: number
   serves: (string | null)[]; checks_in_for: (string | null)[]; patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; is_private: boolean; after_done: 'next' | 'queue'
   pack_cards: boolean; screens: string[]; opens: string | null; encounter_class: SettingData['department.encounter_class']['class'] | null
+  packs: string[]   // the packs it uses: ticked here and on for the clinic (§5.1 rule 1)
 }
 export interface ServiceField { position: number; key: string; code: string; name: string; kind: 'number' | 'text' | 'choice'; unit: string | null; ucum: string | null; choices: string[] | null
   reference_low: number | null; reference_high: number | null; critical_low: number | null; critical_high: number | null; ranges: FieldRange[] }

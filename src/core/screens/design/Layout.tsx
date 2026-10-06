@@ -1,8 +1,9 @@
 // /design · Components, the frames: sections (open, folded, compact, needing attention, a list), the page head, toolbars, tabs,
-// side-navigation links, the chart's split (in a box narrower than 640 px, so its tabs show) and the header menu.
+// side-navigation links, a department's frame (its tabs, the toolbar, empty and not for your role), the chart's split (in a box
+// narrower than 640 px, so its tabs show) and the header menu.
 import { useState } from 'react'
 import { Activity, Check, ChevronDown, FileText, LogOut, Palette, Settings } from 'lucide-react'
-import { Button, Menu, MenuItem, MenuLabel, MenuSeparator, NavItem, PageHead, Section, SplitPane, Stat, Tabs, ThemeToggle, Toolbar } from '../../ui'
+import { Button, Card, Empty, Input, Menu, MenuItem, MenuLabel, MenuSeparator, NavItem, NotForRole, PageHead, ScreenFrame, ScreenTabs, Section, SplitPane, Stat, Tabs, ThemeToggle, Toolbar } from '../../ui'
 import { Group, Sample } from './Frame'
 import { useColumn } from './live'
 import { PATIENT, WEIGHT } from './fixtures'
@@ -10,10 +11,13 @@ import { PATIENT, WEIGHT } from './fixtures'
 type Kind = 'all' | 'notes' | 'results' | 'medicines'
 const KINDS: { id: Kind; label: string; count: number }[] = [{ id: 'all', label: 'All', count: 14 }, { id: 'notes', label: 'Notes', count: 5 }, { id: 'results', label: 'Results', count: 6 }, { id: 'medicines', label: 'Medicines', count: 3 }]
 const noop = () => {}
+const TABS = ['Collect', 'Receive', 'Verify', 'Worklist', 'Archive', 'Quality', 'Stock'].map((l) => ({ key: l.toLowerCase(), label: l }))
+type View = 'todo' | 'doing' | 'done'
 
 export function Layout() {
   const { root } = useColumn()
   const [line, setLine] = useState<'active' | 'past'>('active'); const [kind, setKind] = useState<Kind>('all'); const [chosen, setChosen] = useState('')
+  const [tab, setTab] = useState('collect'); const [more, setMore] = useState(false); const [view, setView] = useState<View>('todo')
   return <>
     <Group title="Sections" hint="a titled panel that folds (remembered in this browser), and still says what is inside while folded">
       <div className="grid items-start gap-3 lg:grid-cols-2">
@@ -38,6 +42,16 @@ export function Layout() {
       <Sample title="NavItem" note="the current page is marked" className="grid w-full max-w-60 gap-0.5">
         <NavItem to="/design/components" icon={Palette}>Components</NavItem><NavItem to="/design/charts" icon={Activity} count={3}>Charts</NavItem>
       </Sample>
+    </Group>
+    <Group title="A department's frame" hint="every department screen, base or pack: one row of tabs (the selected one is the title; at most five, then More · n, opening in the row), one toolbar (views as counted filters, a state colour only when the count asks for action; search, date and the main action on the right), the content at one width">
+      <div className="rounded-lg bg-canvas pb-1 ring-1 ring-inset ring-line">
+        <ScreenTabs label="Laboratory: screens" first={TABS.slice(0, 5)} rest={TABS.slice(5)} value={tab} open={more} onChange={setTab} onMore={() => setMore(!more)} />
+        <ScreenFrame views={[{ id: 'todo', label: 'To collect', count: 3, needs: 'warn' }, { id: 'doing', label: 'In progress', count: 1 }, { id: 'done', label: 'Done today', count: 0, needs: 'warn' }]}
+          view={view} onView={setView} search={<Input placeholder="Scan or type a name" aria-label="Scan or type a name" className="w-full sm:w-64" />} action={<Button size="sm">Collect</Button>}>
+          {view === 'done' ? <Card><Empty>Nothing released in the last 24 hours.</Empty></Card> : <Card className="p-4 text-13 text-muted">The screen's content.</Card>}
+        </ScreenFrame>
+      </div>
+      <Sample title="NotForRole" note="a screen or a part of one this role does not open here; Empty is the one for nothing here" className="block"><NotForRole /></Sample>
     </Group>
     <Group title="The chart's split" hint="SplitPane answers to its own width: under 640 px it shows two tabs, and both panes stay mounted">
       <div className="max-w-[900px] rounded-lg bg-canvas py-3 ring-1 ring-inset ring-line">

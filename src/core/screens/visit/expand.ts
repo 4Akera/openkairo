@@ -1,11 +1,12 @@
 // The composer's pure half (spec 05): a /command or a #preset expands to drafts, and the word being typed gets suggestions.
 import type { Template } from '../../db/types'
 import { suggestAllergens, suggestDrugs, suggestProblems } from './catalog'
-import { allowed, commandNamed, commandsFor } from './commands'
+import { allowed, commandNamed, commandsFor, usedWhere } from './commands'
 import { lineOf, parse, splitCommand, type Ctx, type Parsed, type Result } from './parse'
 
 /** errors stop the line; skipped are a preset's lines this patient's record cannot take — the rest of the preset still goes in */
-export interface Expanded { items: Parsed[]; errors: string[]; skipped?: string[]; drawer?: { kind: string; text: string }; label?: string }
+/** hint: a card that is not an error — a pack's command typed where its pack is not used says where it is (§5.1 rule 1) */
+export interface Expanded { items: Parsed[]; errors: string[]; skipped?: string[]; drawer?: { kind: string; text: string }; label?: string; hint?: string }
 export interface Suggestion { key: string; label: string; detail?: string; insert: string }
 
 // note commands that became labels: a preset line saved as "/plan review" still reads as "plan: review"
@@ -31,6 +32,7 @@ export function expand(text: string, ctx: Ctx, presets: Template[]): Expanded | 
   const cmd = commandNamed(word, ctx)
   if (!cmd && presets.some((x) => x.shortcut === word.toLowerCase())) return { items: [], errors: [`${word} is a preset — type #${word.toLowerCase()}`] }
   if (cmd) {
+    if (cmd.pack && ctx.packs && !ctx.packs.includes(cmd.pack)) return { items: [], errors: [], hint: usedWhere(cmd.name, ctx.usedIn?.(cmd.pack) ?? []) }
     if (!allowed(cmd, ctx)) return { items: [], errors: [`/${cmd.name} is not open to your role here`] }
     const r = rest ? cmd.parse(rest, ctx) : null
     if (r) return wrap('ok' in r ? { ok: r.ok.map((p) => ({ action: cmd.action, ...p })) } : r)
