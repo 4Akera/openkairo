@@ -57,7 +57,7 @@ declare
   v_fam uuid[]; v_family uuid; v_other boolean;
   v_find jsonb := '[]'; f jsonb; fs jsonb; fn regprocedure; cur int; seen int;
   v_setj jsonb; v_result jsonb; v_refuse jsonb; v_warn jsonb; v_items uuid[] := '{}'; v_types text[] := '{}'; v_patients uuid[];
-  dv core.derived; lv core.listeners; v_err text; v_hidden uuid[];
+  dv core.derived; lv core.listeners; v_err text; v_hidden uuid[]; v_idle boolean;
 begin
   -- the envelope
   begin v_set_id := (p_set ->> 'set_id')::uuid; exception when others then v_set_id := null; end;
@@ -152,6 +152,8 @@ begin
     r.recorded_at := v_now;
     r.occurred_at := coalesce(r.occurred_at, v_now);
     if r.occurred_at > v_now + interval '5 minutes' then return core.refused(v_set_id, 'in_the_future', r.id); end if;
+    -- a pack off for the clinic takes no new entry of its types; a correction of one (replaces, or changes for a type whose base
+    -- corrects by change, as a step does) still lands (§5, §5.2 Off)
     if t.layer <> 'base' and not core.layer_on(v_org, t.layer) and r.replaces is null and coalesce(r.relation, '') <> 'changes' then
       return core.refused(v_set_id, 'pack_off', r.id, t.layer);
     end if;
@@ -162,7 +164,11 @@ begin
     if not exists (select 1 from core.departments d where d.organization_id = v_org and d.id = r.department_id and d.retired_at is null) then
       return core.refused(v_set_id, 'not_found', r.id, 'department');
     end if;
-    if not core.may(me.id, 'write:' || t.key, r.department_id) then return core.refused(v_set_id, 'not_allowed', r.id, 'write:' || t.key); end if;
+    -- where the pack's actions do not count (off, or not used in this department), its entry is corrected by an author of the item who
+    -- still holds a role there, written in the target's own department (checked with the target below)
+    v_idle := coalesce((r.replaces is not null or r.relation = 'changes') and t.layer <> 'base' and not core.department_uses(v_org, r.department_id, t.layer)
+              and not core.may(me.id, 'write:' || t.key, r.department_id), false);
+    if not v_idle and not core.may(me.id, 'write:' || t.key, r.department_id) then return core.refused(v_set_id, 'not_allowed', r.id, 'write:' || t.key); end if;
     -- one family per set, unless the type declares it may sit beside another patient
     if i = 1 then v_family := r.patient_id;
     elsif r.patient_id <> v_family and not t.other_patient then return core.refused(v_set_id, 'two_patients', r.id);
@@ -186,6 +192,10 @@ begin
       -- a stored target is known by its set, not its time (the clock may step back)
       if tgt.set_id <> v_set_id and (core.hidden(v_org, me.id, array[tgt.id]) @> array[tgt.id]) then
         return core.refused(v_set_id, 'not_found', r.id, 'target');
+      end if;
+      if v_idle and not (tgt.type = t.key and tgt.department_id = r.department_id and exists (select 1 from core.entries x where x.organization_id = v_org and x.item = tgt.item and x.author_id = me.id)
+                         and exists (select 1 from core.live_holdings(v_org) h where h.user_id = me.id and (h.department_id is null or h.department_id = r.department_id))) then
+        return core.refused(v_set_id, 'not_allowed', r.id, 'write:' || t.key);
       end if;
       select x.* into tgt_type from core.types x where x.key = tgt.type and x.version = tgt.type_version;
       if r.replaces is not null or r.relation = 'changes' then
@@ -294,10 +304,10 @@ begin
   v_patients := (select array_agg(distinct x.patient_id) from unnest(rows) x);
   for dv in select * from core.derived dd where dd.key in (select unnest(tt.feeds) from core.types tt where tt.key = any (v_types)) order by (dd.layer <> 'base'), dd.position loop
     if dv.layer = 'base' then
-      execute format('select %s($1, $2)', dv.refresh::regproc) using v_org, v_items;
+      perform core.run_refresh(dv.refresh, v_org, v_items);
     else
       begin
-        execute format('select %s($1, $2)', dv.refresh::regproc) using v_org, v_items;
+        perform core.run_refresh(dv.refresh, v_org, v_items);
       exception when others then
         get stacked diagnostics v_err = message_text;
         insert into core.stale (organization_id, layer, patient_id, error) select v_org, dv.layer, p, v_err from unnest(v_patients) p
@@ -350,7 +360,7 @@ begin
   perform set_config('statement_timeout', '55s', false);   -- a run never outlasts the next one (a SET clause would forbid the COMMIT below)
   for o in select * from core.outbox where tries < 5 order by id limit p_limit for update skip locked loop
     begin
-      execute format('select %s($1, $2)', o.refresh::regproc) using o.organization_id, o.items;
+      perform core.run_refresh(o.refresh, o.organization_id, o.items);
       delete from core.outbox where id = o.id;
       -- a pack's table caught up: the screens reading it look again (the hint carries no content)
       perform core.hint('organization:' || o.organization_id);

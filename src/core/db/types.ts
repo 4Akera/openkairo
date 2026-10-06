@@ -39,7 +39,9 @@ export interface ServerRecord {
 }
 export interface SettingRow { key: string; thing_id: string; owner_id: string | null; data: Record<string, unknown>; recorded_at: string }
 export interface ServerMe {
-  me: { id: string; name: string; title: string | null; kind: string; organization_id: string; holdings: { department_id: string | null; role_id: string; actions: string[] }[] }
+  // may: what I may do in each department ('' for held everywhere), as the server's may answers it: a pack's actions only where it is used
+  me: { id: string; name: string; title: string | null; kind: string; organization_id: string; holdings: { department_id: string | null; role_id: string; actions: string[] }[]
+    may: Record<string, string[]> }
   users_of_login: { id: string; organization_id: string; organization: string; name: string }[]
   organization: { id: string; name: string; time_zone: string; packs_used: string[] }
   sites: { id: string; name: string; retired_at: string | null }[]
@@ -49,8 +51,10 @@ export interface ServerMe {
   places: { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; retired_at: string | null }[]
   users: { id: string; name: string; title: string | null; kind: string; retired_at: string | null; signed_in_at: string | null; has_login: boolean }[]
   holdings: { id: string; user_id: string; role_id: string; department_id: string | null }[]
-  roles: { id: string; key: string; name: string; layer: string | null; builtin: boolean; retired_at: string | null; every_action: boolean; actions: string[] }[]
-  actions: { key: string; layer: string; scope: string; labels: Record<string, string> }[]
+  // built_on: the base role it holds everything of; everyday: holds a pack's everyday actions where a department uses the pack; own: its own actions
+  roles: { id: string; key: string; name: string; layer: string | null; builtin: boolean; retired_at: string | null; every_action: boolean; actions: string[]
+    built_on: string | null; everyday: boolean; own: string[] }[]
+  actions: { key: string; layer: string; scope: string; everyday: boolean; labels: Record<string, string> }[]
   settings: SettingRow[]
   registry: { types: { key: string; version: number; layer: string; base_type: string | null; in_record: boolean; may_be_private: boolean; labels: Record<string, string> }[]
     // action: what a user needs here to see its tab (null: anyone working there); replaces: the base screens a pack's stands in for
@@ -124,12 +128,12 @@ export interface Template { id: string; department_id: string | null; name: stri
 export interface Place { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; closed: boolean; closed_reason: string | null }
 export interface Organization {
   organization: { id: string; name: string; time_zone: string; record_view: 'visits' | 'entries' }
-  me: { id: string; name: string; kind: string; departments: Department[]; actions: string[]; works_in: string[]; holdings: ServerMe['me']['holdings'] }
+  me: { id: string; name: string; kind: string; departments: Department[]; actions: string[]; works_in: string[]; holdings: ServerMe['me']['holdings']; may: ServerMe['me']['may'] }
   departments: Department[]; allDepartments: Department[]; services: Service[]; templates: Template[]; places: Place[]; sites: ServerMe['sites']
   packs: { key: string; name: string; enabled: boolean; stale: number }[]
   users: { id: string; name: string; kind: string; title: string | null; retired_at: string | null; accepted_at: string | null; has_login: boolean; roles: { role_id: string; role_key: string; department_id: string | null }[] }[]
-  roles: { id: string; key: string; name: string; is_builtin: boolean; actions: string[]; every_action: boolean }[]
-  actions: { key: string; layer: string; label: string }[]; types: ServerMe['registry']['types']; screens: ServerMe['registry']['screens']
+  roles: { id: string; key: string; name: string; is_builtin: boolean; actions: string[]; every_action: boolean; built_on: string | null; everyday: boolean; own: string[] }[]
+  actions: { key: string; layer: string; label: string; everyday: boolean }[]; types: ServerMe['registry']['types']; screens: ServerMe['registry']['screens']
   parked_pack_calls: number; loginUsers: ServerMe['users_of_login']
 }
 /** an entry in full: every version of its item, and what refers to it */

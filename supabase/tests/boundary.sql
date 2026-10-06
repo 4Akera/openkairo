@@ -10,6 +10,8 @@ allowed(name) as (values
   ('core.erase'), ('core.redact'), ('core.rebuild_check'), ('core.refresh_patients'),
   -- the doors that ask "was it ever used" or catch a pack up, and a pack's reading door
   ('core.save_place_row'), ('public.remove'), ('public.write_setting'), ('core.pack_entries'),
+  -- a pack's reading doors, masked by default (§5.2)
+  ('core.pack_masked'), ('core.pack_kind'), ('core.pack_visit'), ('core.pack_rows'),
   -- helpers of the base's checks and refreshes
   ('base.entry'), ('base.latest'), ('base.orders_of'), ('base.answers_of'), ('base.same_kind'))
 select t.report('boundary', n.nspname || '.' || p.proname || ' names core.entries')
@@ -18,13 +20,14 @@ select t.report('boundary', n.nspname || '.' || p.proname || ' names core.entrie
    and p.oid not in (select f from registered) and n.nspname || '.' || p.proname not in (select name from allowed);
 select t.ok(true, 'every function naming core.entries is the writer''s, the reader''s, a refresh, a check, a rule, the eraser''s or a listed door');
 
-\echo '── who names a derived table: refreshes, checks and mappings (reads); the reader reaches them only through the registry'
+\echo '── who names a derived table: refreshes, checks and mappings (reads), and the base''s identity door for packs; the reader reaches them only through the registry'
 with registered as (
-  select unnest(checks)::oid f from core.types union select to_fhir from core.types where to_fhir is not null union select refresh from core.derived union select refresh from core.listeners)
+  select unnest(checks)::oid f from core.types union select to_fhir from core.types where to_fhir is not null union select refresh from core.derived union select refresh from core.listeners
+  union select 'base.pack_identity(uuid,uuid,timestamptz)'::regprocedure)
 select t.report('boundary', n.nspname || '.' || p.proname || ' names a derived table')
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace, core.derived d
  where n.nspname not in ('t', 'pg_catalog', 'information_schema') and p.prosrc ~ (replace(d.key, '.', '\.') || '\M') and p.oid not in (select f from registered);
-select t.ok(true, 'every function naming a derived table is registered');
+select t.ok(true, 'every function naming a derived table is registered, or the identity door');
 
 \echo '── grants: the API holds no table; only the doors are callable'
 select t.ok(not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('core', 'base', 'pharmacy') and c.relkind in ('r', 'v', 'm')

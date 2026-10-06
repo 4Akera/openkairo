@@ -13,21 +13,110 @@ begin
   execute format('grant %I to postgres', r);
   execute format('create schema if not exists %I authorization %I', p_key, r);
   execute format('revoke all on schema %I from public', p_key);
-  execute format('grant usage on schema core to %I', r);
+  execute format('grant usage on schema core, base to %I', r);
   execute format('grant usage on schema %I to core_eraser', p_key);
   execute format('alter default privileges for role %I revoke execute on functions from public', r);   -- global: a per-schema default cannot take it away
   execute format('grant execute on function core.pack_entries(uuid, uuid[]), core.may(uuid, text, uuid), core.setting_at(uuid, text, uuid, timestamptz),
     core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.kinds(text), core.base_of(text),
-    core.refuse(text, text), core.hint(text), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text) to %I', r);
+    core.refuse(text, text), core.hint(text), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text),
+    core.pack_kind(uuid, uuid, text, jsonb), core.pack_visit(uuid, uuid, text), core.pack_rows(uuid, text, jsonb), core.pack_codes(text, text[]),
+    core.pack_department(uuid, uuid), core.pack_staff(uuid, uuid[]), base.pack_identity(uuid, uuid, timestamptz) to %I', r);
 end $$;
--- the entries of these items (every version), the entries that refer to them and the entries they refer to: a pack's only way to
--- read the record
+
+-- ── what a pack may read (§5.2): core doors, never core tables. Masked by default: in a check or any read made for a person, the reader
+-- is the user signed in (the session's, never a parameter), so a pack sees only what that person may see; only a refresh or a listener
+-- (core.run_refresh) reads unmasked, and its rows keep source_entries for the reader to mask. A hidden entry comes back as its
+-- placeholder: no data, no codes, no findings, no author. ──
+-- the entries of these items (every version), the entries that refer to them and the entries they refer to
 create function core.pack_entries(p_org uuid, p_items uuid[]) returns setof core.entries language sql stable security definer set search_path = '' as $$
-  select e.* from core.entries e where e.organization_id = p_org and (e.item = any (p_items)
+  select * from core.pack_masked(p_org, array(select e from core.entries e where e.organization_id = p_org and (e.item = any (p_items)
     or e.refers_to in (select x.id from core.entries x where x.organization_id = p_org and x.item = any (p_items))
-    or e.id in (select x.refers_to from core.entries x where x.organization_id = p_org and x.item = any (p_items) and x.refers_to is not null))
+    or e.id in (select x.refers_to from core.entries x where x.organization_id = p_org and x.item = any (p_items) and x.refers_to is not null))))
 $$;
-revoke all on function core.pack_entries(uuid, uuid[]), core.create_pack(text) from public, anon, authenticated;
+
+-- a patient's entries of one kind, newest first: the type and every pack type extending it (core.kinds). The filter: data (contained),
+-- codes (any of them), from and to (occurred_at, from inclusive), current (only each item's latest version, while it is still of the
+-- kind: a crossed-out item drops), limit (500 by default, 2000 at most), applied last. A data or codes filter matches only what the
+-- reader may see: the matches are read newest first a page at a time and masked, the hidden ones dropped, until the limit is reached.
+create function core.pack_kind(p_org uuid, p_patient uuid, p_kind text, p_filter jsonb default '{}') returns setof core.entries
+language plpgsql stable security definer set search_path = '' as $$
+declare f jsonb := coalesce(p_filter, '{}'); v_codes text[] := (select array_agg(x) from jsonb_array_elements_text(f -> 'codes') x);
+        lim int := greatest(1, least(coalesce((f ->> 'limit')::int, 500), 2000)); v_filtered boolean := f -> 'data' is not null or v_codes is not null;
+        page core.entries[]; v_out core.entries[] := '{}'; v_at timestamptz; v_id uuid;
+begin
+  loop
+    select coalesce(array_agg(e order by e.recorded_at desc, e.id desc), '{}') into page from (
+      select e.* from core.entries e
+       where e.organization_id = p_org and e.patient_id = any (core.family(p_org, p_patient)) and e.type = any (core.kinds(p_kind))
+         and (f ->> 'from' is null or e.occurred_at >= (f ->> 'from')::timestamptz) and (f ->> 'to' is null or e.occurred_at < (f ->> 'to')::timestamptz)
+         and (f -> 'data' is null or e.data @> (f -> 'data')) and (v_codes is null or e.codes && v_codes)
+         and (not coalesce((f ->> 'current')::boolean, false) or not exists (select 1 from core.entries y where y.organization_id = p_org and y.item = e.item and y.item_version > e.item_version))
+         and (v_at is null or (e.recorded_at, e.id) < (v_at, v_id))
+       order by e.recorded_at desc, e.id desc limit lim) e;
+    v_out := v_out || array(select m from core.pack_masked(p_org, page) m where not v_filtered or m.author_id is not null);
+    exit when cardinality(v_out) >= lim or cardinality(page) < lim;
+    v_at := page[lim].recorded_at; v_id := page[lim].id;
+  end loop;
+  return query select m.* from unnest(v_out[1:lim]) m order by m.recorded_at desc, m.id desc;
+end $$;
+
+-- a visit's entries: its own item (the moves) and every entry written in it, oldest first; of one kind when named
+create function core.pack_visit(p_org uuid, p_visit uuid, p_kind text default null) returns setof core.entries language sql stable security definer set search_path = '' as $$
+  select * from core.pack_masked(p_org, array(select e from core.entries e where e.organization_id = p_org and (e.visit_id = p_visit or e.item = p_visit)
+    and (p_kind is null or e.type = any (core.kinds(p_kind))) order by e.recorded_at, e.id))
+$$;
+
+-- rows of one of the base's derived tables, through the registry (never another pack's: a pack reads its own directly). The query:
+-- patient (the family's rows), where (as the reader's table filter), latest {by, at} (one row per value of by, the latest by at: latest
+-- values by code), limit. The matching rows are read (2000 at most; the newest by at first for latest), a row with a source entry the
+-- reader may not see is withheld, then the latest is picked and the limit applied: the latest is the latest the reader may see.
+create function core.pack_rows(p_org uuid, p_table text, p_query jsonb default '{}') returns setof jsonb language plpgsql stable security definer set search_path = '' as $$
+declare d core.derived; q jsonb := coalesce(p_query, '{}'); w jsonb := coalesce(p_query -> 'where', '{}'); v jsonb; hid uuid[]; hid_items uuid[];
+        v_by text := q -> 'latest' ->> 'by'; v_at text := coalesce(q -> 'latest' ->> 'at', 'at');
+        lim int := greatest(1, least(coalesce((q ->> 'limit')::int, 2000), 2000));
+begin
+  select * into d from core.derived x where x.key = p_table;
+  if not found then perform core.refuse('unknown_table', p_table); end if;
+  if d.layer <> 'base' then perform core.refuse('other_packs_table', p_table); end if;
+  if q ? 'patient' then w := w || jsonb_build_object('patient_id', to_jsonb(core.family(p_org, (q ->> 'patient')::uuid))); end if;
+  v := core.table_rows(p_org, d, w, 2000, case when v_by is not null then v_at end);
+  hid := core.pack_hidden(p_org, (select array_agg(distinct s::uuid) from jsonb_array_elements(v) r, jsonb_array_elements_text(coalesce(r -> 'source_entries', '[]')) s));
+  select coalesce(array_agg(distinct e.item), '{}') into hid_items from core.entries e where e.organization_id = p_org and e.id = any (hid);
+  if v_by is null then
+    return query select r from jsonb_array_elements(v) with ordinality x(r, n) where not ((r ->> 'item')::uuid = any (hid_items)) order by n limit lim;
+  else
+    -- the rows come newest first (ordered by at's own type), so the first of each value is its latest
+    return query select y.r from (select distinct on (x.r ->> v_by) x.r, x.n from jsonb_array_elements(v) with ordinality x(r, n)
+                                   where not ((x.r ->> 'item')::uuid = any (hid_items)) order by x.r ->> v_by, x.n) y order by y.n limit lim;
+  end if;
+end $$;
+
+-- code properties: a code system's rows (labels, parent, props such as a LOINC code's units or an ATC level)
+create function core.pack_codes(p_system text, p_codes text[]) returns table (system text, code text, labels jsonb, parent text, props jsonb, retired boolean)
+language sql stable security definer set search_path = '' as $$
+  select c.system, c.code, c.labels, c.parent, c.props, c.retired_at is not null from core.codes c where c.system = p_system and c.code = any (p_codes)
+$$;
+
+-- a department's work and places (and the packs it uses)
+create function core.pack_department(p_org uuid, p_department uuid) returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('id', d.id, 'name', d.name, 'work', d.work, 'site_id', d.site_id, 'retired', d.retired_at is not null,
+    'packs', coalesce((select jsonb_agg(l.key order by l.key) from core.layers l where l.is_pack and core.department_uses(p_org, d.id, l.key)), '[]'),
+    'places', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'label', p.label, 'name', p.name, 'parent_id', p.parent_id, 'position', p.position,
+                          'retired', p.retired_at is not null) order by p.position, p.name) from core.places p where p.organization_id = p_org and p.department_id = d.id), '[]'))
+  from core.departments d where d.organization_id = p_org and d.id = p_department and core.pack_hidden(p_org, null) = '{}'
+$$;
+
+-- staff identifiers: who these users are (name, title, kind) and their identifiers (syndicate numbers)
+create function core.pack_staff(p_org uuid, p_users uuid[]) returns table (user_id uuid, name text, title text, kind text, retired boolean, identifiers jsonb)
+language sql stable security definer set search_path = '' as $$
+  select u.id, u.name, u.title, u.kind, u.retired_at is not null,
+    coalesce((select jsonb_agg(jsonb_build_object('system', i.system, 'value', i.value, 'verified', i.verified) order by i.system, i.value) from core.identifiers i
+               where i.organization_id = p_org and i.owner_kind = 'user' and i.owner_id = u.id), '[]')
+  from core.users u where u.organization_id = p_org and u.id = any (p_users) and core.pack_hidden(p_org, null) = '{}'
+$$;
+revoke all on function core.pack_entries(uuid, uuid[]), core.create_pack(text),
+  core.pack_kind(uuid, uuid, text, jsonb), core.pack_visit(uuid, uuid, text), core.pack_rows(uuid, text, jsonb), core.pack_codes(text, text[]),
+  core.pack_department(uuid, uuid), core.pack_staff(uuid, uuid[]) from public, anon, authenticated;
 
 -- drain the outbox inside a transaction (tests, and the procedure's batches)
 create function core.drain(p_limit int default 500) returns int language plpgsql volatile security definer set search_path = '' as $$
@@ -35,7 +124,7 @@ declare o core.outbox; v_err text; n int := 0;
 begin
   for o in select * from core.outbox where tries < 5 order by id limit p_limit for update skip locked loop
     begin
-      execute format('select %s($1, $2)', o.refresh::regproc) using o.organization_id, o.items;
+      perform core.run_refresh(o.refresh, o.organization_id, o.items);
       delete from core.outbox where id = o.id;
       n := n + 1;
     exception when others then

@@ -60,20 +60,22 @@ export function directory(m: ServerMe): Organization {
   const roleKey = (id: string) => m.roles.find((r) => r.id === id)?.key ?? ''
   return {
     organization: { id: m.organization.id, name: m.organization.name, time_zone: m.organization.time_zone, record_view: s.one('organization.record_view', m.organization.id)?.view ?? 'visits' },
-    me: { id: m.me.id, name: m.me.name, kind: m.me.kind, departments: mine.filter((d) => d.work !== 'outside'), actions: [...new Set(m.me.holdings.flatMap((h) => h.actions))],
-      works_in: m.me.holdings.map((h) => h.department_id).filter((x): x is string => !!x), holdings: m.me.holdings },
+    me: { id: m.me.id, name: m.me.name, kind: m.me.kind, departments: mine.filter((d) => d.work !== 'outside'), actions: [...new Set(Object.values(m.me.may ?? {}).flat())],
+      works_in: m.me.holdings.map((h) => h.department_id).filter((x): x is string => !!x), holdings: m.me.holdings, may: m.me.may ?? {} },
     departments: live, allDepartments: all, services, templates, places, sites: [...m.sites].sort((a, b) => a.name.localeCompare(b.name)),
     packs: m.registry.packs.map((p) => ({ key: p.key, name: p.labels.en ?? p.key, enabled: p.used, stale: p.stale })),
     users: m.users.map((u) => ({ id: u.id, name: u.name, kind: u.kind, title: u.title, retired_at: u.retired_at, accepted_at: u.signed_in_at, has_login: u.has_login,
       roles: m.holdings.filter((h) => h.user_id === u.id).map((h) => ({ role_id: h.role_id, role_key: roleKey(h.role_id), department_id: h.department_id })) })),
-    roles: m.roles.filter((r) => !r.retired_at).map((r) => ({ id: r.id, key: r.key, name: r.name, is_builtin: r.builtin, actions: r.actions, every_action: r.every_action })),
-    actions: m.actions.map((a) => ({ key: a.key, layer: a.layer, label: a.labels.en ?? a.key })), types: m.registry.types, screens: m.registry.screens,
+    roles: m.roles.filter((r) => !r.retired_at).map((r) => ({ id: r.id, key: r.key, name: r.name, is_builtin: r.builtin, actions: r.actions, every_action: r.every_action,
+      built_on: r.built_on ?? null, everyday: !!r.everyday, own: r.own ?? r.actions })),
+    actions: m.actions.map((a) => ({ key: a.key, layer: a.layer, label: a.labels.en ?? a.key, everyday: !!a.everyday })), types: m.registry.types, screens: m.registry.screens,
     parked_pack_calls: m.registry.packs.reduce((n, p) => n + p.stale, 0), loginUsers: m.users_of_login,
   }
 }
-/** may I do this here: a role held in this department or everywhere */
+/** may I do this here, as the server's may answers it (a role held here or everywhere; a pack's actions only where the department uses
+ *  the pack; a pack's everyday actions for Doctors and Nurses there); no department: only what is held everywhere */
 export const mayIn = (o: Organization | undefined, action: string, departmentId: string | null | undefined) =>
-  !!o?.me.holdings.some((h) => (h.department_id === null || h.department_id === departmentId) && h.actions.includes(action))
+  !!o?.me.may[departmentId ?? '']?.includes(action)
 export const nameOf = (o: Organization | undefined, id: string | null | undefined) => (id && (o?.allDepartments.find((d) => d.id === id)?.name ?? o?.users.find((u) => u.id === id)?.name)) || null
 export const userName = (o: Organization | undefined, id: string | null | undefined) => (id && o?.users.find((u) => u.id === id)?.name) || null
 

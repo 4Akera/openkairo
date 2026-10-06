@@ -331,7 +331,7 @@ begin
   select coalesce(array_agg(distinct e.item), '{}') into v_items from core.entries e where e.organization_id = p_org and e.patient_id = any (p_patients);
   if cardinality(v_items) = 0 then return; end if;
   for d in select * from core.derived x order by (x.layer <> 'base'), x.position loop
-    execute format('select %s($1, $2)', d.refresh::regproc) using p_org, v_items;
+    perform core.run_refresh(d.refresh, p_org, v_items);
   end loop;
 end $$;
 
@@ -409,10 +409,10 @@ begin
       if exists (select 1 from core.layers y, unnest(y.requires) q where y.key = v_layer and not (q = any (v_on_after))) then perform core.refuse('requires', v_layer); end if;
       select coalesce(array_agg(distinct e.item), '{}') into v_items from core.entries e where e.organization_id = v_org;
       for d in select * from core.derived x where x.layer = v_layer loop
-        execute format('select %s($1, $2)', d.refresh::regproc) using v_org, v_items;
+        perform core.run_refresh(d.refresh, v_org, v_items);
       end loop;
       for l in select * from core.listeners x where x.layer = v_layer loop
-        execute format('select %s($1, $2)', l.refresh::regproc) using v_org, v_items;
+        perform core.run_refresh(l.refresh, v_org, v_items);
       end loop;
       delete from core.stale where organization_id = v_org and layer = v_layer;
     end loop;
@@ -479,7 +479,7 @@ begin
   delete from core.file_uses where organization_id = p_org and entry_id = any (v_ids);
   insert into core.redactions (organization_id, item, entry_ids, user_id, reason, moved_to) values (p_org, v_item, v_ids, p_user, p_reason, p_moved_to);
   for d in select * from core.derived x order by (x.layer <> 'base'), x.position loop
-    execute format('select %s($1, $2)', d.refresh::regproc) using p_org, array[v_item];
+    perform core.run_refresh(d.refresh, p_org, array[v_item]);
   end loop;
   return jsonb_build_object('redacted', v_item, 'entries', to_jsonb(v_ids));
 end $$;
@@ -552,3 +552,5 @@ grant execute on function core.may(uuid, text, uuid), core.may_somewhere(uuid, t
   core.refuse(text, text), core.fold(text), core.packs_used(uuid, timestamptz), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text),
   core.codings(jsonb), core.nodes(jsonb),
   core.next_number(uuid, text, text, date), core.role_actions_of(uuid, uuid) to base_role, core_eraser;
+grant execute on function core.run_refresh(regprocedure, uuid, uuid[]) to core_eraser;   -- a redact refreshes what it touched
+grant execute on function core.pack_hidden(uuid, uuid[]) to base_role;   -- the base's identity door for packs is masked like the core's

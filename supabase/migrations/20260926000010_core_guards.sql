@@ -18,7 +18,7 @@ begin
     for o in select id from core.organizations where p_org is null or id = p_org loop
       select coalesce(array_agg(distinct e.item), '{}') into items from core.entries e where e.organization_id = o;
       for d in select * from core.derived order by (layer <> 'base'), position loop
-        execute format('select %s($1, $2)', d.refresh::regproc) using o, items;
+        perform core.run_refresh(d.refresh, o, items);
       end loop;
     end loop;
     for d in select * from core.derived order by position loop

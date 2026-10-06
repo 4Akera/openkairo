@@ -59,7 +59,12 @@ select t.refuses($q$select public.save('user', '{"id":"00000000-0000-0000-0000-0
 \echo '── may: a null department matches only roles held everywhere'
 reset role;
 select t.ok(core.may('00000000-0000-0000-0000-0000000000b1', 'write:note', :'im') and not core.may('00000000-0000-0000-0000-0000000000b1', 'write:note', null), 'a department role is not held "anywhere"');
-select t.ok(core.may('00000000-0000-0000-0000-0000000000b9', 'write:pharmacy.dispense', null), 'the owner holds every action, a pack''s included');
+select t.as(:'ow');
+select public.write_setting('{"key":"department.packs","owner_id":"00000000-0000-0000-0000-0000000000d3","data":{"packs":["pharmacy"]}}') ->> 'key' as ticked;
+select t.ok(core.may('00000000-0000-0000-0000-0000000000b9', 'write:pharmacy.dispense', '00000000-0000-0000-0000-0000000000d3'),
+  'the owner holds every action, a pack''s included, where the department uses the pack (§5.2)');
+select t.ok(not core.may('00000000-0000-0000-0000-0000000000b9', 'write:pharmacy.dispense', :'im') and not core.may('00000000-0000-0000-0000-0000000000b9', 'write:pharmacy.dispense', null),
+  'a pack''s action counts nowhere else, not even for the owner');
 select t.ok(core.may_somewhere('00000000-0000-0000-0000-0000000000b1', 'write:note'), 'may_somewhere answers "in any department"');
 set role authenticated;
 

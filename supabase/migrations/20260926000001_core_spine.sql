@@ -98,6 +98,8 @@ create table core.roles (
   name        text not null,
   labels      jsonb not null default '{}',
   every_action boolean not null default false,       -- the Owner: every action of every layer the organization uses
+  built_on    uuid references core.roles,             -- a specialist built on a base role holds that role's actions as they stand now (§5.2)
+  everyday    boolean not null default false,         -- the base's Doctor and Nurse: a pack's everyday actions where the department uses it
   created_at  timestamptz not null default now(),
   retired_at  timestamptz,
   check ((organization_id is null) = (layer is not null))
@@ -275,6 +277,7 @@ create table core.actions (
   key         text primary key check (key ~ '^[a-z]+:[a-z0-9_.]+$'),
   layer       text not null references core.layers,
   scope       text not null default 'department' check (scope in ('department', 'organization')),
+  everyday    boolean not null default false,         -- a pack's: held by the everyday roles where a department uses the pack (§5.2)
   labels      jsonb not null default '{}'
 );
 create table core.role_actions (
@@ -478,6 +481,14 @@ create table core.redactions (
   moved_to    uuid,
   at          timestamptz not null default clock_timestamp(),
   primary key (organization_id, id)
+);
+
+-- ── a refresh or a listener under way in this backend's transaction: only then do the pack doors read unmasked (§5.2). Written only
+-- by core.run_refresh; nobody else holds a privilege on it ──
+create unlogged table core.unmasked (
+  pid             int primary key,
+  xid             xid8 not null,
+  organization_id uuid not null     -- the clinic the refresh runs for: an unmasked read of another is refused
 );
 
 -- ── after-commit reactions and stale marks (§3.9 step 9) ──

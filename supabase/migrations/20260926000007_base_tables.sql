@@ -453,6 +453,20 @@ begin
   end loop;
 end $$;
 
+-- a pack's read of identity (§5.2): sex, birth date with its precision, estimated, unknown, deceased (the base's died, never private), and
+-- the age at a moment (now when none) in completed years, months and days by the clinic's day; no age without a birth date
+create function base.pack_identity(p_org uuid, p_patient uuid, p_at timestamptz default null) returns jsonb language sql stable security definer set search_path = '' as $$
+  with p as (select x.*, (coalesce(p_at, now()) at time zone base.tz(p_org))::date as day from core.patients x
+              where x.organization_id = p_org and x.id = core.survivor(p_org, p_patient) and core.pack_hidden(p_org, null) = '{}'),
+       a as (select p.*, case when p.birth_date <= p.day then age(p.day, p.birth_date) end as span from p)
+  select jsonb_build_object('patient_id', a.id, 'sex', a.gender, 'birth_date', a.birth_date, 'birth_precision', a.birth_precision, 'estimated', a.birth_estimated,
+    'unknown', a.anonymous, 'age_years', extract(year from a.span)::int, 'age_months', (extract(year from a.span) * 12 + extract(month from a.span))::int,
+    'age_days', case when a.span is not null then a.day - a.birth_date end,
+    'deceased', exists (select 1 from base.deceased d where d.organization_id = p_org and d.patient_id = any (core.family(p_org, a.id))),
+    'deceased_at', (select d.at from base.deceased d where d.organization_id = p_org and d.patient_id = any (core.family(p_org, a.id)) order by d.at limit 1))
+  from a
+$$;
+
 reset role;
 
 -- the eraser removes a patient's rows and runs the refreshes; the reader reads these tables through core's definer functions

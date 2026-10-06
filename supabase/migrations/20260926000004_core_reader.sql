@@ -55,10 +55,11 @@ begin
   end if;
 end $$;
 
--- rows of one derived table: equality or IN filters on its own columns, or {"op": ">=", "value": …}; organization always first
-create function core.table_rows(p_org uuid, p_table core.derived, p_where jsonb, p_limit int) returns jsonb language plpgsql stable security definer set search_path = '' as $$
-declare sql text := format('select coalesce(jsonb_agg(to_jsonb(x) - ''organization_id''), ''[]'') from (select * from %s x where x.organization_id = %L', p_table.relation, p_org);
-        k text; v jsonb; typ text; op text;
+-- rows of one derived table: equality or IN filters on its own columns, or {"op": ">=", "value": …}; organization always first. With
+-- p_newest, the rows newest first by that column (its own type)
+create function core.table_rows(p_org uuid, p_table core.derived, p_where jsonb, p_limit int, p_newest text default null) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare sql text := format(' from (select * from %s x where x.organization_id = %L', p_table.relation, p_org);
+        k text; v jsonb; typ text; op text; ord text := '';
 begin
   for k, v in select * from jsonb_each(coalesce(p_where, '{}')) loop
     select format_type(a.atttypid, a.atttypmod) into typ from pg_attribute a where a.attrelid = p_table.relation and a.attname = k and a.attnum > 0 and not a.attisdropped;
@@ -75,7 +76,14 @@ begin
       sql := sql || format(' and x.%I = %L::%s', k, v #>> '{}', typ);
     end if;
   end loop;
-  sql := sql || format(' limit %s) x', greatest(1, least(coalesce(p_limit, 500), 2000)));
+  if p_newest is not null then
+    if not exists (select 1 from pg_attribute a where a.attrelid = p_table.relation and a.attname = p_newest and a.attnum > 0 and not a.attisdropped) then
+      perform core.refuse('bad_filter', p_newest);
+    end if;
+    ord := format(' order by x.%I desc nulls last', p_newest);
+  end if;
+  sql := format('select coalesce(jsonb_agg(to_jsonb(x) - %L%s), %L)', 'organization_id', ord, '[]') || sql
+         || ord || format(' limit %s) x', greatest(1, least(coalesce(p_limit, 500), 2000)));
   execute sql into v;
   return v;
 end $$;
@@ -104,7 +112,10 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
     'me', jsonb_build_object('id', me.id, 'name', me.name, 'title', me.title, 'kind', me.kind, 'organization_id', me.organization_id,
       'holdings', coalesce((select jsonb_agg(jsonb_build_object('department_id', h.department_id, 'role_id', h.role_id,
           'actions', (select jsonb_agg(x order by x) from core.role_actions_of(me.organization_id, h.role_id) x)))
-        from core.live_holdings(me.organization_id) h where h.user_id = me.id), '[]')),
+        from core.live_holdings(me.organization_id) h where h.user_id = me.id), '[]'),
+      -- what I may do in each department, as may answers it ('' for held everywhere): a pack's actions only where it is used (§5.2)
+      'may', (select jsonb_object_agg(coalesce(d.id::text, ''), coalesce((select jsonb_agg(x order by x) from core.actions_in(me.id, d.id) x), '[]'))
+        from (select x.id from core.departments x where x.organization_id = me.organization_id and x.retired_at is null union all select null) d)),
     'users_of_login', coalesce((select jsonb_agg(jsonb_build_object('id', u.id, 'organization_id', u.organization_id, 'organization', o.name, 'name', u.name))
         from core.users u join core.organizations o on o.id = u.organization_id where u.login_id = me.login_id and u.retired_at is null and o.retired_at is null), '[]'),
     'organization', (select jsonb_build_object('id', o.id, 'name', o.name, 'time_zone', coalesce(core.setting_at(o.id, 'organization.time_zone', o.id) ->> 'zone', 'Africa/Cairo'),
@@ -129,10 +140,12 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
           from core.holdings h where h.organization_id = me.organization_id
            and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id)), '[]') else '[]' end,
     'roles', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'key', r.key, 'name', r.name, 'layer', r.layer, 'builtin', r.organization_id is null,
-          'retired_at', r.retired_at, 'every_action', r.every_action,
-          'actions', coalesce((select jsonb_agg(x order by x) from core.role_actions_of(me.organization_id, r.id) x), '[]')) order by r.name)
+          'retired_at', r.retired_at, 'every_action', r.every_action, 'built_on', r.built_on, 'everyday', r.everyday,
+          'actions', coalesce((select jsonb_agg(x order by x) from core.role_actions_of(me.organization_id, r.id) x), '[]'),
+          'own', coalesce((select jsonb_agg(ra.action order by ra.action) from core.role_actions ra join core.actions a on a.key = ra.action
+                            where ra.role_id = r.id and core.layer_on(me.organization_id, a.layer)), '[]')) order by r.name)
         from core.roles r where (r.organization_id = me.organization_id or (r.organization_id is null and core.layer_on(me.organization_id, r.layer)))), '[]'),
-    'actions', coalesce((select jsonb_agg(jsonb_build_object('key', a.key, 'layer', a.layer, 'scope', a.scope, 'labels', a.labels) order by a.key)
+    'actions', coalesce((select jsonb_agg(jsonb_build_object('key', a.key, 'layer', a.layer, 'scope', a.scope, 'everyday', a.everyday, 'labels', a.labels) order by a.key)
         from core.actions a where core.layer_on(me.organization_id, a.layer)), '[]'),
     'settings', coalesce((select jsonb_agg(jsonb_build_object('key', s.key, 'thing_id', s.thing_id, 'owner_id', s.owner_id, 'data', s.data, 'recorded_at', s.recorded_at))
         from (select distinct on (s.key, s.thing_id) s.* from core.settings s where s.organization_id = me.organization_id order by s.key, s.thing_id, s.recorded_at desc, s.id desc) s
@@ -333,6 +346,32 @@ create function core.read_codes(me core.users, q jsonb) returns jsonb language s
           and (coalesce(q ->> 'q', '') = '' or c.code ilike (q ->> 'q') || '%' or c.labels ->> 'en' ilike '%' || (q ->> 'q') || '%')
         order by c.system, c.code limit greatest(1, least(coalesce((q ->> 'limit')::int, 50), 2000))) c
 $$;
+
+-- ── masked by default (§5.2): a pack's read for a person sees what that person may see (the pack doors, migration 11) ──
+-- which of these entries the reader may not see; a read for a person of another organization is refused
+create function core.pack_hidden(p_org uuid, p_ids uuid[]) returns uuid[] language plpgsql stable security definer set search_path = '' as $$
+declare me core.users;
+begin
+  if core.unmasked_now() then
+    if core.unmasked_for() is distinct from p_org then perform core.refuse('wrong_organization'); end if;
+    return '{}';
+  end if;
+  me := core.me();
+  if me.organization_id is distinct from p_org then perform core.refuse('wrong_organization'); end if;
+  if coalesce(cardinality(p_ids), 0) = 0 then return '{}'; end if;
+  return core.hidden(p_org, me.id, p_ids);
+end $$;
+create function core.pack_masked(p_org uuid, p_rows core.entries[]) returns setof core.entries language plpgsql stable security definer set search_path = '' as $$
+declare hid uuid[]; x core.entries;
+begin
+  hid := core.pack_hidden(p_org, (select array_agg(y.id) from unnest(p_rows) y));
+  foreach x in array coalesce(p_rows, '{}') loop
+    if x.id = any (hid) then
+      x.data := '{}'; x.codes := '{}'; x.findings := '[]'; x.author_id := null; x.source_system := null; x.source_id := null; x.until := null;
+    end if;
+    return next x;
+  end loop;
+end $$;
 
 -- the one door out. FHIR (shape fhir) is added by the base's export migration through core.read_fhir.
 create function core.read_fhir(me core.users, q jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$

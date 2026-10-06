@@ -85,12 +85,18 @@ entries. Everything that happens is an entry, including "made private", "called"
   `importer`. A doctor at two clinics has two users. When a login has more than one live user, the client asks which one and calls
   `choose_user`, which binds the choice to the JWT's `session_id`. Nothing is ever shown across organizations.
 - **roles**: bundles of declared actions. Built-in roles belong to a layer (organization null) and are read-only; a clinic copies one
-  to make its own. **holdings** are insert-only rows with a validity period, held everywhere (department null) or in one department.
+  to make its own. A built-in role may be **built on** a base role: it holds every action of that role as it stands now, plus its own,
+  so whatever the base role gains later it gains too. The base's Doctor and Nurse are **everyday** roles: in a department that uses a
+  pack they hold the pack's everyday actions (§5.2), and only those. A role's actions are added one at a time, never replaced as a
+  list. **holdings** are insert-only rows with a validity period, held everywhere (department null) or in one department.
   Ending a holding inserts a row into `core.holding_ends`. The clock may step back: a holding dated no later than its grant, and
   every end, count once committed; one dated later is live from the later of the transaction's start and the clock.
 - `core.may(user, action, department)` → yes/no. **A null department matches only roles held everywhere.** `core.may_somewhere(user,
-  action)` answers "in any department". A pack's actions need the pack in the organization's `packs_used` setting. Retired users and
-  machine users hold nothing that opens a private item (§5.3).
+  action)` answers "in any department". A pack's actions count **only in a department that uses the pack** (`core.department_uses`:
+  on for the clinic and ticked there, §5.1 rule 1), so a null department never holds one; an organization-wide pack action needs only
+  the pack on (and so it cannot be everyday: `everyday_for_department`). One function (`core.gives(organization, role, action, department)`) answers for a role, and `core.actions_in(user,
+  department)` lists what may answers there (read `me` sends it per department, so the client asks the same question). Retired users
+  and machine users hold nothing that opens a private item (§5.3).
 - Identifiers for users, organizations, sites and departments are stored like patients' (`core.identifiers`, by owner kind).
 - **The last administrator.** Somebody must keep `manage:users` and `manage:roles` held everywhere (possibly on two roles). Nobody edits
   their own holdings or a role they hold, and nobody grants an action they do not hold everywhere.
@@ -184,14 +190,17 @@ select core.declare_type(
 select core.declare_system  (key, kind, uri, version, closed, check, licence, labels);
 select core.declare_table   (key => 'base.lists', layer => 'base', refresh => 'base.lists_refresh(uuid,uuid[])', action => 'read:record');
 select core.declare_rule    (key => 'base.private', layer => 'base', hidden => 'base.private_hidden(uuid,uuid[])');
-select core.declare_action  (key => 'write:note', layer => 'base', scope => 'department', labels => '{…}');
+select core.declare_action  (key => 'write:note', layer => 'base', scope => 'department', labels => '{…}',
+                             everyday => false);       -- a pack's only: held by the everyday roles where a department uses the pack
 select core.declare_setting (key => 'department.private', layer => 'base', owner => 'department', shape => '{…}', check_fn => null, many => false);
 select core.declare_screen  (key => 'pharmacy.dispensing', layer => 'pharmacy', work => 'bench', labels => '{…}',
                              action => 'read:pharmacy.queue',  -- what a user needs in the department to see its tab; null: anyone working there
                              replaces => array['base.bench']); -- a pack screen: the base screens of its work it stands in for
 select core.declare_listener(layer => 'pharmacy', types => array['medication','order'], refresh => 'pharmacy.queue_refresh(uuid,uuid[])');
 select core.declare_pack    (key => 'pharmacy', version => 1, requires => '{}', labels => '{…}');
-select core.declare_role    (id, key, layer, actions, labels);   -- a built-in role (read-only to organizations)
+select core.declare_role    (id, key, layer, name, actions, labels, every_action, built_on, everyday);   -- a built-in role (read-only
+                             -- to organizations): built_on a base role; everyday the base's only. Its actions are added, never replaced
+select core.declare_role_action(layer, role, action);  -- one action more, by the role's own layer: the core's, the base's or its own
 ```
 
 **Enforced when something is declared**
@@ -218,8 +227,11 @@ The writer:
 4. **Locks**: advisory transaction locks on every patient family in the set plus every claim, in sorted order, with `lock_timeout` 3 s
    (a timeout returns outcome `busy`, which the client retries). It works out each survivor again after locking. Then
    `recorded_at` = the clock, or 1 µs after the latest entry of those families when the clock has stepped back.
-5. **Generic checks**, which always refuse: the type exists and is on (its pack used here); the shape; `may(user, 'write:<type>',
-   the entry's department)`; the department and visit belong to the organization; one patient family per set unless the type declares
+5. **Generic checks**, which always refuse: the type exists and is on (its pack on for the clinic; while off only a correction lands:
+   `replaces`, or `changes` for a type whose base corrects by change, as a step does); the shape; `may(user, 'write:<type>', the
+   entry's department)`, except that where the pack's actions do not count (off, or not used in that department) a correction of its
+   entry is written by an author of the item who still holds a role there, in the target's own department (so no department can be
+   picked to dodge `may`); the department and visit belong to the organization; one patient family per set unless the type declares
    `other_patient`; `replaces` and `refers_to` targets exist in the family and are visible to the writer; the same-resource item rule;
    registered code systems only.
 6. **Assigns item and version** under the lock. A `replaces` or `changes` whose seen version (from `seen`, default the target's own
@@ -268,7 +280,11 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
   type, a pack's only to its own types. Types that may never be private skip every rule. Only the base's `opened_anyway` grants
   anything.
 - A hidden entry becomes a placeholder: "Private note · Psychiatry · 3 Sep", with no data, no author and no findings. Derived rows that
-  came from it are masked too (a private result's values vanish from trends and counts).
+  came from it are masked too (a private result's values vanish from trends and counts): a row is withheld when its own item has a
+  hidden source entry.
+- **The row rule** (every derived table, a pack's above all): a row copies data only from its own item; from other items it copies
+  only facts that are never private (a medicine's name, an order's service). So masking by the row's item is enough. The pack
+  contract suite proves it on every pack table (§8.8).
 - FHIR mappings take the reader's rows as input, never `entries`. No `service_role` is used for a patient read.
 
 ### 3.11 The two exceptions (owned by `core_eraser`; the permanence trigger allows only `current_user = core_eraser`)
@@ -508,8 +524,9 @@ it works ("/x is used in: …").
 - **May not**: redefine base ideas; loosen visibility; declare outside its prefix; call the writer from a check or refresh; reach the
   network; read another pack's tables; hold any privilege on core tables.
 - **Dependencies**: `requires` other packs, with no loops, checked at declaration.
-- **Off** (not in `organization.packs_used`): its types refuse new entries except corrections and cross-outs, and its visibility
-  rules keep applying. **On again**: its tables are refreshed for the organization before its screens show. There is no removal while
+- **Off** (not in `organization.packs_used`): its types refuse new entries except corrections and cross-outs (a correction by an
+  author of the item, §3.9 step 5), nobody holds its actions, its entries stay on every chart read-only, and its visibility rules keep
+  applying. **On again**: its tables are refreshed for the organization before its screens show. There is no removal while
   its entries exist.
 - A pack screen may look nothing like the base's and may replace a department's default screen (declared with `replaces`, registered
   with `registerScreen`), but it calls the same actions. It is
@@ -602,16 +619,41 @@ it works ("/x is used in: …").
   writing or reading, taken from the session, never passed in, so a pack sees only what that person may see. Only a refresh or a
   listener reads unmasked, and its rows keep `source_entries` for the reader to mask. A pack row copies data only from its own item;
   from other items it copies only facts that are never private. A permanent test proves no private value leaks into a pack table.
+  *Built 2026-10-06:* the doors, granted to every pack role by `core.create_pack` (never to the API):
+
+  | door | returns |
+  |---|---|
+  | `base.pack_identity(org, patient, at)` | sex, birth date and its precision, estimated, unknown, deceased and when (the base's `died`), the age at the moment in completed years, months and days by the clinic's day |
+  | `core.pack_kind(org, patient, kind, filter)` | the family's entries of a kind, a pack type extending it included (`core.kinds`), newest first; filter `data` (contained), `codes` (any), `from`/`to` (clinical time), `current` (each item's latest version, while still of the kind), `limit` (applied last, after the filters and the masking) |
+  | `core.pack_visit(org, visit, kind)` | the visit's own moves and every entry written in it, oldest first |
+  | `core.pack_entries(org, items)` | every version of these items, what refers to them and what they refer to |
+  | `core.pack_rows(org, table, query)` | rows of a base table through the registry (never another pack's): `patient`, `where`, `latest {by, at}` (newest by `at`'s own type), `limit` (applied last) — the lists, latest values by code, open orders and dues; at most 2000 matching rows are read |
+  | `core.pack_codes(system, codes)` | labels, parent, props, retired |
+  | `core.pack_department(org, department)` | its work, the packs it uses, its places |
+  | `core.pack_staff(org, users)` | name, title, kind and identifiers (syndicate numbers) |
+
+  Masked means: the reader is `core.me()`, and a read for another organization is refused `wrong_organization`; a hidden entry comes
+  back as its placeholder (no data, codes, findings, author or end time, as the reader's); a data or codes filter matches only what
+  the reader may see, and a hidden match takes no place in the limit; a table row with a hidden source entry is withheld before the
+  latest is picked and the limit applied, so the latest value is the latest the reader may see. Unmasked means a refresh or a
+  listener under way: the core runs each one through `core.run_refresh`, which marks this backend's transaction in `core.unmasked`
+  with the clinic it runs for (no pack holds a privilege on it, nor may call `run_refresh`) for the call's length; an unmasked read
+  of another clinic is refused `wrong_organization` too.
 - **Roles.** Each specialty has its own role, declared by its pack and **built on a base role**: an Obstetrician holds everything a
   Doctor holds plus ObGyn's actions, an Anaesthetist is Doctor plus anaesthesia, a Midwife is her own role built on Nurse plus births;
   whatever the base role gains later, the specialist gains too. A pack marks some actions *everyday* (`/anc`): in a department that
   ticks the pack, its ordinary Doctors and Nurses hold those, and only those. A pack's actions count only in departments that tick it
   (rule 1). Jobs that are neither doctor nor nurse have their own plain roles (radiographer, cashier, store keeper, social worker).
-  Actions are added one at a time, never by replacing a whole list.
+  Actions are added one at a time, never by replacing a whole list. *Built 2026-10-06:* `declare_role(…, built_on => Doctor)`; an
+  action `declare_action(…, everyday => true)`; Doctor and Nurse are the base's everyday roles; `declare_role_action` adds one action
+  (a pack adds only to its own roles); `core.gives` answers for a role in a department (§3.1). Pharmacist, Lab technician and
+  Reception stay plain. Settings → Roles shows what a role is built on ("Built on Doctor"), its own actions by kind and by pack, and
+  the everyday ones a Doctor or Nurse holds where a department uses the pack.
 - **Export.** A pack's FHIR adds beside its base type's mapping, never replaces it; the result is valid R4 (one value per choice
   element); a mapping that fails fails the tests.
 - **Off.** With a pack off for the clinic, its entries stay on every chart, read-only; only new entries of its types stop (corrections
-  and cross-outs still land), its actions stop, and its tables are not rebuilt. Turned on again, it catches up in the background and
+  and cross-outs still land: a correction by an author of the item who still holds a role in the target's department, written
+  there, since nobody holds the pack's write action while it is off; a cross-out is the base's), its actions stop, and its tables are not rebuilt. Turned on again, it catches up in the background and
   shows its progress.
 - **Setup and guards.** A starter setup ticks the department's packs and adds what is missing (places, services, presets, settings);
   on an existing department it never overwrites what staff changed and shows the difference instead. A pack declares only inside its
@@ -711,7 +753,9 @@ Addresses: governorate as ISO 3166-2:EG (EG-C, EG-GZ, EG-ALX), country EG. Phone
 6. **FHIR**: the demo patients export as an R4 Bundle and an IPS whose resources pass the structural checks; every coding resolves;
    every unit is UCUM.
 7. **Tenancy matrix**: every read and write across organizations sees nothing.
-8. **Pack contract**: one suite for every pack (prefix, grants, refresh = rebuild, canary on its types, off and on).
+8. **Pack contract**: one suite for every pack (prefix, grants, refresh = rebuild, canary on its types, off and on, and the row rule:
+   a private note and result with a marker, then every pack table scanned: the marker never lands, and a row's source entries from
+   other items are all of types that may never be private).
 
 The client's entry and setting types (`src/core/db/shapes.generated.ts`) are generated from the declared shapes by `npm run gen:shapes`;
 the test run ends with `gen:shapes --check` and fails when they are stale.
@@ -910,4 +954,34 @@ types, parked pack calls with per-call Retry, Postgres enums.
     department and for every reader, a pregnancy past 44 weeks, the pack words (department filter, rank, two, +n), the second line,
     the registry, pharmacy's word; `test:composer` 15 groups (the facts' commands and entries, a bare /alert, a bad LMP),
     `test:chart` 22 + 9, `test:sections` 19, `test:screens` 9.
+- 2026-10-06: platform piece 4 — what a pack may read, and roles (§5.2 Reading, Roles, Off; §3.1, §3.9 step 5, §3.10 the row rule).
+  - **Reading**: the pack doors (§5.2's table), masked by default (the session's user; `wrong_organization` across clinics); only a
+    refresh or a listener reads unmasked, every one now run through `core.run_refresh` (the writer, the outbox drain, a merge, a pack
+    on again, redact, the rebuild check). `core.pack_entries` is masked too (it was always unmasked).
+  - **Roles**: `core.roles.built_on` and `everyday`, `core.actions.everyday`; `core.gives`, `core.actions_in`; `may`, `may_somewhere`
+    and `holders_in` count a pack's actions only where its department uses the pack, a base role's actions for what is built on it, and
+    the everyday actions for Doctor and Nurse there. `declare_role` adds, never replaces; `declare_role_action`. Read `me` sends each
+    role's `built_on`, `everyday` and `own` actions, each action's `everyday`, and `me.may` per department; the client's `mayIn`
+    reads it. Settings → Roles: "Built on Doctor", the own actions by pack, the everyday ones.
+  - **Off**: a correction of a pack entry while the pack is off (or not used in the department) lands for an author of the item;
+    before, it was refused `not_allowed` because nobody held the pack's write action.
+  - **Tests changed where the contract changed**: admin's "the owner holds a pack's action" now asks in a department that ticks the
+    pack (and that it holds it nowhere else); the pharmacy and pack contract suites tick the pack where its actions are used; the
+    boundary scan lists the new doors.
+  - **Reviewed** (find, then an adversarial check of each finding): the correction path could be taken with the pack on, by picking an
+    unticked department (a former pharmacist, now a ward nurse, completed a dispense): it now needs the target's own department; a new
+    pack entry in an unticked department slipped past `may` (a null in the test) and is refused `not_allowed`; `pack_kind` applied its
+    limit before the data and codes filters and the masking (the newest note, hidden or of another kind, hid an older match), now last;
+    `pack_rows` cut an unordered slice before withholding and `latest` (a limit of one gave whichever row came first), now newest
+    first by `at`'s own type, withheld, then limited; an unmasked read took any clinic's id (the mark now names the clinic the refresh
+    runs for); a hidden entry's placeholder kept its end time; an organization-wide action can no longer be everyday
+    (`everyday_for_department`); Settings → Roles shows the everyday actions of a role built on Doctor or Nurse.
+  - **Tests**: new `pack_reads` (48: each door masked as a reader without rights and in full as one with them, in a check as the
+    writer, unmasked in a listener with rows the reader masks, refused with no session or across clinics, a listener refused another
+    clinic, a filter and a latest before the limit, a pack entry refused where the department does not tick the pack) and `roles` (30:
+    pharmacy's actions only where ticked, a probe pack's specialist built on Doctor gaining a base action declared later, its everyday
+    action held by a GP Doctor and a Nurse only where the department ticks the probe pack, unticked and off, no everyday
+    organization-wide action); `pack_contract` +6 (the row rule); `pharmacy` +6 (off: its holders keep nothing, a correction by its
+    author lands, by anyone else not, a cross-out lands; on: a former pharmacist's change refused in the ward and in the pharmacy).
+    19 suites, 620 checks; `test:composer` 13 groups, `test:chart` 22 + 9, `test:screens` 9, `test:sections` 19.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

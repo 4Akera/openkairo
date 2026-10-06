@@ -9,6 +9,10 @@
 \set pm   '11111111-0000-0000-0000-0000000000b6'
 \set ow   '11111111-0000-0000-0000-0000000000b9'
 select t.fixture();
+-- the pharmacy ticks the pack (the demo's does): its actions count only there (§5.2)
+select t.as(:'ow');
+select public.write_setting(jsonb_build_object('key', 'department.packs', 'owner_id', :'ph', 'data', '{"packs":["pharmacy"]}'::jsonb)) ->> 'key' as ticked;
+select t.as(null);
 
 \echo '── the boundary: the pack role holds nothing on any core table; its functions are its own and definer'
 select t.ok(bool_and(not has_table_privilege('pack_pharmacy', 'core.' || tablename, 'SELECT,INSERT,UPDATE,DELETE')), 'pack_pharmacy holds no core table') from pg_tables where schemaname = 'core';
@@ -50,6 +54,22 @@ select t.ok(count(*) = 0, 'nothing to review for a dispense') from t.rows('base.
 select t.ok(string_agg(e ->> 'line', ' > ' order by (e ->> 'item_version')::int) = 'Prepared > Dispensed · Lithium 400 mg × 60', 'steps: ' || string_agg(e ->> 'line', ' > ' order by (e ->> 'item_version')::int))
   from jsonb_array_elements(public.read(jsonb_build_object('shape', 'item', 'item', '00000000-0000-0000-0000-0000000000e3', 'department_id', :'im')) -> 'entries') e where e ->> 'item' = '00000000-0000-0000-0000-0000000000e3';
 
+\echo '── pack on: a former pharmacist, now a nurse in the ward (which does not tick pharmacy), cannot alter a dispense'
+reset role;
+savepoint former;
+insert into core.holding_ends (organization_id, holding_id) select h.organization_id, h.id from core.holdings h where h.user_id = '00000000-0000-0000-0000-0000000000b6';
+insert into core.holdings (organization_id, user_id, role_id, department_id)
+  values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000b6', '00000000-0000-0000-0000-00000000c003', '00000000-0000-0000-0000-0000000000d6');
+set role authenticated;
+select t.as(:'pm');
+select t.refused(t.w(t.e('pharmacy.dispense', :'pt', '00000000-0000-0000-0000-0000000000d6', '{"status":"completed","pharmacy":{"items":[{"drug":{"text":"Lithium"},"quantity":{"value":"90","unit":"tablets","ucum":"{tbl}"}}]}}',
+  null, null, '00000000-0000-0000-0000-0000000000e4', 'changes')), 'not_allowed', 'written in the ward, where pharmacy''s actions do not count');
+select t.refused(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed","pharmacy":{"items":[{"drug":{"text":"Lithium"},"quantity":{"value":"90","unit":"tablets","ucum":"{tbl}"}}]}}',
+  null, null, '00000000-0000-0000-0000-0000000000e4', 'changes')), 'not_allowed', 'written in the pharmacy, where they hold the action no more');
+reset role;
+rollback to savepoint former;
+set role authenticated;
+
 \echo '── pack off: a new dispense is refused; a correction still lands; the record still reads; on again, its table catches up'
 select t.as(:'dr');
 select t.landed(t.w(jsonb_build_array(
@@ -60,6 +80,18 @@ select t.as(:'ow');
 select public.write_setting('{"key":"organization.packs_used","data":{"packs":[]}}') ->> 'key' as pack_off;
 select t.as(:'pm');
 select t.refused(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","step":"prepared"}', null, null, '00000000-0000-0000-0000-0000000000e6', 'answers')), 'pack_off', 'a new dispense');
+reset role;
+select t.ok(not core.may('00000000-0000-0000-0000-0000000000b6', 'write:pharmacy.dispense', :'ph') and not core.may_somewhere('00000000-0000-0000-0000-0000000000b6', 'read:pharmacy.queue'),
+  'its holders keep none of its actions');
+set role authenticated;
+select t.as(:'pm');
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed","pharmacy":{"items":[{"drug":{"text":"Lithium"},"dose":{"value":"400","unit":"mg","ucum":"mg"},"quantity":{"value":"30","unit":"tablets","ucum":"{tbl}"}}]}}',
+  '00000000-0000-0000-0000-0000000000e9', null, '00000000-0000-0000-0000-0000000000e4', 'changes')), 'a correction by its author still lands (60 was 30; a step corrects by change)');
+select t.as(:'ow');
+select t.refused(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed","pharmacy":{"items":[{"drug":{"text":"Lithium"},"quantity":{"value":"20","unit":"tablets","ucum":"{tbl}"}}]}}',
+  null, null, '00000000-0000-0000-0000-0000000000e9', 'changes')), 'not_allowed', 'a correction by someone who wrote none of it');
+select t.as(:'pm');
+select t.landed(t.w(t.e('crossed_out', :'pt', :'ph', '{"reason":"wrong_value"}', null, null, null, null, '00000000-0000-0000-0000-0000000000e9')), 'a cross-out still lands');
 select t.as(:'ow');
 select t.ok(exists (select 1 from jsonb_array_elements(t.record(:'pt', :'im') -> 'entries') e where e ->> 'type' = 'pharmacy.dispense' and e ->> 'line' like 'Dispensed%'), 'the record still reads, with the pack''s line');
 reset role;

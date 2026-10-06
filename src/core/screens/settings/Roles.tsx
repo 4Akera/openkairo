@@ -6,14 +6,15 @@ import { Badge, Button, Card, Chip, DeleteButton, EditPanel, Empty, Field, Field
 import { useSave } from './save'
 
 type RoleDraft = { name: string; actions: string[] }
-type ActionRow = { key: string; pack: string | null; label: string }
+type ActionRow = { key: string; pack: string | null; label: string; everyday: boolean }
+type Role = Organization['roles'][number]
 const KINDS: [string, string, string][] = [['write', 'Writes', 'what they may add to the record, and the moves of a visit or an order'],
   ['read', 'Reads', 'what they may see'], ['manage', 'Settings', 'what they may change here — only what you hold yourself'], ['', 'Rare', 'export, erase and redact']]
 
 /** Roles (spec 02): what a person may do where they hold the role. Built-in roles are read-only; copy one to make your own. */
 export function RolesPage({ org }: { org: Organization }) {
   // the actions the registry declares; a pack's are its own group (the words are the registry's labels)
-  const acts: { data: ActionRow[]; isLoading: boolean } = { data: org.actions.map((a) => ({ key: a.key, pack: a.layer === 'core' || a.layer === 'base' ? null : a.layer, label: a.label })), isLoading: false }
+  const acts: { data: ActionRow[]; isLoading: boolean } = { data: org.actions.map((a) => ({ key: a.key, pack: a.layer === 'core' || a.layer === 'base' ? null : a.layer, label: a.label, everyday: a.everyday })), isLoading: false }
   const actionLabel = (k: string) => acts.data.find((a) => a.key === k)?.label ?? k
   const save = useSave((r: { id: string; name: string; actions: string[] }) => saveRow('role', r)); const retire = useSave((id: string) => saveRow('role', { id, retired: true }))
   const del = useSave((id: string) => remove('role', id)); const e = useDraft<RoleDraft>()
@@ -24,7 +25,8 @@ export function RolesPage({ org }: { org: Organization }) {
   const holders = (roleId: string) => org.users.filter((u) => !u.retired_at && u.roles.some((r) => r.role_id === roleId))
   const packName = (k: string) => org.packs.find((p) => p.key === k)?.name ?? k
   const own = org.roles.filter((r) => !r.is_builtin); const builtin = org.roles.filter((r) => r.is_builtin)
-  const copy = (r: Organization['roles'][number]) => open(newId(), { name: `${r.name} (copy)`, actions: [...r.actions] }, true)
+  const copy = (r: Role) => open(newId(), { name: `${r.name} (copy)`, actions: [...r.actions] }, true)
+  const baseOf = (r: Role) => (r.built_on ? org.roles.find((x) => x.id === r.built_on) : undefined)
 
   const picker = (d: RoleDraft, readOnly: boolean) => {
     const all = acts.data; const flip = (k: string) => e.set({ actions: d.actions.includes(k) ? d.actions.filter((x) => x !== k) : [...d.actions, k] })
@@ -47,8 +49,17 @@ export function RolesPage({ org }: { org: Organization }) {
       <Fieldset title={`Can do · ${d.actions.length}`}>{acts.isLoading ? <p className="text-12 text-faint">Loading…</p> : picker(d, false)}</Fieldset>
     </EditPanel>
   }
-  const row = (r: Organization['roles'][number]) => { const n = holders(r.id).length
-    return <><span className="w-44 truncate font-medium">{r.name}</span><Badge>{r.every_action ? 'every action' : `${r.actions.length} actions`}</Badge>{n > 0 && <Badge tone="accent">{n} {n === 1 ? 'person' : 'people'}</Badge>}
+  // a built-in role read-only: what it is built on (whatever that role gains, it gains), its own actions by kind and by pack, and a
+  // pack's everyday actions where it holds them, as an everyday role or built on one (§5.2)
+  const builtinView = (r: Role) => { const base = baseOf(r); const everyday = (r.everyday || base?.everyday) ? acts.data.filter((a) => a.everyday && a.pack) : []
+    return <div className="grid gap-3 border-y border-line bg-sunken px-4 py-4">
+      {base && <p className="text-12 text-muted">Built on <span className="font-medium text-fg">{base.name}</span>: it holds everything a {base.name} holds, as that role stands now, and its own below.</p>}
+      {picker({ name: r.name, actions: base ? r.own : r.actions }, true)}
+      {everyday.length > 0 && <div><p className="mb-1.5 text-11 text-faint"><span className="font-medium text-muted">Everyday</span> · held in a department that uses the pack</p>
+        <div className="flex flex-wrap gap-1.5">{everyday.map((a) => <Badge key={a.key}>{packName(a.pack!)} · {a.label}</Badge>)}</div></div>}
+      <div><Button type="button" size="sm" variant="outline" onClick={() => copy(r)}><Copy className="h-3.5 w-3.5" />Copy to make your own</Button></div></div> }
+  const row = (r: Role) => { const n = holders(r.id).length; const base = baseOf(r)
+    return <><span className="w-44 truncate font-medium">{r.name}</span><Badge>{r.every_action ? 'every action' : `${r.actions.length} actions`}</Badge>{base && <Badge>Built on {base.name}</Badge>}{n > 0 && <Badge tone="accent">{n} {n === 1 ? 'person' : 'people'}</Badge>}
       <span className="min-w-0 flex-1 truncate text-12 text-faint">{r.actions.filter((a) => a.startsWith('write:')).map(actionLabel).join(' · ') || r.actions.slice(0, 4).map(actionLabel).join(' · ')}</span></> }
 
   return <div className="grid gap-4">
@@ -61,8 +72,7 @@ export function RolesPage({ org }: { org: Organization }) {
     </Section>
     <Section flush id="roles.builtin" title="Built in" count={builtin.length} summary="read-only — copy to change" start={false}>
       <ul className="divide-y divide-line">{builtin.map((r) => <Row key={r.id} open={e.id === r.id && !e.isNew} onToggle={() => open(r.id, { name: r.name, actions: [...r.actions] })}
-        editor={() => <div className="grid gap-3 border-y border-line bg-sunken px-4 py-4">{picker({ name: r.name, actions: r.actions }, true)}
-          <div><Button type="button" size="sm" variant="outline" onClick={() => copy(r)}><Copy className="h-3.5 w-3.5" />Copy to make your own</Button></div></div>}>{row(r)}</Row>)}</ul>
+        editor={() => builtinView(r)}>{row(r)}</Row>)}</ul>
     </Section>
   </div>
 }

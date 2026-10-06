@@ -96,35 +96,46 @@ create function core.department_uses(p_org uuid, p_department uuid, p_layer text
     and exists (select 1 from jsonb_array_elements_text(coalesce(core.setting_at(p_org, 'department.packs', p_department) -> 'packs', '[]')) x where x = p_layer))
 $$;
 
--- ── may (§3.1): a null department matches only roles held everywhere. A holding dated no later than its grant counts once
+-- ── may (§3.1, §5.2): a null department matches only roles held everywhere. A holding dated no later than its grant counts once
 -- committed, one dated later from core.now_safe(); an end is dated by its own insert (a planned end is valid_until), so it counts
 -- once committed, as the doors read it. A clock stepping back never undoes a grant or an end of a moment ago. ──
+-- does a role give this action in this department: its own actions and those of the role it is built on, as they stand now (the Owner
+-- every action); a pack's everyday action to a role marked everyday (the base's Doctor and Nurse, and what is built on them). A pack's
+-- action counts only where the department uses the pack (§5.1 rule 1); an organization-wide one while the clinic has it on.
+create function core.gives(p_org uuid, p_role uuid, p_action text, p_department uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from core.roles r join core.actions a on a.key = p_action join core.layers l on l.key = a.layer
+      left join core.roles b on b.id = r.built_on and b.retired_at is null
+     where r.id = p_role
+       and (r.every_action or exists (select 1 from core.role_actions ra where ra.role_id in (r.id, b.id) and ra.action = a.key)
+            or (a.everyday and (r.everyday or coalesce(b.everyday, false))))
+       and case when not l.is_pack then true
+                when a.scope = 'organization' then core.layer_on(p_org, a.layer)
+                else p_department is not null and core.department_uses(p_org, p_department, a.layer) end)
+$$;
 create function core.may(p_user uuid, p_action text, p_department uuid) returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from core.users u
       join core.holdings h on h.organization_id = u.organization_id and h.user_id = u.id
       join core.roles r on r.id = h.role_id and r.retired_at is null and (r.organization_id is null or r.organization_id = u.organization_id)
-      join core.actions a on a.key = p_action
-      left join core.role_actions ra on ra.role_id = r.id and ra.action = p_action
      where u.id = p_user and u.retired_at is null
        and h.valid_from <= greatest(h.recorded_at, core.now_safe()) and (h.valid_until is null or h.valid_until > core.now_safe())
        and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id)
        and (h.department_id is null or h.department_id = p_department)
-       and (ra.action is not null or r.every_action)
-       and core.layer_on(u.organization_id, a.layer))
+       and core.gives(u.organization_id, r.id, p_action, p_department))
 $$;
+-- in any department: where the holding is, or any department for one held everywhere (a pack's action counts where it is used)
 create function core.may_somewhere(p_user uuid, p_action text) returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from core.users u
       join core.holdings h on h.organization_id = u.organization_id and h.user_id = u.id
       join core.roles r on r.id = h.role_id and r.retired_at is null and (r.organization_id is null or r.organization_id = u.organization_id)
-      join core.actions a on a.key = p_action
-      left join core.role_actions ra on ra.role_id = r.id and ra.action = p_action
      where u.id = p_user and u.retired_at is null
        and h.valid_from <= greatest(h.recorded_at, core.now_safe()) and (h.valid_until is null or h.valid_until > core.now_safe())
        and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id)
-       and (ra.action is not null or r.every_action)
-       and core.layer_on(u.organization_id, a.layer))
+       and (core.gives(u.organization_id, r.id, p_action, h.department_id)
+            or (h.department_id is null and exists (select 1 from core.departments d where d.organization_id = u.organization_id and d.retired_at is null
+                                                      and core.gives(u.organization_id, r.id, p_action, d.id)))))
 $$;
 -- the live holdings of a user (who holds what where), live as in may: used by the base's privacy rule and by settings
 create function core.live_holdings(p_org uuid) returns table (user_id uuid, role_id uuid, department_id uuid)
@@ -133,19 +144,49 @@ language sql stable security definer set search_path = '' as $$
    where h.organization_id = p_org and h.valid_from <= greatest(h.recorded_at, core.now_safe()) and (h.valid_until is null or h.valid_until > core.now_safe())
      and not exists (select 1 from core.holding_ends x where x.organization_id = h.organization_id and x.holding_id = h.id)
 $$;
--- the actions a role gives (every action of the organization's layers, for the Owner)
+-- the actions a role gives wherever a department uses them: its own and its base role's (every action of the organization's layers, for
+-- the Owner); a pack's everyday actions count only in a department, so they are not here (Settings, and who may grant what)
 create function core.role_actions_of(p_org uuid, p_role uuid) returns setof text language sql stable security definer set search_path = '' as $$
-  select a.key from core.actions a join core.roles r on r.id = p_role
-   where core.layer_on(p_org, a.layer) and (r.every_action or exists (select 1 from core.role_actions ra where ra.role_id = r.id and ra.action = a.key))
+  select a.key from core.actions a join core.roles r on r.id = p_role left join core.roles b on b.id = r.built_on and b.retired_at is null
+   where core.layer_on(p_org, a.layer)
+     and (r.every_action or exists (select 1 from core.role_actions ra where ra.role_id in (r.id, b.id) and ra.action = a.key))
+$$;
+-- every action a user may do in a department (null: held everywhere), as may answers it: the directory's rights, one per department
+create function core.actions_in(p_user uuid, p_department uuid) returns setof text language sql stable security definer set search_path = '' as $$
+  select distinct a.key from core.users u join core.live_holdings(u.organization_id) h on h.user_id = u.id
+    join core.roles r on r.id = h.role_id and (r.organization_id is null or r.organization_id = u.organization_id), core.actions a
+   where u.id = p_user and u.retired_at is null and (h.department_id is null or h.department_id = p_department)
+     and core.gives(u.organization_id, r.id, a.key, p_department)
 $$;
 -- users who hold an action in a department by a role held there (not everywhere): who works there (§4.3)
 create function core.holders_in(p_org uuid, p_action text, p_department uuid) returns setof uuid
 language sql stable security definer set search_path = '' as $$
   select distinct h.user_id from core.live_holdings(p_org) h
-    join core.role_actions_of(p_org, h.role_id) ra(action) on ra.action = p_action
     join core.users u on u.organization_id = p_org and u.id = h.user_id and u.retired_at is null and u.kind = 'staff'
-   where h.department_id = p_department
+   where h.department_id = p_department and core.gives(p_org, h.role_id, p_action, p_department)
 $$;
+
+-- ── masked by default (§5.2): a pack door reads for the person signed in, unless a refresh or a listener is under way ──
+create function core.unmasked_now() returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from core.unmasked m where m.pid = pg_backend_pid() and m.xid = pg_current_xact_id_if_assigned())
+$$;
+-- the clinic the refresh under way runs for (null: none under way)
+create function core.unmasked_for() returns uuid language sql stable security definer set search_path = '' as $$
+  select m.organization_id from core.unmasked m where m.pid = pg_backend_pid() and m.xid = pg_current_xact_id_if_assigned()
+$$;
+-- run a refresh or a listener: the pack doors it calls read unmasked, and its rows keep source_entries for the reader to mask. The mark
+-- lives in this transaction only; a refresh that raises takes it back with its own work
+create function core.run_refresh(p_fn regprocedure, p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
+declare n int;
+begin
+  insert into core.unmasked as m (pid, xid, organization_id) values (pg_backend_pid(), pg_current_xact_id(), p_org)
+  on conflict (pid) do update set xid = excluded.xid, organization_id = excluded.organization_id where m.xid is distinct from excluded.xid;
+  get diagnostics n = row_count;
+  -- nested inside another refresh: the same clinic only
+  if n = 0 and core.unmasked_for() is distinct from p_org then perform core.refuse('wrong_organization'); end if;
+  execute format('select %s($1, $2)', p_fn::regproc) using p_org, p_items;
+  if n > 0 then delete from core.unmasked where pid = pg_backend_pid(); end if;
+end $$;
 
 -- ── counters (§3.6) ──
 create function core.next_number(p_org uuid, p_key text, p_scope text default '', p_day date default '2000-01-01') returns bigint
@@ -282,27 +323,59 @@ begin
   if loop_found then perform core.refuse('requires_loop', declare_pack.key); end if;
 end $$;
 
-create function core.declare_action(key text, layer text, scope text default 'department', labels jsonb default '{}') returns void language plpgsql as $$
+-- an action (§3.8). A pack may mark one everyday: where a department uses the pack, the everyday roles hold it (§5.2)
+create function core.declare_action(key text, layer text, scope text default 'department', labels jsonb default '{}', everyday boolean default false)
+returns void language plpgsql as $$
 #variable_conflict use_variable
 begin
   perform core.check_prefix(layer, split_part(key, ':', 2));
-  insert into core.actions (key, layer, scope, labels) values (declare_action.key, declare_action.layer, declare_action.scope, declare_action.labels)
-  on conflict on constraint actions_pkey do update set labels = excluded.labels, scope = excluded.scope
+  if everyday and not (select is_pack from core.layers l where l.key = layer) then perform core.refuse('everyday_for_packs', key); end if;
+  -- everyday actions are held only in a department that uses the pack, so an organization-wide one cannot be everyday
+  if everyday and scope = 'organization' then perform core.refuse('everyday_for_department', key); end if;
+  insert into core.actions (key, layer, scope, labels, everyday) values (declare_action.key, declare_action.layer, declare_action.scope, declare_action.labels, declare_action.everyday)
+  on conflict on constraint actions_pkey do update set labels = excluded.labels, scope = excluded.scope, everyday = excluded.everyday
   where core.actions.layer = excluded.layer;
 end $$;
 
-create function core.declare_role(id uuid, key text, layer text, name text, actions text[], labels jsonb default '{}', every_action boolean default false) returns void language plpgsql as $$
+-- one action more for a built-in role, never a whole list replaced (§5.2): the core's, the base's, or its own layer's and the packs it
+-- requires; only the role's own layer adds to it (a base role gains a pack's action only as an everyday one)
+create function core.declare_role_action(layer text, role uuid, action text) returns void language plpgsql as $$
+#variable_conflict use_variable
+declare r core.roles; a core.actions; v_requires text[];
+begin
+  select * into r from core.roles x where x.id = role and x.organization_id is null;
+  if not found then perform core.refuse('unknown_role', role::text); end if;
+  if r.layer <> layer then perform core.refuse('other_layers_role', format('%s may not add to %s', layer, r.key)); end if;
+  select coalesce(l.requires, '{}') into v_requires from core.layers l where l.key = r.layer;
+  select * into a from core.actions x where x.key = action;
+  if not found or not (a.layer in ('core', 'base', r.layer) or a.layer = any (coalesce(v_requires, '{}'))) then
+    perform core.refuse('unknown_action', format('%s for %s', action, r.key));
+  end if;
+  insert into core.role_actions (role_id, action) values (r.id, a.key) on conflict do nothing;
+end $$;
+
+-- a built-in role (§3.1, §5.2): built on a base role (it holds what that role holds, as it stands now, plus its own), or everyday (it
+-- holds a pack's everyday actions where a department uses the pack). Its actions are added, never replaced.
+create function core.declare_role(id uuid, key text, layer text, name text, actions text[], labels jsonb default '{}', every_action boolean default false,
+  built_on uuid default null, everyday boolean default false) returns void language plpgsql as $$
 #variable_conflict use_variable
 declare a text;
 begin
+  if built_on is not null and not exists (select 1 from core.roles b where b.id = built_on and b.organization_id is null and b.layer = 'base'
+                                            and not b.every_action and b.built_on is null) then
+    perform core.refuse('unknown_role', format('%s is built on %s, which is no base role', key, built_on));
+  end if;
+  if everyday and layer <> 'base' then perform core.refuse('everyday_for_base', key); end if;
+  if exists (select 1 from core.roles x where x.id = declare_role.id and x.layer is distinct from declare_role.layer) then
+    perform core.refuse('other_layers_role', format('%s may not declare %s', layer, key));
+  end if;
+  insert into core.roles (id, organization_id, layer, key, name, labels, every_action, built_on, everyday)
+  values (declare_role.id, null, declare_role.layer, declare_role.key, declare_role.name, declare_role.labels, declare_role.every_action, declare_role.built_on, declare_role.everyday)
+  on conflict on constraint roles_pkey do update set name = excluded.name, labels = excluded.labels, every_action = excluded.every_action,
+     built_on = excluded.built_on, everyday = excluded.everyday;
   foreach a in array actions loop
-    if not exists (select 1 from core.actions x where x.key = a) then perform core.refuse('unknown_action', a); end if;
+    perform core.declare_role_action(layer, declare_role.id, a);
   end loop;
-  insert into core.roles (id, organization_id, layer, key, name, labels, every_action)
-  values (declare_role.id, null, declare_role.layer, declare_role.key, declare_role.name, declare_role.labels, declare_role.every_action)
-  on conflict on constraint roles_pkey do update set name = excluded.name, labels = excluded.labels, every_action = excluded.every_action;
-  delete from core.role_actions ra where ra.role_id = declare_role.id and not (ra.action = any (actions));
-  insert into core.role_actions (role_id, action) select declare_role.id, unnest(actions) on conflict do nothing;
 end $$;
 
 create function core.declare_system(key text, layer text, kind text, uri text, version text default null, closed boolean default false,

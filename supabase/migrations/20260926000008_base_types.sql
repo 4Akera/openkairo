@@ -785,18 +785,20 @@ select core.declare_screen('base.queue', 'base', 'visits', '{"en":"Queue"}', 're
 select core.declare_screen('base.bench', 'base', 'bench', '{"en":"Bench"}', 'read:bench');
 select core.declare_screen('base.beds', 'base', 'stays', '{"en":"Bed board"}', 'read:queue');
 
--- ── built-in roles (fixed ids; read-only to organizations) ──
+-- ── built-in roles (fixed ids; read-only to organizations). Doctor and Nurse are everyday: where a department uses a pack, they hold its
+-- everyday actions (§5.2); a specialist a pack declares is built on one of them ──
 select core.declare_role('00000000-0000-0000-0000-00000000c001', 'owner', 'base', 'Owner', '{}', '{"en":"Owner"}', every_action => true);
 select core.declare_role('00000000-0000-0000-0000-00000000c002', 'doctor', 'base', 'Doctor', array[
   'read:patients', 'read:record', 'read:queue', 'read:review', 'read:bench', 'export:fhir',
   'write:note', 'write:vitals', 'write:observation', 'write:problem', 'write:allergy', 'write:medication', 'write:given', 'write:list_review', 'write:order',
   'write:result', 'write:procedure', 'write:reviewed', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:died', 'write:crossed_out',
   'write:here', 'write:not_here', 'write:called', 'write:seen', 'write:back_to_waiting', 'write:away', 'write:urgent', 'write:assigned', 'write:left', 'write:done',
-  'write:transferred', 'write:admitted', 'write:moved', 'write:discharged', 'write:private', 'write:not_private', 'write:opened_anyway'], '{"en":"Doctor"}');
+  'write:transferred', 'write:admitted', 'write:moved', 'write:discharged', 'write:private', 'write:not_private', 'write:opened_anyway'], '{"en":"Doctor"}',
+  everyday => true);
 select core.declare_role('00000000-0000-0000-0000-00000000c003', 'nurse', 'base', 'Nurse', array[
   'read:patients', 'read:record', 'read:queue', 'write:note', 'write:vitals', 'write:observation', 'write:allergy', 'write:given', 'write:list_review',
   'write:procedure', 'write:alert', 'write:pregnancy', 'write:breastfeeding', 'write:crossed_out', 'write:here', 'write:not_here', 'write:called', 'write:back_to_waiting', 'write:away', 'write:urgent',
-  'write:assigned', 'write:moved', 'write:private'], '{"en":"Nurse"}');
+  'write:assigned', 'write:moved', 'write:private'], '{"en":"Nurse"}', everyday => true);
 select core.declare_role('00000000-0000-0000-0000-00000000c004', 'reception', 'base', 'Reception', array[
   'read:patients', 'read:queue', 'manage:patients', 'write:checked_in', 'write:here', 'write:not_here', 'write:away', 'write:urgent', 'write:transferred',
   'write:left', 'write:crossed_out'], '{"en":"Reception"}');

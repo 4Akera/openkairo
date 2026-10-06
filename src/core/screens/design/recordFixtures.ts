@@ -13,7 +13,7 @@ const T = { visit: at(0, 9, 40), lab: at(0, 11, 20), month: at(30, 10), year: at
 const TYPE = (key: string, en: string, in_record = true, base_type: string | null = null) => ({ key, version: 1, layer: base_type ? 'demo' : 'base', base_type, in_record, may_be_private: key === 'note', labels: { en } })
 export const SAMPLE_ORG = {
   organization: { id: 'demo-org', name: 'Demo Clinic', time_zone: 'UTC', record_view: 'visits' },
-  me: { id: ME, name: 'Dr. Demo Doctor', kind: 'staff', departments: [], actions: [], works_in: [], holdings: [] },
+  me: { id: ME, name: 'Dr. Demo Doctor', kind: 'staff', departments: [], actions: [], works_in: [], holdings: [], may: {} },
   users: [{ id: ME, name: 'Dr. Demo Doctor' }, { id: LAB_TECH, name: 'Sample Lab Technician' }, { id: PH_TECH, name: 'Sample Pharmacist' }],
   allDepartments: [{ id: GP, name: 'General Practice' }, { id: LAB, name: 'Laboratory' }, { id: PH, name: 'Pharmacy' }, { id: PSY, name: 'Psychiatry' }],
   departments: [], templates: [], sites: [], packs: [], roles: [], actions: [], screens: [], parked_pack_calls: 0, loginUsers: [], places: [],

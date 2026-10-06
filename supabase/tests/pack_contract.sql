@@ -52,6 +52,7 @@ select core.declare_rule('hostile.hide', 'hostile', 'hostile.hide(uuid,uuid[])')
 select core.lock_pack('hostile');
 select t.as('11111111-0000-0000-0000-0000000000b9');
 select public.write_setting('{"key":"organization.packs_used","data":{"packs":["pharmacy","hostile"]}}') ->> 'key' as on;
+select public.write_setting(jsonb_build_object('key', 'department.packs', 'owner_id', :'im', 'data', '{"packs":["hostile"]}'::jsonb)) ->> 'key' as ticked;   -- its actions count where it is used
 reset role;
 select t.ok(bool_and(not has_table_privilege('pack_hostile', 'core.' || tablename, 'SELECT,INSERT,UPDATE,DELETE')), 'B4 the pack role holds nothing on any core table') from pg_tables where schemaname = 'core';
 select t.ok(bool_and(p.prosecdef and r.rolname = 'pack_hostile'), 'B3 every hostile function is definer and its own') from pg_proc p join pg_namespace n on n.oid = p.pronamespace join pg_roles r on r.oid = p.proowner where n.nspname = 'hostile';
@@ -129,6 +130,34 @@ select t.as('11111111-0000-0000-0000-0000000000b9');
 select public.write_setting('{"key":"organization.packs_used","data":{"packs":["pharmacy","hostile"]}}') ->> 'key' as on_again;
 reset role;
 select t.ok(exists (select 1 from hostile.log where item = '00000000-0000-0000-0000-0000000000e1') and not exists (select 1 from core.stale where layer = 'hostile'), 'on again: caught up, no longer stale');
+
+\echo '── the row rule (§3.10): a pack row copies data only from its own item; from other items only facts that are never private'
+set role authenticated;
+select t.as('11111111-0000-0000-0000-0000000000b8');
+select t.landed(t.w(jsonb_build_array(
+  t.e('note', :'pt', '00000000-0000-0000-0000-0000000000d5', '{"kind":"progress","text":"ROWRULE-93 the story"}', '00000000-0000-0000-0000-0000000000e7'),
+  t.e('result', :'pt', '00000000-0000-0000-0000-0000000000d5', '{"status":"final","conclusion":"ROWRULE-93","analytes":[{"key":"k","name":"ROWRULE-93","value":{"value":"93.93","ucum":"mmol/L"}}]}'),
+  t.e('medication', :'pt', '00000000-0000-0000-0000-0000000000d5', '{"basis":"prescribed","drug":{"text":"Lithium"},"status":"active"}', '00000000-0000-0000-0000-0000000000e8'),
+  t.e('order', :'pt', '00000000-0000-0000-0000-0000000000d5', '{"service":{"id":"00000000-0000-0000-0000-0000000000c3","code":"dispense","name":"Dispensing"},"department_id":"00000000-0000-0000-0000-0000000000d3","priority":"routine","status":"active"}',
+    null, null, '00000000-0000-0000-0000-0000000000e8', 'about'))),
+  'a private note and a private result in Psychiatry, each with a marker; a medicine sent to the pharmacy (never private: the queue may copy it)');
+reset role;
+select core.drain() as drained;
+select t.ok(not exists (select 1 from core.entries e where e.id = '00000000-0000-0000-0000-0000000000e7' and not (core.hidden(e.organization_id, '00000000-0000-0000-0000-0000000000b1', array[e.id]) @> array[e.id])),
+  'the note is private (Dr Ali may not read it)');
+create temp table pack_rows_now (tbl text, item uuid, sources uuid[], body text);
+do $$ declare d record; begin
+  for d in select x.key, x.relation from core.derived x join core.layers l on l.key = x.layer where l.is_pack loop
+    execute format('insert into pack_rows_now select %L, x.item, x.source_entries, to_jsonb(x)::text from %s x', d.key, d.relation);
+  end loop;
+end $$;
+select t.ok(count(distinct tbl) = (select count(*) from core.derived x join core.layers l on l.key = x.layer where l.is_pack), 'every pack table scanned: ' || string_agg(distinct tbl, ', '))
+  from pack_rows_now;
+select t.ok(exists (select 1 from pack_rows_now where tbl = 'pharmacy.queue' and body like '%Lithium%'), 'what is never private is copied (the queue names the medicine)');
+select t.ok(not exists (select 1 from pack_rows_now where body like '%ROWRULE-93%' or body like '%93.93%'), 'no private value of another item lands in a pack table');
+select t.ok(not exists (select 1 from pack_rows_now r, unnest(r.sources) s join core.entries e on e.id = s join core.types y on y.key = e.type and y.version = e.type_version
+                         where y.may_be_private and e.item <> r.item),
+  'a row''s source entries from other items are all of types that may never be private');
 select t.ok(core.rebuild_check('00000000-0000-0000-0000-0000000000a1') = '[]'::jsonb, 'refresh = rebuild for every pack table');
 select t.ok((select command from cron.job where jobname = 'opencare_outbox') ~ '^\s*call core\.drain_outbox\(\)\s*;?\s*$',
   'the outbox job is a lone CALL, so drain_outbox may commit each batch (two statements would run as one block and refuse the COMMIT)');
