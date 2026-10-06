@@ -302,16 +302,21 @@ begin
     union select y.type from unnest(rows) x join core.entries y on y.organization_id = v_org and y.id in (x.replaces, x.refers_to)) q;
   v_types := v_types || (select coalesce(array_agg(distinct b.base_type), '{}') from core.types b where b.key = any (v_types) and b.base_type is not null);
   v_patients := (select array_agg(distinct x.patient_id) from unnest(rows) x);
-  for dv in select * from core.derived dd where dd.key in (select unnest(tt.feeds) from core.types tt where tt.key = any (v_types)) order by (dd.layer <> 'base'), dd.position loop
+  -- a pack off for the clinic is not rebuilt: turned on again, it catches up (§5.2 Off)
+  for dv in select * from core.derived dd where dd.key in (select unnest(tt.feeds) from core.types tt where tt.key = any (v_types)) and core.layer_on(v_org, dd.layer)
+             order by (dd.layer <> 'base'), dd.position loop
     if dv.layer = 'base' then
       perform core.run_refresh(dv.refresh, v_org, v_items);
     else
       begin
         perform core.run_refresh(dv.refresh, v_org, v_items);
       exception when others then
+        -- never refuses: the pack is stale for these patients and the same refresh waits in the outbox, tried again in the background
         get stacked diagnostics v_err = message_text;
         insert into core.stale (organization_id, layer, patient_id, error) select v_org, dv.layer, p, v_err from unnest(v_patients) p
           on conflict (organization_id, layer, patient_id) do update set error = excluded.error;
+        insert into core.outbox (organization_id, layer, refresh, patient_id, items, kind, tries, error)
+          select v_org, dv.layer, dv.refresh, p, v_items, 'refresh', 1, v_err from unnest(v_patients) p;
       end;
     end if;
   end loop;
@@ -352,27 +357,54 @@ create trigger settings_permanent before update or delete on core.settings for e
 create trigger patient_changes_permanent before update or delete on core.patient_changes for each row execute function core.permanent();
 create trigger holdings_permanent before update on core.holdings for each row execute function core.permanent();
 
--- after commit: pack listeners drain here, as the pack's refresh (a definer owned by the pack's role); a failure marks the
--- (pack, patient) stale and never touches the write that caused it
+-- one row of a pack's background work, as the pack's refresh (a definer owned by the pack's role). Done: the row goes, and the pack is
+-- no longer stale for the patient once none of its work for them is failing. Failed: tried again later, parked after five tries, the
+-- pack stale for the patient; it never touches the write that caused it. A pack off for the clinic does not run: turned on again, it
+-- catches up anyway (§5.2 Off). The clinic's hint is the caller's (core.drain_hints): one per run, never one per row
+create function core.drain_one(o core.outbox) returns boolean language plpgsql volatile security definer set search_path = '' as $$
+declare v_err text;
+begin
+  if not core.layer_on(o.organization_id, o.layer) then delete from core.outbox where id = o.id; return false; end if;
+  begin
+    perform core.run_refresh(o.refresh, o.organization_id, o.items);
+  exception when others then
+    get stacked diagnostics v_err = message_text;
+    update core.outbox set tries = tries + 1, error = v_err where id = o.id;
+    if o.patient_id is not null then
+      insert into core.stale (organization_id, layer, patient_id, error) values (o.organization_id, o.layer, o.patient_id, v_err)
+      on conflict (organization_id, layer, patient_id) do update set error = excluded.error;
+    end if;
+    return false;
+  end;
+  delete from core.outbox where id = o.id;
+  if o.patient_id is not null and not exists (select 1 from core.outbox x where x.organization_id = o.organization_id and x.layer = o.layer
+                                                and x.patient_id = o.patient_id and x.error is not null) then
+    delete from core.stale where organization_id = o.organization_id and layer = o.layer and patient_id = o.patient_id;
+  end if;
+  if o.kind = 'catch_up' and not exists (select 1 from core.outbox x where x.organization_id = o.organization_id and x.layer = o.layer and x.kind = 'catch_up') then
+    delete from core.catch_ups where organization_id = o.organization_id and layer = o.layer;
+  end if;
+  -- a pack's table caught up: the record reading it looks again (the hint carries no content)
+  if o.patient_id is not null then perform core.hint('record:' || o.patient_id); end if;
+  return true;
+end $$;
+-- the drain touched these clinics (a row done, failed, parked or dropped): their screens, Settings → Packs among them, read again. Sent
+-- every 50 rows and at the end of a run, so a catch-up of hundreds of patients does not restart every open queue's read per row
+create function core.drain_hints(p_orgs uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
+begin
+  perform core.hint('organization:' || o) from (select distinct o from unnest(p_orgs) o) x;
+end $$;
+
+-- after commit: the pg_cron job drains here, committing each row. Live work goes before a catch-up's
 create procedure core.drain_outbox(p_limit int default 200) language plpgsql as $$
-declare o core.outbox; v_err text;
+declare o core.outbox; v_orgs uuid[] := '{}'; n int := 0;
 begin
   perform set_config('statement_timeout', '55s', false);   -- a run never outlasts the next one (a SET clause would forbid the COMMIT below)
-  for o in select * from core.outbox where tries < 5 order by id limit p_limit for update skip locked loop
-    begin
-      perform core.run_refresh(o.refresh, o.organization_id, o.items);
-      delete from core.outbox where id = o.id;
-      -- a pack's table caught up: the screens reading it look again (the hint carries no content)
-      perform core.hint('organization:' || o.organization_id);
-      if o.patient_id is not null then perform core.hint('record:' || o.patient_id); end if;
-    exception when others then
-      get stacked diagnostics v_err = message_text;
-      update core.outbox set tries = tries + 1, error = v_err where id = o.id;
-      if o.patient_id is not null then
-        insert into core.stale (organization_id, layer, patient_id, error) values (o.organization_id, o.layer, o.patient_id, v_err)
-        on conflict (organization_id, layer, patient_id) do update set error = excluded.error;
-      end if;
-    end;
+  for o in select * from core.outbox where tries < 5 order by (kind = 'catch_up'), id limit p_limit for update skip locked loop
+    perform core.drain_one(o);
+    v_orgs := v_orgs || o.organization_id; n := n + 1;
+    if n % 50 = 0 then perform core.drain_hints(v_orgs); v_orgs := '{}'; end if;
     commit;
   end loop;
+  perform core.drain_hints(v_orgs);
 end $$;

@@ -182,15 +182,29 @@ $$;
 -- run a refresh or a listener: the pack doors it calls read unmasked, and its rows keep source_entries for the reader to mask. The mark
 -- lives in this transaction only; a refresh that raises takes it back with its own work
 create function core.run_refresh(p_fn regprocedure, p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
-declare n int;
+declare n int; v_outer regprocedure;
 begin
-  insert into core.unmasked as m (pid, xid, organization_id) values (pg_backend_pid(), pg_current_xact_id(), p_org)
-  on conflict (pid) do update set xid = excluded.xid, organization_id = excluded.organization_id where m.xid is distinct from excluded.xid;
+  insert into core.unmasked as m (pid, xid, organization_id, refresh) values (pg_backend_pid(), pg_current_xact_id(), p_org, p_fn)
+  on conflict (pid) do update set xid = excluded.xid, organization_id = excluded.organization_id, refresh = excluded.refresh where m.xid is distinct from excluded.xid;
   get diagnostics n = row_count;
-  -- nested inside another refresh: the same clinic only
-  if n = 0 and core.unmasked_for() is distinct from p_org then perform core.refuse('wrong_organization'); end if;
+  -- nested inside another refresh: the same clinic only; the inner one is the refresh running until it returns
+  if n = 0 then
+    if core.unmasked_for() is distinct from p_org then perform core.refuse('wrong_organization'); end if;
+    select m.refresh into v_outer from core.unmasked m where m.pid = pg_backend_pid();
+    update core.unmasked set refresh = p_fn where pid = pg_backend_pid();
+  end if;
   execute format('select %s($1, $2)', p_fn::regproc) using p_org, p_items;
-  if n > 0 then delete from core.unmasked where pid = pg_backend_pid(); end if;
+  if n > 0 then delete from core.unmasked where pid = pg_backend_pid(); else update core.unmasked set refresh = v_outer where pid = pg_backend_pid(); end if;
+end $$;
+-- the identity door, in a refresh or a listener under way (§5.2): a pack's refresh reads identity only when its table declared it
+-- (reads), so a change of sex or birth date refreshes it; read through a helper or not, it is refused at run time otherwise
+create function core.identity_read() returns boolean language plpgsql stable security definer set search_path = '' as $$
+declare r regprocedure;
+begin
+  select m.refresh into r from core.unmasked m where m.pid = pg_backend_pid() and m.xid = pg_current_xact_id_if_assigned();
+  if r is null or exists (select 1 from core.derived d where d.refresh = r and (d.layer = 'base' or cardinality(d.reads) > 0)) then return true; end if;
+  perform core.refuse('identity_undeclared', format('%s reads identity: its table declares no reads', r));
+  return false;
 end $$;
 
 -- ── counters (§3.6) ──
@@ -427,7 +441,9 @@ begin
     from core.systems s where s.key = p_system;
 end $$;
 
-create function core.declare_table(key text, layer text, refresh regprocedure, action text) returns void language plpgsql as $$
+-- a derived table (§3.8). reads: what of a patient's identity its refresh reads (age, sex), so only such tables are refreshed when it
+-- changes (§5.2); a refresh calling the identity door must say so
+create function core.declare_table(key text, layer text, refresh regprocedure, action text, reads text[] default '{}') returns void language plpgsql as $$
 #variable_conflict use_variable
 declare rel regclass := to_regclass(key); c text;
 begin
@@ -443,9 +459,24 @@ begin
     perform core.refuse('wrong_signature', format('refresh %s must take (p_org uuid, p_items uuid[])', refresh));
   end if;
   if not exists (select 1 from core.actions a where a.key = action) then perform core.refuse('unknown_action', action); end if;
-  insert into core.derived (key, layer, relation, refresh, action, hashes)
-  values (declare_table.key, declare_table.layer, rel, declare_table.refresh, declare_table.action, jsonb_build_object('refresh', core.check_fn(layer, refresh, 'v', 'refresh')))
-  on conflict on constraint derived_pkey do update set refresh = excluded.refresh, action = excluded.action, hashes = excluded.hashes where core.derived.layer = excluded.layer;
+  if exists (select 1 from unnest(reads) r where r not in ('age', 'sex')) then perform core.refuse('unknown_read', array_to_string(reads, ',')); end if;
+  -- the refresh and the functions of its own schema it names, five calls deep; a call this scan cannot see (built at run time) is
+  -- refused when it runs (core.identity_read)
+  if cardinality(reads) = 0 and layer <> 'base' and exists (
+       with recursive f(oid, depth) as (
+         select refresh::oid, 0
+         union
+         select p.oid, f.depth + 1 from f join pg_proc s on s.oid = f.oid
+           join pg_proc p on p.pronamespace = s.pronamespace and p.oid <> s.oid and s.prosrc ~ ('\m' || p.proname || '\M')
+          where f.depth < 5)
+       select 1 from f join pg_proc p on p.oid = f.oid where p.prosrc ~ 'pack_identity') then
+    perform core.refuse('identity_undeclared', format('%s reads identity: declare reads => ''{age}'' or ''{sex}''', key));
+  end if;
+  insert into core.derived (key, layer, relation, refresh, action, reads, hashes)
+  values (declare_table.key, declare_table.layer, rel, declare_table.refresh, declare_table.action, (select coalesce(array_agg(distinct r order by r), '{}') from unnest(reads) r),
+          jsonb_build_object('refresh', core.check_fn(layer, refresh, 'v', 'refresh')))
+  on conflict on constraint derived_pkey do update set refresh = excluded.refresh, action = excluded.action, reads = excluded.reads, hashes = excluded.hashes
+  where core.derived.layer = excluded.layer;
 end $$;
 
 create function core.declare_rule(key text, layer text, hidden regprocedure) returns void language plpgsql as $$

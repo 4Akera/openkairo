@@ -318,13 +318,14 @@ $$;
 create function base.reviewed_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select jsonb_build_array(base.fhir_head(p, 'Task') || jsonb_strip_nulls(jsonb_build_object('status', 'completed', 'intent', 'order',
     'code', jsonb_build_object('text', 'Review'), 'for', base.fhir_subject(p),
-    'focus', (select base.fhir_ref(case when t.type = any (core.kinds('result')) then 'DiagnosticReport' else 'Task' end, t.item::text) from core.entries t
+    'focus', (select base.fhir_ref(case when t.type = any (core.kinds('result')) then 'DiagnosticReport' when t.type = any (core.kinds('note')) then 'DocumentReference'
+                                     else 'Task' end, t.item::text) from core.entries t
                where t.organization_id = (p ->> 'org')::uuid and t.id = (o ->> 'refers_to')::uuid),
     'authoredOn', core.fhir_instant((o ->> 'recorded_at')::timestamptz), 'owner', base.fhir_ref('PractitionerRole', o ->> 'author_id'))))
   from (select base.fhir_own(p) o) x
 $$;
 
--- a result: a DiagnosticReport and one Observation per analyte, id {item}-{key}
+-- a result: a DiagnosticReport and one Observation per analyte, id {item}-{key}, or uuid v5(item, key) when that is too long
 create function base.result_fhir(p jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare o jsonb := base.fhir_own(p); v_org uuid := (p ->> 'org')::uuid; v_item text := p -> 'entries' -> 0 ->> 'item'; v_status text; obs jsonb := '[]'; a jsonb; v_id text; v_order text;
 begin
@@ -332,6 +333,7 @@ begin
   select t.item::text into v_order from core.entries t where t.organization_id = v_org and t.id = (p -> 'entries' -> 0 ->> 'refers_to')::uuid and p -> 'entries' -> 0 ->> 'relation' = 'answers';
   for a in select * from jsonb_array_elements(coalesce(o -> 'data' -> 'analytes', '[]')) loop
     v_id := v_item || '-' || regexp_replace(coalesce(a ->> 'key', 'x'), '[^A-Za-z0-9.-]', '-', 'g');
+    if length(v_id) > 64 then v_id := core.uuid5(v_item::uuid, coalesce(a ->> 'key', 'x'))::text; end if;   -- longer than an id may be (§6.4 rule 1)
     obs := obs || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('resourceType', 'Observation', 'id', v_id, 'meta', core.fhir_meta(base.fhir_latest(p), coalesce((p ->> 'private')::boolean, false)),
       'status', v_status, 'category', jsonb_build_array(core.fhir_code('hl7.observation-category', 'laboratory', null, v_org)),
       'code', case when a ? 'code' then jsonb_build_object('text', coalesce(a ->> 'name', a ->> 'key'), 'coding', jsonb_build_array(core.fhir_coding(a -> 'code', v_org)))
@@ -485,11 +487,71 @@ select core.declare_fhir('died', 1, 'base.died_fhir(jsonb)');
 select core.declare_fhir('checked_in', 1, 'base.encounter_fhir(jsonb)');
 select core.declare_fhir('admitted', 1, 'base.encounter_fhir(jsonb)');
 
+-- ── core: a pack's mapping beside its base type's (§5.2 Export) ──
+-- R4's choice elements ([x]): each holds one value, so an object never has two keys of one of these with a type after it (valueQuantity
+-- and valueString). The names a mapping here may use
+create function core.fhir_choices() returns text[] language sql immutable as $$
+  select array['value', 'effective', 'onset', 'abatement', 'deceased', 'multipleBirth', 'medication', 'occurrence', 'performed', 'timing',
+    'asNeeded', 'born', 'age', 'serviced', 'reported', 'allowed', 'collected', 'statusReason', 'dose', 'rate', 'scheduled', 'answer', 'defaultValue']
+$$;
+-- what makes a resource not valid R4 for the export: no resourceType, an id FHIR refuses, a choice element holding two values (anywhere
+-- inside it, by path). Empty when valid
+create function core.fhir_problems(r jsonb, p_path text default null) returns text[] language plpgsql immutable as $$
+declare out text[] := '{}'; k text; v jsonb; c text; n int; i int;
+begin
+  if p_path is null then
+    if coalesce(r ->> 'resourceType', '') !~ '^[A-Z][A-Za-z]+$' then out := array_append(out, 'no resourceType'); end if;
+    if coalesce(r ->> 'id', '') !~ '^[A-Za-z0-9.-]{1,64}$' then out := out || format('%s has a bad id %s', r ->> 'resourceType', coalesce(r ->> 'id', 'null')); end if;
+    p_path := coalesce(r ->> 'resourceType', '?');
+  end if;
+  if jsonb_typeof(r) = 'object' then
+    foreach c in array core.fhir_choices() loop
+      select count(*) into n from jsonb_object_keys(r) x where x ~ ('^' || c || '[A-Z]');
+      if n > 1 then out := out || format('%s.%s[x] holds %s values', p_path, c, n); end if;
+    end loop;
+    for k, v in select * from jsonb_each(r) loop
+      if jsonb_typeof(v) in ('object', 'array') then out := out || core.fhir_problems(v, p_path || '.' || k); end if;
+    end loop;
+  elsif jsonb_typeof(r) = 'array' then
+    for i in 0 .. jsonb_array_length(r) - 1 loop
+      if jsonb_typeof(r -> i) in ('object', 'array') then out := out || core.fhir_problems(r -> i, p_path); end if;
+    end loop;
+  end if;
+  return out;
+end $$;
+-- a pack type's resources: its base type's mapping as it stands, and beside it what the pack's own mapping adds: new resources, or
+-- elements on one of the base's (same resourceType and id). An element the base already set is never overwritten (an array is added
+-- to); a choice element ([x]) takes no second value. Anything else raises, so the export refuses rather than drop it silently
+create function core.fhir_beside(p_base jsonb, p_adds jsonb) returns jsonb language plpgsql immutable as $$
+declare out jsonb := coalesce(p_base, '[]'); a jsonb; i int; k text; v jsonb; b jsonb; c text;
+begin
+  for a in select * from jsonb_array_elements(coalesce(p_adds, '[]')) loop
+    select x.n - 1 into i from jsonb_array_elements(out) with ordinality x(r, n) where x.r ->> 'resourceType' = a ->> 'resourceType' and x.r ->> 'id' = a ->> 'id' limit 1;
+    if i is null then out := out || jsonb_build_array(a); continue; end if;
+    b := out -> i;
+    for k, v in select * from jsonb_each(a) loop
+      continue when k in ('resourceType', 'id');
+      if b ? k and b -> k = v then continue; end if;
+      if b ? k and jsonb_typeof(b -> k) = 'array' and jsonb_typeof(v) = 'array' then b := jsonb_set(b, array[k], (b -> k) || v); continue; end if;
+      if b ? k then raise exception 'overwrites %.% of the base''s %', a ->> 'resourceType', k, a ->> 'id' using errcode = 'P0001'; end if;
+      foreach c in array core.fhir_choices() loop
+        if k ~ ('^' || c || '[A-Z]') and exists (select 1 from jsonb_object_keys(b) x where x ~ ('^' || c || '[A-Z]')) then
+          raise exception 'a second value for %.%[x]', a ->> 'resourceType', c using errcode = 'P0001';
+        end if;
+      end loop;
+      b := b || jsonb_build_object(k, v);
+    end loop;
+    out := jsonb_set(out, array[i::text], b);
+  end loop;
+  return out;
+end $$;
+
 -- ── core: the export (§3.10 shape fhir). Input rows are the reader's; the item's kind is its first entry's type. ──
 create or replace function core.read_fhir(me core.users, q jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_org uuid := me.organization_id; v_dept uuid := (q ->> 'department_id')::uuid; p core.patients; fam uuid[]; ids uuid[]; hid uuid[]; priv uuid[];
         it record; t core.types; res jsonb := '[]'; r jsonb; patient jsonb; v_kind text := coalesce(q ->> 'kind', 'bundle'); v_authors uuid[] := '{}';
-        v_depts uuid[] := '{}'; prov jsonb := '[]'; v_sets record; sections jsonb; comp jsonb; v_x jsonb; withheld int := 0;
+        v_depts uuid[] := '{}'; prov jsonb := '[]'; v_sets record; sections jsonb; comp jsonb; v_x jsonb; withheld int := 0; v_fn regprocedure; v_add regprocedure; v_in jsonb;
+        v_at regprocedure; v_patched text[] := '{}'; v_owner jsonb := '{}'; v_bad text;
 begin
   if v_dept is null or not core.may(me.id, 'read:record', v_dept) or not core.may(me.id, 'export:fhir', v_dept) then perform core.refuse('not_allowed', 'export:fhir'); end if;
   select * into p from core.patients x where x.organization_id = v_org and x.id = core.survivor(v_org, (q ->> 'patient_id')::uuid);
@@ -499,24 +561,43 @@ begin
   hid := core.hidden(v_org, me.id, ids);
   priv := core.hidden(v_org, null, ids);   -- private to someone with no rights at all: meta.security R
   patient := core.fhir_patient(v_org, p.id);
-  for it in select e.item, (array_agg(e.type order by e.item_version))[1] kind, jsonb_agg(core.entry_out(e, false) order by e.item_version) rows,
+  for it in select e.item, (array_agg(e.type order by e.item_version))[1] kind, jsonb_agg(core.entry_out(e, false) order by e.item_version) rows, array_agg(e.id::text) ids,
                    bool_or(e.id = any (hid)) hidden, bool_or(e.id = any (priv)) private, array_agg(distinct e.author_id) authors, array_agg(distinct e.department_id) depts
               from core.entries e where e.organization_id = v_org and e.patient_id = any (fam) group by e.item loop
     if it.hidden then withheld := withheld + 1; continue; end if;
     select * into t from core.types x where x.key = it.kind order by x.version desc limit 1;
-    -- a pack type that extends a base type maps as its base type unless it declares its own mapping
-    if t.to_fhir is null and t.base_type is not null then
-      t.to_fhir := (select b.to_fhir from core.types b where b.key = t.base_type order by b.version desc limit 1);
-    end if;
-    continue when t.to_fhir is null;
+    -- a pack type that extends a base type always maps as its base type; its own mapping only adds beside it (§5.2 Export)
+    v_fn := case when t.base_type is not null then (select b.to_fhir from core.types b where b.key = t.base_type order by b.version desc limit 1) else t.to_fhir end;
+    v_add := case when t.base_type is not null then t.to_fhir end;
+    continue when v_fn is null;
+    v_in := jsonb_build_object('org', v_org, 'patient', p.id, 'private', it.private, 'entries', it.rows);
+    -- a mapping that fails refuses the export, naming the type and the mapping that failed (never its data): nothing is dropped silently
     begin
-      execute format('select %s($1)', t.to_fhir::regproc) into r using jsonb_build_object('org', v_org, 'patient', p.id, 'private', it.private, 'entries', it.rows);
+      v_at := v_fn;
+      execute format('select %s($1)', v_fn::regproc) into r using v_in;
+      if v_add is not null then
+        v_at := v_add;
+        execute format('select %s($1)', v_add::regproc) into v_x using v_in || jsonb_build_object('base', coalesce(r, '[]'));
+        -- the pack's patch of the Patient (or the Patient itself) goes beside what is there, like any of its additions
+        patient := core.fhir_beside(jsonb_build_array(patient), (select coalesce(jsonb_agg((y - 'patch') || jsonb_build_object('resourceType', 'Patient', 'id', p.id::text)), '[]')
+                     from jsonb_array_elements(coalesce(v_x, '[]')) y where y ? 'patch' or (y ->> 'resourceType' = 'Patient' and y ->> 'id' = p.id::text))) -> 0;
+        r := core.fhir_beside(r, (select coalesce(jsonb_agg(y), '[]') from jsonb_array_elements(coalesce(v_x, '[]')) y
+                                   where not (y ? 'patch' or (y ->> 'resourceType' = 'Patient' and y ->> 'id' = p.id::text))));
+        if exists (select 1 from jsonb_array_elements(coalesce(v_x, '[]')) y where y ? 'patch' or y ->> 'resourceType' = 'Patient') then v_patched := v_patched || format('%s: %s', it.kind, v_add); end if;
+      end if;
     exception when others then
-      raise warning 'to_fhir % failed: %', t.to_fhir, sqlerrm;
-      r := '[]';
+      perform core.refuse('fhir_failed', format('%s: %s', it.kind, v_at));
     end;
+    if exists (select 1 from jsonb_array_elements(coalesce(r, '[]')) y where not y ? 'patch' and cardinality(core.fhir_problems(y)) > 0) then
+      perform core.refuse('fhir_invalid', format('%s: %s', it.kind, (select string_agg(pr, '; ') from jsonb_array_elements(r) y, unnest(core.fhir_problems(y)) pr where not y ? 'patch')));
+    end if;
     for v_x in select * from jsonb_array_elements(coalesce(r, '[]')) loop
-      if v_x ? 'patch' then patient := patient || (v_x - 'patch'); else res := res || jsonb_build_array(v_x); end if;
+      if v_x ? 'patch' then patient := patient || (v_x - 'patch'); v_patched := v_patched || format('%s: %s', it.kind, v_fn);
+      else
+        res := res || jsonb_build_array(v_x);
+        -- an id that does not start with its item (uuid v5): its set's Provenance finds it here
+        if not (left(v_x ->> 'id', 36) = any (it.ids)) then v_owner := v_owner || jsonb_build_object((v_x ->> 'resourceType') || '/' || (v_x ->> 'id'), it.item); end if;
+      end if;
     end loop;
     v_authors := v_authors || it.authors; v_depts := v_depts || it.depts ||
       coalesce((select array_agg(distinct (e -> 'data' ->> k)::uuid) from jsonb_array_elements(it.rows) e, unnest(array['department_id', 'to_department_id']) k
@@ -529,16 +610,22 @@ begin
                   from core.entries e where e.organization_id = v_org and e.patient_id = any (fam) and not (e.id = any (hid)) group by e.set_id loop
     prov := prov || jsonb_build_array(jsonb_build_object('resourceType', 'Provenance', 'id', v_sets.set_id,
       'target', (select jsonb_agg(jsonb_build_object('reference', (y ->> 'resourceType') || '/' || (y ->> 'id')))
-                   from jsonb_array_elements(res) y where v_sets.items @> to_jsonb(array[left(y ->> 'id', 36)])),
+                   from jsonb_array_elements(res) y where v_sets.items @> to_jsonb(array[left(y ->> 'id', 36)])
+                     or v_sets.items @> jsonb_build_array(v_owner -> ((y ->> 'resourceType') || '/' || (y ->> 'id')))),
       'recorded', core.fhir_instant(v_sets.at),
       'activity', jsonb_build_object('coding', jsonb_build_array(jsonb_build_object('system', 'http://terminology.hl7.org/CodeSystem/v3-DataOperation',
         'code', case when v_sets.nullify then 'NULLIFY' when v_sets.updates then 'UPDATE' else 'CREATE' end))),
       'agent', jsonb_build_array(jsonb_build_object('who', jsonb_build_object('reference', 'PractitionerRole/' || v_sets.author),
         'onBehalfOf', jsonb_build_object('reference', 'Organization/' || v_org)))));
   end loop;
-  prov := coalesce((select jsonb_agg(x) from jsonb_array_elements(prov) x where jsonb_array_length(coalesce(x -> 'target', '[]')) > 0), '[]');
+  prov := coalesce((select jsonb_agg(x) from jsonb_array_elements(prov) x where case when jsonb_typeof(x -> 'target') = 'array' then jsonb_array_length(x -> 'target') else 0 end > 0), '[]');   -- a set that wrote no resource (a death patches the Patient) has none
+  -- the Patient with every patch, the places, the people and the Provenance are checked like the rest
+  select string_agg(pr, '; ') into v_bad from unnest(core.fhir_problems(patient)) pr;
+  if v_bad is not null then perform core.refuse('fhir_invalid', format('%s: %s', coalesce(nullif(array_to_string(v_patched, ', '), ''), 'Patient'), v_bad)); end if;
   res := jsonb_build_array(patient) || core.fhir_places(v_org, (select array_agg(distinct d) from unnest(v_depts) d)) ||
          core.fhir_people(v_org, (select array_agg(distinct a) from unnest(v_authors) a)) || res;
+  select string_agg((y ->> 'resourceType') || ': ' || pr, '; ') into v_bad from jsonb_array_elements(res || prov) y, unnest(core.fhir_problems(y)) pr;
+  if v_bad is not null then perform core.refuse('fhir_invalid', v_bad); end if;
   perform core.log_read(me, v_dept, p.id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('fhir', v_kind), withheld);
   if v_kind = 'ips' then
     -- the International Patient Summary: a document; sections by resource; an empty required section says so (§6.4 rule 10)
@@ -563,7 +650,11 @@ begin
     return jsonb_build_object('resourceType', 'Bundle', 'id', core.uuid5(p.id, 'ips-bundle')::text, 'type', 'document',
       'identifier', jsonb_build_object('system', 'urn:ietf:rfc:3986', 'value', 'urn:uuid:' || core.uuid5(p.id, 'ips-bundle')),
       'timestamp', core.fhir_instant(clock_timestamp()),
-      'entry', (select jsonb_agg(jsonb_build_object('fullUrl', 'urn:uuid:' || (y ->> 'id'), 'resource', y)) from jsonb_array_elements(jsonb_build_array(comp) || res) y));
+      -- a fullUrl urn:uuid: is a plain uuid, once in the bundle: the resource's id when it is one no other resource shares (a department
+      -- is an Organization and a Location), else uuid v5 of the patient and Type/id
+      'entry', (select jsonb_agg(jsonb_build_object('fullUrl', 'urn:uuid:' || case when z.id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' and z.same = 1 then z.id
+                  else core.uuid5(p.id, (z.y ->> 'resourceType') || '/' || z.id)::text end, 'resource', z.y) order by z.n)
+                  from (select y, n, y ->> 'id' id, count(*) over (partition by y ->> 'id') same from jsonb_array_elements(jsonb_build_array(comp) || res) with ordinality x(y, n)) z));
   end if;
   return jsonb_build_object('resourceType', 'Bundle', 'id', core.uuid5(p.id, 'bundle')::text, 'type', 'collection', 'timestamp', core.fhir_instant(clock_timestamp()),
     'entry', (select jsonb_agg(jsonb_build_object('fullUrl', (select url from core.canon) || '/fhir/' || (y ->> 'resourceType') || '/' || (y ->> 'id'), 'resource', y))

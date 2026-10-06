@@ -8,6 +8,7 @@ import { dataOf, interp } from '../../../db/views'
 import { Steps, TONE, Tag, cn, flagTone, interpMark, type Step } from '../../../ui'
 import type { ChartItem } from '../model/items'
 import { FINAL_STEP, ORDER_STATUS, stepWord } from '../model/labels'
+import { replyFormFor } from '../../../renderers'
 import { ItemFrame } from './Item'
 import { placeName, useBlockEnv, type BlockEnv, type GroupProps } from './env'
 
@@ -32,7 +33,7 @@ function stepsOf(item: ChartItem, svc: Service | undefined): Step[] {
   const keys = ['sent', ...(svc?.steps ?? o?.stepKeys ?? []), 'answer']
   if (answered) at.set('answer', answered)
   const last = Math.max(...keys.map((k, i) => at.has(k) ? i : -1))
-  const steps: Step[] = keys.map((k, i) => ({ key: k, label: k === 'answer' ? (answered && !done ? 'Preliminary' : FINAL_STEP[svc?.reply_type ?? ''] ?? 'Done') : stepWord(k), at: at.get(k) ?? null,
+  const steps: Step[] = keys.map((k, i) => ({ key: k, label: k === 'answer' ? (answered && !done ? 'Preliminary' : FINAL_STEP[svc?.reply_type ?? ''] ?? replyFormFor(svc?.reply_type)?.done ?? 'Done') : stepWord(k), at: at.get(k) ?? null,
     state: done || i < last ? 'done' : i === last && !STOPPED.has(status) ? 'current' : 'todo' }))
   return STOPPED.has(status) ? [...steps.filter((s) => s.state !== 'todo'), { key: 'stopped', label: ORDER_STATUS[status] ?? status, at: row?.last_at ?? null, state: 'failed' }] : steps
 }

@@ -93,8 +93,8 @@ function Rx({ q, set, ctx }: { q: Q; set: (p: Q) => void; ctx: Ctx }) {
       {q.action === 'start' && <Select aria-label="For problem" value={q.problems?.[0]?.id ?? ''} onChange={(e) => { const p = ctx.problems.find((x) => x.id === e.target.value); set({ problems: p ? [{ id: p.id, name: p.name }] : [] }) }} className={cn(small, 'ms-2 w-52')}>
         <option value="">For problem…</option>{ctx.problems.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>}
     </FormRow>}
-    {ctx.canSend && <FormRow inline label="Pharmacy"><Chip data-chip on={!!q.send} onClick={() => set({ send: !q.send })}>{q.send ? 'Send to pharmacy ✓' : 'Send to pharmacy'}</Chip>
-      <span className="text-11 text-faint">{q.send ? 'The pharmacy gets it on Done' : 'Not sent — on the medication list only; the patient may buy it outside'}</span></FormRow>}
+    {ctx.send && <FormRow inline label={ctx.send.field}><Chip data-chip on={!!q.send} onClick={() => set({ send: !q.send })}>{q.send ? `${ctx.send.chip} ✓` : ctx.send.chip}</Chip>
+      <span className="text-11 text-faint">{q.send ? ctx.send.sends : ctx.send.keeps}</span></FormRow>}
     <FormRow inline label="Instructions"><Input aria-label="Instructions" value={q.instructions_text ?? ''} onChange={(e) => set({ instructions_text: e.target.value || (q.action === 'change' ? '' : null) })} placeholder="after food, at night…" className={cn(small, 'max-w-md flex-1')} /></FormRow>
   </div>
 }

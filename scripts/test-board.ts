@@ -7,6 +7,9 @@ import { PACK_BUTTONS, noBedActions, registerTileButton, registerTileLine, tileA
 import { benchMarkRow, marksOf, registerRowMark, rowMarkDefs, stateTone, visitMarkRow, type MarkCtx, type MarkDef, type MarkRow } from '../src/core/screens/marks'
 import { collectMark } from '../src/packs/pharmacy/dispensed'
 import type { OrderRow, PresenceRow } from '../src/core/db/types'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { PackLine } from '../src/core/screens/ward/Tile'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -21,7 +24,7 @@ const free = { closed: false }
 // the probe pack, registered once as a pack would be
 const clicked: string[] = []
 test('the probe pack registers one tile line, two buttons and one mark; a third button, a second line or mark, and the base are refused', () => {
-  assert.equal(registerTileLine('probe', (r, c) => ({ words: `Ventilated d${c.day} · NorAd 0.15 · MAP 62`, tone: r.urgent ? 'danger' : undefined })), true)
+  assert.equal(registerTileLine('probe', (r, c) => ({ words: [`Ventilated d${c.day}`, 'NorAd 0.15', { text: 'MAP 62', tone: r.urgent ? 'danger' : undefined }] })), true)
   assert.equal(registerTileButton('probe', { label: 'Obs', onClick: (r) => clicked.push(r.item) }), true)
   assert.equal(registerTileButton('probe', { label: 'Wean', path: (r) => `/visit/${r.item}?at=wean`, show: (r) => r.reason !== 'no vent' }), true)
   quiet(() => {
@@ -41,23 +44,31 @@ test('the probe pack registers one tile line, two buttons and one mark; a third 
 })
 
 test('the tile line: the probe\'s words where the department uses it; nothing where it does not', () => {
-  assert.deepEqual(tileLineOf(tileLineDefs(), stay(), ctx(['probe'])), [{ pack: 'probe', words: 'Ventilated d2 · NorAd 0.15 · MAP 62' }])
+  assert.deepEqual(tileLineOf(tileLineDefs(), stay(), ctx(['probe'])), [{ pack: 'probe', words: [{ text: 'Ventilated d2' }, { text: 'NorAd 0.15' }, { text: 'MAP 62' }] }])
   assert.deepEqual(tileLineOf(tileLineDefs(), stay(), ctx([])), [], 'not used here')
   assert.deepEqual(tileLineOf(tileLineDefs(), stay(), ctx(['pharmacy'])), [], 'another pack, with no line')
 })
 test('the tile line is one line: each pack used says its words in the department\'s pack order; a failing or empty one says nothing', () => {
-  const list = [...tileLineDefs(), { pack: 'labour', line: () => ({ words: '6 cm · past alert line', tone: 'warn' as const }) },
+  const list = [...tileLineDefs(), { pack: 'labour', line: () => ({ words: ['6 cm', { text: 'past alert line', tone: 'warn' as const }] }) },
     { pack: 'broken', line: () => { throw new Error('no') } }, { pack: 'blank', line: () => ({ words: '  ' }) }]
   const line = quiet(() => tileLineOf(list, stay(), ctx(['labour', 'broken', 'blank', 'probe'])))
   assert.deepEqual(line.map((s) => s.pack), ['labour', 'probe'])
-  assert.deepEqual(line[0], { pack: 'labour', words: '6 cm · past alert line', tone: 'warn' })
+  assert.deepEqual(line[0], { pack: 'labour', words: [{ text: '6 cm' }, { text: 'past alert line', tone: 'warn' }] })
 })
-test('a pack word takes a state colour only: ok, info, warn, danger; anything else is no colour', () => {
-  assert.equal(tileLineOf(tileLineDefs(), stay({ urgent: true }), ctx(['probe']))[0].tone, 'danger')
+test('a pack word takes a state colour only: ok, info, warn, danger; anything else is no colour; only that word, never the line', () => {
+  assert.deepEqual(tileLineOf(tileLineDefs(), stay({ urgent: true }), ctx(['probe']))[0].words.map((w) => w.tone), [undefined, undefined, 'danger'], 'MAP 62 alone')
   for (const t of ['ok', 'info', 'warn', 'danger']) assert.equal(stateTone(t), t)
   for (const t of ['accent', 'neutral', 'pink', '', undefined, 3]) assert.equal(stateTone(t), undefined, String(t))
-  const pink = [{ pack: 'probe', line: () => ({ words: 'Ventilated', tone: 'accent' }) }] as unknown as Parameters<typeof tileLineOf>[0]
-  assert.deepEqual(tileLineOf(pink, stay(), ctx(['probe'])), [{ pack: 'probe', words: 'Ventilated' }], 'a pack has no colour of its own')
+  const pink = [{ pack: 'probe', line: () => ({ words: [{ text: 'Ventilated', tone: 'accent' }] }) }] as unknown as Parameters<typeof tileLineOf>[0]
+  assert.deepEqual(tileLineOf(pink, stay(), ctx(['probe'])), [{ pack: 'probe', words: [{ text: 'Ventilated' }] }], 'a pack has no colour of its own')
+  const whole = [{ pack: 'probe', line: () => ({ words: 'Ventilated d2 · MAP 62', tone: 'danger' }) }] as unknown as Parameters<typeof tileLineOf>[0]
+  assert.deepEqual(tileLineOf(whole, stay(), ctx(['probe'])), [{ pack: 'probe', words: [{ text: 'Ventilated d2 · MAP 62' }] }], 'a colour for the whole line is dropped')
+  // drawn: the one word in its state colour, the line and the other words plain
+  const html = renderToStaticMarkup(createElement(PackLine, { line: [...tileLineOf(tileLineDefs(), stay({ urgent: true }), ctx(['probe'])),
+    { pack: 'labour', words: [{ text: '6 cm' }, { text: 'past alert line', tone: 'warn' }] }] }))
+  assert.deepEqual([...html.matchAll(/<span class="([^"]*)">([^<]*)<\/span>/g)].filter((m) => /text-(danger|warn|ok|info)/.test(m[1])).map((m) => m[2]), ['MAP 62', 'past alert line'])
+  assert.ok(!/<p class="[^"]*text-(danger|warn)/.test(html), 'the line itself takes no state colour')
+  assert.match(html, /Ventilated d2/); assert.match(html, /NorAd 0\.15/)
 })
 
 test('the buttons: the base\'s first and in the same place — a free bed Admit here; a taken one Move, Discharge, then the probe\'s two', () => {

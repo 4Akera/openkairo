@@ -1,6 +1,6 @@
 // A pack's section in the record panel (spec/openCare.md §5.1 rule 2): the kit's folding section with the pack's title, its Summary
 // line while folded, and the pack's body over the entries this reader may see. What is hidden from the reader shows as the fact only
-// (§4.3): "Private dispense · Psychiatry · 3 Sep", never its content; a section that holds nothing else is never handed to the pack.
+// (§4.3): "Private <its type> · Psychiatry · 3 Sep", never its content; a section that holds nothing else is never handed to the pack.
 // While the packs' read is under way the body is a skeleton, never the pack's empty line.
 import { Lock } from 'lucide-react'
 import { nameOf } from '../../../db/views'

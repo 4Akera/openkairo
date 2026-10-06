@@ -26,7 +26,7 @@ export function summaryOf(rec: Rec, ctx: ChartCtx, o: SummaryOpts = {}) {
       died: rec.tables['base.deceased']?.rows[0]?.at ?? null },
     /** 1 · chronic ones first, then the newest; empty: "No active problems" and the review line (reviewed · or not reviewed, a prompt) */
     problems: { ...cut(problems.active, lim(6)), review: problems.review },
-    /** 2 · current, then reported (tagged); on hold and at the pharmacy are on each row */
+    /** 2 · current, then reported (tagged); on hold and sent on are on each row */
     medicines: { ...cut([...meds.current, ...meds.reported], lim(8)), review: meds.review },
     /** 3 · never cut: every active alert, then every active allergy; empty: checked (nka) or not asked */
     allergies: { alerts: alerts.active, rows: allergies.active, review: allergies.review, nka: allergies.nka, asked: allergies.asked },

@@ -27,8 +27,9 @@ function Who({ o }: { o: Occupant }) {
     <span className="text-12 text-faint">{[`Day ${o.day}`, o.clinician, o.reason, o.urgent && 'urgent'].filter(Boolean).join(' · ')}</span></button>
 }
 
-/** the packs' one line: each pack's words in turn; a state colour only on words that carry a state */
+/** the packs' one line: each pack's words in turn; a state colour only on the word that carries the state, never the whole line */
 export function PackLine({ line }: { line: TileSegment[] }) {
-  return <p className="truncate text-12 text-muted" title={line.map((s) => s.words).join(' · ')}>{line.map((s, i) =>
-    <span key={s.pack}>{i > 0 && <span className="text-faint"> · </span>}<span className={cn(s.tone && `font-medium ${TONE[s.tone].text}`)}>{s.words}</span></span>)}</p>
+  const words = line.flatMap((s) => s.words.map((w, i) => ({ key: `${s.pack}:${i}`, ...w })))
+  return <p className="truncate text-12 text-muted" title={words.map((w) => w.text).join(' · ')}>{words.map((w, i) =>
+    <span key={w.key}>{i > 0 && <span className="text-faint"> · </span>}<span className={cn(w.tone && `font-medium ${TONE[w.tone].text}`)}>{w.text}</span></span>)}</p>
 }

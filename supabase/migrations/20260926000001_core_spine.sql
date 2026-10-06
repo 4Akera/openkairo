@@ -267,6 +267,7 @@ create table core.derived (
   relation    regclass not null,
   refresh     regprocedure not null,
   action      text not null,
+  reads       text[] not null default '{}',             -- what of a patient's identity it reads (age, sex): refreshed when that changes (§5.2)
   hashes      jsonb not null default '{}'
 );
 create table core.rules (
@@ -540,10 +541,12 @@ create table core.redactions (
 create unlogged table core.unmasked (
   pid             int primary key,
   xid             xid8 not null,
-  organization_id uuid not null     -- the clinic the refresh runs for: an unmasked read of another is refused
+  organization_id uuid not null,    -- the clinic the refresh runs for: an unmasked read of another is refused
+  refresh         regprocedure      -- the refresh running now: the identity door asks whether its table declared what it reads
 );
 
--- ── after-commit reactions and stale marks (§3.9 step 9) ──
+-- ── a pack's background work and stale marks (§3.9 step 9, §5.2): a listener after commit, an inline refresh that failed, a pack on
+-- again catching up, an identity change; each row one refresh of one patient's items. Five failed tries park it until Retry ──
 create table core.outbox (
   id          bigint generated always as identity primary key,
   organization_id uuid not null,
@@ -551,9 +554,19 @@ create table core.outbox (
   refresh     regprocedure not null,
   patient_id  uuid,
   items       uuid[] not null,
+  kind        text not null default 'listener' check (kind in ('listener', 'refresh', 'catch_up', 'identity')),
   at          timestamptz not null default clock_timestamp(),
   tries       int not null default 0,
   error       text
+);
+create index outbox_layer on core.outbox (organization_id, layer, kind);
+-- a pack turned on again catching up in the background: how many patients it started with (the outbox holds what is left)
+create table core.catch_ups (
+  organization_id uuid not null,
+  layer       text not null,
+  patients    int not null,
+  started_at  timestamptz not null default clock_timestamp(),
+  primary key (organization_id, layer)
 );
 create table core.stale (
   organization_id uuid not null,

@@ -10,6 +10,8 @@ allowed(name) as (values
   ('core.erase'), ('core.redact'), ('core.rebuild_check'), ('core.refresh_patients'),
   -- the doors that ask "was it ever used" or catch a pack up, and a pack's reading door
   ('core.save_place_row'), ('public.remove'), ('public.write_setting'), ('core.pack_entries'),
+  -- a pack's background work: catching up, Retry, an identity change (§5.2)
+  ('core.catch_up'), ('public.retry_pack'), ('core.identity_changed'),
   -- a pack's reading doors, masked by default (§5.2)
   ('core.pack_masked'), ('core.pack_kind'), ('core.pack_visit'), ('core.pack_rows'),
   -- helpers of the base's checks and refreshes
@@ -32,7 +34,7 @@ select t.ok(true, 'every function naming a derived table is registered, or the i
 \echo '── grants: the API holds no table; only the doors are callable'
 select t.ok(not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('core', 'base', 'pharmacy') and c.relkind in ('r', 'v', 'm')
   and (has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE') or has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))), 'authenticated and anon hold no table in core, base or a pack');
-select t.ok(coalesce(string_agg(p.proname, ', ' order by p.proname), '') = 'choose_user, create_organization, erase_patient, merge_patients, my_users, read, redact, remove, save, save_patient, setup, write, write_setting',
+select t.ok(coalesce(string_agg(p.proname, ', ' order by p.proname), '') = 'choose_user, create_organization, erase_patient, merge_patients, my_users, read, redact, remove, retry_pack, save, save_patient, setup, write, write_setting',
   'the public doors: ' || coalesce(string_agg(p.proname, ', ' order by p.proname), '')) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
 select t.ok(coalesce(string_agg(p.proname, ', ' order by p.proname), '') = 'may_listen, may_read_file, may_upload_file', 'core functions the API may call: ' || coalesce(string_agg(p.proname, ', ' order by p.proname), ''))

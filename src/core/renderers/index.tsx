@@ -23,15 +23,22 @@ export const benchWordsFor = (departmentType: string): BenchWords => benchWords.
 /** A pack's answer form for the answer type of a service (spec/openCare.md §5): the bench shows it in place of the value grid and writes
  *  what toWrite returns in the same set as every other answer. The client fills the id, patient, department and the link to the order. */
 export interface ReplyForm<V = unknown> {
-  action: string                                                       // the action the writer needs, e.g. write:pharmacy.dispense
+  action: string                                                       // the action the writer needs: write:<the pack's type>
   Editor: ComponentType<{ request: RequestQueueRow; value: V | undefined; onChange: (v: V) => void }>
   toWrite: (request: RequestQueueRow, value: V | undefined) => EntryBody | null   // a type and its data, in that type's declared shape
-  automatic?: boolean                                                  // its requests come from another write (dispensing, from a prescription): not ordered by hand
+  automatic?: boolean                                                  // its requests come from another write (a prescription sent on): not ordered by hand
   quick?: string                                                       // a one-click release on the bench row ("Give all"): toWrite(request, undefined) for each
+  done?: string                                                        // its last step on an order's steps (Done when unsaid)
+  details?: ReplyDetails                                               // what its requests carry on the bench, from the pack's own table
 }
+/** a bench row's details from a pack's table: read where the reader holds the action, the rows of this department, each keyed by its order item */
+export interface ReplyDetails { table: string; action: string; where: (departmentId: string) => Record<string, unknown>
+  of: (row: Record<string, unknown>) => { item: string; details: Record<string, unknown> } }
 const replyForms = new Map<string, ReplyForm<never>>()
 export const registerReplyForm = <V,>(replyType: string, form: ReplyForm<V>) => { replyForms.set(replyType, form as unknown as ReplyForm<never>) }
 export const replyFormFor = (replyType: string | null | undefined): ReplyForm<unknown> | undefined => (replyType ? replyForms.get(replyType) as unknown as ReplyForm<unknown> : undefined)
+/** every pack's bench details, for the bench's read */
+export const replyDetails = (): ReplyDetails[] => [...replyForms.values()].flatMap((f) => f.details ? [f.details] : [])
 
 /** a result's values: the kit's table, where a flag is never shown by colour alone (a glyph, and the word for screen readers) */
 export const ValuesTable = ({ values }: { values: Value[] }) => <AnalyteTable dense rows={values.map((v) => ({ name: v.name, value: v.value_number ?? v.value_text ?? '', unit: v.unit,

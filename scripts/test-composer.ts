@@ -7,6 +7,7 @@ import { registerCommand } from '../src/core/screens/visit/commands'
 import { drugWarnings, allergyWarnings, doseWarnings, duplicateProblem, findDrug } from '../src/core/screens/visit/catalog'
 import type { Allergy, Medication, Organization, Problem, Template } from '../src/core/db/types'
 import { draftEntries } from '../src/core/db/entries'
+import { PLAIN_SEND, registerSend } from '../src/core/screens/visit/send'
 import { factMissing, isDay } from '../src/core/screens/visit/facts'
 
 const ctx: Ctx = {
@@ -139,7 +140,8 @@ test('review fixes: allergy lines, durations, units, doses, free text, reverse c
 })
 test('drafts become entries: codings and quantities (spec §4.7)', () => {
   const org = { services: [{ id: 's1', code: 'cbc', name: 'Complete blood count', department_id: 'lab', reply_type: 'result', coding: { system: 'loinc', code: '58410-2' }, fields: [], section_name: null },
-    { id: 'rx', code: 'dispense', name: 'Dispense', department_id: 'ph', reply_type: 'pharmacy.dispense', coding: null, fields: [], section_name: null }] } as unknown as Organization
+    { id: 'rx', code: 'give', name: 'Give', department_id: 'ph', reply_type: 'testpack.give', coding: null, fields: [], section_name: null }] } as unknown as Organization
+  registerSend('testpack.give', { ...PLAIN_SEND, to: 'the test pack' })   // a pack that answers prescriptions registers where they go (visit/send.ts)
   const at = { patientId: 'pt', departmentId: 'im', visitId: 'v1', org }
   const one = (line: string, extra: Record<string, unknown> = {}) => { const d = ok(line)[0]; return draftEntries({ id: 'e1', function: d.function, params: { ...d.params, ...extra } }, at) }
   const [med] = one('/rx metformin 500 bd 30d for dm'); const md = med.data as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -147,8 +149,9 @@ test('drafts become entries: codings and quantities (spec §4.7)', () => {
   assert.deepEqual(md.drug.codings[0], { system: 'atc', code: findDrug('metformin')!.atc, display: 'Metformin' })
   assert.deepEqual(md.dosage.dose, { value: '500', unit: 'mg', ucum: 'mg' }); assert.equal(md.dosage.timing.frequency, 2)
   assert.deepEqual(md.reasons, [{ to: 'item', id: 'p1' }])
-  const sent = one('/rx metformin 500 bd 30d', { send: true })                                  // sent to the pharmacy: an order about the medication
+  const sent = one('/rx metformin 500 bd 30d', { send: true })                                  // sent on: an order about the medication
   assert.deepEqual(sent.map((e) => e.type), ['medication', 'order']); assert.equal(sent[1].refers_to, sent[0].id); assert.equal(sent[1].relation, 'about')
+  assert.deepEqual((sent[1].data as { department_id: string; service: { id: string } }), { service: { id: 'rx', code: 'give', name: 'Give' }, department_id: 'ph', priority: 'routine', status: 'active' })
   const v = one('/v 148/92 p 84 t 37.2')[0].data as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
   assert.deepEqual(v.bp.sys, { value: '148', unit: 'mmHg', ucum: 'mm[Hg]' }); assert.equal(v.temp.ucum, 'Cel')
   const dx = one('/dx hypertension')[0].data as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any

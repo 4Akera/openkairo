@@ -171,7 +171,14 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
       'datatypes', core.datatypes(),
       'packs', coalesce((select jsonb_agg(jsonb_build_object('key', l.key, 'version', l.version, 'requires', l.requires, 'labels', l.labels,
           'used', l.key = any (core.packs_used(me.organization_id)),
-          'stale', (select count(*) from core.stale s where s.organization_id = me.organization_id and s.layer = l.key))) from core.layers l where l.is_pack), '[]'),
+          -- its background work (§5.2): the patients it is stale for; work failing and tried again, parked after five tries (Retry), waiting;
+          -- a pack on again catching up: how many patients it started with, how many are left
+          'stale', (select count(*) from core.stale s where s.organization_id = me.organization_id and s.layer = l.key))
+          || (select jsonb_build_object('failing', count(*) filter (where o.error is not null and o.tries < 5), 'parked', count(*) filter (where o.tries >= 5),
+                'waiting', count(*) filter (where o.error is null)) from core.outbox o where o.organization_id = me.organization_id and o.layer = l.key)
+          || jsonb_build_object('catch_up', (select jsonb_build_object('patients', c.patients, 'left', x.n) from core.catch_ups c,
+                lateral (select count(distinct o.patient_id) n from core.outbox o where o.organization_id = c.organization_id and o.layer = c.layer and o.kind = 'catch_up') x
+               where c.organization_id = me.organization_id and c.layer = l.key and x.n > 0))) from core.layers l where l.is_pack), '[]'),
       'systems', coalesce((select jsonb_agg(jsonb_build_object('key', s.key, 'kind', s.kind, 'closed', s.closed, 'labels', s.labels)) from core.systems s), '[]'),
       'purposes', coalesce((select jsonb_agg(to_jsonb(p)) from core.purposes p), '[]')))
 $$;

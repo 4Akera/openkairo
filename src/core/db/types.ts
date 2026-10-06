@@ -73,7 +73,9 @@ export interface ServerMe {
   registry: { types: { key: string; version: number; layer: string; base_type: string | null; in_record: boolean; may_be_private: boolean; labels: Record<string, string> }[]
     // action: what a user needs here to see its tab (null: anyone working there); replaces: the base screens a pack's stands in for
     screens: { key: string; layer: string; work: string; action: string | null; replaces: string[]; labels: Record<string, string> }[]
-    packs: { key: string; version: number; requires: string[]; labels: Record<string, string>; used: boolean; stale: number }[]
+    // a pack's background work (§5.2): stale patients; rows failing (tried again), parked (five tries), waiting; on again, catching up
+    packs: { key: string; version: number; requires: string[]; labels: Record<string, string>; used: boolean; stale: number; failing?: number; parked?: number; waiting?: number
+      catch_up?: { patients: number; left: number } | null }[]
     setting_keys: SettingKey[]; datatypes: Record<string, Schema>; scores?: ScoreTable[]; setups?: SetupInfo[] }
 }
 /** a starter setup (§5.2): what a kind of department starts with; counts of what it holds */
@@ -150,11 +152,13 @@ export interface Service { id: string; department_id: string | null; section_nam
   steps: string[] }   // its steps in order, as keys (collected, received)
 export interface Template { id: string; department_id: string | null; name: string; items: { service_id: string }[]; shortcut: string | null; lines: string[] }
 export interface Place { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; closed: boolean; closed_reason: string | null }
+/** a pack's background work, as read 'me' counts it (settings/packWork.ts puts words on it) */
+export interface PackWork { stale: number; failing: number; parked: number; waiting: number; catchUp: { patients: number; left: number } | null }
 export interface Organization {
   organization: { id: string; name: string; time_zone: string; record_view: 'visits' | 'entries' }
   me: { id: string; name: string; kind: string; departments: Department[]; actions: string[]; works_in: string[]; holdings: ServerMe['me']['holdings']; may: ServerMe['me']['may'] }
   departments: Department[]; allDepartments: Department[]; services: Service[]; templates: Template[]; places: Place[]; sites: ServerMe['sites']
-  packs: { key: string; name: string; enabled: boolean; stale: number }[]
+  packs: { key: string; name: string; enabled: boolean; stale: number; work: PackWork }[]
   users: { id: string; name: string; kind: string; title: string | null; retired_at: string | null; accepted_at: string | null; has_login: boolean; roles: { role_id: string; role_key: string; department_id: string | null }[] }[]
   roles: { id: string; key: string; name: string; is_builtin: boolean; actions: string[]; every_action: boolean; built_on: string | null; everyday: boolean; own: string[] }[]
   actions: { key: string; layer: string; label: string; everyday: boolean }[]; types: ServerMe['registry']['types']; screens: ServerMe['registry']['screens']

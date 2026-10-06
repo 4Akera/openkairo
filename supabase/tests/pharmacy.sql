@@ -1,6 +1,6 @@
 -- the pharmacy pack (spec §5), ported: a medication sent is an order to the pharmacy; the queue (a pack table, fed after commit by a
 -- listener); prepared, the one step its service lists; a result cannot answer it; the dispense closes it; the pack off refuses new
--- dispenses and the record still reads
+-- dispenses and the record still reads; on again it catches up in the background
 \set im   '00000000-0000-0000-0000-0000000000d1'
 \set ph   '00000000-0000-0000-0000-0000000000d3'
 \set pt   '00000000-0000-0000-0000-0000000000f1'
@@ -100,7 +100,12 @@ select core.drain();
 set role authenticated;
 select t.as(:'ow');
 select public.write_setting('{"key":"organization.packs_used","data":{"packs":["pharmacy"]}}') ->> 'key' as pack_on;
+reset role;
+select t.ok(not exists (select 1 from pharmacy.queue) and exists (select 1 from core.outbox where layer = 'pharmacy' and kind = 'catch_up'),
+  'on again: nothing rebuilt in the switch''s own transaction; its catch-up queued (§5.2 Off)');
+select core.drain() as drained;
+set role authenticated;
 select t.as(:'pm');
-select t.ok(count(*) = 2, 'on again: its table caught up for the organization') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
+select t.ok(count(*) = 2, 'on again: its table caught up for the organization in the background') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
 reset role;
 select t.ok(core.rebuild_check('00000000-0000-0000-0000-0000000000a1') = '[]'::jsonb, 'rebuild = live, the pack''s table included');

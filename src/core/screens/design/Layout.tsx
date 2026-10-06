@@ -26,7 +26,7 @@ export function Layout() {
         <Section variant="compact" title="Medicines" count={2}><p className="text-13 text-fg">Metformin 500 mg · twice a day</p><p className="text-13 text-fg">Amlodipine 5 mg · once a day</p></Section>
         <Section tone="attention" title="Needs attention" count={1}><p className="text-14 text-muted">A warn edge: something here waits on you.</p></Section>
       </div>
-      <Section flush title="A list" count={3}><ul className="divide-y divide-line text-14">{['Laboratory', 'Radiology', 'Pharmacy'].map((d) => <li key={d} className="px-4 py-2 text-fg">{d}</li>)}</ul></Section>
+      <Section flush title="A list" count={3}><ul className="divide-y divide-line text-14">{['Laboratory', 'Radiology', 'Physiotherapy'].map((d) => <li key={d} className="px-4 py-2 text-fg">{d}</li>)}</ul></Section>
     </Group>
     <Group title="Page, toolbars, tabs and navigation">
       <Sample title="PageHead" className="block"><PageHead title="Services" hint="What each department does, and what it asks for." right={<Button size="sm">New service</Button>} className="mb-0" /></Sample>

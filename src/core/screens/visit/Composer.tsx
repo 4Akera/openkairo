@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { CornerDownLeft } from 'lucide-react'
 import { useDepartment, worksFor } from '../../hooks/organization'
-import { canSendPrescriptions } from './send'
+import { sendTarget } from './send'
 import { useDrafts, useDraftsFor } from '../../hooks/drafts'
 import { useComposer, type Seed } from '../../hooks/composer'
 import type { Allergy, Medication, RecordView } from '../../db/types'
@@ -38,13 +38,13 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
 
   const presets = useMemo(() => (org?.templates ?? []).filter((t) => !t.department_id || t.department_id === departmentId), [org, departmentId])
   const ctx: Ctx = useMemo(() => ({
-    // a service another write creates (a pack's dispensing, from a prescription) is not ordered by hand
+    // a service another write creates (a pack's answer to a prescription sent on) is not ordered by hand
     // …and one whose department does not work for this one is refused (not_served), so it is not offered
     services: (org?.services ?? []).filter((x) => !replyFormFor(x.reply_type)?.automatic && worksFor(org, x.department_id, departmentId)), templates: presets, departments: org?.departments ?? [], departmentId,
     // a pack's commands only where this department uses the pack; typed elsewhere, the card says where (§5.1 rule 1)
     can, packs: org?.departments.find((x) => x.id === departmentId)?.packs ?? [], usedIn: (pack: string) => (org?.departments ?? []).filter((x) => x.packs.includes(pack)).map((x) => x.name),
     noteKind: can('write:medication') ? 'progress' : can('write:vitals') ? 'nurse' : 'progress',   // a nurse's lines are nurse notes
-    canSend: canSendPrescriptions(org, departmentId) && can('write:medication'),   // a pharmacy answers prescriptions here
+    send: can('write:medication') ? sendTarget(org, departmentId)?.words ?? null : null,   // a pack answers prescriptions from here: its words
     departmentType: org?.departments.find((x) => x.id === departmentId)?.type, packCards: org?.departments.find((x) => x.id === departmentId)?.pack_cards ?? true,
     problems: [...r.problems.map((p) => ({ id: p.id, name: p.name })), ...drafts.filter((d) => d.function === 'problem' && d.params.action === 'add').map((d) => ({ id: d.id, name: String(d.params.name) }))],
     facts: standingOf(facts.data, org?.types, ymd(new Date().toISOString())), scores: org?.scores ?? [],
@@ -86,7 +86,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       case 'medication':
         if (q.action === 'stop') return null
         if (q.action === 'start' && !String(q.drug?.name ?? '').trim()) return 'Name the drug'
-        if (q.send && !ctx.canSend) return 'There is no pharmacy here to send it to — leave out send'
+        if (q.send && !ctx.send) return 'Nothing here answers prescriptions — leave out send'
         if (q.prn && !q.prn_reason_text) return 'Say what PRN is for'
         if (!q.frequency) return 'How often? — od, bd, tds, qds, prn …'
         if (q.dose_number != null && !q.dose_unit) return 'Say the unit — mg, units, ml, tab …'

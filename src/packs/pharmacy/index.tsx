@@ -2,6 +2,7 @@
 // its Dispensing screen, in place of the bench, shows what to give (the pack's own table, pharmacy.queue). Give all writes
 // pharmacy.dispense — the pack's type that extends the base's step — straight from the medication. Not given takes a one-word reason.
 // Its section in the chart (Pharmacy) lists what was dispensed; its banner word and its row mark say what waits to be collected.
+// It says what the core may not: where a prescription is sent and the words on a medicine there, its last step, what its rows carry.
 import { registerRenderer, registerReplyForm } from '@core/renderers'
 import { registerScreen } from '@core/screens/registry'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
@@ -10,8 +11,11 @@ import { Chip, Field, Input, KV, Tag } from '@core/ui'
 import { Dispensing } from './Dispensing'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerRowMark } from '@core/screens/marks'
+import { registerSend } from '@core/screens/visit/send'
+import { registerWords } from '@core/db/words'
 import { collectMark, collectWords, suppliedLine, suppliedOf, suppliedWord } from './dispensed'
 import { Supplied } from './Section'
+import { ANSWER, DONE, QUEUE_DETAILS, REFUSALS, SEND_WORDS } from './answers'
 
 interface Dispense { given: boolean; reason: string }
 const PER_DAY: Record<string, number> = { OD: 1, BD: 2, TDS: 3, QDS: 4, q4h: 6, q6h: 4, q8h: 3, q12h: 2, once: 1, stat: 1 }
@@ -41,10 +45,12 @@ function GivenOrNot({ request, value, onChange }: { request: RequestQueueRow; va
   </div>
 }
 
-registerReplyForm<Dispense>('pharmacy.dispense', {
+registerReplyForm<Dispense>(ANSWER, {
   action: 'write:pharmacy.dispense',
   automatic: true,                      // a prescription the doctor sends; nobody orders dispensing by hand
   quick: 'Give all',
+  done: DONE,
+  details: QUEUE_DETAILS,             // what to give, on each request, from its own table
   Editor: GivenOrNot,
   toWrite: (r, value) => {
     const v = value ?? { given: true, reason: '' }
@@ -53,6 +59,9 @@ registerReplyForm<Dispense>('pharmacy.dispense', {
     return item ? { type: 'pharmacy.dispense', data: { status: 'completed', pharmacy: { items: [item] } } } : null
   },
 })
+// where a prescription is sent, and the words on a medicine sent here: the composer's chip, the medicine list, the prescription block
+registerSend(ANSWER, SEND_WORDS)
+registerWords(REFUSALS)
 // its one screen for the work sent to it, in place of the bench (declared pharmacy.dispensing, replaces base.bench)
 registerScreen('pharmacy.dispensing', Dispensing)
 // its section in the chart: for anyone, shown in a department that uses the pack and wherever the patient has dispenses

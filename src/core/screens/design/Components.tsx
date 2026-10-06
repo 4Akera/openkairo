@@ -84,7 +84,7 @@ function Choices() {
       <Segmented aria-label="Sex" value={sex} onChange={setSex} options={[['female', 'Female'], ['male', 'Male'], ['other', 'Other']]} />
       <Segmented aria-label="Size" size="sm" value={size} onChange={setSize} options={[['sm', 'Small'], ['md', 'Medium']]} />
     </Sample>
-    <Sample title="Switch" note="on · off · disabled"><Switch label="Pharmacy pack" checked={on} onChange={setOn} /><Switch label="Off" checked={false} onChange={noop} /><Switch label="Disabled" checked disabled onChange={noop} /></Sample>
+    <Sample title="Switch" note="on · off · disabled"><Switch label="A pack" checked={on} onChange={setOn} /><Switch label="Off" checked={false} onChange={noop} /><Switch label="Disabled" checked disabled onChange={noop} /></Sample>
     <Sample title="ThemeToggle" note="segmented · icon: this browser's real choice (the menu one is under Menu)"><ThemeToggle /><ThemeToggle variant="icon" /></Sample>
   </Group>
 }

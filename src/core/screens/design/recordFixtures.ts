@@ -7,22 +7,22 @@ import { bySet, listPool, type SetGroup } from '../chart/model/encounter'
 import { MOVES, draftItems, itemsOf } from '../chart/model/items'
 
 const at = (daysAgo: number, h: number, m = 0) => { const d = new Date(); d.setDate(d.getDate() - daysAgo); d.setHours(h, m, 0, 0); return d.toISOString() }
-const ME = 'demo-dr', LAB_TECH = 'demo-lab', PH_TECH = 'demo-ph', GP = 'demo-gp', LAB = 'demo-lab-dept', PH = 'demo-pharmacy', PSY = 'demo-psy', PT = 'demo-patient', VISIT = 'demo-visit'
+const ME = 'demo-dr', LAB_TECH = 'demo-lab', GIVER = 'demo-giver', GP = 'demo-gp', LAB = 'demo-lab-dept', DISP = 'demo-dispensary', PSY = 'demo-psy', PT = 'demo-patient', VISIT = 'demo-visit'
 const T = { visit: at(0, 9, 40), lab: at(0, 11, 20), month: at(30, 10), year: at(365, 11), yesterday: at(1, 16, 10) }
 
 const TYPE = (key: string, en: string, in_record = true, base_type: string | null = null) => ({ key, version: 1, layer: base_type ? 'demo' : 'base', base_type, in_record, may_be_private: key === 'note', labels: { en } })
 export const SAMPLE_ORG = {
   organization: { id: 'demo-org', name: 'Demo Clinic', time_zone: 'UTC', record_view: 'visits' },
   me: { id: ME, name: 'Dr. Demo Doctor', kind: 'staff', departments: [], actions: [], works_in: [], holdings: [], may: {} },
-  users: [{ id: ME, name: 'Dr. Demo Doctor' }, { id: LAB_TECH, name: 'Sample Lab Technician' }, { id: PH_TECH, name: 'Sample Pharmacist' }],
-  allDepartments: [{ id: GP, name: 'General Practice' }, { id: LAB, name: 'Laboratory' }, { id: PH, name: 'Pharmacy' }, { id: PSY, name: 'Psychiatry' }],
+  users: [{ id: ME, name: 'Dr. Demo Doctor' }, { id: LAB_TECH, name: 'Sample Lab Technician' }, { id: GIVER, name: 'Sample Dispenser' }],
+  allDepartments: [{ id: GP, name: 'General Practice' }, { id: LAB, name: 'Laboratory' }, { id: DISP, name: 'Dispensary' }, { id: PSY, name: 'Psychiatry' }],
   departments: [], templates: [], sites: [], packs: [], roles: [], actions: [], screens: [], parked_pack_calls: 0, loginUsers: [], places: [],
   services: [{ id: 'svc-cbc', department_id: LAB, name: 'Complete blood count', code: 'cbc', reply_type: 'result', steps: ['collected', 'received'], fields: [] },
     { id: 'svc-a1c', department_id: LAB, name: 'HbA1c', code: 'a1c', reply_type: 'result', steps: ['collected'], fields: [] },
-    { id: 'svc-rx', department_id: PH, name: 'Dispensing', code: 'dispense', reply_type: 'pharmacy.dispense', steps: [], fields: [] }],
+    { id: 'svc-rx', department_id: DISP, name: 'Supply', code: 'supply', reply_type: 'demo.supply', steps: [], fields: [] }],
   types: [...[['note', 'Note'], ['vitals', 'Vitals'], ['result', 'Result'], ['medication', 'Medication'], ['order', 'Order'], ['problem', 'Problem'], ['allergy', 'Allergy'],
     ['list_review', 'List review'], ['given', 'Given'], ['procedure', 'Procedure'], ['observation', 'Observation'], ['alert', 'Alert'], ['died', 'Died'], ['crossed_out', 'Crossed out'],
-    ['step', 'Step']].map(([k, en]) => TYPE(k, en)), ...[...MOVES].map((k) => TYPE(k, k, false)), TYPE('pharmacy.dispense', 'Dispense', true, 'step'), TYPE('demo.device_check', 'Device check')],
+    ['step', 'Step']].map(([k, en]) => TYPE(k, en)), ...[...MOVES].map((k) => TYPE(k, k, false)), TYPE('demo.supply', 'Supply', true, 'step'), TYPE('demo.device_check', 'Device check')],
 } as unknown as Organization
 
 let n = 0
@@ -56,9 +56,9 @@ const aml1 = E('medication', med('Amlodipine', '5 mg', '5', 'mg', 'OD'), { recor
 const aml2 = next(aml1, med('Amlodipine', '10 mg', '10', 'mg', 'OD', { reasons: [{ to: 'item', id: htn.item }] }))
 const ibu1 = E('medication', med('Ibuprofen', '400 mg', '1', 'tablet', 'TDS'), { recorded_at: T.month, set_id: 'demo-month' })
 const ibu2 = next(ibu1, { ...ibu1.data, status: 'stopped', status_reason: 'stomach pain' })
-const dispense = E('order', { service: { id: 'svc-rx', name: 'Dispensing' }, department_id: PH, priority: 'routine', status: 'active' }, { refers_to: metformin.id, relation: 'about' })
-const given = E('pharmacy.dispense', { status: 'completed', pharmacy: { items: [{ drug: { text: 'Metformin 500 mg' }, dose: q('1', 'tablet'), quantity: q('60') }] } },
-  { refers_to: dispense.id, relation: 'answers', department_id: PH, author_id: PH_TECH, visit_id: null, recorded_at: at(0, 10, 5), set_id: 'demo-set-ph' })
+const supply = E('order', { service: { id: 'svc-rx', name: 'Supply' }, department_id: DISP, priority: 'routine', status: 'active' }, { refers_to: metformin.id, relation: 'about' })
+const given = E('demo.supply', { status: 'completed', note: 'Metformin 500 mg × 60' },
+  { refers_to: supply.id, relation: 'answers', department_id: DISP, author_id: GIVER, visit_id: null, recorded_at: at(0, 10, 5), set_id: 'demo-set-supply' })
 const cbc = E('order', { service: { id: 'svc-cbc', name: 'Complete blood count' }, department_id: LAB, priority: 'urgent', status: 'active', question: 'Pale and tired for three weeks: anaemia?' })
 const a1c = E('order', { service: { id: 'svc-a1c', name: 'HbA1c' }, department_id: LAB, priority: 'routine', status: 'active' })
 const step = (k: string, h: number, m: number) => E('step', { status: 'in-progress', step: k }, { refers_to: cbc.id, relation: 'answers', department_id: LAB, author_id: LAB_TECH, visit_id: null, recorded_at: at(0, h, m), set_id: `demo-step-${k}` })
@@ -105,8 +105,8 @@ export const SAMPLE_TABLES: ServerRecord['tables'] = {
   'base.lists': tab(lists, [dm1, dm2, htn, pen, asa1, asa2, metformin, aml1, aml2, ibu1, ibu2]),
   'base.orders': tab([order(cbc, { service_id: 'svc-cbc', service_name: 'Complete blood count', priority: 'urgent', status: 'completed', step_key: 'received', answers: [blood.id], answered_at: T.lab,
       final: true, source_entries: [cbc.id, collected.id, received.id, blood.id] }), order(a1c, { service_id: 'svc-a1c', service_name: 'HbA1c' }),
-    order(dispense, { to_department_id: PH, service_id: 'svc-rx', about_item: metformin.item, status: 'completed', answers: [given.id], answered_at: given.recorded_at, final: true, source_entries: [dispense.id, given.id] })],
-    [cbc, collected, received, blood, a1c, dispense, given]),
+    order(supply, { to_department_id: DISP, service_id: 'svc-rx', about_item: metformin.item, status: 'completed', answers: [given.id], answered_at: given.recorded_at, final: true, source_entries: [supply.id, given.id] })],
+    [cbc, collected, received, blood, a1c, supply, given]),
   'base.review': tab<ReviewRow>([{ item: blood.item, patient_id: PT, why: 'critical', level: 'critical', critical: true, for_user: ME, for_department: GP, order_item: cbc.item, visit_id: VISIT,
     entry_id: blood.id, at: T.lab, source_entries: [blood.id] }], [blood]),
   'base.values': tab(earlier, []),
@@ -115,7 +115,7 @@ export const SAMPLE_TABLES: ServerRecord['tables'] = {
 // ── folded by the chart's model ──
 const ctx = { types: SAMPLE_ORG.types, services: SAMPLE_ORG.services, me: ME, departmentId: GP, orders: SAMPLE_TABLES['base.orders'], reviews: SAMPLE_TABLES['base.review']!.rows,
   pool: [...listPool({ tables: SAMPLE_TABLES }), struck, k1], newSince: at(0, 10) }
-const page = [vitals, dm2, htn, pen, asa2, review, metformin, dispense, aml2, ibu2, cbc, a1c, paracetamol, note, appendix, smoking, dnr, blood, k2, hidden, wrong, notGiven]
+const page = [vitals, dm2, htn, pen, asa2, review, metformin, supply, aml2, ibu2, cbc, a1c, paracetamol, note, appendix, smoking, dnr, blood, k2, hidden, wrong, notGiven]
 const sets = bySet(itemsOf(page, ctx), moves, SAMPLE_ORG.types)
 const setOf = (e: ServerEntry) => sets.find((s) => s.set_id === e.set_id)!
 export const SAMPLE_SETS = { visit: setOf(vitals), lab: setOf(blood), private: setOf(hidden), crossed: setOf(wrong) }

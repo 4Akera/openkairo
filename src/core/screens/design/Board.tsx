@@ -10,7 +10,8 @@ import { tileActions, tileLineOf, type ButtonDef, type LineDef, type TileCtx } f
 import { Group, Sample } from './Frame'
 import { QUEUE } from './fixtures'
 
-const LINES: LineDef[] = [{ pack: 'probe', line: (r) => r.urgent ? { words: 'Ventilated d2 · NorAd 0.15 · MAP 62', tone: 'danger' } : { words: 'Room air · NEWS2 1' } }]
+// the state colour is the one word's that carries it (MAP 62 low), never the line's
+const LINES: LineDef[] = [{ pack: 'probe', line: (r) => r.urgent ? { words: ['Ventilated d2', 'NorAd 0.15', { text: 'MAP 62', tone: 'danger' }] } : { words: ['Room air', 'NEWS2 1'] } }]
 const BUTTONS: ButtonDef[] = [{ pack: 'probe', key: 'probe:Obs', label: 'Obs', onClick: () => {} }, { pack: 'probe', key: 'probe:Wean', label: 'Wean', path: () => '/design', show: (r) => r.urgent }]
 const MARKS: MarkDef[] = [{ pack: 'probe', mark: (row) => row.patient_id === '10001' ? { word: 'Obs due', tone: 'warn' } : { word: 'On probe' } }]
 const row = (item: string, urgent: boolean) => ({ item, patient_id: item, urgent, reason: null }) as PresenceRow

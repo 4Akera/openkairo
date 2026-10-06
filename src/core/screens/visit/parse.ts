@@ -21,7 +21,7 @@ export interface Ctx {
   noteKind?: string                                   // what an unlabelled line is: 'progress', or 'nurse' for a nurse
   departmentType?: string                             // this department's type: a pack may give it its own version of a command
   packCards?: boolean                                 // does this department use its packs' cards (departments.pack_cards)
-  canSend?: boolean                                   // a pharmacy here answers prescriptions: /rx … send
+  send?: SendWords | null                             // where a prescription goes from here, in its pack's words (visit/send.ts): /rx … send
   facts?: StandingFacts                               // the pregnancy, breastfeeding and alerts standing now: /preg, /bf, /alert change or end them
   scores?: ScoreTable[]                               // the score tables (read 'me'): /score and each score's alias (/gcs)
 }
@@ -30,6 +30,7 @@ import { allowed, commandNamed, registerCommand, usedWhere } from './commands'
 import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, factLine, pregnancy, type StandingFacts } from './facts'
 import { aliasLine, emptyScore, parseScore, scoreLine, type ScoreParams } from './score'
 import type { ScoreTable } from '../../db/types'
+import { PLAIN_SEND, type SendWords } from './send'
 
 /** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
 export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string; action?: string }
@@ -117,7 +118,7 @@ function prescription(rest: string, ctx: Ctx): Result {
     const w = words[i].toLowerCase(); const next = words[i + 1]?.toLowerCase() ?? ''
     const d = w.match(/^(\d+(?:\.\d+)?)([a-z]+)?$/)
     const glued = w.match(/^x?(\d+)(d|days?|w|wk|wks|weeks?|m|mo|months?)$/) ?? (w === 'x' || w === 'for' ? null : w.match(/^x(\d+)$/))
-    if (drug.length && w === 'send') { send = true; typed.add('send'); continue }                          // … send: to the pharmacy
+    if (drug.length && w === 'send') { send = true; typed.add('send'); continue }                          // … send: on, to where prescriptions go
     if (drug.length && glued) { duration = days(+glued[1], glued[2]); continue }                       // 7d · x7 · 2w
     if (drug.length && (w === 'for' || w === 'x') && /^\d+[a-z]*$/.test(next)) {                        // for 7 days · for 7d · x 2 weeks
       const m = next.match(/^(\d+)([a-z]+)?$/)!
@@ -139,7 +140,7 @@ function prescription(rest: string, ctx: Ctx): Result {
   const prnReason = prnFor?.join(' ').trim() || null
   if (prn && !prnReason) return { error: 'Say what PRN is for: … prn pain · prn fever · prn wheeze' }
   if (instructions) typed.add('instructions_text'); if (duration) typed.add('duration_days')
-  const line = [name, dose !== null ? `${dose}${unit ? ` ${unit}` : ''}` : null, route && route !== 'oral' ? route : null, freq, prn ? `${freq !== 'PRN' ? 'PRN ' : ''}for ${prnReason}` : null, duration ? `× ${duration}d` : null, forProblem ? `for ${forProblem.name}` : null, send ? '→ pharmacy' : null].filter(Boolean).join(' ')
+  const line = [name, dose !== null ? `${dose}${unit ? ` ${unit}` : ''}` : null, route && route !== 'oral' ? route : null, freq, prn ? `${freq !== 'PRN' ? 'PRN ' : ''}for ${prnReason}` : null, duration ? `× ${duration}d` : null, forProblem ? `for ${forProblem.name}` : null, send ? `→ ${(ctx.send ?? PLAIN_SEND).to}` : null].filter(Boolean).join(' ')
   return { ok: [{ function: 'medication', kind: 'prescription', line, typed: [...typed], params: { action: 'start', drug: known ? { name, code: `atc:${known.atc}` } : { name }, dose_number: dose, dose_unit: dose !== null ? unit : null, route, frequency: freq, prn, prn_reason_text: prnReason, duration_days: duration, instructions_text: instructions, problems: forProblem ? [{ id: forProblem.id, name: forProblem.name }] : [], send } }] }
 }
 
@@ -231,7 +232,7 @@ export function parse(input: string, ctx: Ctx): Result {
 }
 
 /** the one-line summary of a draft, from its fields (the card edits the fields; the line follows) */
-export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'>): string {
+export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & Pick<Partial<Ctx>, 'send'>): string {
   const q = p.params as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
   switch (p.function) {
     case 'vitals': return ([['systolic', 'BP'], ['pulse', 'P'], ['temperature', 'T'], ['weight', 'Wt'], ['height', 'Ht'], ['spo2', 'SpO₂'], ['respiratory_rate', 'RR']] as const)
@@ -239,7 +240,7 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'>): 
     case 'medication': return q.action === 'stop' ? `Stop ${q.drug?.name}${q.stop_reason_text ? ` — ${q.stop_reason_text}` : ''}`
       : [q.action === 'change' ? 'Change:' : q.action === 'repeat' ? 'Repeat' : null, q.drug?.name, q.dose_number != null ? `${q.dose_number} ${q.dose_unit ?? ''}`.trim() : null,
          q.route && q.route !== 'oral' ? q.route : null, q.frequency, q.prn ? `${q.frequency !== 'PRN' ? 'PRN ' : ''}${q.prn_reason_text ? `for ${q.prn_reason_text}` : ''}`.trim() || null : null, q.duration_days ? `× ${q.duration_days}d` : null,
-         q.problems?.[0]?.name ? `for ${q.problems[0].name}` : null, q.send ? '→ pharmacy' : null].filter(Boolean).join(' ')
+         q.problems?.[0]?.name ? `for ${q.problems[0].name}` : null, q.send ? `→ ${(ctx?.send ?? PLAIN_SEND).to}` : null].filter(Boolean).join(' ')
     case 'problem': return `${q.action === 'resolve' ? 'Resolved: ' : q.action === 'update' ? 'Update: ' : ''}${q.name}${q.certainty === 'suspected' ? ' (suspected)' : ''}${q.onset_on ? ` · since ${q.onset_on}` : ''}${q.text ? ` — ${q.text}` : ''}`
     case 'allergy': return q.action === 'refute' ? `Refuted: ${q.substance?.name}` : `${q.kind === 'intolerance' ? 'Intolerance' : 'Allergy'}: ${q.substance?.name}${q.reactions_text ? ` — ${q.reactions_text}` : ''}${q.severity ? ` (${q.severity})` : ''}`
     case 'order': {

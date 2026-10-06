@@ -134,6 +134,8 @@ set role authenticated;
 select t.as('11111111-0000-0000-0000-0000000000b9');
 select public.write_setting('{"key":"organization.packs_used","data":{"packs":["pharmacy","hostile"]}}') ->> 'key' as on_again;
 reset role;
+select t.ok(not exists (select 1 from hostile.log), 'on again: nothing rebuilt in the switch''s own transaction (it catches up in the background)');
+select core.drain() as drained;
 select t.ok(exists (select 1 from hostile.log where item = '00000000-0000-0000-0000-0000000000e1') and not exists (select 1 from core.stale where layer = 'hostile'), 'on again: caught up, no longer stale');
 
 \echo '── the row rule (§3.10): a pack row copies data only from its own item; from other items only facts that are never private'

@@ -112,8 +112,8 @@ export function partialWords(p: { value: string; precision?: string | null; text
 }
 /** a block group's name: the paper form it stands for */
 export const GROUP_WORD = { rx: 'Prescription', reported: 'Reported medicines', problems: 'Diagnoses & problems', allergies: 'Allergies', orders: 'Orders', order: 'Order' }
-/** the last step of a service, by what answers it */
-export const FINAL_STEP: Record<string, string> = { result: 'Resulted', note: 'Replied', 'pharmacy.dispense': 'Dispensed' }
+/** the last step of a service, by what answers it (a pack's answer says its own: its reply form's done) */
+export const FINAL_STEP: Record<string, string> = { result: 'Resulted', note: 'Replied' }
 
 /** how long ago a partial date was: 6 y · 4 mo · this month (moved from Side.tsx's since) */
 export function sinceWords(on: string | null | undefined, now = new Date()) {

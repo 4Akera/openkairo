@@ -6,7 +6,7 @@ import { read, remove, save as saveRow, writeSetting } from '../db/rpc'
 import { useDepartment } from '../hooks/organization'
 import { newId } from '../hooks/writes'
 import type { Organization } from '../db/types'
-import { Avatar, Badge, Button, Callout, Centered, DeleteButton, EditPanel, Empty, Field, Fieldset, FormRow, IconButton, Input, NavItem, NewCard, PageHead, Row, SaveState, SearchInput, Section, Segmented, Select, Spinner, Switch, dateTime, errorText, useDraft } from '../ui'
+import { Avatar, Badge, Button, Callout, Centered, DeleteButton, EditPanel, Empty, Field, Fieldset, FormRow, IconButton, Input, NavItem, NewCard, PageHead, Row, SaveState, SearchInput, Section, Segmented, Select, Spinner, dateTime, errorText, useDraft } from '../ui'
 import { Mfa } from '../shell/Mfa'
 import { ServicesPage } from './settings/Services'
 import { PAGE_ACTION, mayOpen, useMfaNeeded, useSave } from './settings/save'
@@ -14,7 +14,8 @@ import { RolesPage } from './settings/Roles'
 import { ReadsPage } from './settings/Reads'
 import { DepartmentsPage } from './settings/Departments'
 import { TemplatesPage } from './settings/Presets'
-import { PackPage, hasSettings } from './settings/PackSettings'
+import { PackPage } from './settings/PackSettings'
+import { PacksPage } from './settings/PackList'
 import { ReferencePage } from './settings/Reference'
 import { ScoresPage } from './settings/Scores'
 
@@ -52,7 +53,6 @@ export function SettingsScreen() {
     </Routes></div>
   </div>
 }
-const Err = ({ e }: { e: Error | null }) => e ? <p className="px-4 py-2 text-14 text-danger">{errorText(e)}</p> : null
 
 // ── Organization ──
 type Change = { id: string; at: string; action: string; what: string; user_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
@@ -72,7 +72,7 @@ function OrganizationPage({ org }: { org: Organization }) {
     <PageHead title={org.organization.name} hint="Settings that hold for the whole organization, and what changed lately." />
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{tiles.map(([k, l, n]) => <Link key={k} to={`/settings/${k}`} className="rounded-xl border border-line bg-surface px-4 py-3 shadow-xs transition-colors hover:border-accent-line">
       <p className="text-22 font-semibold tnum">{n}</p><p className="text-12 text-faint">{l}</p></Link>)}</div>
-    {org.parked_pack_calls > 0 && <Callout tone="danger"><Link to="/settings/packs" className="rounded-sm hover:underline focus-ring">{org.parked_pack_calls} pack calls are parked and waiting. Check the packs.</Link></Callout>}
+    {org.parked_pack_calls > 0 && <Callout tone="danger"><Link to="/settings/packs" className="rounded-sm hover:underline focus-ring">{org.parked_pack_calls === 1 ? 'A pack\'s refresh failed' : `${org.parked_pack_calls} pack refreshes failed`}: see Packs, where Retry runs them again.</Link></Callout>}
     <Section flush id="org.general" title="The clinic" summary={`${org.organization.time_zone.replace(/_/g, ' ')} · record ${org.organization.record_view === 'entries' ? 'as all entries' : 'by visit'}`}>
       <div className="grid gap-6 p-4"><ClinicZone org={org} /><RecordViewSetting org={org} /></div>
     </Section>
@@ -177,26 +177,3 @@ function UsersPage({ org }: { org: Organization }) {
   </div>
 }
 
-// ── Packs ──
-function PacksPage({ org }: { org: Organization }) {
-  // the packs used are one setting: the whole list is written each time
-  const used = org.packs.filter((p) => p.enabled).map((p) => p.key)
-  const on = useSave((key: string) => writeSetting({ key: 'organization.packs_used', data: { packs: [...used, key] } }))
-  const off = useSave((key: string) => writeSetting({ key: 'organization.packs_used', data: { packs: used.filter((k) => k !== key) } }))
-  const busy = on.isPending || off.isPending
-  return <div className="grid gap-4">
-    <PageHead title="Packs" hint="Add-ons installed on this server. Turn one on to use it in this organization." />
-    {org.parked_pack_calls > 0 && <Callout tone="danger">{org.parked_pack_calls} pack calls are parked and waiting.</Callout>}
-    <Section flush id="packs" title="Installed" count={org.packs.length} summary={org.packs.filter((p) => p.enabled).map((p) => p.name).join(', ') || 'none on'}>
-      {org.packs.length === 0 ? <Empty>No packs installed on this server yet.</Empty>
-      : <ul className="divide-y divide-line">{org.packs.map((p) => <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-14">
-          <span className="min-w-0 flex-1"><span className="font-medium">{p.name}</span> <span className="font-mono text-12 text-faint">{p.key}</span></span>
-          {hasSettings(org, p.key) && <Link to={`/settings/packs/${p.key}`} className="rounded-sm text-12 text-accent hover:underline focus-ring">Settings</Link>}
-          <Badge tone={p.enabled ? 'accent' : 'neutral'}>{p.enabled ? 'On' : 'Off'}</Badge>
-          <Switch checked={p.enabled} label={p.name} disabled={busy}
-            onChange={() => p.enabled ? confirm(`Turn off ${p.name}? What it adds stops working here until it is turned on again.`) && off.mutate(p.key) : on.mutate(p.key)} />
-        </li>)}</ul>}
-      <Err e={on.error ?? off.error} />
-    </Section>
-  </div>
-}

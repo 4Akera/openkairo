@@ -8,6 +8,8 @@ import { banner, benchRow, cards, card, hit, mayIn, queueRows, recentRow, record
 import { ymd } from '../ui'
 import { useDepartment } from './organization'
 import { useLive } from './live'
+import { replyDetails } from '../renderers'
+import { baseOf } from '../screens/chart/model/items'
 
 const OPEN_STATES = ['waiting', 'called', 'with', 'pending', 'back']
 const table = <R,>(t: string, departmentId: string, where: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
@@ -73,13 +75,14 @@ export function useRequestQueue(departmentId: string | null) {
       const open = await table<OrderRow>('base.orders', departmentId!, { to_department_id: departmentId, status: ['active', 'in-progress', 'on-hold'] })
       const since = new Date(Date.now() - 24 * 3600_000).toISOString()
       const recent = await table<OrderRow>('base.orders', departmentId!, { to_department_id: departmentId, answered_at: { op: '>=', value: since } })
-      // what a pharmacy gives: the medication each order is about (the pack's own table)
+      // what a pack's answer needs on each request (what to give), from its own table where the reader may read it (renderers' details)
       const details = new Map<string, Record<string, unknown>>()
-      if (can('read:pharmacy.queue')) for (const r of (await table<Record<string, unknown>>('pharmacy.queue', departmentId!, { department_id: departmentId }, { entries: false })).rows) details.set(String(r.item), r)
+      for (const d of replyDetails()) if (can(d.action))
+        for (const r of (await table<Record<string, unknown>>(d.table, departmentId!, d.where(departmentId!), { entries: false })).rows) { const x = d.of(r); details.set(x.item, x.details) }
       const here = new Map<string, boolean>()
       const pts = [...new Set(open.rows.map((r) => r.patient_id))]
       if (pts.length && can('read:queue')) for (const p of (await table<PresenceRow>('base.presence', departmentId!, { patient_id: pts, state: OPEN_STATES }, { entries: false })).rows) here.set(p.patient_id, p.here || here.get(p.patient_id) === true)
-      const requests = open.rows.map((x) => { const r = benchRow(x, open, org, here.get(x.patient_id)); const d = details.get(x.item); return d ? { ...r, details: { drug: { name: d.drug }, dose: d.dose, frequency: d.timing, duration_days: d.duration_days, quantity: d.quantity, medication_item: d.medication_item } } : r })
+      const requests = open.rows.map((x) => { const r = benchRow(x, open, org, here.get(x.patient_id)); const d = details.get(x.item); return d ? { ...r, details: d } : r })
       const answered = recent.rows.filter((x) => x.status === 'completed' || x.status === 'rejected' || x.status === 'cancelled')
       return { requests, recent: answered.map((x) => recentRow(x, recent, org)), done_today: answered.length }
     },
@@ -153,7 +156,7 @@ export function useEntry(entryId: string | null) {
       return { ...c, data: latest.data ?? {}, patient_id: latest.patient_id, patient: null, replaced_by_id: null, is_note: latest.type === 'note',
         can_mark_private: ['note', 'result'].includes(latest.type), is_private: undefined,
         replies: related.filter((e) => e.relation === 'answers' && e.type !== 'step').map((e) => ({ ...card(e, org), data: e.data ?? {} })),
-        steps: related.filter((e) => e.type === 'step' || e.type.endsWith('dispense')).map((e, i) => ({ step: String(e.data?.step ?? e.data?.status ?? e.type), recorded_at: e.recorded_at, reason: (e.data?.reason as string) ?? null, position: i })),
+        steps: related.filter((e) => baseOf(e.type, org?.types) === 'step').map((e, i) => ({ step: String(e.data?.step ?? e.data?.status ?? e.type), recorded_at: e.recorded_at, reason: (e.data?.reason as string) ?? null, position: i })),
         files: ((latest.data?.attachments as { name?: string; mime: string }[] | undefined) ?? []).map((a, i) => ({ position: i + 1, name: a.name ?? 'file', mime: a.mime })),
         versions: vc.filter((x) => x.id !== latest.id), related: related.map((e) => card(e, org)), author_name: userName(org, latest.author_id) }
     },

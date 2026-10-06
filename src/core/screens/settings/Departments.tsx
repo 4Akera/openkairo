@@ -14,7 +14,7 @@ import { PackCards } from './PackSettings'
 import { CompareSetup, StartFrom } from './Setups'
 
 const WORKS: [Department['work'], string, string][] = [['visits', 'Clinics', 'Patients are seen here in visits.'], ['stays', 'Wards', 'Patients stay here, in beds.'],
-  ['desk', 'Front desks', 'Checks patients in for the clinics it serves.'], ['bench', 'Benches', 'Does work others order: a lab, imaging, a pharmacy.'],
+  ['desk', 'Front desks', 'Checks patients in for the clinics it serves.'], ['bench', 'Benches', 'Does work others order: a lab, imaging, a dispensary.'],
   ['outside', 'Outside', 'Somewhere outside the organization that orders go to.']]
 const REVIEW: [Department['review_results'], string][] = [['critical', 'Critical only'], ['abnormal', 'Critical and abnormal'], ['all', 'Every result']]
 // Encounter.class (v3 ActCode, §4.2); unset, the FHIR mapping calls a visit AMB and a stay IMP
@@ -86,7 +86,7 @@ export function DepartmentsPage({ org }: { org: Organization }) {
       </div>
       {(d.work === 'desk' || d.work === 'bench') && <Fieldset title="Serves">
         <FormRow label={d.work === 'desk' ? 'Checks in for' : 'Works for'} changed={e.changed('serves')}
-          hint={d.work === 'desk' ? 'Its desk sends patients to these and sees their queues.' : 'Only these send it orders (and prescriptions, for a pharmacy); others are refused. With two labs, each works for its own.'}>
+          hint={d.work === 'desk' ? 'Its desk sends patients to these and sees their queues.' : 'Only these send it orders (and prescriptions, where it answers them); others are refused. With two labs, each works for its own.'}>
           <div className="flex flex-wrap gap-1.5">
             <Chip variant="check" shape="pill" on={d.serves.includes(null)} onClick={() => e.set({ serves: [null] })}>{every(d.work)[0].toUpperCase() + every(d.work).slice(1)}</Chip>
             {clients.map((v) => { const on = d.serves.includes(v.id); const rest = d.serves.filter((x): x is string => !!x && x !== v.id)

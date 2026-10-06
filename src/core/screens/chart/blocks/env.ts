@@ -1,5 +1,5 @@
 // What every block reads besides its item (chart-plan.md §1.3): who reads and where, the directory for names and labels, the
-// record's derived tables (a value before, a problem's name, a pharmacy order), and what a click does. The chart provides it; the
+// record's derived tables (a value before, a problem's name, an order about a medicine), and what a click does. The chart provides it; the
 // /design gallery provides a sample one, where nothing is read or written (sample) and each action says what it would do.
 import { createContext, useContext } from 'react'
 import type { Draft } from '../../../db/entries'

@@ -39,7 +39,7 @@ export const stepName = (key: string) => key[0].toUpperCase() + key.slice(1).rep
 export type Phase = 'todo' | 'doing'
 export const phaseOf = (step: string | undefined): Phase => (step ?? 'sent') === 'sent' ? 'todo' : 'doing'
 /** each order's next step, one button per step: the service's first step after the one it reached, the first when none yet
- *  (spec/openCare.md §4.4). A service answered by a pack type that extends step (pharmacy.dispense) takes its steps in that type. */
+ *  (spec/openCare.md §4.4). A service answered by a pack type that extends step takes its steps in that type. */
 export function nextSteps(rows: RequestQueueRow[], o: Organization | undefined, may: (action: string) => boolean) {
   const by = new Map<string, { key: string; type: string; rows: RequestQueueRow[] }>()
   for (const r of rows) {

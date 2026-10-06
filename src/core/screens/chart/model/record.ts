@@ -55,7 +55,9 @@ export const doseText = (l: MedLine) => [l.dose, l.route && l.route !== 'oral' ?
 /** a change: 500 mg BD → 1 g BD; nothing when the dose stayed */
 export const changeText = (before: MedLine, now: MedLine) => doseText(before) !== doseText(now) ? `${doseText(before)} → ${doseText(now)}` : null
 export interface MedRow extends Medication { first_at: string; changed_at: string; visit_id: string | null; stopped_on: string | null; status_reason: string | null
-  reported: boolean; before: Medication | null; line: MedLine; pharmacy: { order: OrderRow; step: string; word: string; open: boolean } | null }
+  reported: boolean; before: Medication | null; line: MedLine
+  /** sent on (an order about it to where prescriptions go): where it has got to; its words are its pack's (visit/send.ts) */
+  sent: { order: OrderRow; step: string; word: string; open: boolean } | null }
 /** current (active, on hold) · reported (the patient takes it: nothing writes these yet, so an empty state until a path exists) · past */
 export function medicinesOf(rec: Rec, ctx: ChartCtx) {
   const t = listsOf(rec); const types = ctx.org?.types; const orders = rec.tables['base.orders']?.rows ?? []
@@ -65,7 +67,7 @@ export function medicinesOf(rec: Rec, ctx: ChartCtx) {
     const o = orders.filter((r) => r.about_item === x.item).sort((a, b) => b.ordered_at.localeCompare(a.ordered_at))[0]
     return { ...m, started_on: m.data?.started?.value ?? dateOf(vs[0], x.first_at), first_at: x.first_at, changed_at: x.changed_at, visit_id: x.visit_id,
       stopped_on: m.status === 'stopped' || m.status === 'completed' ? dateOf(latest, x.changed_at) : null, status_reason: m.data?.status_reason ?? null, reported: m.basis === 'reported',
-      before: prev ? medicationOf(x, prev, types) : null, line: medLine(m.data), pharmacy: o ? { order: o, step: stepOf(o), word: stepWord(stepOf(o)), open: OPEN.has(o.status) } : null }
+      before: prev ? medicationOf(x, prev, types) : null, line: medLine(m.data), sent: o ? { order: o, step: stepOf(o), word: stepWord(stepOf(o)), open: OPEN.has(o.status) } : null }
   })
   const now = rows.filter((m) => m.status === 'active' || m.status === 'on-hold').sort((a, b) => a.drug_name.localeCompare(b.drug_name))
   return { current: now.filter((m) => !m.reported), reported: now.filter((m) => m.reported),
@@ -116,8 +118,8 @@ export function historyOf(facts: ServerEntry[], types?: Types) {
 // ── still waiting ──
 export interface ReviewLine { row: ReviewRow; entry: ServerEntry | undefined; name: string; critical: boolean; flag: Flag | null }
 export interface OrderLine { row: OrderRow; name: string; to: string | null; step: string; word: string; since: string; medicine: string | null }
-/** results to review for me or my department (critical first, then the newest), orders out (the oldest first; a dispense order names its
- *  medicine), and whether this visit waits for results */
+/** results to review for me or my department (critical first, then the newest), orders out (the oldest first; an order sending a medicine on names
+ *  it), and whether this visit waits for results */
 export function waitingOf(rec: Rec, ctx: ChartCtx, visit?: Pick<PresenceRow, 'state'> | null) {
   const rv = rec.tables['base.review']; const o = rec.tables['base.orders']; const t = listsOf(rec); const types = ctx.org?.types
   const reviews = (rv?.rows ?? []).filter((r) => isForMe(r, ctx.me, ctx.departmentId)).map((r): ReviewLine => { const e = rv!.entries[r.entry_id]

@@ -16,7 +16,7 @@ export interface DayGroup { day: string; n: number; sets: SetGroup[] }   // n: d
 export const listPool = (rec: Tables) => Object.values(rec.tables['base.lists']?.entries ?? {})
 
 /** the encounter's entries: the page read by visit, and every entry of its orders — the bench writes steps and answers with no visit_id,
- *  so they join through base.orders (the demo's results, steps and dispenses all carry none) */
+ *  so they join through base.orders (the demo's results, steps and packs' answers all carry none) */
 export function encounterEntries(page: ServerEntry[], rec: Tables, visitId: string): ServerEntry[] {
   const orders = rec.tables['base.orders']
   const joined = (orders?.rows ?? []).filter((o) => o.visit_id === visitId).flatMap((o) => o.source_entries.map((id) => orders!.entries[id]))

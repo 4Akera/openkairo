@@ -52,7 +52,7 @@ export function useChartActions({ r, visit, role, patientId, visitId, next, comp
     if (!ok) { onHeld?.(); requestAnimationFrame(() => composer.current?.focus()) }
     return ok
   }
-  /** the drafts as entries (a medication sent to the pharmacy is two), in the visit or outside any */
+  /** the drafts as entries (a medication sent on is two), in the visit or outside any */
   const entries = (withVisit: boolean): EntryIn[] => drafts().flatMap((d) =>
     draftEntries(d, { patientId: patientId!, departmentId: dept!.id, visitId: withVisit && visit ? visit.id : null, record: r, org }))
   /** one set: landed → the drafts cleared; warnings → a card, and Sign anyway resends with them confirmed */

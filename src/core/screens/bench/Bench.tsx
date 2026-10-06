@@ -78,7 +78,7 @@ export function Bench({ dept }: ScreenProps) {
   const none = (text: string) => <Nothing text={f ? 'No match here.' : text} others={f ? found.filter(([k, , m]) => k !== seg && m > 0) : []} onPick={pick} />
   const row = (g: DayGroup, i: number, old: boolean) => {
     const steps = nextSteps(g.rows, org, can).map((s) => <Button key={`${s.type} ${s.key}`} size="sm" variant="outline" onClick={() => void advance(s.rows, s.key, s.type)} disabled={stepping}>{stepName(s.key)} {s.rows.length}</Button>)
-    // a pack's one-click release (the pharmacy's "Give all"): every request its form can answer as it stands, in one atomic set
+    // a pack's one-click release (its quick word, "Give all"): every request its form can answer as it stands, in one atomic set
     const quick = seg !== 'done' ? g.rows.map((r) => ({ r, pf: replyFormFor(r.reply_type) })).filter(({ r, pf }) => pf?.quick && can(pf.action) && pf.toWrite(r, undefined)) : []
     if (quick.length) steps.push(<Button key="quick" size="sm" disabled={quickBusy === g.patient.id} onClick={async () => {
       const items: EntryIn[] = quick.flatMap(({ r, pf }) => { const w = pf!.toWrite(r, undefined); return w ? [answerEntry(r, departmentId, w)] : [] })

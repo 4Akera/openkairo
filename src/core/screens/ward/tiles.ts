@@ -7,7 +7,9 @@ import { isPackKey, stateTone, type StateTone } from '../marks'
 
 /** what a pack's line and buttons read: the department, the bed, the patient, the stay's day (1 the admission's), the rights here */
 export interface TileCtx { dept: Pick<Department, 'id' | 'packs'>; place: Place | null; identity: Identity | null; day: number; can: (action: string) => boolean }
-export interface TileWords { words: string; tone?: StateTone }
+/** a pack's words on the tile: plain words, or its words one by one, each with a state colour of its own (only that word takes it) */
+export interface TileWord { text: string; tone?: StateTone }
+export interface TileWords { words: string | (string | TileWord)[] }
 export type TileLineFn = (row: PresenceRow, ctx: TileCtx) => TileWords | null | undefined
 /** a pack's button: its label, when it shows, and what it does (onClick, or a path to open) */
 export interface TileButtonIn { label: string; show?: (row: PresenceRow, ctx: TileCtx) => boolean; onClick?: (row: PresenceRow, ctx: TileCtx) => void; path?: (row: PresenceRow, ctx: TileCtx) => string }
@@ -36,7 +38,13 @@ export function registerTileButton(pack: string, b: TileButtonIn): boolean {
 export const tileLineDefs = (): readonly LineDef[] => lines
 export const tileButtonDefs = (): readonly ButtonDef[] => buttons
 
-export interface TileSegment { pack: string; words: string; tone?: StateTone }
+export interface TileSegment { pack: string; words: TileWord[] }
+/** a pack's words, each trimmed, the empty ones dropped; a colour only for a state, on its own word (§5.1 rule 4) */
+function wordsOf(w: TileWords['words'] | undefined): TileWord[] {
+  const list = typeof w === 'string' ? [w] : Array.isArray(w) ? w : []
+  return list.flatMap((x) => { const text = (typeof x === 'string' ? x : x?.text)?.trim(); const tone = typeof x === 'string' ? undefined : stateTone(x?.tone)
+    return text ? [tone ? { text, tone } : { text }] : [] })
+}
 /** the tile's one pack line: each pack this department uses, in its pack order, says its words; a pack whose words fail says nothing */
 export function tileLineOf(list: readonly LineDef[], row: PresenceRow, ctx: TileCtx): TileSegment[] {
   const out: TileSegment[] = []
@@ -44,8 +52,8 @@ export function tileLineOf(list: readonly LineDef[], row: PresenceRow, ctx: Tile
     const d = list.find((x) => x.pack === pack); if (!d) continue
     let w: TileWords | null | undefined = null
     try { w = d.line(row, ctx) } catch (e) { console.error(`openCare: the tile line of ${pack} failed`, e) }
-    const words = w?.words?.trim(); const tone = stateTone(w?.tone)
-    if (words) out.push({ pack, words, ...(tone ? { tone } : {}) })
+    const words = wordsOf(w?.words)
+    if (words.length) out.push({ pack, words })
   }
   return out
 }

@@ -271,6 +271,23 @@ create function core.patient_snapshot(p core.patients) returns jsonb language sq
   select core.identity(p) - 'id' - 'number' - 'merged_into'
 $$;
 
+-- what of a patient's identity changed (age, sex): the tables that declare they read it are refreshed for the family's items, the
+-- base's inline, a pack's (while on) in the background like a listener's; no other table is touched (§5.2 Setup and guards)
+create function core.identity_changed(p_org uuid, p_patient uuid, p_reads text[]) returns void language plpgsql volatile security definer set search_path = '' as $$
+declare v_who uuid := core.survivor(p_org, p_patient); v_items uuid[]; d core.derived;
+begin
+  if cardinality(p_reads) = 0 then return; end if;
+  select coalesce(array_agg(distinct e.item), '{}') into v_items from core.entries e where e.organization_id = p_org and e.patient_id = any (core.family(p_org, v_who));
+  if cardinality(v_items) = 0 then return; end if;
+  for d in select * from core.derived x where x.reads && p_reads and core.layer_on(p_org, x.layer) order by (x.layer <> 'base'), x.position loop
+    if d.layer = 'base' then
+      perform core.run_refresh(d.refresh, p_org, v_items);
+    else
+      insert into core.outbox (organization_id, layer, refresh, patient_id, items, kind) values (p_org, d.layer, d.refresh, v_who, v_items, 'identity');
+    end if;
+  end loop;
+end $$;
+
 create function public.save_patient(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare me core.users := core.me(); v_org uuid; v_dept uuid := (p ->> 'department_id')::uuid; x jsonb := p -> 'patient'; v_id uuid; old core.patients; cur core.patients;
         v_given text[]; v_full text; v_findings jsonb := '[]'; idf jsonb; s core.systems; fs jsonb;
@@ -321,16 +338,22 @@ begin
         from jsonb_array_elements(x -> 'identifiers') i where trim(coalesce(i ->> 'value', '')) <> '';
   end if;
   insert into core.patient_changes (organization_id, patient_id, data, reason, author_id) values (v_org, v_id, core.patient_snapshot(cur), p ->> 'reason', me.id);
+  -- a change of sex or birth date refreshes only the tables that declare they read it (§5.2)
+  if old.id is not null then
+    perform core.identity_changed(v_org, v_id, array_remove(array[
+      case when old.gender is distinct from cur.gender then 'sex' end,
+      case when (old.birth_date, old.birth_precision, old.birth_estimated) is distinct from (cur.birth_date, cur.birth_precision, cur.birth_estimated) then 'age' end], null));
+  end if;
   return jsonb_build_object('patient', core.identity(cur), 'findings', v_findings, 'created', old.id is null);
 end $$;
 
--- every derived row of these patients' items, recomputed (merge, pack on, erase)
+-- every derived row of these patients' items, recomputed (a merge); a pack off is not rebuilt
 create function core.refresh_patients(p_org uuid, p_patients uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
 declare v_items uuid[]; d core.derived;
 begin
   select coalesce(array_agg(distinct e.item), '{}') into v_items from core.entries e where e.organization_id = p_org and e.patient_id = any (p_patients);
   if cardinality(v_items) = 0 then return; end if;
-  for d in select * from core.derived x order by (x.layer <> 'base'), x.position loop
+  for d in select * from core.derived x where core.layer_on(p_org, x.layer) order by (x.layer <> 'base'), x.position loop
     perform core.run_refresh(d.refresh, p_org, v_items);
   end loop;
 end $$;
@@ -386,12 +409,55 @@ begin
   return null;
 end $$;
 
+-- ── a pack's background work (§5.2 Off, Setup and guards) ──
+-- a pack on again catches up: its earlier work dropped, then one row per patient and refresh (its tables in declaration order, then its
+-- listeners), drained after commit like a listener's, live work first; core.catch_ups keeps how many patients it started with
+create function core.catch_up(p_org uuid, p_layer text) returns int language plpgsql volatile security definer set search_path = '' as $$
+declare n int;
+begin
+  delete from core.outbox where organization_id = p_org and layer = p_layer;
+  delete from core.catch_ups where organization_id = p_org and layer = p_layer;
+  insert into core.outbox (organization_id, layer, refresh, patient_id, items, kind)
+  select p_org, p_layer, f.fn, w.who, w.items, 'catch_up'
+    from (select core.survivor(p_org, e.patient_id) who, array_agg(distinct e.item) items from core.entries e where e.organization_id = p_org group by 1) w,
+         (select x.fn, min(x.o) o from (select d.refresh fn, d.position o from core.derived d where d.layer = p_layer
+                                        union all select l.refresh, 2147483647 from core.listeners l where l.layer = p_layer) x group by x.fn) f
+   order by w.who, f.o;
+  select count(distinct patient_id) into n from core.outbox where organization_id = p_org and layer = p_layer and kind = 'catch_up';
+  if n > 0 then insert into core.catch_ups (organization_id, layer, patients) values (p_org, p_layer, n); end if;
+  return n;
+end $$;
+
+-- Retry (Settings → Packs): a pack's failed and parked work is tried again in the background, and a patient it is stale for with no work
+-- waiting gets its refresh queued again; each stale mark clears once its work succeeds. Who changes settings everywhere may
+create function public.retry_pack(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare me core.users := core.me(); v_org uuid := me.organization_id; v_layer text := p ->> 'pack'; n int; m int;
+begin
+  perform core.require_mfa();
+  if not core.may(me.id, 'manage:settings', null) then perform core.refuse('not_allowed', 'manage:settings'); end if;
+  if not exists (select 1 from core.layers l where l.key = v_layer and l.is_pack) then perform core.refuse('unknown_pack', v_layer); end if;
+  if not core.layer_on(v_org, v_layer) then perform core.refuse('pack_off', v_layer); end if;
+  update core.outbox set tries = 0 where organization_id = v_org and layer = v_layer and error is not null;
+  get diagnostics n = row_count;
+  delete from core.stale s where s.organization_id = v_org and s.layer = v_layer
+     and not exists (select 1 from core.entries e where e.organization_id = v_org and e.patient_id = any (core.family(v_org, s.patient_id)));
+  insert into core.outbox (organization_id, layer, refresh, patient_id, items, kind, error)
+  select v_org, v_layer, f.fn, s.patient_id, (select array_agg(distinct e.item) from core.entries e where e.organization_id = v_org and e.patient_id = any (core.family(v_org, s.patient_id))),
+         'refresh', s.error
+    from core.stale s, (select distinct x.fn from (select d.refresh fn from core.derived d where d.layer = v_layer union all select l.refresh from core.listeners l where l.layer = v_layer) x) f
+   where s.organization_id = v_org and s.layer = v_layer
+     and not exists (select 1 from core.outbox x where x.organization_id = v_org and x.layer = v_layer and x.patient_id = s.patient_id);
+  get diagnostics m = row_count;
+  perform core.audit(me, 'retry', 'pack:' || v_layer, null, null, jsonb_build_object('requeued', n + m));
+  perform core.hint('organization:' || v_org);
+  return jsonb_build_object('pack', v_layer, 'requeued', n + m);
+end $$;
+
 -- ── settings (§3.4): shape, key check, may; organization and place keys need the action everywhere. A refusal names its field when it
 -- can (the hint): the shape's, by core.shape_field; a check's, by its finding's field ──
 create function public.write_setting(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare me core.users := core.me(); v_org uuid; k core.setting_keys; v_owner uuid := (p ->> 'owner_id')::uuid; v_thing uuid; v_data jsonb := coalesce(p -> 'data', '{}');
-        v_retired boolean := coalesce((p ->> 'retired')::boolean, false); fs jsonb; before jsonb; v_id uuid; v_on_before text[]; v_on_after text[]; v_layer text; d core.derived; l core.listeners;
-        v_items uuid[];
+        v_retired boolean := coalesce((p ->> 'retired')::boolean, false); fs jsonb; before jsonb; v_id uuid; v_on_before text[]; v_on_after text[]; v_layer text;
 begin
   v_org := me.organization_id;
   perform core.require_mfa();
@@ -436,20 +502,18 @@ begin
           greatest(clock_timestamp(), (before ->> 'recorded_at')::timestamptz + interval '1 microsecond',
                    (select e.recorded_at from core.entries e where e.organization_id = v_org order by e.recorded_at desc limit 1) + interval '1 microsecond')) returning id into v_id;
   perform core.audit(me, case when v_retired then 'retire' when before is null then 'create' else 'change' end, 'setting:' || k.key, v_thing, before -> 'data', v_data);
-  -- a pack turned on: its tables and listeners catch up for the organization before its screens show (§5)
+  -- a pack turned on again catches up in the background (§5.2 Off): its work queued per patient, drained after commit with its progress
+  -- in Settings → Packs; a pack turned off stops its work (its tables are not rebuilt while off)
   if k.key = 'organization.packs_used' then
     v_on_after := core.packs_used(v_org);
     for v_layer in select x from unnest(v_on_after) x where not (x = any (v_on_before)) loop
       if not exists (select 1 from core.layers y where y.key = v_layer and y.is_pack) then perform core.refuse('unknown_pack', v_layer); end if;
       if exists (select 1 from core.layers y, unnest(y.requires) q where y.key = v_layer and not (q = any (v_on_after))) then perform core.refuse('requires', v_layer); end if;
-      select coalesce(array_agg(distinct e.item), '{}') into v_items from core.entries e where e.organization_id = v_org;
-      for d in select * from core.derived x where x.layer = v_layer loop
-        perform core.run_refresh(d.refresh, v_org, v_items);
-      end loop;
-      for l in select * from core.listeners x where x.layer = v_layer loop
-        perform core.run_refresh(l.refresh, v_org, v_items);
-      end loop;
-      delete from core.stale where organization_id = v_org and layer = v_layer;
+      perform core.catch_up(v_org, v_layer);
+    end loop;
+    for v_layer in select x from unnest(v_on_before) x where not (x = any (v_on_after)) loop
+      delete from core.outbox where organization_id = v_org and layer = v_layer;
+      delete from core.catch_ups where organization_id = v_org and layer = v_layer;
     end loop;
     if exists (select 1 from core.layers y, unnest(y.requires) q where y.key = any (v_on_after) and not (q = any (v_on_after))) then perform core.refuse('required_by_another'); end if;
   end if;
@@ -720,7 +784,7 @@ revoke create on schema core from core_eraser;
 grant usage on schema core to core_eraser, base_role;
 grant usage on schema extensions to core_eraser, base_role;
 grant select, delete on core.entries, core.sets, core.patients, core.patient_identifiers, core.patient_relations, core.patient_changes, core.merges,
-  core.read_log, core.file_uses, core.stale, core.outbox, core.redactions to core_eraser;
+  core.read_log, core.file_uses, core.stale, core.outbox, core.catch_ups, core.redactions to core_eraser;
 grant update on core.entries, core.patients to core_eraser;
 grant select on core.derived, core.types, core.layers, core.systems, core.codes, core.users, core.departments to core_eraser;
 grant insert on core.erasures, core.redactions to core_eraser;
@@ -737,7 +801,7 @@ alter default privileges in schema public revoke execute on functions from publi
 grant execute on function core.may_listen(text) to authenticated;
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
   public.save(text, jsonb), public.remove(text, uuid), public.save_patient(jsonb), public.merge_patients(jsonb), public.write_setting(jsonb),
-  public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb) to authenticated;
+  public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb), public.retry_pack(jsonb) to authenticated;
 -- the base and the packs call these core helpers from their own definer functions
 grant execute on function core.may(uuid, text, uuid), core.may_somewhere(uuid, text), core.setting_at(uuid, text, uuid, timestamptz),
   core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.uuid7(),
@@ -746,4 +810,4 @@ grant execute on function core.may(uuid, text, uuid), core.may_somewhere(uuid, t
   core.codings(jsonb), core.nodes(jsonb),
   core.next_number(uuid, text, text, date), core.role_actions_of(uuid, uuid), core.score(text, text, jsonb) to base_role, core_eraser;
 grant execute on function core.run_refresh(regprocedure, uuid, uuid[]) to core_eraser;   -- a redact refreshes what it touched
-grant execute on function core.pack_hidden(uuid, uuid[]) to base_role;   -- the base's identity door for packs is masked like the core's
+grant execute on function core.pack_hidden(uuid, uuid[]), core.identity_read() to base_role;   -- the base's identity door for packs is masked like the core's

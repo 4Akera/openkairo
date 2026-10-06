@@ -198,7 +198,8 @@ select core.declare_type(
   other_patient  => false,  -- may sit in a set beside another patient (the birth card)
   labels         => '{"en":"Medication","ar":"دواء"}');
 select core.declare_system  (key, kind, uri, version, closed, check, licence, labels);
-select core.declare_table   (key => 'base.lists', layer => 'base', refresh => 'base.lists_refresh(uuid,uuid[])', action => 'read:record');
+select core.declare_table   (key => 'base.lists', layer => 'base', refresh => 'base.lists_refresh(uuid,uuid[])', action => 'read:record',
+                             reads => '{}');           -- what of identity its refresh reads ('age', 'sex'): refreshed when that changes
 select core.declare_rule    (key => 'base.private', layer => 'base', hidden => 'base.private_hidden(uuid,uuid[])');
 select core.declare_action  (key => 'write:note', layer => 'base', scope => 'department', labels => '{…}',
                              everyday => false);       -- a pack's only: held by the everyday roles where a department uses the pack
@@ -290,11 +291,14 @@ The writer:
 8. **Inserts** the entries, fills `codes`, stores `findings`, writes the set ledger row.
 9. **Refreshes**: every derived table fed by the new entries' types and their targets' types, with the touched items (the new entries'
    items, their targets' items and their visits). Base tables refresh inline and must succeed. A pack's tables fed by its own types
-   refresh inline inside a savepoint; an error marks (pack, patient) stale and never refuses. A pack listening to another layer's
-   types gets an outbox row, drained after commit by a pg_cron job every 5 seconds, with the same refresh. The job is a lone
-   `call core.drain_outbox()`: a command of two statements runs as one transaction block, where the procedure's commit per batch is
-   refused. Each drained batch sends the same content-free hints as a write, so a pack's worklist catches up without polling.
-   Settings → Packs shows "N patients to refresh".
+   refresh inline inside a savepoint; an error marks (pack, patient) stale, never refuses, and queues the same refresh in the outbox to
+   be tried again. A pack listening to another layer's types gets an outbox row, drained after commit by a pg_cron job every 5 seconds,
+   with the same refresh. The job is a lone `call core.drain_outbox()`: a command of two statements runs as one transaction block, where
+   the procedure's commit per row is refused. Live work drains before a catch-up's (§5.2 Off). A failed row is tried again, and parked
+   after five tries; a stale mark clears once none of the pack's work for that patient is failing. A pack off for the clinic is
+   neither refreshed nor heard (its rows are dropped by the drain). Each drained row sends its patient's content-free record hint, and
+   each run one hint per clinic it touched (a row done, failed, parked or dropped), every 50 rows and at its end, so a pack's worklist
+   and Settings → Packs catch up without polling and a catch-up of hundreds of patients does not restart every open queue per row. Settings → Packs shows "N patients to refresh", the work failing and parked, with Retry.
 10. Sends a realtime hint with no content (`record:<patient>`, `organization:<id>`), and returns `{set_id, outcome, entries: [{id, item,
    item_version}], findings}`. It never returns rows, so a refusal cannot leak private data.
 
@@ -591,7 +595,8 @@ it works ("/x is used in: …").
 - **Dependencies**: `requires` other packs, with no loops, checked at declaration.
 - **Off** (not in `organization.packs_used`): its types refuse new entries except corrections and cross-outs (a correction by an
   author of the item, §3.9 step 5), nobody holds its actions, its entries stay on every chart read-only, and its visibility rules keep
-  applying. **On again**: its tables are refreshed for the organization before its screens show. There is no removal while
+  applying, and its tables are not rebuilt. **On again**: it catches up in the background, its progress in Settings → Packs (§5.2
+  Off). There is no removal while
   its entries exist.
 - A pack screen may look nothing like the base's and may replace a department's default screen (declared with `replaces`, registered
   with `registerScreen`), but it calls the same actions. It is
@@ -638,8 +643,8 @@ it works ("/x is used in: …").
   screen: then it is the department's only screen for that work, never a second tab beside the base one, and it does the base
   actions (call, start, done) itself. *Built 2026-10-06:* every tile of the board (`ward/BedBoard.tsx`, `ward/Tile.tsx`) is the
   base's part on top (the bed; who is in it, sex and age; the stay's day, 1 the admission's; the responsible clinician; the reason),
-  then one pack line, then the buttons at its foot. A pack registers its words once (`registerTileLine(pack, (row, ctx) → {words,
-  tone})`, `ward/tiles.ts`) and at most two buttons (`registerTileButton(pack, {label, show(row), onClick or path})`; a third is
+  then one pack line, then the buttons at its foot. A pack registers its words once (`registerTileLine(pack, (row, ctx) → {words}`,
+  `ward/tiles.ts`; words plain, or one by one each with its own state tone, which colours only that word, never the line) and at most two buttons (`registerTileButton(pack, {label, show(row), onClick or path})`; a third is
   refused, and so is a base button's word: Admit, Admit here, Move, Discharge); only the packs the department uses (its
   `department.packs` through the directory) speak, each in turn on the one line in the department's pack order, and a pack whose
   words fail says nothing. The base's Admit here (a free bed), Move and Discharge (a taken one) come first and always hold their
@@ -783,11 +788,26 @@ it works ("/x is used in: …").
   Reception stay plain, and so does pharmacy's Store keeper (it reads the dispensing queue and writes nothing). Settings → Roles shows what a role is built on ("Built on Doctor"), its own actions by kind and by pack, and
   the everyday ones a Doctor or Nurse holds where a department uses the pack.
 - **Export.** A pack's FHIR adds beside its base type's mapping, never replaces it; the result is valid R4 (one value per choice
-  element); a mapping that fails fails the tests.
+  element); a mapping that fails fails the tests. *Built 2026-10-06:* a pack type with a base type always maps as that base type's
+  `to_fhir`; its own `to_fhir` (handed the base's resources as `base`) only adds — new resources, or elements on one of the base's
+  (the same resourceType and id), merged by `core.fhir_beside`: an element the base set is never overwritten (a list is added to),
+  a choice element takes no second value. A pack's patch of the Patient (`{"patch":"Patient",…}`, the form the base's `died` uses)
+  merges the same way into the Patient. Every resource is checked (`core.fhir_problems`: a resourceType, an id FHIR takes, one
+  value per choice element at any depth), the Patient with every patch, the places, the people and the Provenance too. A mapping
+  that raises, overwrites or breaks R4 refuses the export, `fhir_failed` or `fhir_invalid`, naming the type and the mapping that
+  failed (the base's when the base's raised), never the data. The IPS gives each entry a plain `urn:uuid:` fullUrl, once in the
+  bundle: the id when it is a uuid no other resource shares, else uuid v5(patient, Type/id). Pharmacy's dispense exports as the base's Task with an `output`
+  naming each MedicationDispense it adds (`{item}-d1`…: what was given, how much, when handed over, on which MedicationRequest; not
+  given, the medicine prescribed, declined, and why).
 - **Off.** With a pack off for the clinic, its entries stay on every chart, read-only; only new entries of its types stop (corrections
   and cross-outs still land: a correction by an author of the item who still holds a role in the target's department, written
   there, since nobody holds the pack's write action while it is off; a cross-out is the base's), its actions stop, and its tables are not rebuilt. Turned on again, it catches up in the background and
-  shows its progress.
+  shows its progress. *Built 2026-10-06:* while off, the writer neither refreshes its tables nor queues its listeners, a merge and
+  the rebuild check leave its rows as they were, and turning it off drops its pending work. Turned on (`core.catch_up`), its earlier
+  work is dropped and one outbox row per patient and refresh is queued (its tables in declaration order, then its listeners), drained
+  after commit like a listener's, live work first, never in the switch's own transaction; `core.catch_ups` keeps how many patients it
+  started with, and read `me` sends each pack's `catch_up` (patients, left), so Settings → Packs reads "catching up · 120 of 400
+  patients" and follows the drain's hints.
 - **Setup and guards.** A starter setup ticks the department's packs and adds what is missing (places, services, presets, settings);
   on an existing department it never overwrites what staff changed and shows the difference instead. A pack declares only inside its
   prefix: types, settings, actions, roles, code systems, demo ids. A table that reads age or sex says so, and only those are
@@ -823,6 +843,16 @@ it works ("/x is used in: …").
   the journey's patient, any layer's). The demo's departments are made from setups (`demo.setup`): Front desk, General Practice and
   Psychiatry (Clinic), the Medical Ward (Ward), the Laboratory and pharmacy's Pharmacy; what the clinic changed since (Psychiatry
   private, the chest X-ray and the psychiatry consult, the clinic's presets) is written after, as staff would.
+  *Built 2026-10-06 (piece 9b):* `declare_table(…, reads => '{age}' | '{sex}')` (`unknown_read` otherwise; a refresh calling the identity door
+  without it is refused `identity_undeclared`: when declared, by its source and that of the functions of its own schema it names,
+  five calls deep; and when it runs, since `core.run_refresh` marks the refresh under way and `base.pack_identity` refuses a pack's
+  refresh whose table declares no reads, however it was reached); `save_patient` works out what changed (sex; the birth date, its precision or
+  estimate) and `core.identity_changed` refreshes only the tables that read it, the base's inline, a pack's in the background. Every
+  failed refresh or listener is an outbox row with its error (kind listener, refresh, catch_up or identity); read `me` counts each
+  pack's stale patients, rows failing (tried again), parked (five tries) and waiting; Settings → Packs words them ("2 refreshes failed
+  · trying again", "1 refresh failed five times and stopped", "3 patients to refresh") with **Retry** (`public.retry_pack`, for
+  whoever changes settings everywhere, audited): failed and parked rows are tried again, and a patient stale with no work waiting gets
+  its refresh queued; the marks clear when it succeeds.
 - **Reference data.** Licensed lists come in by import script (rule 7); the demo loads a small sample of each, labelled "demo sample,
   not the full list".
 - **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
@@ -833,7 +863,11 @@ it works ("/x is used in: …").
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
-  (eight places today); pharmacy goes behind the same registries every pack uses.
+  (eight places today); pharmacy goes behind the same registries every pack uses. *Built 2026-10-06:* no core file names a pack
+  (ESLint `opencare/no-pack-names`: a pack's key, each folder under `src/packs`, never appears in `src/core` outside generated
+  files). A pack that answers prescriptions registers where they go and its words on a medicine (`registerSend`, `visit/send.ts`:
+  the composer's chip, the list's Send, the prescription's and the list's state words); its reply form says its last step (`done`)
+  and what its requests carry from its own table (`details`); its refusals' words come from it (`registerWords`, `db/words.ts`).
 
 ---
 
@@ -875,7 +909,8 @@ Addresses: governorate as ISO 3166-2:EG (EG-C, EG-GZ, EG-ALX), country EG. Phone
 
 ### 6.4 FHIR mapping rules (R4 4.0.1)
 1. `Resource.id` = item; `meta.versionId` = item_version; `meta.lastUpdated` = recorded_at. A type with several resources uses
-   `{item}-{key}`; a resource that is one per entry (MedicationRequest) uses the entry id. Any other derived id is uuid v5(item, key).
+   `{item}-{key}` (uuid v5(item, key) when that would pass the 64 characters an id may have: a long analyte key); a resource that is
+   one per entry (MedicationRequest) uses the entry id. Any other derived id is uuid v5(item, key).
 2. `meta.profile` = {canon}/StructureDefinition/{type}|{version}. Private items → `meta.security` R, others N.
 3. subject → the survivor Patient; encounter → `Encounter/{visit_id}`; recorder/asserter → the PractitionerRole of the author.
 4. occurred_at + precision → a FHIR partial date in the organization's time zone; until → Period.end; recorded_at → recordedDate,
@@ -1317,4 +1352,56 @@ types, parked pack calls with per-call Retry, Postgres enums.
     unticked in words and never offered; which setup a department compares with). 24 suites, 996 checks; `test:composer` 15,
     `test:chart` 23 + 9, `test:screens` 10, `test:sections` 19, `test:banner` 13, `test:settings` 11, `test:board` 12, `test:scores`
     7, `test:demo` 8, `test:setups` 11; typecheck, eslint and the build clean.
+- 2026-10-06: platform piece 9b — export, off and on, Retry, and the core free of pharmacy (§5.2 Export, Off, Setup and guards; §3.8,
+  §3.9 step 9, §5.1 rule 4), proven with test-only probe packs and on pharmacy.
+  - **Export**: a pack type maps as its base type, and its own mapping only adds beside it (`core.fhir_beside`); every resource is
+    checked (`core.fhir_problems`); a mapping that raises, overwrites the base or breaks R4 refuses the export (`fhir_failed`,
+    `fhir_invalid`) where it used to be dropped with a warning. Pharmacy's `pharmacy.dispense_fhir` adds a MedicationDispense per
+    thing given (or one declined) and an `output` on the base's Task (`resources` Task, MedicationDispense; the pack roles may call
+    the core's FHIR helpers). Found by exporting the demo: a `reviewed` about a consult's note pointed at a Task; it points at the
+    DocumentReference.
+  - **Off and on**: a pack off is not refreshed by the writer, a merge or the rebuild check, and its listeners are not queued; its
+    pending work is dropped when it goes off and by the drain. On again it catches up in the background (`core.catch_up`,
+    `core.catch_ups`, outbox kind `catch_up`), never in the switch's transaction; read `me` sends the progress.
+  - **No silent failures**: an inline refresh that fails is queued in the outbox with its error, beside the stale mark; one row's work
+    is `core.drain_one` (the job's procedure and the tests' `core.drain` both use it), live work first; a success clears the
+    patient's stale mark once none of the pack's work for them is failing. `public.retry_pack` (Retry) queues failed and parked work
+    again, and the refresh of a stale patient with nothing waiting. Settings → Packs (`settings/PackList.tsx`, words in
+    `settings/packWork.ts`) shows catching up, failing, parked and stale, with Retry; the Settings home counts failed work.
+  - **Identity**: `core.derived.reads`, `declare_table(…, reads)` (`unknown_read`, `identity_undeclared`); a change of sex or birth
+    date refreshes only the tables that read it (`core.identity_changed`).
+  - **The core free of pharmacy**: the send registry (`visit/send.ts`: `registerSend`, `sendTarget`, `sendWordsOf`, the plain words
+    when no pack speaks), the reply form's `done` and `details` (`replyDetails`), `registerWords` (`db/words.ts`, split from
+    `rpc.ts`), `worksFor` pure in `db/views.ts`; reads.ts, entries.ts, `FINAL_STEP`, the card, the composer, the medicine list, the
+    Summary and the prescription block read them; the step test is the base type's. Pharmacy registers its words
+    (`packs/pharmacy/answers.ts`). `/design`'s record sample uses its own sample type. ESLint `opencare/no-pack-names` fails on a
+    pack's key anywhere in `src/core` (generated files aside).
+  - **The tile line**: a pack's words are plain or one by one, each with its own state tone, which colours only that word.
+  - **Tests changed where the contract changed**: pharmacy's and the pack contract's "on again" drain before they look (and check that
+    nothing was rebuilt in the switch's own transaction); the boundary scan lists the new doors and `retry_pack`; the composer's and
+    the chart's fixtures register the sender a pack would; the board's probe colours one word (and a whole-line tone is dropped).
+  - **The review** found ten things (two pairs the same), all fixed with a check that fails without the fix: a pack's patch of the
+    Patient skipped the merge and the R4 check (it now merges beside the Patient, and the Patient, places, people and Provenance
+    are checked; a set that wrote no resource, a death, no longer breaks the Provenance filter); a lab analyte key long enough to
+    pass 64 characters in `{item}-{key}` refused the whole export (that id is now uuid v5(item, key), and its set's Provenance still
+    names it); `identity_undeclared` read only the refresh's own source (the declaration now follows its own schema's helpers, and
+    `base.pack_identity` refuses at run time a pack's refresh whose table declares no reads, `core.unmasked.refresh`);
+    `fhir_failed` blamed the pack when the base's mapping raised (it names the mapping that was running); a failed or parked row
+    sent no hint and a catch-up sent one per row (`core.drain_hints`: one per clinic per run, every 50 rows and at its end, a failure
+    included); the IPS gave `{item}-d1` resources a fullUrl that is not a uuid, and a department's Organization and Location one
+    fullUrl (a plain uuid, once each). `export` 50 (+15: the base's mapping named, a patch over gender or a second deceased[x]
+    refused, an extension added, the long analyte key, the IPS fullUrls), `pack_work` 68 (+6: a helper refused when declared, a
+    hidden one when it runs, a declared one runs, the door masked outside a refresh, a failing drain's hint); 25 suites, 997
+    checks, every `test:*` script, typecheck, eslint and the build clean.
+  - **Tests**: new `export` (35: the dispense's Task as the base maps it with the pack's output, the MedicationDispense given and the
+    one declined, valid R4 and every reference resolving, the merge and the checks, a mapping that raises, overwrites or breaks R4
+    refused naming only the type and mapping, every demo patient exported valid with its MedicationDispenses) and `pack_work` (62: the
+    reads declared and refused, off with no work, on catching up in batches with its progress and live work first, off dropping its
+    work, the drain dropping a pack off's row, on again, a failed listener and inline refresh, parked, Retry refused and allowed, the
+    marks cleared, a stale patient with nothing waiting, identity refreshing only the tables that read sex or age); `pharmacy` 31,
+    `pack_contract` 33, `boundary` 10; 25 suites, 976 checks. `npm run test:registries` (new), 7 groups — no target until a pack
+    registers, pharmacy's words and target (works_for), a prescription sent on and its line, the reply form's done and details, the
+    refusals' words, the no-pack-name scan of every core file and of each way of writing one, Settings → Packs' words and Retry.
+    `test:board` 12 (one word coloured, drawn), `test:composer` 15, `test:chart` 23 + 9, `test:screens` 10, `test:sections` 19,
+    `test:banner` 13, `test:settings` 11, `test:scores` 7, `test:demo` 7; typecheck, eslint and the build clean.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

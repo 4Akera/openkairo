@@ -19,7 +19,7 @@ export function Fallback({ item, data, compact }: BlockProps) {
   </div>
 }
 
-/** a pack's Full renderer for its own type, drawn in the chart's shell (the pharmacy's dispense) */
+/** a pack's Full renderer for its own type, drawn in the chart's shell */
 export function PackFull({ item, data, compact }: BlockProps) {
   const env = useBlockEnv(); const F = rendererFor(item.type)?.Full
   return F ? <F card={card(item.entry, env.org)} data={data} /> : <Fallback item={item} data={data} compact={compact} />

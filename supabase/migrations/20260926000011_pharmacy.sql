@@ -20,7 +20,9 @@ begin
     core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.kinds(text), core.base_of(text),
     core.refuse(text, text), core.hint(text), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text),
     core.pack_kind(uuid, uuid, text, jsonb), core.pack_visit(uuid, uuid, text), core.pack_rows(uuid, text, jsonb), core.pack_codes(text, text[]),
-    core.pack_department(uuid, uuid), core.pack_staff(uuid, uuid[]), base.pack_identity(uuid, uuid, timestamptz), core.score(text, text, jsonb) to %I', r);
+    core.pack_department(uuid, uuid), core.pack_staff(uuid, uuid[]), base.pack_identity(uuid, uuid, timestamptz), core.score(text, text, jsonb),
+    core.fhir_uri(text, uuid), core.fhir_coding(jsonb, uuid), core.fhir_concept(jsonb, uuid), core.fhir_code(text, text, text, uuid), core.fhir_quantity(jsonb),
+    core.fhir_date(timestamptz, text, uuid), core.fhir_instant(timestamptz), core.fhir_meta(jsonb, boolean) to %I', r);
 end $$;
 
 -- ── what a pack may read (§5.2): core doors, never core tables. Masked by default: in a check or any read made for a person, the reader
@@ -118,24 +120,15 @@ revoke all on function core.pack_entries(uuid, uuid[]), core.create_pack(text),
   core.pack_kind(uuid, uuid, text, jsonb), core.pack_visit(uuid, uuid, text), core.pack_rows(uuid, text, jsonb), core.pack_codes(text, text[]),
   core.pack_department(uuid, uuid), core.pack_staff(uuid, uuid[]) from public, anon, authenticated;
 
--- drain the outbox inside a transaction (tests, and the procedure's batches)
+-- drain the outbox inside a transaction (tests): as the job does, live work before a catch-up's; the rows done
 create function core.drain(p_limit int default 500) returns int language plpgsql volatile security definer set search_path = '' as $$
-declare o core.outbox; v_err text; n int := 0;
+declare o core.outbox; n int := 0; v_orgs uuid[] := '{}';
 begin
-  for o in select * from core.outbox where tries < 5 order by id limit p_limit for update skip locked loop
-    begin
-      perform core.run_refresh(o.refresh, o.organization_id, o.items);
-      delete from core.outbox where id = o.id;
-      n := n + 1;
-    exception when others then
-      get stacked diagnostics v_err = message_text;
-      update core.outbox set tries = tries + 1, error = v_err where id = o.id;
-      if o.patient_id is not null then
-        insert into core.stale (organization_id, layer, patient_id, error) values (o.organization_id, o.layer, o.patient_id, v_err)
-        on conflict (organization_id, layer, patient_id) do update set error = excluded.error;
-      end if;
-    end;
+  for o in select * from core.outbox where tries < 5 order by (kind = 'catch_up'), id limit p_limit for update skip locked loop
+    if core.drain_one(o) then n := n + 1; end if;
+    v_orgs := v_orgs || o.organization_id;
   end loop;
+  perform core.drain_hints(v_orgs);
   return n;
 end $$;
 revoke all on function core.drain(int) from public, anon, authenticated;
@@ -226,6 +219,49 @@ create function pharmacy.dispense_line(e jsonb) returns text language sql stable
     coalesce(' · ' || nullif(e -> 'data' ->> 'reason', ''), '')
 $$;
 
+-- its FHIR beside the base's Task (§5.2 Export: the base maps the dispense as the step it extends; this only adds). A MedicationDispense
+-- for each thing given ({item}-d1, -d2 …), or one declined for the medicine prescribed, with the reason; on the Task an output naming
+-- each. Its prescription is the MedicationRequest of the version the order was about
+create function pharmacy.dispense_fhir(p jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p ->> 'org')::uuid; v_item text := p -> 'entries' -> 0 ->> 'item'; o jsonb; l jsonb; v_status text; ord core.entries; m core.entries;
+        v_rx jsonb; v_head jsonb; i jsonb; n int := 0; out jsonb := '[]'; outs jsonb := '[]';
+begin
+  l := p -> 'entries' -> (jsonb_array_length(p -> 'entries') - 1);
+  select e into o from jsonb_array_elements(p -> 'entries') with ordinality x(e, k) where e ->> 'type' <> 'crossed_out' order by k desc limit 1;
+  if o is null then return '[]'; end if;
+  v_status := case when l ->> 'type' = 'crossed_out' then 'entered-in-error'
+                   else case o -> 'data' ->> 'status' when 'completed' then 'completed' when 'in-progress' then 'in-progress' else 'declined' end end;
+  -- the order it answers, and the medicine that order is about (never private: the queue copies it too)
+  select x.* into ord from core.pack_entries(v_org, array[v_item::uuid]) x where x.id = (p -> 'entries' -> 0 ->> 'refers_to')::uuid;
+  if ord.id is not null and ord.relation = 'about' then
+    select x.* into m from core.pack_entries(v_org, array[ord.item]) x where x.id = ord.refers_to;
+  end if;
+  v_rx := case when m.data ->> 'basis' = 'prescribed' then jsonb_build_array(jsonb_build_object('reference', 'MedicationRequest/' || m.id)) end;
+  v_head := jsonb_build_object('resourceType', 'MedicationDispense', 'meta', core.fhir_meta(o, coalesce((p ->> 'private')::boolean, false)), 'status', v_status,
+    'subject', jsonb_build_object('reference', 'Patient/' || (p ->> 'patient')),
+    'context', case when o ->> 'visit_id' is not null then jsonb_build_object('reference', 'Encounter/' || (o ->> 'visit_id')) end,
+    'performer', jsonb_build_array(jsonb_build_object('actor', jsonb_build_object('reference', 'PractitionerRole/' || (o ->> 'author_id')))),
+    'authorizingPrescription', v_rx);
+  for i in select * from jsonb_array_elements(coalesce(o -> 'data' -> 'pharmacy' -> 'items', '[]')) loop
+    n := n + 1;
+    out := out || jsonb_build_array(jsonb_strip_nulls(v_head || jsonb_build_object('id', v_item || '-d' || n,
+      'medicationCodeableConcept', core.fhir_concept(i -> 'drug', v_org), 'quantity', core.fhir_quantity(i -> 'quantity'),
+      'whenHandedOver', case when v_status = 'completed' then core.fhir_date((o ->> 'occurred_at')::timestamptz, o ->> 'precision', v_org) end,
+      'dosageInstruction', case when i ? 'dose' then jsonb_build_array(jsonb_build_object('doseAndRate', jsonb_build_array(jsonb_build_object('doseQuantity', core.fhir_quantity(i -> 'dose'))))) end,
+      'note', case when coalesce(i ->> 'note', '') <> '' then jsonb_build_array(jsonb_build_object('text', i ->> 'note')) end)));
+  end loop;
+  -- not given: the medicine prescribed, declined, and why
+  if n = 0 and v_status = 'declined' and m.id is not null then
+    n := 1;
+    out := jsonb_build_array(jsonb_strip_nulls(v_head || jsonb_build_object('id', v_item || '-d1', 'medicationCodeableConcept', core.fhir_concept(m.data -> 'drug', v_org),
+      'statusReasonCodeableConcept', case when coalesce(o -> 'data' ->> 'reason', '') <> '' then jsonb_build_object('text', o -> 'data' ->> 'reason') end)));
+  end if;
+  if n = 0 then return '[]'; end if;
+  select jsonb_agg(jsonb_build_object('type', jsonb_build_object('text', 'Dispensed'), 'valueReference', jsonb_build_object('reference', 'MedicationDispense/' || (d ->> 'id'))))
+    into outs from jsonb_array_elements(out) d;
+  return out || jsonb_build_array(jsonb_build_object('resourceType', 'Task', 'id', v_item, 'output', outs));
+end $$;
+
 -- the counselling note shown when giving: shown needs words (the form shows the refusal next to the note)
 create function pharmacy.counselling_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select case when coalesce((p_data ->> 'show')::boolean, false) and coalesce(trim(p_data ->> 'note'), '') = ''
@@ -244,7 +280,8 @@ select core.declare_type('pharmacy.dispense', 1, 'pharmacy', '{"type":"object","
     "properties":{"status":{"enum":["in-progress","completed","cancelled","rejected"]},"step":{"type":"string"},"reason":{"type":"string"},"note":{"type":"string"},
       "pharmacy":{"type":"object","additionalProperties":false,"properties":{"items":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["drug","quantity"],
         "properties":{"drug":{"$ref":"#/$defs/concept"},"dose":{"$ref":"#/$defs/quantity"},"quantity":{"$ref":"#/$defs/quantity"},"batch":{"type":"string"},"expiry":{"type":"string"},"note":{"type":"string"}}}}}}}}'::jsonb,
-  'pharmacy.dispense_line(jsonb)', array['Task'], base_type => 'step', checks => array['pharmacy.dispense_check(jsonb,jsonb)']::regprocedure[],
+  'pharmacy.dispense_line(jsonb)', array['Task', 'MedicationDispense'], base_type => 'step', checks => array['pharmacy.dispense_check(jsonb,jsonb)']::regprocedure[],
+  to_fhir => 'pharmacy.dispense_fhir(jsonb)',
   feeds => array['pharmacy.queue'], labels => '{"en":"Dispense","ar":"صرف"}');
 select core.declare_listener('pharmacy', array['order', 'medication'], 'pharmacy.queue_refresh(uuid,uuid[])');
 -- its one screen for the work sent to a pharmacy: the bench's list and actions for dispensing, so it stands in for the bench (§5.1 rule 4)

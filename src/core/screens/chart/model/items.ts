@@ -41,7 +41,7 @@ const NOT_IN_RECORD = new Set([...MOVES, 'reviewed', 'private', 'not_private', '
 export const FAMILY: Record<string, Family> = { note: 'note', vitals: 'vitals', result: 'result', medication: 'medication', order: 'order', problem: 'problem', allergy: 'allergy',
   list_review: 'review', given: 'given', procedure: 'procedure', observation: 'observation', alert: 'alert', died: 'died',
   pregnancy: 'observation', breastfeeding: 'observation', score: 'observation' }
-/** a type's base (the registry's base_type: pharmacy.dispense → step), else the type itself */
+/** a type's base (the registry's base_type: a pack's answer that extends step → step), else the type itself */
 export const baseOf = (type: string, types?: ItemCtx['types']) => types?.find((t) => t.key === type)?.base_type ?? type
 export const family = (type: string, types?: ItemCtx['types']): Family => FAMILY[baseOf(type, types)] ?? 'other'
 export const inRecord = (type: string, types?: ItemCtx['types']) => types?.find((t) => t.key === type)?.in_record ?? !NOT_IN_RECORD.has(baseOf(type, types))
@@ -137,7 +137,7 @@ export const filterKind = (items: ChartItem[], kind: Kind | 'all' | null | undef
 // ── within a signed set: the paper forms ──
 const ORDER_OF: Family[] = ['vitals', 'result', 'problem', 'allergy', 'medication', 'order', 'given', 'procedure', 'observation', 'alert', 'died', 'note', 'review', 'other']
 const GROUP: Partial<Record<Family, BlockGroup['kind']>> = { medication: 'rx', problem: 'problems', allergy: 'allergies', order: 'orders' }
-/** one set's items as blocks: its medicines are one prescription (with a dispense order about one of them), its orders one requisition,
+/** one set's items as blocks: its medicines are one prescription (with an order sending one of them on), its orders one requisition,
  *  its problems and its allergies one block each; everything else stands alone */
 export function groupBlocks(items: ChartItem[]): BlockGroup[] {
   const meds = new Set(items.filter((i) => i.family === 'medication').flatMap((i) => [i.item, i.entry.id]))

@@ -12,12 +12,13 @@ begin
     before := before || jsonb_build_object(d.key, v);
   end loop;
   begin
-    for d in select * from core.derived order by position loop
-      execute format('delete from %s x where $1 is null or x.organization_id = $1', d.relation) using p_org;
-    end loop;
+    -- a pack off for a clinic is not rebuilt there (§5.2 Off): its rows stay as they were
     for o in select id from core.organizations where p_org is null or id = p_org loop
+      for d in select * from core.derived x where core.layer_on(o, x.layer) order by position loop
+        execute format('delete from %s x where x.organization_id = $1', d.relation) using o;
+      end loop;
       select coalesce(array_agg(distinct e.item), '{}') into items from core.entries e where e.organization_id = o;
-      for d in select * from core.derived order by (layer <> 'base'), position loop
+      for d in select * from core.derived x where core.layer_on(o, x.layer) order by (x.layer <> 'base'), x.position loop
         perform core.run_refresh(d.refresh, o, items);
       end loop;
     end loop;

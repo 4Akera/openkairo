@@ -17,7 +17,7 @@ const usedHere = (s: Declared, packs: string[]) => isBase(s) || packs.includes(s
 /** what the line's screens used here stand in for (a pack screen not used here stands in for nothing) */
 const replacedBy = (keys: string[], declared: Declared[], packs: string[]) =>
   new Set(keys.flatMap((k) => { const s = declared.find((x) => x.key === k); return s && usedHere(s, packs) ? s.replaces : [] }))
-/** a line without the base screens one of its pack screens stands in for (dispensing in place of the bench) */
+/** a line without the base screens one of its pack screens stands in for (a pack's list of work in place of the bench) */
 const unreplaced = (keys: string[], declared: Declared[], packs: string[]) => {
   const gone = replacedBy(keys, declared, packs)
   return keys.filter((k) => !gone.has(k))

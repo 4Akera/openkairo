@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { read } from '../db/rpc'
-import type { Organization, ServerMe } from '../db/types'
+import type { ServerMe } from '../db/types'
 import { directory, mayIn } from '../db/views'
 import { setClinicTimeZone } from '../ui'
 import { useLoginId } from '../auth'
@@ -37,9 +37,5 @@ export function useDepartment() {
   return { org: org.data, isLoading: org.isLoading, error: org.error, departments: mine, dept, can, setDepartment: useChoice.getState().setDepartment }
 }
 
-/** whether a serving department (a lab, a pharmacy) works for this one: [null] is every department (department.works_for) */
-export function worksFor(org: Organization | undefined, providerId: string | null, departmentId: string | null | undefined) {
-  if (!providerId) return true
-  const s = org?.allDepartments.find((d) => d.id === providerId)?.serves ?? [null]
-  return s.some((x) => x === null || x === departmentId)
-}
+// whether a serving department works for this one: pure, in views (the composer's model and its tests read it there)
+export { worksFor } from '../db/views'

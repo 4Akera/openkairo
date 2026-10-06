@@ -21,6 +21,7 @@ import { DRAFT, endFact, useListDrafts } from './actions'
 import { breastfeedingWords, pregnancyWords } from '../model/facts'
 import { Fact, More, ReviewLine, Undo } from './parts'
 import type { Panel } from './RecordPanel'
+import { sendWordsOf } from '../../visit/send'
 
 const today = () => ymd(new Date().toISOString())
 /** when the vitals were taken: 10:05 today, else 12 Jun · 10:05 */
@@ -54,7 +55,7 @@ export function Summary({ p }: { p: Panel }) {
           return <li key={m.id}><Fact onOpen={m.entry_id ? () => p.open(m.entry_id!) : undefined} className="font-medium">{m.drug_name}</Fact>
             {m.line.strength && <span className="text-muted"> {m.line.strength}</span>}{dose && <span className="text-muted tnum"> · {dose}</span>}
             {m.status === 'on-hold' && <Tag tone="warn" className="ms-1.5">On hold</Tag>}{m.reported && <Tag className="ms-1.5">Reported</Tag>}
-            {m.pharmacy?.open && <Tag tone="info" className="ms-1.5">at the pharmacy</Tag>}</li> })}</ul>
+            {m.sent?.open && <Tag tone="info" className="ms-1.5">{sendWordsOf(p.ctx.org, m.sent.order.service_id).open}</Tag>}</li> })}</ul>
           : <p className="text-faint">No current medicines<ReviewLine at={s.medicines.review} /></p>}
         <More n={s.medicines.more} onClick={() => p.jump('medicines')} />
       </Item>

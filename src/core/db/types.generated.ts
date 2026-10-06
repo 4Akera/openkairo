@@ -31,6 +31,7 @@ export type Database = {
       read: { Args: { p_query: Json }; Returns: Json }
       redact: { Args: { p: Json }; Returns: Json }
       remove: { Args: { p_id: string; p_what: string }; Returns: Json }
+      retry_pack: { Args: { p: Json }; Returns: Json }
       save: { Args: { p_row: Json; p_what: string }; Returns: Json }
       save_patient: { Args: { p: Json }; Returns: Json }
       setup: { Args: { p: Json }; Returns: Json }

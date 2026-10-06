@@ -43,7 +43,7 @@ function useWide() {
 
 /** All of one patient's open tests for this department on one screen; Enter walks every field; ⌘↵ releases them together. Beside them,
  *  for a reader who holds read:record at this bench, the patient's glance (chart-plan.md §1.5): problems, medicines, allergies, the
- *  last vitals, key results, visits — read-only (pharmacists and lab technicians hold no read:record, so they see none: owner D13). */
+ *  last vitals, key results, visits — read-only (a bench's plain roles, a lab technician, hold no read:record, so they see none: owner D13). */
 export function BenchPatient() {
   const { patientId } = useParams(); const navigate = useNavigate(); const qc = useQueryClient()
   const { org, dept, can } = useDepartment()

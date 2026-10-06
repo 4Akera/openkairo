@@ -6,6 +6,7 @@ import type { EntryData, PartialDate, Quantity, Timing } from './shapes.generate
 import type { Organization, RecordView, RequestQueueRow, ServiceField, VisitRow } from './types'
 import { findAllergen, findDrug } from '../screens/visit/catalog'
 import { scoreData, type ScoreParams } from '../screens/visit/score'
+import { sendTarget } from '../screens/visit/send'
 
 export const newId = () => uuid()
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -82,7 +83,7 @@ function factData(type: 'pregnancy' | 'breastfeeding' | 'alert', q: Q): EntryDat
   return { concept: { text, codings: q.kind && q.kind !== 'other' ? [{ system: 'local.alert', code: String(q.kind), display: text }] : [] }, status: 'active' }
 }
 
-/** one draft → the entries it writes (a medication sent to the pharmacy is two: the medication, and an order about it) */
+/** one draft → the entries it writes (a medication sent on is two: the medication, and an order about it) */
 export function draftEntries(d: Draft, w: Where): EntryIn[] {
   const q = d.params as Q; const base = { patient_id: w.patientId, department_id: w.departmentId, visit_id: w.visitId ?? null }
   const listed = <T extends { id: string }>(list: T[] | undefined, item: unknown) => list?.find((x) => x.id === String(item))
@@ -106,7 +107,8 @@ export function draftEntries(d: Draft, w: Where): EntryIn[] {
       const med: EntryIn = q.action === 'start' ? { ...base, id: d.id, type: 'medication', data: medicationData(q) }
         : { ...base, id: d.id, type: 'medication', data: medicationData(q, was?.data), refers_to: was?.entry_id ?? String(q.medication_id), relation: 'changes' }
       if (!q.send) return [med]
-      const svc = w.org?.services.find((s) => s.reply_type === 'pharmacy.dispense' && s.department_id)
+      // sent on: an order about it to the service a pack's answer serves for this department (visit/send.ts)
+      const svc = sendTarget(w.org, w.departmentId)?.service
       return svc?.department_id ? [med, { ...base, id: newId(), type: 'order', data: { service: { id: svc.id, code: svc.code, name: svc.name }, department_id: svc.department_id, priority: 'routine', status: 'active' },
         refers_to: med.id, relation: 'about' }] : [med]
     }

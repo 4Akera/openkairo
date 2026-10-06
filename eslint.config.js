@@ -1,11 +1,13 @@
 // Spec 05: core may not import packs; a pack may not import another pack; the db client only from core/db.
-// Design system (design-system.md §6): screens and packs use the tokens and the kit only (opencare/tokens-only).
+// Design system (design-system.md §6): screens and packs use the tokens and the kit only (opencare/tokens-only). The core names no pack
+// (opencare/no-pack-names, spec §5.2).
 import js from '@eslint/js'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tokensOnly from './eslint/tokens-only.js'
+import noPackNames from './eslint/no-pack-names.js'
 
 // The import guards. In flat config the last entry that matches a file replaces the rule's options, so each file group has one
 // merged no-restricted-imports (three overlapping entries used to leave only the db-client one in force).
@@ -29,6 +31,8 @@ export default tseslint.config(
   { files: ['src/core/main.tsx'], rules: guard(CLIENT) },                     // the one place core loads the packs: import '../packs'
   ...[1, 2, 3, 4].map((d) => ({ files: [`src/packs/*/${'*/'.repeat(d - 1)}*.{ts,tsx}`], rules: guard(OTHER_PACK, CLIENT, climbOut(d)) })),
   // tokens only, core and packs alike: an error since the sweep and the chart are done (build plan step 4); the kit owns the recipes
-  { files: ['src/**/*.{ts,tsx}'], plugins: { opencare: { rules: { 'tokens-only': tokensOnly } } }, rules: { 'opencare/tokens-only': 'error' } },
+  { files: ['src/**/*.{ts,tsx}'], plugins: { opencare: { rules: { 'tokens-only': tokensOnly, 'no-pack-names': noPackNames } } }, rules: { 'opencare/tokens-only': 'error' } },
   { files: ['src/core/ui/**'], rules: { 'opencare/tokens-only': 'off' } },
+  // the core names no pack (spec §5.2): pharmacy goes behind the registries every pack uses; generated files hold the database's words
+  { files: ['src/core/**/*.{ts,tsx}'], ignores: ['src/core/**/*.generated.ts'], rules: { 'opencare/no-pack-names': 'error' } },
 )

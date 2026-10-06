@@ -64,13 +64,14 @@ export function directory(m: ServerMe): Organization {
     me: { id: m.me.id, name: m.me.name, kind: m.me.kind, departments: mine.filter((d) => d.work !== 'outside'), actions: [...new Set(Object.values(m.me.may ?? {}).flat())],
       works_in: m.me.holdings.map((h) => h.department_id).filter((x): x is string => !!x), holdings: m.me.holdings, may: m.me.may ?? {} },
     departments: live, allDepartments: all, services, templates, places, sites: [...m.sites].sort((a, b) => a.name.localeCompare(b.name)),
-    packs: m.registry.packs.map((p) => ({ key: p.key, name: p.labels.en ?? p.key, enabled: p.used, stale: p.stale })),
+    packs: m.registry.packs.map((p) => ({ key: p.key, name: p.labels.en ?? p.key, enabled: p.used, stale: p.stale,
+      work: { stale: p.stale, failing: p.failing ?? 0, parked: p.parked ?? 0, waiting: p.waiting ?? 0, catchUp: p.catch_up ?? null } })),
     users: m.users.map((u) => ({ id: u.id, name: u.name, kind: u.kind, title: u.title, retired_at: u.retired_at, accepted_at: u.signed_in_at, has_login: u.has_login,
       roles: m.holdings.filter((h) => h.user_id === u.id).map((h) => ({ role_id: h.role_id, role_key: roleKey(h.role_id), department_id: h.department_id })) })),
     roles: m.roles.filter((r) => !r.retired_at).map((r) => ({ id: r.id, key: r.key, name: r.name, is_builtin: r.builtin, actions: r.actions, every_action: r.every_action,
       built_on: r.built_on ?? null, everyday: !!r.everyday, own: r.own ?? r.actions })),
     actions: m.actions.map((a) => ({ key: a.key, layer: a.layer, label: a.labels.en ?? a.key, everyday: !!a.everyday })), types: m.registry.types, screens: m.registry.screens,
-    parked_pack_calls: m.registry.packs.reduce((n, p) => n + p.stale, 0), loginUsers: m.users_of_login,
+    parked_pack_calls: m.registry.packs.filter((p) => p.used).reduce((n, p) => n + (p.parked ?? 0) + (p.failing ?? 0), 0), loginUsers: m.users_of_login,
     settings: m.settings, settingKeys: m.registry.setting_keys ?? [], datatypes: m.registry.datatypes ?? {}, scores: m.registry.scores ?? [],
     setups: m.registry.setups ?? [],
   }
@@ -79,6 +80,12 @@ export function directory(m: ServerMe): Organization {
  *  the pack; a pack's everyday actions for Doctors and Nurses there); no department: only what is held everywhere */
 export const mayIn = (o: Organization | undefined, action: string, departmentId: string | null | undefined) =>
   !!o?.me.may[departmentId ?? '']?.includes(action)
+/** whether a serving department (a lab, a bench answering prescriptions) works for this one: [null] is every department (department.works_for) */
+export function worksFor(org: Pick<Organization, 'allDepartments'> | undefined, providerId: string | null, departmentId: string | null | undefined) {
+  if (!providerId) return true
+  const s = org?.allDepartments?.find((d) => d.id === providerId)?.serves ?? [null]
+  return s.some((x) => x === null || x === departmentId)
+}
 export const nameOf = (o: Organization | undefined, id: string | null | undefined) => (id && (o?.allDepartments.find((d) => d.id === id)?.name ?? o?.users.find((u) => u.id === id)?.name)) || null
 export const userName = (o: Organization | undefined, id: string | null | undefined) => (id && o?.users.find((u) => u.id === id)?.name) || null
 

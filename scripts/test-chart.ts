@@ -11,6 +11,9 @@ import { fieldLabel, noteKind, sections, typeLabel } from '../src/core/screens/c
 import { atOf, atParam, sameAt, withAt } from '../src/core/screens/chart/model/at'
 import type { ServerEntry } from '../src/core/db/types'
 import { E, T0, analyte, ctx, listRow, med, next, orderRow, org, presence, problem, record, result, reviewRow, table, types, val } from './chart-fixtures'
+import { PLAIN_SEND, registerSend } from '../src/core/screens/visit/send'
+// the fixture's dispensing service answers prescriptions, as its pack would register (the core names none)
+registerSend('pharmacy.dispense', { ...PLAIN_SEND, to: 'pharmacy' })
 
 setClinicTimeZone('Africa/Cairo')
 let n = 0
@@ -101,7 +104,7 @@ test('since Done: what arrived after Done, critical results called out', () => {
   assert.deepEqual(d.items.map((i) => i.entry.id), [res.id]); assert.deepEqual(d.critical.map((i) => i.id), [res.id])   // occurred before Done, came after
   assert.ok(itemsOf([res], { types, newSince: doneAt })[0].isNew)
 })
-test('problems: active (chronic first), past with its date, diagnoses; medicines current, reported, past, a change, the pharmacy', () => {
+test('problems: active (chronic first), past with its date, diagnoses; medicines current, reported, past, a change, where it was sent on', () => {
   const dm = E('problem', { data: problem('Diabetes', 'active', { onset: { value: '2019', precision: 'year' } }) })
   const cough = E('problem', { data: problem('Cough') }); const pn1 = E('problem', { occurred_at: DAY(T0, 90), data: problem('Pneumonia') })
   const pn2 = next(pn1, 'problem', problem('Pneumonia', 'resolved', { abatement: { value: '2026-07', precision: 'month' } }))
@@ -120,7 +123,7 @@ test('problems: active (chronic first), past with its date, diagnoses; medicines
   assert.deepEqual(m.current.map((x) => x.drug_name), ['Metformin']); assert.deepEqual(m.reported.map((x) => x.drug_name), ['Aspirin'])
   assert.deepEqual(m.past.map((x) => `${x.drug_name}:${x.status_reason}`), ['Gliclazide:hypoglycaemia'])
   const met = m.current[0]; assert.equal(met.started_on, '2026-03-31'); assert.equal(met.before?.dose_number, 500); assert.equal(changeText(medLine(met.before!.data), met.line), '500 mg BD → 1000 mg BD')
-  assert.equal(met.pharmacy?.word, 'Prepared'); assert.equal(met.line.frequency_words, 'twice a day')
+  assert.equal(met.sent?.word, 'Prepared'); assert.equal(met.sent?.open, true); assert.equal(met.line.frequency_words, 'twice a day')
 })
 test('allergies: active, ruled out, checked or not asked', () => {
   const pen = E('allergy', { data: { concept: { text: 'Penicillins' }, clinical_status: 'active', verification: 'confirmed', criticality: 'high', reactions: [{ manifestation: { text: 'Rash' }, severity: 'severe' }] } })
