@@ -532,6 +532,36 @@ record stays in view.
   (critical red, not asked amber), never to mark a pack: the department's packs are told apart by their place and the line. Keys
   1–9 jump to the chip in that place. On a phone the row scrolls sideways under the banner.
 
+### 5.2 What a pack may read and do (decided with the owner, 2026-10-06)
+- **Reading.** A pack reads only through core doors, never core tables: identity (age at a moment, sex, birth date and its precision,
+  deceased, unknown), a patient's entries by kind, a visit's entries, the lists, latest values by code, open orders and dues, code
+  properties, departments and their places, staff identifiers. **Masked by default**: in a check or a screen the reader is the person
+  writing or reading, taken from the session, never passed in, so a pack sees only what that person may see. Only a refresh or a
+  listener reads unmasked, and its rows keep `source_entries` for the reader to mask. A pack row copies data only from its own item;
+  from other items it copies only facts that are never private. A permanent test proves no private value leaks into a pack table.
+- **Roles.** Each specialty has its own role, declared by its pack and **built on a base role**: an Obstetrician holds everything a
+  Doctor holds plus ObGyn's actions, an Anaesthetist is Doctor plus anaesthesia, a Midwife is her own role built on Nurse plus births;
+  whatever the base role gains later, the specialist gains too. A pack marks some actions *everyday* (`/anc`): in a department that
+  ticks the pack, its ordinary Doctors and Nurses hold those, and only those. A pack's actions count only in departments that tick it
+  (rule 1). Jobs that are neither doctor nor nurse have their own plain roles (radiographer, cashier, store keeper, social worker).
+  Actions are added one at a time, never by replacing a whole list.
+- **Export.** A pack's FHIR adds beside its base type's mapping, never replaces it; the result is valid R4 (one value per choice
+  element); a mapping that fails fails the tests.
+- **Off.** With a pack off for the clinic, its entries stay on every chart, read-only; only new entries of its types stop (corrections
+  and cross-outs still land), its actions stop, and its tables are not rebuilt. Turned on again, it catches up in the background and
+  shows its progress.
+- **Setup and guards.** A starter setup ticks the department's packs and adds what is missing (places, services, presets, settings);
+  on an existing department it never overwrites what staff changed and shows the difference instead. A pack declares only inside its
+  prefix: types, settings, actions, roles, code systems, demo ids. A table that reads age or sex says so, and only those are
+  refreshed when identity changes. Nothing fails silently: a pack's failed background work shows in Settings → Packs with Retry.
+- **Reference data.** Licensed lists come in by import script (rule 7); the demo loads a small sample of each, labelled "demo sample,
+  not the full list".
+- **What the base adds for §5.1** (none of it exists yet): a department's packs used here; the fit test; chip words and Summary lines;
+  banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
+  setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
+  with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
+  (eight places today); pharmacy goes behind the same registries every pack uses.
+
 ---
 
 ## 6. Standards
