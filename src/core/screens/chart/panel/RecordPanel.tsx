@@ -1,57 +1,63 @@
-// The record panel (chart-plan.md §1.1, §4, §5; build plan 3.7–3.8): the record beside the encounter, a stack of compact sections —
-// Summary, Problems, Medicines, Allergies & alerts, History, Results, Documents, Visits & stays — from the one record read and the
-// facts page. The section chips at the top jump to a section and open it (←/→ between them; Alt+R lands here); ↑/↓ move between the
-// folding section heads, ↵ or Space folds one; folds are remembered in this browser. A list action seeds the composer and says so
-// (onCompose), so under 640 px the chart can show the encounter. A fact, a visit or a result opens in the center (onOpen), never
-// over the record.
+// The record panel (chart-plan.md §1.1, §4, §5; spec/openCare.md §5.1 rule 2): the record beside the encounter, a stack of compact
+// sections from the section registry (sections.ts) — the base's always (Summary, Problems, Medicines, Allergies & alerts, History,
+// Results, Documents, Visits & stays), a pack's by the rule (this department uses it and the patient fits, or the patient has its
+// data), the rest behind More · n — from the one record read, the facts page and the packs' own read. The section chips
+// at the top jump to a section and open it (Alt+R lands here; 1–9 jump); ↑/↓ move between the folding section heads, ↵ or Space
+// folds one; folds are remembered in this browser. A list action seeds the composer and says so (onCompose), so under 640 px the
+// chart can show the encounter. A fact, a visit or a result opens in the center (onOpen), never over the record.
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { RecordView, ServerEntry } from '../../../db/types'
 import { nameOf } from '../../../db/views'
+import { useDocuments } from '../../../hooks/chart'
+import { useDraftsFor } from '../../../hooks/drafts'
 import { useDepartment } from '../../../hooks/organization'
-import { cn } from '../../../ui'
+import { ymd } from '../../../ui'
 import { BlockContext, type BlockEnv } from '../blocks/env'
 import { PrivateNotes } from '../blocks/Privacy'
 import type { At } from '../model/at'
 import type { ChartCtx, Rec } from '../model/record'
-import { Allergies } from './Allergies'
-import { Documents } from './Documents'
-import { History } from './History'
-import { Medicines } from './Medicines'
-import { Problems } from './Problems'
-import { Results } from './Results'
-import { Summary } from './Summary'
-import { Visits } from './Visits'
+import { sectionDefs, sectionsOf, type PackLine, type Shown } from '../sections'
+import { draftedOf } from './actions'
+import './base'
+import { Chips, type ChipItem } from './Chips'
+import { PackSection } from './PackSection'
 
 export interface PanelProps {
   r: RecordView                                     // the one record read (r.server: every derived table with its source entries)
   facts?: ServerEntry[]; factsLoading?: boolean     // alerts, procedures, observations and their cross-outs (useFacts)
+  packs?: ServerEntry[]; packsLoading?: boolean     // the pack sections' types and the cross-outs (usePackEntries)
   patientId: string; departmentId: string           // the chart's department: the reads and the drafts are made there
   can: (action: string) => boolean
   at?: At; onOpen: (at: At) => void                 // what the center shows: a visit, the entries outside one, a fact's entry
   onCompose?: () => void                            // a list action seeded the composer
   readOnly?: boolean                                // the glance: no actions
 }
-export type SectionKey = 'summary' | 'problems' | 'medicines' | 'allergies' | 'history' | 'results' | 'documents' | 'visits'
-/** what every section reads: the props, the record's tables, who reads where, and the panel's own moves */
-export interface Panel extends PanelProps { rec: Rec; ctx: ChartCtx; visitId: string | null; writes: (action: string) => boolean; jump: (k: SectionKey) => void; open: (entryId: string) => void }
+/** what every section reads: the props, the record's tables, who reads where, the packs' Summary lines, and the panel's own moves */
+export interface Panel extends PanelProps { rec: Rec; ctx: ChartCtx; visitId: string | null; writes: (action: string) => boolean; lines: PackLine[]
+  jump: (k: string) => void; open: (entryId: string) => void }
 
-const SECTIONS: [SectionKey, string][] = [['summary', 'Summary'], ['problems', 'Problems'], ['medicines', 'Medicines'], ['allergies', 'Allergies'], ['history', 'History'],
-  ['results', 'Results'], ['documents', 'Documents'], ['visits', 'Visits']]
 const headOf = (el: Element | null | undefined) => el?.hasAttribute('data-fold') ? el.querySelector<HTMLElement>('button[aria-expanded]') : null
 const smooth = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' } catch { return 'auto' } }
 
 export function RecordPanel(props: PanelProps) {
-  const { r, patientId, departmentId, can, readOnly, onOpen } = props
-  const { org } = useDepartment(); const root = useRef<HTMLDivElement>(null)
+  const { r, facts, packs, patientId, departmentId, can, readOnly, onOpen } = props
+  const { org } = useDepartment(); const root = useRef<HTMLDivElement>(null); const [moreOpen, setMoreOpen] = useState(false)
   const ctx = useMemo<ChartCtx>(() => ({ org, me: org?.me.id ?? '', departmentId }), [org, departmentId])
+  const docs = useDocuments(patientId, false)   // read when Documents is opened; counted from then, "n+" while earlier pages remain
+  const documents = useMemo(() => docs.data ? { n: docs.data.pages.reduce((n, x) => n + x.docs.length, 0), more: !!docs.hasNextPage } : null, [docs.data, docs.hasNextPage])
+  const drafts = useDraftsFor(patientId); const drafted = useMemo(() => draftedOf(drafts), [drafts])   // counted on the chips as the heads count them
+  // the rule over the registry, each section's word and the packs' Summary lines
+  const placed = useMemo(() => sectionsOf(sectionDefs(), { rec: r.server, ctx, identity: r.identity, facts, packs, documents, drafted }, {
+    here: org?.allDepartments.find((d) => d.id === departmentId)?.packs ?? [], on: (org?.packs ?? []).filter((x) => x.enabled).map((x) => x.key),
+    today: ymd(new Date().toISOString()) }), [org, departmentId, r.server, r.identity, ctx, facts, packs, documents, drafted])
   /** to a section: scrolled into view, opened when folded, its head focused */
-  const jump = useCallback((k: SectionKey) => {
+  const jump = useCallback((k: string) => {
     const el = root.current?.querySelector<HTMLElement>(`[data-section="${k}"]`); if (!el) return
     const head = headOf(el); if (head?.getAttribute('aria-expanded') === 'false') head.click()
     el.scrollIntoView({ block: 'start', inline: 'nearest', behavior: smooth() }); (head ?? el).focus({ preventScroll: true })
   }, [])
   const open = useCallback((id: string) => onOpen({ scope: 'entry', id }), [onOpen])
-  const p: Panel = { ...props, rec: r.server, ctx, visitId: r.visit?.id ?? null, writes: (a) => !readOnly && can(a), jump, open }
+  const p: Panel = { ...props, rec: r.server, ctx, visitId: r.visit?.id ?? null, writes: (a) => !readOnly && can(a), lines: placed.lines, jump, open }
   const env = useMemo<BlockEnv>(() => ({ org, me: org?.me.id, departmentId, can, tables: r.server.tables, onOpen: open }), [org, departmentId, can, r.server.tables, open])
   const hidden = r.server.hidden.filter((h) => h.items > 0).map((h) => ({ ...h, department: nameOf(org, h.department_id) ?? '' }))
   // ↑/↓ on a section head: the next or the one before (a head is a section's fold button)
@@ -61,37 +67,21 @@ export function RecordPanel(props: PanelProps) {
     const i = hs.indexOf(e.target as HTMLElement); if (i < 0) return
     e.preventDefault(); hs[(i + (e.key === 'ArrowDown' ? 1 : -1) + hs.length) % hs.length].focus()
   }
+  const chip = (x: Shown): ChipItem => ({ key: x.key, title: x.def.title, word: x.word })
+  const part = (x: Shown) => <Part key={x.key} k={x.key} fold={x.def.fold}>{x.def.layer === 'base' ? <x.def.Body p={p} own={x.own} />
+    : <PackSection def={x.def} p={p} own={x.own} hiddenOnly={x.private} line={placed.lines.find((l) => l.key === x.key)?.line ?? null} />}</Part>
   return <BlockContext.Provider value={env}>
     <div ref={root} onKeyDown={heads} className="grid grid-cols-1 content-start gap-3">
-      <Chips jump={jump} />
+      <Chips lead={placed.lead.map(chip)} rest={placed.rest.map(chip)} more={placed.more.map(chip)} open={moreOpen} onMore={() => setMoreOpen(!moreOpen)} jump={jump} />
       <PrivateNotes hidden={hidden} patientId={patientId} />
-      <Part k="summary"><Summary p={p} /></Part>
-      <Part k="problems" fold><Problems p={p} /></Part>
-      <Part k="medicines" fold><Medicines p={p} /></Part>
-      <Part k="allergies" fold><Allergies p={p} /></Part>
-      <Part k="history" fold><History p={p} /></Part>
-      <Part k="results" fold><Results p={p} /></Part>
-      <Part k="documents" fold><Documents p={p} /></Part>
-      <Part k="visits" fold><Visits p={p} /></Part>
+      {placed.lead.map(part)}
+      {placed.rest.map(part)}
+      {moreOpen && placed.more.map(part)}
     </div>
   </BlockContext.Provider>
 }
 
-/** a section's place: what the chips jump to (clear of the sticky banner and, under 640 px, the tab row) */
-function Part({ k, fold, children }: { k: SectionKey; fold?: boolean; children: ReactNode }) {
-  return <div data-section={k} data-fold={fold || undefined} tabIndex={-1} className="scroll-mt-[calc(var(--chart-top,0px)+3.5rem)] rounded-xl outline-none @split:scroll-mt-2">{children}</div>
-}
-
-/** the section chips: ←/→ (Home, End) move between them, ↵ jumps; the chart's Alt+R focuses the current one (#record-sections) */
-function Chips({ jump }: { jump: (k: SectionKey) => void }) {
-  const [at, setAt] = useState(0)
-  const keys = (e: KeyboardEvent<HTMLElement>) => {
-    const n = e.key === 'ArrowRight' ? at + 1 : e.key === 'ArrowLeft' ? at - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? SECTIONS.length - 1 : null
-    if (n === null) return
-    e.preventDefault(); const i = (n + SECTIONS.length) % SECTIONS.length; setAt(i); e.currentTarget.querySelectorAll<HTMLElement>('button')[i]?.focus()
-  }
-  return <nav id="record-sections" aria-label="Record sections" onKeyDown={keys} className="flex flex-wrap gap-0.5">
-    {SECTIONS.map(([k, label], i) => <button key={k} type="button" tabIndex={i === at ? 0 : -1} onClick={() => { setAt(i); jump(k) }}
-      className={cn('inline-flex h-7 items-center rounded-full px-2 text-12 text-muted transition-colors hover:bg-hover hover:text-fg focus-ring', i === at && 'bg-accent-soft font-medium text-accent')}>{label}</button>)}
-  </nav>
+/** a section's place: what the chips jump to (clear of the sticky banner and, under 640 px, the tab row and the chips) */
+function Part({ k, fold, children }: { k: string; fold?: boolean; children: ReactNode }) {
+  return <div data-section={k} data-fold={fold || undefined} tabIndex={-1} className="scroll-mt-[calc(var(--chart-top,0px)+5rem)] rounded-xl outline-none @split:scroll-mt-2">{children}</div>
 }

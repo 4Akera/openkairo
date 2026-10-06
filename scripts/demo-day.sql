@@ -103,10 +103,12 @@ declare org uuid := '00000000-0000-0000-0000-00000000a001'; pharm uuid := '00000
 begin
   -- the pharmacist dispenses half of what was sent, prepares the next one (the dispensing service's step) and leaves the last to give
   perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000109', true);
-  for o in select item, patient_id from base.orders where organization_id = org and to_department_id = pharm and status = 'active' order by ordered_at limit 3 loop
+  for o in select b.item, b.patient_id, coalesce((select m.data -> 'drug' ->> 'text' from core.entries m where m.item = b.about_item and m.type = 'medication'
+                   order by m.recorded_at desc limit 1), 'Medicine') as drug
+           from base.orders b where b.organization_id = org and b.to_department_id = pharm and b.status = 'active' order by b.ordered_at limit 3 loop
     r := public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'type', 'pharmacy.dispense',
       'patient_id', o.patient_id, 'department_id', pharm, 'refers_to', o.item, 'relation', 'answers', 'data', jsonb_build_object('status', 'completed',
-        'pharmacy', jsonb_build_object('items', jsonb_build_array(jsonb_build_object('drug', jsonb_build_object('text', 'as prescribed'),
+        'pharmacy', jsonb_build_object('items', jsonb_build_array(jsonb_build_object('drug', jsonb_build_object('text', o.drug),
           'quantity', jsonb_build_object('value', '30', 'unit', 'tablets', 'ucum', '{tbl}')))))))));
   end loop;
   for o in select item, patient_id from base.orders where organization_id = org and to_department_id = pharm and status = 'active' order by ordered_at limit 1 loop

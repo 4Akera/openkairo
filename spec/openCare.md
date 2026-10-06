@@ -442,14 +442,17 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
     **Whole record** (by visit or by day per `organization.record_view`, paged), results over time, one entry with its Details under
     it. A kind filter (`?kind=`, `[` `]`) narrows each. Nothing opens over the record.
   - *Record panel* (right; tabs under 640 px, on a phone): the **Summary** — active problems, current medicines, allergies and alerts, last
-    vitals, key results, last visits, still waiting, each with its limit and empty state — then Problems, Medicines, Allergies &
-    alerts, History, Results, Documents, Visits & stays; list actions seed the composer; a fact opens its entry in the center.
+    vitals, key results, last visits, still waiting, each with its limit and empty state, and before Last visits each shown pack
+    section's Summary line — then Problems, Medicines, Allergies & alerts, History, Results, Documents, Visits & stays, and the packs'
+    sections by §5.1 rule 2. Every section comes from one registry (`registerSection`, `src/core/screens/chart/sections.ts`; the
+    base's in `panel/base.ts`; the packs' data in a read of its own), and the section chips above them (§5.1) jump to each; list
+    actions seed the composer; a fact opens its entry in the center.
   - *Glance*: the Summary's first five items at half their limits and the visits, read-only — beside the bench grid for a reader
     holding `read:record` there, and in place of the chart for a reader who may not read the record (presence and identity only; the
     desk's card folds out the same visits).
   - *Keys*: `/` the composer · Alt+P / M / A start /dx /rx /al · ⌘↵ Done (Sign in a stay; Sign N for someone else's patient) · Alt+R
-    the record's sections and back · `[` `]` the kind filter · ↵ a block's Details · Esc closes them, then back to this visit · Alt+J
-    Who's in.
+    the record's sections and back · 1–9 the section chip in that place (never while typing) · `[` `]` the kind filter · ↵ a block's
+    Details · Esc closes them, then back to this visit · Alt+J Who's in.
 
 #### Design system
 One system for core and packs (`src/core/ui`, imported as `@core/ui`): **tokens** in `src/core/styles.css`, a light and a dark value
@@ -508,7 +511,15 @@ it works ("/x is used in: …").
   patient already has that pack's data. Each pack declares its fit once, by age and sex (Pregnancy: women 10–55; Growth: under 19);
   a clinic cannot change it. Base sections always show. Every other section waits behind **More · n**, which opens in place as more
   chips (never a menu over the record). Order: Summary, this department's pack sections, the base sections, then other packs'
-  sections that have data. A section that shows because of private data shows the fact, not the story (§4.3).
+  sections that have data. A section that shows because of private data shows the fact, not the story (§4.3). *Built 2026-10-06:*
+  a fit is a sex (any · female · male) and an age from and to in days, months or years, both inclusive in completed units (Growth:
+  to 18 years), by the clinic's day; a female-only section leaves out only men and a male-only one only women (other and unknown
+  fit both), and an age not known fits. A pack section names the types whose entries are its data (a pack type extending a base one
+  is found by either); the chart reads them with their cross-outs in a read of their own (never on the facts page, whose alerts
+  feed the banner), so has-data sees an item hidden from the reader as the reader's placeholder, and an item crossed out or
+  redacted does not count. A section whose data is all hidden says "private" on its chip, gives no
+  Summary line and lists the placeholders ("Private dispense · Psychiatry · 3 Sep"); the pack is handed only what the reader may see.
+  A pack off for the clinic with no data on this chart waits nowhere (not even behind More).
 - **Rule 3 · the banner stays short.** One line in fixed zones, split by thin lines: *who* (name, age, sex, record number) · *where*
   (the encounter in words: "Admitted · Bed 3 · day 3", "In consult · 12 min") · *safety*, the same in every department: allergies
   (severe ones by name, "not asked" in amber), the base alerts (DNR, isolation for HBV and HCV, never HIV, fall risk), critical
@@ -550,7 +561,16 @@ it works ("/x is used in: …").
   sections, then More · n. Each chip carries its count or its state in words ("Medicines 1", "Allergies not asked", "Results 1
   critical", "Chronic care on target"); a section declares that word as it declares its Summary line. Colour only for a state
   (critical red, not asked amber), never to mark a pack: the department's packs are told apart by their place and the line. Keys
-  1–9 jump to the chip in that place. On a phone the row scrolls sideways under the banner.
+  1–9 jump to the chip in that place. Chips that do not fit the row's width fold into More too, from the end, so More is always
+  in sight and the row never runs past its edge; the Summary and a chip with a state word ("1 critical", "not asked") never fold.
+  Opened, the row wraps onto a second line so every chip is in sight, Fewer last. On a phone it sits under the banner. *Built 2026-10-06:* the base's words —
+  Problems the active ones, Medicines the current ones, Allergies "not asked" (amber), "none known" or a count (red with the
+  severe ones counted, "2, 1 severe"), Results a count or "n critical" (red), History, Visits and Documents (once the section has
+  been opened, since its files are read then; "3+" while earlier pages remain) a count; a count of none says nothing. Problems,
+  Medicines and Allergies count this patient's list drafts as their section heads do (a drafted allergy or none known clears "not
+  asked"). The row never wraps (it scrolls sideways on
+  any width); More's chips open after the rest, with their sections under the others, and Fewer folds them; the thin line shows
+  only when this department has a pack section in the row. A pack's Summary line shows only while its section is in the row.
 
 ### 5.2 What a pack may read and do (decided with the owner, 2026-10-06)
 - **Reading.** A pack reads only through core doors, never core tables: identity (age at a moment, sex, birth date and its precision,
@@ -576,8 +596,8 @@ it works ("/x is used in: …").
   refreshed when identity changes. Nothing fails silently: a pack's failed background work shows in Settings → Packs with Retry.
 - **Reference data.** Licensed lists come in by import script (rule 7); the demo loads a small sample of each, labelled "demo sample,
   not the full list".
-- **What the base adds for §5.1** (built 2026-10-06: a department's packs used here, and the frame, toolbar and tab row with the action
-  each tab needs; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
+- **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
+  each tab needs; the fit test, chip words and Summary lines; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -816,4 +836,24 @@ types, parked pack calls with per-call Retry, Postgres enums.
     state is the kit's `Empty` or `NotForRole`.
   - **Tests**: 17 suites, 529 checks (new `screens`: 41); `npm run test:screens` (new), 9 groups; `test:composer` 13 groups; `test:chart`
     22 + 9 groups.
+- 2026-10-06: platform piece 2 — chart sections and their chips (§5.1 rule 2 and "The section chips"), proven on pharmacy.
+  - **Client**: one section registry (`registerSection`, `src/core/screens/chart/sections.ts`) replaces the record panel's fixed list;
+    the base's eight register in `panel/base.ts` with their chip words (`model/chips.ts`); a pack's declares its fit, its types (its
+    has-data test) and its chip word and Summary line. The rule is one pure function (`arrange`, and `sectionsOf` with the words, the
+    private fact and the Summary lines); every pack section's types are read with the cross-outs in a read of their own
+    (`usePackEntries`), so hidden entries count as placeholders.
+    The chips are one row (Summary, this department's pack sections, a thin line, the base's, other packs' with data, More · n in
+    place; on a phone sticky under the banner, scrolling sideways); keys 1–9 jump to a chip; the Summary shows a pack's line while its
+    section shows. Pharmacy's section lists each dispense (products and amounts, or the medicine a not-given one answers; when; Given ·
+    Prepared · Not given), its chip "n supplied", its Summary line the last supply. No server change.
+  - **Reviewed** (find, then an adversarial check of each finding): the packs' types left the facts page (500 entries, newest first)
+    for a read of their own, so a chronic patient's refills can no longer push an old DNR off the banner, nor old dispenses off
+    has-data; a redacted dispense (data blanked, `wrong_patient`) is no data, so it no longer brings the section onto that chart as
+    "1 prepared", and a dispense with no state it knows is left out; the Documents chip says "3+" while earlier pages remain; the
+    Problems, Medicines and Allergies chips count the list drafts as their heads do; a pack section is a skeleton while its read is
+    under way, never "Nothing dispensed yet"; a not-given row names the medicine its order is about.
+  - **Tests**: `npm run test:sections` (new), 17 groups: age and fit at the boundaries, the rule (used here or not, fit, data, a pack
+    off), the order and More, private data as the fact only, a section's own entries, Summary lines, the registry, the base words,
+    pharmacy's, and one per review finding (redacted, the packs' own read, Documents "n+", drafts on the chips, the medicine not
+    given). `test:chart` 22 + 9 groups, `test:composer` 13, `test:screens` 9; 17 suites, 529 checks (unchanged).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

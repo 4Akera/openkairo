@@ -3,7 +3,8 @@
 // notices above them (opened anyway, died; the private notes stand just above the Summary). The label sits left of the facts where
 // the panel is wide, above them where it is narrow. Vitals carry no flag (none exists): a tile shows its change (↗ ↘ →), never a flag
 // arrow; a result keeps its analyte's own interpretation (↑‼ critically high). A fact opens its entry in the center, "+N more" its
-// section. "Not reviewed" is warn, as Side.tsx's amber: it asks for a review.
+// section. "Not reviewed" is warn, as Side.tsx's amber: it asks for a review. A pack's Summary line sits before Last visits, only
+// while its section shows (spec/openCare.md §5.1), and opens that section.
 import { useMemo, useState, type ReactNode } from 'react'
 import { Lock, TriangleAlert } from 'lucide-react'
 import type { ListReview } from '../../../db/types'
@@ -73,6 +74,7 @@ export function Summary({ p }: { p: Panel }) {
         {s.results.rows.length ? <ul className="grid grid-cols-1 gap-0.5">{s.results.rows.map((k) => <li key={k.code}><KeyRow k={k} onOpen={() => p.open(k.entry_id)} /></li>)}</ul>
           : <p className="text-faint">None of the key tests yet — <Fact onOpen={() => p.jump('results')} className="text-accent">all results below</Fact></p>}
       </Item>}
+      {p.lines.map((l) => <Item key={l.key} label={l.label}><Fact onOpen={() => p.jump(l.key)}>{l.line}</Fact></Item>)}
       <Item label="Last visits">
         {s.visits.rows.length ? <ul className="grid gap-0.5">{s.visits.rows.map((v) => <li key={v.id}>
           <Fact onOpen={() => p.onOpen({ scope: 'visit', id: v.id })}><span className="text-muted tnum">{shortDate(v.start)}</span>

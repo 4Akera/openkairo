@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { useFacts } from '../../hooks/chart'
+import { useFacts, usePackEntries } from '../../hooks/chart'
 import { compose } from '../../hooks/composer'
 import { useDraftsFor } from '../../hooks/drafts'
 import { useDepartment } from '../../hooks/organization'
@@ -26,6 +26,7 @@ import { atOf, withAt, type At } from './model/at'
 import { KINDS, isForMe } from './model/items'
 import { cmdEnter, doneNext, roleOf } from './model/visit'
 import { RecordPanel } from './panel/RecordPanel'
+import { packTypes } from './sections'
 import { useChartActions } from './useChartActions'
 
 const START: Record<string, string> = { KeyP: '/dx ', KeyM: '/rx ', KeyA: '/al ', p: '/dx ', m: '/rx ', a: '/al ' }
@@ -44,6 +45,7 @@ export function ChartScreen() {
   const reader = can('read:record')
   const rec = useRecord(reader ? patientId : null, dept?.id ?? null, visitId)
   const facts = useFacts(reader ? patientId : null)
+  const packs = usePackEntries(reader ? patientId : null, packTypes())   // the pack sections' entries: which packs' data the patient has
   const drafts = useDraftsFor(patientId).length
   const composer = useRef<ComposerHandle>(null)
   const me = org?.me.id ?? ''; const visit = rec.data?.visit ?? null
@@ -67,7 +69,7 @@ export function ChartScreen() {
   // a notice (an error, warnings to confirm, the discharge chooser) is in the center: under 640 px its tab comes forward
   useEffect(() => { if (actions.err || actions.warn || actions.discharging) setTab('main') }, [actions.err, actions.warn, actions.discharging]) // eslint-disable-line react-hooks/exhaustive-deps
   // the keys, one listener (chart-plan.md §5.2): ⌘↵ Done (Sign in a stay; Sign N for someone else's patient) · / the composer ·
-  // Alt+P/M/A start /dx /rx /al · Alt+R the record's sections and back · [ ] the kind filter · Esc back to this visit
+  // Alt+P/M/A start /dx /rx /al · Alt+R the record's sections and back · 1–9 a section chip · [ ] the kind filter · Esc back to this visit
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement; const typing = /INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable
@@ -84,6 +86,10 @@ export function ChartScreen() {
       else if ((e.key === '[' || e.key === ']') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const ks = kinds.current; const i = Math.max(0, ks.indexOf(kindOf(new URLSearchParams(window.location.search).get('kind'))))
         e.preventDefault(); setKind(ks[(i + (e.key === ']' ? 1 : -1) + ks.length) % ks.length])
+      } else if (/^[1-9]$/.test(e.key) && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // the section chip in that place (never while typing: the composer takes digits)
+        const chip = document.querySelectorAll<HTMLElement>('#record-sections [data-chip]')[Number(e.key) - 1]
+        if (chip) { e.preventDefault(); setTab('aside'); requestAnimationFrame(() => chip.click()) }
       } else if (e.key === 'Escape' && !typing) {
         if (actions.more) actions.setMore(false); else if (at.scope !== 'encounter') open({ scope: 'encounter' })
       }
@@ -105,6 +111,6 @@ export function ChartScreen() {
     <SplitPane className="mt-4" tab={tab} onTab={setTab} mainTab={<>Encounter{drafts > 0 && <span className="text-accent tnum">· {drafts}</span>}</>}
       asideTab={<>Record{review > 0 && <span className="text-warn tnum">· {review}</span>}</>}
       main={<EncounterPane composer={composer} />}
-      aside={<RecordPanel r={rec.data} facts={facts.data} factsLoading={facts.isLoading} patientId={patientId} departmentId={dept.id} can={can} at={at} onOpen={open} onCompose={() => setTab('main')} />} />
+      aside={<RecordPanel r={rec.data} facts={facts.data} factsLoading={facts.isLoading} packs={packs.data} packsLoading={packs.isLoading} patientId={patientId} departmentId={dept.id} can={can} at={at} onOpen={open} onCompose={() => setTab('main')} />} />
   </div></ChartContext.Provider>
 }

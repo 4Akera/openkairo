@@ -6,6 +6,7 @@ import { useDrafts, useDraftsFor, type Draft, type NewDraft } from '../../../hoo
 import { compose } from '../../../hooks/composer'
 import type { Allergy, Medication, Problem } from '../../../db/types'
 import { lineOf, type Parsed } from '../../visit/parse'
+import type { Drafted } from '../sections'
 
 const seed = (label: string, p: Omit<Parsed, 'line'>) => compose({ seed: { label, items: [{ ...p, line: lineOf({ ...p, line: '' }) }] } })
 /** open the composer on a medication: a new dose */
@@ -51,3 +52,9 @@ export function useListDrafts(patientId: string) {
   }
 }
 export type ListDrafts = ReturnType<typeof useListDrafts>
+/** the list drafts the chips count, as the section heads do: problems and medicines added, allergies added, none known drafted */
+export function draftedOf(drafts: Draft[]): Drafted {
+  const n = (fn: string, action: string) => drafts.filter((d) => d.function === fn && d.params.action === action).length
+  return { problem: n('problem', 'add'), medication: n('medication', 'start'), allergy: n('allergy', 'add'),
+    nka: drafts.some((d) => d.function === 'list_review' && d.params.list === 'allergies' && d.params.outcome === 'none_known') }
+}

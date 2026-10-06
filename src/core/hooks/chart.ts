@@ -41,6 +41,16 @@ export function useFacts(patientId: string | null) {
   })
 }
 
+/** the pack sections' types with the cross-outs, in their own read, so a pack's volume never pushes the facts (the banner's alerts)
+ *  off their page; the chart knows from it which packs' data the patient has (hidden ones come back as placeholders) */
+export function usePackEntries(patientId: string | null, types: string[]) {
+  const { dept, org } = useDepartment()
+  return useQuery({
+    queryKey: ['record', patientId, 'packs', dept?.id, types], enabled: !!patientId && !!dept && !!org && types.length > 0,
+    queryFn: async () => (await page(dept!.id, { patient_id: patientId!, types: [...types, 'crossed_out'], limit: 500 })).entries,
+  })
+}
+
 /** notes and results that carry files, newest first, paged only when the Documents section is opened; a hidden note returns no data,
  *  so its files never list */
 export function useDocuments(patientId: string | null, enabled: boolean) {
