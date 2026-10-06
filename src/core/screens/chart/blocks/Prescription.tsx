@@ -58,7 +58,7 @@ function Pharmacy({ med: m, order }: { med: ChartItem; order: ChartItem | undefi
   // the pharmacy's answer (a step of its own type): given, or not and why
   const last = [...(order.order?.steps ?? []), ...(order.order?.answers ?? [])].filter((e) => !e.hidden && (e.data?.status === 'completed' || e.data?.status === 'cancelled')).at(-1)
   if (last?.data?.status === 'cancelled') return <Tag tone="warn">Not given{last.data.reason ? `: ${String(last.data.reason)}` : ''}</Tag>
-  if (last || row?.status === 'completed') return <Tag tone="ok">Dispensed {hm(last?.recorded_at ?? row?.answered_at ?? row!.last_at)}</Tag>
+  if (last || row?.status === 'completed') return <Tag tone="ok">Dispensed {hm(last?.occurred_at ?? row?.answered_at ?? row!.last_at)}</Tag>
   if (!row) return <Tag tone="info">{order.draft ? 'To the pharmacy' : 'Sent to the pharmacy'}</Tag>
   if (['revoked', 'rejected', 'cancelled', 'failed'].includes(row.status)) return <Tag tone="warn">Not dispensed</Tag>
   const step = stepOf(row)

@@ -204,8 +204,9 @@ begin
     insert into pharmacy.queue values (p_org, k, core.survivor(p_org, o1.patient_id), (ol.data ->> 'department_id')::uuid, m.item, m.data -> 'drug' ->> 'text',
       coalesce(m.data -> 'dosage' -> 'dose' ->> 'value' || ' ' || coalesce(m.data -> 'dosage' -> 'dose' ->> 'unit', ''), null), m.data -> 'dosage' -> 'timing' ->> 'code',
       (m.data ->> 'duration_days')::int, m.data -> 'quantity' ->> 'value', v_status,
-      case when d.id is not null then (select min(x.recorded_at) from core.pack_entries(p_org, array[d.item]) x where x.item = d.item) end,
-      case when v_status = 'dispensed' then d.recorded_at end, o1.recorded_at, coalesce(src, '{}'));
+      -- clinical times, as base.orders' are
+      case when d.id is not null then (select min(x.occurred_at) from core.pack_entries(p_org, array[d.item]) x where x.item = d.item) end,
+      case when v_status = 'dispensed' then d.occurred_at end, o1.occurred_at, coalesce(src, '{}'));
   end loop;
 end $$;
 
@@ -250,6 +251,9 @@ select core.declare_listener('pharmacy', array['order', 'medication'], 'pharmacy
 select core.declare_screen('pharmacy.dispensing', 'pharmacy', 'bench', '{"en":"Dispensing"}', 'read:pharmacy.queue', array['base.bench']);
 select core.declare_role('00000000-0000-0000-0000-00000000ca01', 'pharmacist', 'pharmacy', 'Pharmacist', array[
   'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out'], '{"en":"Pharmacist"}');
+-- a plain role (§5.2): the store keeper sees what is to prepare and what waits, so the shelves keep up; it writes nothing
+select core.declare_role('00000000-0000-0000-0000-00000000ca02', 'store_keeper', 'pharmacy', 'Store keeper', array[
+  'read:patients', 'read:bench', 'read:pharmacy.queue'], '{"en":"Store keeper"}');
 -- its settings (§5.1 rule 7), each drawn by the automatic form: how long a prepared dispense waits before Dispensing marks it late, per
 -- pharmacy (on the department's card); the counselling note shown when giving, for the clinic (on the pack's page)
 select core.declare_setting('pharmacy.late_after', 'pharmacy', 'department',

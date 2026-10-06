@@ -24,9 +24,10 @@ export function Orders({ items }: GroupProps) {
 function stepsOf(item: ChartItem, svc: Service | undefined): Step[] {
   const o = item.order; const row = o?.row; const status = row?.status ?? (item.entry.data as EntryData['order'] | undefined)?.status ?? 'active'
   const at = new Map<string, string>()
-  if (!item.draft) at.set('sent', row?.ordered_at ?? item.entry.recorded_at)
-  for (const s of o?.steps ?? []) { const k = s.data?.step as string | undefined; if (k) at.set(k, s.recorded_at) }
-  const answered = row?.answered_at ?? o?.answers[0]?.recorded_at ?? null
+  // each step at its clinical time (occurred_at), as base.orders times the order and its answer
+  if (!item.draft) at.set('sent', row?.ordered_at ?? item.entry.occurred_at)
+  for (const s of o?.steps ?? []) { const k = s.data?.step as string | undefined; if (k) at.set(k, s.occurred_at) }
+  const answered = row?.answered_at ?? o?.answers[0]?.occurred_at ?? null
   const done = !!row?.final || status === 'completed'
   const keys = ['sent', ...(svc?.steps ?? o?.stepKeys ?? []), 'answer']
   if (answered) at.set('answer', answered)

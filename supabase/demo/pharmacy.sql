@@ -1,0 +1,53 @@
+-- The pharmacy pack's day (spec/openCare.md §5.1 rule 9): its own three patients on its main path. Each is seen in General
+-- Practice this morning (the base's doctor prescribes and sends it to the Pharmacy, supabase/seeds/pharmacy.sql), then the
+-- pharmacist works on it: one prescription prepared nearly an hour ago and still not collected (late past the pharmacy's half
+-- hour), one prepared ten minutes ago to collect with a second still to prepare, and one given this morning. Times relative to the
+-- load; ids in the pack's namespace; a reload erases these patients first (demo.patient).
+
+-- a prescription sent to the Pharmacy: the medicine and its order, as the chart's /rx … send writes them
+create or replace function pg_temp.rx(p_visit uuid, p_min int, p_med jsonb, p_order uuid) returns jsonb language sql as $$
+  select jsonb_build_array(demo.gp('medication', p_visit, p_min, p_med, demo.id('pharmacy', 'med:' || p_order)),
+    demo.e('order', demo.base('gp'), p_visit, demo.ago(p_min), jsonb_build_object('service', jsonb_build_object('id', demo.id('pharmacy', 'service:dispense'),
+      'code', 'dispense', 'name', 'Dispensing'), 'department_id', demo.id('pharmacy', 'department'), 'priority', 'routine', 'status', 'active'),
+      p_order, demo.id('pharmacy', 'med:' || p_order), 'about'))
+$$;
+-- the pharmacist's answer: prepared (the service's step), or given with what went out
+create or replace function pg_temp.dispense(p_order uuid, p_min int, p_data jsonb) returns jsonb language sql as $$
+  select demo.w(demo.id('pharmacy', 'pharmacist'), jsonb_build_array(demo.e('pharmacy.dispense', demo.id('pharmacy', 'department'), null, demo.ago(p_min), p_data, null, p_order, 'answers')))
+$$;
+create or replace function pg_temp.given(p_drug text, p_atc text, p_quantity int, p_unit text) returns jsonb language sql immutable as $$
+  select jsonb_build_object('status', 'completed', 'pharmacy', jsonb_build_object('items', jsonb_build_array(jsonb_build_object(
+    'drug', demo.concept('atc', p_atc, p_drug), 'quantity', demo.q(p_quantity, p_unit, '{tbl}')))))
+$$;
+
+do $$
+declare v uuid; o1 uuid := gen_random_uuid(); o2 uuid := gen_random_uuid(); o3 uuid := gen_random_uuid(); o4 uuid := gen_random_uuid();
+begin
+  -- prepared 55 minutes ago, not collected: late
+  perform demo.patient(demo.id('pharmacy', 'patient:samia'), array['Samia', 'Hosny'], 'Fathallah', 'female', demo.born(64, 23), '+201098812240');
+  v := demo.arrive('blood pressure high at the pharmacy', 150);
+  perform demo.consult(v, 130, jsonb_build_array(
+    demo.gp('vitals', v, 128, demo.vitals(162, 96, 78, 36.7, 97, 16, 79)),
+    demo.gp('problem', v, 126, demo.problem('I10', 'Essential hypertension'))) || pg_temp.rx(v, 125, demo.med('Amlodipine', 'C08CA01', 10, 'mg', 'OD', '{"duration_days":30}'), o1), 120);
+  perform pg_temp.dispense(o1, 55, '{"status":"in-progress","step":"prepared"}');
+
+  -- prepared ten minutes ago, to collect; a second prescription still to prepare
+  perform demo.patient(demo.id('pharmacy', 'patient:hamdy'), array['Hamdy', 'Lotfi'], 'Shalaby', 'male', demo.born(51, 180), '+201225560913');
+  v := demo.arrive('new diabetes, sugar 240 at work', 70);
+  perform demo.consult(v, 55, jsonb_build_array(
+    demo.gp('vitals', v, 53, demo.vitals(134, 84, 82, 36.8, 98, 16, 101, 175, 238)),
+    demo.gp('problem', v, 51, demo.problem('E11.9', 'Type 2 diabetes mellitus')))
+    || pg_temp.rx(v, 48, demo.med('Metformin', 'A10BA02', 500, 'mg', 'BD', '{"duration_days":30,"instructions":"with meals"}'), o2)
+    || pg_temp.rx(v, 47, demo.med('Atorvastatin', 'C10AA05', 20, 'mg', 'OD', '{"duration_days":30}'), o3), 45);
+  perform pg_temp.dispense(o2, 10, '{"status":"in-progress","step":"prepared"}');
+
+  -- given this morning
+  perform demo.patient(demo.id('pharmacy', 'patient:mona'), array['Mona', 'Gaber'], 'Abdelhamid', 'female', demo.born(35, 302), '+201014478826');
+  v := demo.arrive('sore throat and fever', 200);
+  perform demo.consult(v, 185, jsonb_build_array(
+    demo.gp('vitals', v, 183, demo.vitals(118, 76, 96, 38.2, 98, 18, 66)),
+    demo.gp('problem', v, 181, demo.problem('J02.9', 'Acute pharyngitis', '{"category":"encounter-diagnosis"}')),
+    demo.gp('list_review', v, 181, '{"list":"allergies","outcome":"none_known"}'))
+    || pg_temp.rx(v, 180, demo.med('Amoxicillin', 'J01CA04', 500, 'mg', 'TID', '{"duration_days":7}'), o4), 175);
+  perform pg_temp.dispense(o4, 150, pg_temp.given('Amoxicillin 500 mg', 'J01CA04', 21, 'capsules'));
+end $$;

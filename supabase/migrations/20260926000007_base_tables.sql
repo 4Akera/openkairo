@@ -94,7 +94,7 @@ begin
                order by x.recorded_at desc, x.item_version desc limit 1);
     -- results and notes answering it: the latest version of each, unless crossed out
     select coalesce(array_agg(l.id order by l.recorded_at), '{}'), coalesce(bool_or(coalesce(l.data ->> 'status', 'final') in ('final', 'corrected', 'amended')), false),
-           min(case when coalesce(l.data ->> 'status', 'final') in ('final', 'corrected', 'amended') then f.recorded_at end)
+           min(case when coalesce(l.data ->> 'status', 'final') in ('final', 'corrected', 'amended') then f.occurred_at end)
       into ans, fin, v_answered
       from core.entries a join core.entries f on f.organization_id = a.organization_id and f.item = a.item and f.item_version = 1, lateral base.latest(p_org, a.item) l
      where a.organization_id = p_org and a.relation = 'answers' and a.item_version = 1 and not (a.type = any (core.kinds('step')))
@@ -107,7 +107,7 @@ begin
       when ol.data ->> 'status' = 'on-hold' or st.data ->> 'status' = 'on-hold' then 'on-hold'
       when ol.data ->> 'status' = 'completed' then 'completed'
       else 'active' end;
-    if v_answered is null and v_status in ('completed', 'rejected', 'cancelled', 'failed', 'revoked') then v_answered := coalesce(st.recorded_at, ol.recorded_at); end if;
+    if v_answered is null and v_status in ('completed', 'rejected', 'cancelled', 'failed', 'revoked') then v_answered := coalesce(st.occurred_at, ol.occurred_at); end if;
     select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') into src from core.entries x where x.organization_id = p_org
        and (x.item = k or x.item in (select a.item from core.entries a where a.organization_id = p_org and a.relation = 'answers'
                                        and a.refers_to in (select y.id from core.entries y where y.organization_id = p_org and y.item = k)));
@@ -115,7 +115,8 @@ begin
       coalesce(ol.data ->> 'department_id', o1.data ->> 'department_id')::uuid, (ol.data -> 'service' ->> 'id')::uuid, ol.data -> 'service' ->> 'code',
       ol.data -> 'service' ->> 'name', coalesce(ol.data ->> 'priority', 'routine'), v_status, st.data ->> 'status', v_key, st.item, st.id, ans, v_answered, fin,
       case when o1.relation = 'about' then (select t.item from core.entries t where t.organization_id = p_org and t.id = o1.refers_to) end,
-      o1.recorded_at, greatest(ol.recorded_at, coalesce(st.recorded_at, ol.recorded_at)), (o1.recorded_at at time zone base.tz(p_org))::date, ol.id, ol.item_version, src);
+      -- ordered, answered, last moved and the day are clinical times, as presence's are (a dispense prepared an hour ago reads an hour old)
+      o1.occurred_at, greatest(ol.occurred_at, coalesce(st.occurred_at, ol.occurred_at)), (o1.occurred_at at time zone base.tz(p_org))::date, ol.id, ol.item_version, src);
   end loop;
 end $$;
 
@@ -163,6 +164,7 @@ create index presence_day on base.presence (organization_id, day);
 
 create function base.presence_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
 declare k uuid; keys uuid[]; v_e core.entries; f core.entries; r base.presence; b text; v_open int; v_src uuid[]; v_clin timestamptz; v_clin_by uuid; v_wait jsonb;
+        v_called timestamptz;   -- when the call was written: what came after it is found in write order
 begin
   select coalesce(array_agg(distinct x), '{}') into keys from (
     select e.item x from core.entries e where e.organization_id = p_org and e.item = any (p_items) and e.item_version = 1
@@ -184,17 +186,19 @@ begin
     r.state := case r.kind when 'stay' then 'admitted' else 'waiting' end;
     r.here := coalesce((f.data ->> 'here')::boolean, true); r.urgent := coalesce(f.data ->> 'priority', 'routine') in ('urgent', 'asap', 'stat');
     r.calls := 0; r.missed := 0; r.orders := 0; r.orders_out := 0; r.has_vitals := false;
-    r.checked_in_at := f.recorded_at; r.reason := f.data ->> 'reason'; r.for_order := (f.data ->> 'for_order')::uuid;
+    -- arrived, called and seen are clinical times (occurred_at: the same as written, unless written late); the order of moves is
+    -- the order they were written
+    r.checked_in_at := f.occurred_at; v_called := null; r.reason := f.data ->> 'reason'; r.for_order := (f.data ->> 'for_order')::uuid;
     r.came_from := case when f.relation = 'about' then (select t.item from core.entries t where t.organization_id = p_org and t.id = f.refers_to) end;
     for v_e in select x.* from core.entries x where x.organization_id = p_org and x.item = k and x.item_version > 1 order by x.item_version loop
       b := core.base_of(v_e.type);
       -- a stay counts only its own moves (§4.2): a clinic move landed late (flagged, not refused) never ends or unseats it
       continue when r.kind = 'stay' and b not in ('moved', 'discharged', 'assigned', 'urgent');
       -- seen before this move: something clinical written in the visit after the call
-      if r.called_at is not null and r.seen_at is null then
-        select x.recorded_at, x.author_id into v_clin, v_clin_by from core.entries x join core.types t on t.key = x.type and t.version = x.type_version
-         where x.organization_id = p_org and x.visit_id = k and t.in_record and x.recorded_at >= r.called_at and x.recorded_at <= v_e.recorded_at
-           and x.department_id = r.department_id order by x.recorded_at limit 1;
+      if v_called is not null and r.seen_at is null then
+        select greatest(x.occurred_at, r.called_at), x.author_id into v_clin, v_clin_by from core.entries x join core.types t on t.key = x.type and t.version = x.type_version
+         where x.organization_id = p_org and x.visit_id = k and t.in_record and x.recorded_at >= v_called and x.recorded_at <= v_e.recorded_at
+           and x.department_id = r.department_id order by x.recorded_at, x.occurred_at, x.id limit 1;
         if v_clin is not null then
           r.seen_at := v_clin; r.seen_by := v_clin_by;
           if r.state = 'called' then r.state := 'with'; end if;
@@ -203,26 +207,26 @@ begin
       case b
         when 'here' then r.here := true; r.away_since := null;
         when 'not_here' then r.here := false; r.away_since := null;
-        when 'called' then r.state := 'called'; r.calls := r.calls + 1; r.called_at := v_e.recorded_at; r.called_by := v_e.author_id; r.away_since := null;
+        when 'called' then r.state := 'called'; r.calls := r.calls + 1; r.called_at := v_e.occurred_at; v_called := v_e.recorded_at; r.called_by := v_e.author_id; r.away_since := null;
         when 'back_to_waiting' then
           r.state := case when r.seen_at is not null then 'back' else 'waiting' end;
           if v_e.data ->> 'reason' = 'not_here' then r.missed := r.missed + 1; end if;
         when 'seen' then
-          r.seen_at := coalesce(r.seen_at, v_e.recorded_at); r.seen_by := coalesce(r.seen_by, v_e.author_id);
+          r.seen_at := coalesce(r.seen_at, v_e.occurred_at); r.seen_by := coalesce(r.seen_by, v_e.author_id);
           if r.state in ('called', 'waiting', 'back', 'pending') then r.state := 'with'; end if;
         when 'away' then r.away_since := v_e.recorded_at;
         when 'urgent' then r.urgent := coalesce((v_e.data ->> 'urgent')::boolean, true);
         when 'assigned' then r.assigned_id := (v_e.data ->> 'user_id')::uuid;
         when 'transferred' then
           r.from_department_id := r.department_id; r.department_id := (v_e.data ->> 'to_department_id')::uuid; r.state := 'waiting';
-          r.assigned_id := null; r.called_at := null; r.called_by := null; r.seen_at := null; r.seen_by := null; r.calls := 0; r.here := true;
+          r.assigned_id := null; r.called_at := null; v_called := null; r.called_by := null; r.seen_at := null; r.seen_by := null; r.calls := 0; r.here := true;
         when 'left' then r.state := 'left'; r.ended_at := v_e.recorded_at;
         when 'done' then
-          r.done_at := v_e.recorded_at; r.seen_at := coalesce(r.seen_at, v_e.recorded_at); r.seen_by := coalesce(r.seen_by, v_e.author_id);
+          r.done_at := v_e.recorded_at; r.seen_at := coalesce(r.seen_at, v_e.occurred_at); r.seen_by := coalesce(r.seen_by, v_e.author_id);
           v_wait := core.setting_at(p_org, 'department.patients_wait', r.department_id, v_e.recorded_at);
           r.wait := coalesce((v_e.data ->> 'wait')::boolean, (v_wait ->> 'wait')::boolean, true);
           select count(*) into v_open from base.orders o where o.organization_id = p_org and o.visit_id = k
-             and (o.answered_at is null or o.answered_at > v_e.recorded_at) and o.ordered_at <= v_e.recorded_at;
+             and (o.answered_at is null or o.answered_at > v_e.occurred_at) and o.ordered_at <= v_e.occurred_at;
           if r.wait and v_open > 0 then r.state := 'pending'; r.ended_at := null; else r.state := 'done'; r.ended_at := v_e.recorded_at; end if;
         when 'moved' then r.place_id := (v_e.data ->> 'place_id')::uuid;
         when 'discharged' then r.state := 'discharged'; r.ended_at := v_e.recorded_at;
@@ -230,10 +234,10 @@ begin
       end case;
     end loop;
     -- seen: something clinical written in the visit after the call
-    if r.called_at is not null and r.seen_at is null then
-      select x.recorded_at, x.author_id into v_clin, v_clin_by from core.entries x join core.types t on t.key = x.type and t.version = x.type_version
-       where x.organization_id = p_org and x.visit_id = k and t.in_record and x.recorded_at >= r.called_at and x.department_id = r.department_id
-       order by x.recorded_at limit 1;
+    if v_called is not null and r.seen_at is null then
+      select greatest(x.occurred_at, r.called_at), x.author_id into v_clin, v_clin_by from core.entries x join core.types t on t.key = x.type and t.version = x.type_version
+       where x.organization_id = p_org and x.visit_id = k and t.in_record and x.recorded_at >= v_called and x.department_id = r.department_id
+       order by x.recorded_at, x.occurred_at, x.id limit 1;
       if v_clin is not null then
         r.seen_at := v_clin; r.seen_by := v_clin_by;
         if r.state = 'called' then r.state := 'with'; end if;
@@ -245,7 +249,7 @@ begin
     r.has_vitals := exists (select 1 from core.entries x where x.organization_id = p_org and x.visit_id = k and x.type = any (core.kinds('vitals')));
     v_e := base.latest(p_org, k);
     r.latest_entry := v_e.id; r.version := v_e.item_version; r.last_at := v_e.recorded_at;
-    r.day := (f.recorded_at at time zone base.tz(p_org))::date;
+    r.day := (f.occurred_at at time zone base.tz(p_org))::date;
     select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') into r.source_entries from core.entries x where x.organization_id = p_org and x.item = k;
     insert into base.presence select r.*;
   end loop;

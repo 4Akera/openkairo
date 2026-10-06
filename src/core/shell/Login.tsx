@@ -3,14 +3,15 @@ import { Navigate } from 'react-router-dom'
 import { signIn, useAuth } from '../auth'
 import { useChoice } from '../hooks/organization'
 import { Button, Input, Field } from '../ui'
+import { DEMO_GROUPS, DEMO_PASSWORD } from './logins.generated'
 const DEMO = import.meta.env.VITE_DEMO_LOGINS === 'true'
-const USERS = [['admin@demo.com', 'Admin', 'owner'], ['reception@demo.com', 'Receptionist', 'Front desk'], ['nurse@demo.com', 'Nurse', 'General Practice'], ['dr.ali@demo.com', 'Dr. Ali', 'General Practice'], ['lab@demo.com', 'Lab tech', 'Laboratory'], ['psych@demo.com', 'Dr. Salma', 'Psychiatry'], ['pharm@demo.com', 'Pharmacist', 'Pharmacy']]
 export function Login() {
   const status = useAuth((s) => s.status)
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   if (status === 'signed_in') return <Navigate to="/" replace />
-  async function go(e: string, p: string) {
-    setBusy(true); setError(null); useChoice.getState().setDepartment(null)
+  // a demo login opens in the department it is listed under (§5.1 rule 9: every screen checked as the person who uses it)
+  async function go(e: string, p: string, departmentId: string | null = null) {
+    setBusy(true); setError(null); useChoice.getState().setDepartment(departmentId)
     try { await signIn(e, p) } catch (err) { setError(err instanceof Error ? err.message : 'Sign-in failed') } finally { setBusy(false) }
   }
   const submit = (e: FormEvent) => { e.preventDefault(); void go(email, password) }
@@ -25,7 +26,10 @@ export function Login() {
         <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
         {DEMO && <div className="mt-6 border-t border-line pt-4">
           <p className="mb-2 text-11 font-semibold uppercase tracking-wider text-faint">Demo · one click</p>
-          <ul className="grid grid-cols-2 gap-1.5">{USERS.map(([e, l, r]) => <li key={e}><button type="button" onClick={() => go(e, 'Demo123!')} disabled={busy} className="w-full rounded-md border border-line px-2.5 py-1.5 text-left hover:border-accent hover:bg-accent-soft disabled:opacity-50"><span className="block text-14 font-medium">{l}</span><span className="block text-11 text-faint">{r}</span></button></li>)}</ul>
+          <div className="grid gap-3">{DEMO_GROUPS.map((g) => <section key={g.department} aria-label={g.department}>
+            <h2 className="mb-1 text-12 font-medium text-muted">{g.department}</h2>
+            <ul className="grid grid-cols-2 gap-1.5">{g.people.map((u) => <li key={u.email}><button type="button" onClick={() => go(u.email, DEMO_PASSWORD, g.departmentId)} disabled={busy} className="w-full rounded-md border border-line px-2.5 py-1.5 text-left hover:border-accent hover:bg-accent-soft disabled:opacity-50"><span className="block text-14 font-medium">{u.name}</span><span className="block text-11 text-faint">{u.role}</span></button></li>)}</ul>
+          </section>)}</div>
         </div>}
       </form>
     </div>

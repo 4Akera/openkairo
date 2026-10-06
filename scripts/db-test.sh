@@ -15,8 +15,8 @@ LIB=$(cat supabase/tests/lib/*.sql)
 DBHOST=$(docker exec "$DB" hostname -i | awk '{print $1}')   # the concurrency suite opens real second sessions (dblink) through it
 psql_in() { docker exec -i "$DB" psql -U postgres -v ON_ERROR_STOP=0 -v dbhost="$DBHOST" -q -t -f - 2>&1; }
 esc() { sed -E 's/[][().*+?^$|{}\\]/\\&/g'; }
-# a suite line `-- include: <path>` is replaced by that file (the rebuild suite replays the demo day)
-suite() { awk '/^-- include: /{ while ((getline line < $3) > 0) print line; close($3); next } { print }' "$1"; }
+# a suite line `-- include: <path>` is replaced by that file, itself expanded (the rebuild and demo suites load the demo)
+suite() { awk -f scripts/include.awk "$1"; }
 
 if [ $# -gt 0 ]; then
   suites=()
@@ -70,4 +70,6 @@ for t in "${suites[@]}"; do
 done
 # the client's entry and setting types are generated from the declared shapes (spec §8): a stale file fails the run
 npm run -s gen:shapes -- --check || fail=1
+# the sign-in page's demo logins are generated from the seeds' people (spec §5.1 rule 9): stale fails the run too
+npm run -s gen:logins -- --check || fail=1
 exit $fail

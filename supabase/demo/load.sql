@@ -1,0 +1,13 @@
+-- The demo, in its fixed order (spec/openCare.md §5.1 rule 9): the kit, then the base (its seed, then its day), then each pack
+-- (its seed, then its day), then the shared journey, one file per layer's step, in the journey's order. npm run db:demo loads it
+-- (scripts/demo.sh, one transaction); run again, it reloads: the seeds add only what is missing and each demo patient is erased and
+-- written again, so it leaves a fresh working day. Each `-- include:` line is replaced by that file (scripts/include.awk), as the
+-- test suites' are.
+-- include: supabase/seeds/demo_kit.sql
+-- include: supabase/seeds/dev.sql
+-- include: supabase/demo/base.sql
+-- include: supabase/seeds/pharmacy.sql
+-- include: supabase/demo/pharmacy.sql
+-- include: supabase/demo/journey/1-base.sql
+-- include: supabase/demo/journey/2-pharmacy.sql
+-- include: supabase/demo/journey/9-base.sql

@@ -391,7 +391,12 @@ an `order` that `changes` the order. The performer's "not done" is a `step`. Pre
 `base.presence` holds one row per open or recent visit/stay: patient, department, place, state (`waiting` · `called` · `with` · `pending`
 · `back` · `done` · `left` · `in_bed`, and for stays `admitted` · `discharged`), here, away since, urgent, assigned, called count and
 missed calls, seen at, times. Time-based states are worked out when reading, never by a timer that writes: away for more than 30
-minutes shows as not here; a visit with no move for 12 hours shows as left on screens; an opened anyway lasts 12 hours.
+minutes shows as not here; a visit with no move for 12 hours shows as left on screens; an opened anyway lasts 12 hours. Arrived,
+called and seen, and the visit's day, are clinical times (each move's `occurred_at`, the same as written unless written late), while
+the moves count in the order they were written (built 2026-10-06, for the demo's relative times; Done keeps when it was written,
+which "Since Done" compares with). An order's times (`base.orders`: sent `ordered_at`, answered `answered_at`, `last_at` and its
+day) are clinical times too, and so are pharmacy's prepared and dispensed (`pharmacy.queue`); a Done holds the visit for the orders
+open at its clinical time; the chart's steps and a bench's reply show the clinical time.
 
 **A stay takes only its own moves**: `admitted`, `moved`, `discharged`, `assigned`, `urgent` (and a `crossed_out`). A visit's moves on
 a stay (`called`, `seen`, `back_to_waiting`, `done`, `left`, `here`, `not_here`, `away`, `transferred`; another ward with the bed is a
@@ -481,7 +486,7 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
   `export:fhir`, `manage:patients`, `manage:settings`, `manage:users`, `manage:roles`, `manage:places`, `erase:patient`, `sign:score` (the
   core's: sign a score's version off for the clinic; the Doctor holds it).
 - Built-in roles (fixed ids): Owner `…c001` (every action, held everywhere), Doctor `…c002`, Nurse `…c003`, Reception `…c004`, Lab
-  technician `…c005`. A pack may ship its own (Pharmacist `…ca01`).
+  technician `…c005`. A pack may ship its own (Pharmacist `…ca01`, Store keeper `…ca02`).
 - Default screens: front desk (`base.desk`, work `desk`, tab for `read:patients`), queue (`base.queue`, `visits`, `read:queue`), bench
   (`base.bench`, `bench`, `read:bench`), bed board (`base.beds`, `stays`, `read:queue`; the one board of every department of places,
   §5.1 rule 4); then the patient's chart, composer,
@@ -681,7 +686,30 @@ it works ("/x is used in: …").
   who uses it (never as Admin). Times are relative to the moment the demo loads ("arrived 40 min ago", "admitted 2 days ago"); one
   command reloads it. No pack writes on another pack's patients, except one shared journey patient (GP → ER → ward → ICU → ward →
   home, follow-up booked) whose steps the packs add in order. The demo passes the packs' fit tests (rule 2): no adult values on a
-  baby.
+  baby. *Built 2026-10-06:* `npm run db:demo` (`scripts/demo.sh`) loads `supabase/demo/load.sql` in one transaction: the kit
+  (`supabase/seeds/demo_kit.sql`), the base's seed (`seeds/dev.sql`: the clinic, departments, beds, services, presets, a person for
+  each of its roles) and day (`demo/base.sql`), each pack's seed and day (`seeds/pharmacy.sql`, `demo/pharmacy.sql`), then the
+  shared journey (GP → ward → home with a follow-up booked), one file per layer's step in its order (`demo/journey/1-base.sql`,
+  `2-pharmacy.sql`, `9-base.sql`; a pack's step names only its own ids and is skipped while the pack is off). A reset
+  runs the seeds (`seeds/*.sql`). Everything is written through the doors as the user each step names (`demo.w` stops the load on a
+  refusal or a flagged entry); only the logins are the auth service's own rows. Run again, it reloads: the seeds add only what is
+  missing (`demo.grant` a holding, `demo.tick` a pack, `demo.screen` a tab on the Screens line, `demo.setting` written once) and
+  each demo patient is erased through the eraser's door and written again, so it leaves a working day; each stay takes its bed
+  when it is free, else the ward's next free one as the writer finds them (`demo.w_bed`), so a patient admitted in the app never
+  stops a reload. Every
+  time is minutes, days or years before the load (`demo.ago`, `demo.born`, through the kit's one clock `demo.now`; the scan in
+  `npm run test:demo` refuses a calendar date, a year or `now()` in any demo file). Today's day spans the five hours before the
+  load; loaded before 05:00 those minutes are squeezed in proportion into the time since midnight, so every visit stays today's
+  and in order. Ids: the base keeps its fixed ones, a pack's are `demo.id(<pack>, <name>)` (uuid v5 in its namespace). The
+  sign-in page lists the people grouped by department from `src/core/shell/logins.generated.ts`, which `npm run gen:logins`
+  writes from the seeded people and the kit's one password (`demo.password()`) and `db:test` checks like the shapes; a click
+  opens that department. Pharmacy's: the Pharmacy
+  department, its settings and service, Dr. Reem Hamdy (Pharmacist) and Hesham Ragab (Store keeper); its three patients (one
+  prepared 55 minutes ago and late, one prepared 10 minutes ago to collect with a second to prepare, one given) and the journey's
+  medicines for home. The base's: a waiting room (the longest 40 minutes, a four-year-old urgent), one in consult, the morning
+  done (a pregnant woman at 24 weeks, a breastfeeding mother and her three-month-old, a sample on its way, a result back), two
+  admitted, a private note in Psychiatry, alerts (DNR, fall risk, isolation for HBV), a critical result waiting, and Nadia Kamel's
+  full chart.
 - **The section chips** (the owner's choice A): one row. Summary, then this department's pack sections, a thin line, then the base
   sections, then More · n. Each chip carries its count or its state in words ("Medicines 1", "Allergies not asked", "Results 1
   critical", "Chronic care on target"); a section declares that word as it declares its Summary line. Colour only for a state
@@ -732,7 +760,7 @@ it works ("/x is used in: …").
   Actions are added one at a time, never by replacing a whole list. *Built 2026-10-06:* `declare_role(…, built_on => Doctor)`; an
   action `declare_action(…, everyday => true)`; Doctor and Nurse are the base's everyday roles; `declare_role_action` adds one action
   (a pack adds only to its own roles); `core.gives` answers for a role in a department (§3.1). Pharmacist, Lab technician and
-  Reception stay plain. Settings → Roles shows what a role is built on ("Built on Doctor"), its own actions by kind and by pack, and
+  Reception stay plain, and so does pharmacy's Store keeper (it reads the dispensing queue and writes nothing). Settings → Roles shows what a role is built on ("Built on Doctor"), its own actions by kind and by pack, and
   the everyday ones a Doctor or Nurse holds where a department uses the pack.
 - **Export.** A pack's FHIR adds beside its base type's mapping, never replaces it; the result is valid R4 (one value per choice
   element); a mapping that fails fails the tests.
@@ -749,7 +777,8 @@ it works ("/x is used in: …").
 - **What the base adds for §5.1** (built 2026-10-06: a department's packs used here; the frame, toolbar and tab row with the action
   each tab needs; the fit test, chip words and Summary lines; banner words with their rank; the pregnant and breastfeeding facts;
   setting shapes with labels and units, and the form drawn from them; the board tile line and buttons and the marks on the lists; score
-  tables and a read that scores while typing; the rest not yet): a department's packs used here; the fit test; chip words and Summary lines;
+  tables and a read that scores while typing; the demo loader with relative times, logins per role and ids per pack; the rest not
+  yet): a department's packs used here; the fit test; chip words and Summary lines;
   banner words with their rank; the board tile line and buttons; the frame, toolbar and tab row with the action each tab needs;
   setting shapes with labels and units, and the form drawn from them; score tables and a read that scores while typing; the demo loader
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
@@ -1155,4 +1184,45 @@ types, parked pack calls with per-call Retry, Postgres enums.
     min/max were not checked, so a bad min made `core.score` raise; a choice's value could be a number, which the card and the record
     cannot match; the same declaration with a padded source refused `version_exists`; a failed preview left the card "Working out the
     total…" with no way to ask again.
+- 2026-10-06: platform piece 8 — each pack brings its own demo (§5.1 rule 9), proven on pharmacy and the base.
+  - **Loader**: `npm run db:demo` (`scripts/demo.sh`, one transaction) loads `supabase/demo/load.sql`: the kit, the base's seed and
+    day, each pack's seed and day, the shared journey; `scripts/include.awk` expands its `-- include:` lines for it and for the suites.
+    It reloads any time (the seeds add only what is missing; each demo patient is erased through `erase_patient` and written again)
+    and stops on a refusal or a flagged entry. Gone: `seeds/auth.sql` (each seed makes its own people's logins) and
+    `scripts/demo-day.sql` (the base's day is `demo/base.sql`, pharmacy's part `seeds/pharmacy.sql` and `demo/pharmacy.sql`).
+  - **The kit** (`supabase/seeds/demo_kit.sql`, schema `demo`, local only): ids per layer (`demo.id`), people and holdings added one
+    at a time (`demo.person`, `demo.grant`), a pack turned on and ticked (`demo.pack_on`, `demo.tick`), a tab appended to the Screens
+    line (`demo.screen`), settings written once, patients erased and registered (`demo.patient`, ages by `demo.born`), entries at
+    minutes before the load (`demo.ago`, `demo.e`, `demo.move`, `demo.w`), a clinic visit, the lab's steps and results.
+  - **Relative times**: `base.presence` keeps arrived, called, seen and the day as clinical times and `base.orders` its sent,
+    answered, last moved and day (and `pharmacy.queue` its prepared and dispensed), §4.2, so "arrived 40 min ago", "a result an hour
+    ago" and "prepared 55 min ago" read true whenever it loads; seen is the earliest clinical time of the first set written after
+    the call, picked in a fixed order so a rebuild picks the same.
+  - **Logins**: every built-in role has a demo person with a real name (the owner Amira Lotfy, Sara Mahmoud, Mai Samir, Karim
+    Fawzy; pharmacy's Dr. Reem Hamdy and its new plain Store keeper role `…ca02`, Hesham Ragab); `npm run gen:logins` writes
+    `src/core/shell/logins.generated.ts` from them and `db:test` checks it; the sign-in page lists them by department.
+  - **Tests**: new `demo` suite (38: the demo loaded twice in a row with nothing refused or flagged, the same patients, entries,
+    settings, holdings and people again, rebuild = live; the longest wait 40 minutes, in consult 8, every open visit within 12 hours,
+    Nadia on day 3; alerts, a critical result, pregnant and breastfeeding; pregnancy only for women 10–55, weight and heart rate for
+    the age, no blood pressure on a baby, haemoglobin ranges by sex; a demo person with a login for every built-in role; pharmacy only
+    on its own patients and the journey's, one late and one to collect; the journey in order with a follow-up booked); `rebuild`
+    runs the new demo (+1: the journey's dispense; Nadia's chart lists the base's kinds); `npm run test:demo` (new), 6 groups: no
+    fixed date in any demo or seed file (and the scan catches each way of writing one), the load order, a pack's ids in its own
+    namespace and no table written, the sign-in page from the generated file only, a person per role. 22 suites, 761 checks;
+    `test:composer` 15 groups, `test:chart` 22 + 9, `test:screens` 10, `test:sections` 19, `test:banner` 13, `test:settings` 11,
+    `test:board` 12, `test:demo` 6; typecheck, eslint and the build clean.
+  - **Review** (10 findings, all fixed): the journey's steps clamped to midnight or to 08:00 fell out of order before 09:00 (now
+    plain `demo.ago` times, in order); pharmacy's step sat in the shared journey file (now `demo/journey/<n>-<layer>.sql`, one per
+    layer, the later ones finding the patient and stay by `demo.kept`); the password was typed twice (now `demo.password()`, which
+    `gen:logins` writes as `DEMO_PASSWORD` for the sign-in page); the README's layout (seeds, `supabase/demo/`, the scripts); a
+    patient of the app in a bed the demo named stopped a reload with bed_taken (`demo.w_bed`: the bed named, else the next the
+    writer takes); loaded after midnight the morning fell on yesterday (the kit's one clock `demo.now`, today's minutes squeezed
+    into the time since midnight before 05:00); orders' sent and answered times and the chart's steps were write times (now
+    clinical, a Done holding for orders open at its clinical time). Tests: `demo` 38 → 56 (the journey strictly in order with the
+    round's note, every visit and both admissions today's and ten done today, Salma's lipids sent 144 and back 60 minutes ago,
+    lab orders answered at their result's time, Hamdy waiting 47 minutes; reloaded with two of the app's patients in Beds 3 and 4;
+    loaded as at 00:30 with rebuild = live); `rebuild` checks Nadia moved off her first bed, not Bed 5; `test:demo` 6 → 7 (no
+    `now()` in a demo file, the journey's files in order with each pack's step naming only its ids, the password from the
+    generated file and named once in the kit). 22 suites, 779 checks; `test:composer` 15, `test:chart` 22 + 9, `test:screens` 10,
+    `test:sections` 19, `test:banner` 13, `test:settings` 11, `test:board` 12, `test:demo` 7; typecheck, eslint and the build clean.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

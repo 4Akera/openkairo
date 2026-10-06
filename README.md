@@ -11,9 +11,9 @@ Prerequisites: Docker (Colima on this machine), the Supabase CLI, Node 22+.
 ```bash
 colima start                    # once per boot
 supabase start                  # Postgres 17, Auth, Realtime, Storage, Studio
-npm run db:reset                # migrations → auth users, codes, the demo clinic
-npm run db:test                 # every SQL suite (16), each in its own rolled-back transaction
-npm run db:demo                 # optional: a clinic day written through write() — check-ins, orders, results, dispensing, two stays
+npm run db:reset                # migrations → codes, the demo kit, the base's clinic and staff, the pharmacy's (supabase/seeds/)
+npm run db:test                 # every SQL suite (22), each in its own rolled-back transaction
+npm run db:demo                 # a working day, times relative to now: the base's, each pack's, the shared journey (run again to reload)
 npm run test:composer           # the composer's typed lines and drafts → entries (no browser, no database)
 npm run gen:shapes              # the client's entry and setting types from the declared shapes (db:test fails when they are stale)
 npm install && npm run dev      # the client on http://localhost:3000 (copy .env.example to .env.local first)
@@ -21,7 +21,7 @@ npm install && npm run dev      # the client on http://localhost:3000 (copy .env
 
 Studio: http://127.0.0.1:54323 · API: http://127.0.0.1:54321 · DB: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 
-Dev users (password `Demo123!`): admin@demo.com (owner), reception@demo.com (front desk), nurse@demo.com and dr.ali@demo.com (General Practice; Dr. Ali also the Medical Ward), lab@demo.com (Laboratory), psych@demo.com (Psychiatry, a private department), pharm@demo.com (Pharmacy). With `VITE_DEMO_LOGINS=true` the login page has one-click buttons for them.
+Demo people (password `Demo123!`, the kit's `demo.password()`), one for every built-in role: Amira Lotfy admin@demo.com (owner), Mai Samir reception@demo.com (Front desk), Dr. Ali Hassan dr.ali@demo.com and Sara Mahmoud nurse@demo.com (General Practice and the Medical Ward), Dr. Salma Adel psych@demo.com (Psychiatry, a private department), Karim Fawzy lab@demo.com (Laboratory), Dr. Reem Hamdy pharm@demo.com and Hesham Ragab store@demo.com (Pharmacy). With `VITE_DEMO_LOGINS=true` the login page lists them grouped by department, one click each, from `src/core/shell/logins.generated.ts` (`npm run gen:logins` after a seed changes; `db:test` fails when it is stale).
 
 Settings changes need a second factor. The dev seed turns that off locally (`core.server_settings`, `require_mfa = off`); when it is on, the Settings page enrols an authenticator app the first time a save is refused.
 
@@ -77,9 +77,10 @@ Settings changes need a second factor. The dev seed turns that off locally (`cor
 ```
 spec/openCare.md      the design (spec/archive/: the earlier specs)
 supabase/migrations/  the database, in order
-supabase/seeds/       auth users, codes, the demo clinic (local only)
+supabase/seeds/       codes, the demo kit, the base's clinic and each pack's seed (local only)
+supabase/demo/        each layer's demo day and the shared journey's steps (journey/), in load.sql's order
 supabase/tests/       SQL suites (lib/: assertions and the fixture)
-scripts/              db-test.sh, demo-day.sql, gen-codes.py, import-codes.sh, test-composer.ts
+scripts/              db-test.sh, demo.sh, include.awk, gen-logins.ts, gen-shapes.ts, gen-codes.py, import-codes.sh, test-*.ts
 src/core/             the client: db, auth, hooks, shell, screens, renderers
 src/packs/            packs: pharmacy
 ```
