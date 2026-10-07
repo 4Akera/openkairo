@@ -27,13 +27,16 @@ const groups = query<Group[]>(`
     select u.name, a.email::text as email, r.name as role, h.department_id
       from core.users u join auth.users a on a.id = u.login_id
       join core.live_holdings(u.organization_id) h on h.user_id = u.id join core.roles r on r.id = h.role_id
-     where u.organization_id = '${CLINIC}' and u.kind = 'staff' and u.retired_at is null)
+     where u.organization_id = '${CLINIC}' and u.kind = 'staff' and u.retired_at is null),
+  -- one button a person in a department: the roles they hold there in one line, each named once (a pack's role built on a base
+  -- role of the same name, as the laboratory's technician, is not a second person)
+  p as (select h.department_id, h.email, h.name, string_agg(distinct h.role, ' · ' order by h.role) as role from h group by h.department_id, h.email, h.name)
   select coalesce(json_agg(json_build_object('department', g.department, 'department_id', g.department_id, 'people', g.people)
                            order by g.position nulls first, g.department), '[]')
-    from (select h.department_id, coalesce(d.name, 'Everywhere') as department, d.position,
-                 json_agg(json_build_object('email', h.email, 'name', h.name, 'role', h.role) order by h.role, h.name) as people
-            from h left join core.departments d on d.organization_id = '${CLINIC}' and d.id = h.department_id
-           group by h.department_id, d.name, d.position) g`)
+    from (select p.department_id, coalesce(d.name, 'Everywhere') as department, d.position,
+                 json_agg(json_build_object('email', p.email, 'name', p.name, 'role', p.role) order by p.role, p.name) as people
+            from p left join core.departments d on d.organization_id = '${CLINIC}' and d.id = p.department_id
+           group by p.department_id, d.name, d.position) g`)
 
 const password = query<string>(`select to_json(demo.password())`)
 
