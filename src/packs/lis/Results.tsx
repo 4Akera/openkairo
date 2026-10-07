@@ -4,7 +4,9 @@
 // the range that fits the patient's sex and age, the values worked out (LDL, eGFR, dashed), the change check against the patient's
 // last value within 30 days (check the sample before release). A critical value is only a notice — tell the doctor who asked (or, a
 // walk-in, the patient or the doctor who asked), then Release, which writes each test whose fields are all there as a final result.
-// ↵ moves down the column, Tab across. The large lab's switches (large.ts): turnaround targets (a row past its section's target turns
+// ↵ moves down the column, Tab across. The By patient layout (switch at the top) lists the section's patients beside one patient's tests
+// as a form (each patient with what is left to type, ready, critical, late): ↵ to the next field, after the last to the next patient;
+// the same release, ranges, flags and notices. The large lab's switches (large.ts): turnaround targets (a row past its section's target turns
 // amber, and Late gathers them all), a second person checks (Release writes a preliminary result, To check approves it), scan to
 // receive (a sample is typed only once received).
 import { useState, type KeyboardEvent } from 'react'
@@ -21,13 +23,15 @@ import type { ScreenProps } from '@core/screens/registry'
 import { ageOf, groupByPatient, matches, type PatientGroup } from '@core/screens/bench/shared'
 import { flagOf } from '@core/screens/bench/BenchPatient'
 import { isWalkIn } from '@core/screens/bench/walkins'
-import { Button, Callout, Card, Empty, Input, Kbd, ScreenFrame, Select, Spinner, Tag, cn, errorText, flagMark, hm, type ScreenView } from '@core/ui'
+import { Button, Callout, Card, Empty, Input, Kbd, ScreenFrame, Segmented, Select, Spinner, Tag, cn, errorText, flagMark, hm, type ScreenView } from '@core/ui'
 import { WORKED_OUT, changeOf, columnsOf, workedOut, type Prev } from './grid'
 import { largeOf, lateBy, targetOf } from './large'
 import { ToCheck, toCheck } from './Check'
 
 const started = (r: RequestQueueRow) => !!r.order.step_key || (!!r.request?.step && r.request.step !== 'sent')
 const LATE = '~late'; const CHECK = '~check'
+// a wide section's values scroll sideways under the patient (pinned at the start) and Release (pinned at the end), each with its edge
+const PIN_START = 'sticky start-0 z-raised shadow-[inset_-1px_0_0_var(--line)]'; const PIN_END = 'sticky end-0 z-raised shadow-[inset_1px_0_0_var(--line)]'
 const CELL = { high: 'border-line font-semibold text-warn', low: 'border-line font-semibold text-warn', critical: 'border-danger bg-danger-soft font-semibold text-danger', normal: 'border-line text-fg' }
 const range = (f: Pick<ServiceField, 'reference_low' | 'reference_high'>) => f.reference_low != null && f.reference_high != null ? `${f.reference_low}–${f.reference_high}`
   : f.reference_high != null ? `≤ ${f.reference_high}` : f.reference_low != null ? `≥ ${f.reference_low}` : ''
@@ -37,6 +41,7 @@ export function Results({ dept }: ScreenProps) {
   const q = useRequestQueue(dept.id); const qc = useQueryClient(); const { org, can } = useDepartment()
   const [section, setSection] = useState<string | null>(null); const [find, setFind] = useState('')
   const [vals, setVals] = useState<Record<string, Record<string, string>>>({})   // by patient, by field key
+  const [mode, setMode] = useState<'grid' | 'patient'>('grid'); const [at, setAt] = useState(0)
   const [busy, setBusy] = useState<string | null>(null); const [said, setSaid] = useState<string | null>(null); const [error, setError] = useState<string | null>(null)
   const f = find.trim().toLowerCase()
   const serviceOf = (r: RequestQueueRow): Service | undefined => org?.services.find((s) => s.id === r.order.service_id)
@@ -90,7 +95,7 @@ export function Results({ dept }: ScreenProps) {
     ...sections.map((s) => ({ id: s, label: s, count: groupByPatient(waiting.filter((r) => (r.section_name ?? 'Other') === s)).length })),
     ...(large.second_check ? [{ id: CHECK, label: 'To check', count: groupByPatient(checking).length, needs: 'warn' as const }] : [])]
 
-  const row = (g: PatientGroup) => {
+  const review = (g: PatientGroup) => {
     const mine = (key: string) => g.rows.some((r) => serviceOf(r)?.fields.some((x) => x.key === key))
     const notes: { tone: 'warn' | 'danger'; text: string }[] = []
     let critical = false
@@ -106,11 +111,18 @@ export function Results({ dept }: ScreenProps) {
     const who = walk ? (g.rows.find((r) => r.order.asked_by)?.order.asked_by ? `the patient or ${g.rows.find((r) => r.order.asked_by)!.order.asked_by}` : 'the patient')
       : g.rows[0]?.requester_name ?? g.rows[0]?.from_department_name ?? 'the doctor who asked'
     const any = g.rows.some((r) => { const s = serviceOf(r); return s && ready(g, s) })
+    return { mine, notes, critical, who, walk, any }
+  }
+  const row = (g: PatientGroup) => {
+    const { mine, notes, critical, who, walk, any } = review(g)
     const waited = Math.max(...g.rows.map((r) => lateOf(r) ?? -1)); const sample = g.rows.find((r) => r.step_data?.specimen)?.step_data?.specimen
+    // the row's tint, painted on its pinned cells too (they sit over the values scrolling under them)
+    const tint = waited >= 0 ? 'bg-warn-soft' : notes.length > 0 ? '[background:linear-gradient(var(--hover),var(--hover)),var(--surface)]' : 'bg-surface'
     return [<tr key={g.patient.id} className={cn('border-t border-line', waited >= 0 ? 'bg-warn-soft' : notes.length > 0 && 'bg-hover')}>
-      <td className="px-3 py-2"><span className="flex items-center gap-2"><span className="font-medium text-fg">{g.patient.given_name} {g.patient.family_name}</span>
+      {/* pinned at the start; the name never breaks, its tags wrap under it rather than spill over the first cell */}
+      <td className={cn(PIN_START, 'min-w-56 px-3 py-2', tint)}><span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="whitespace-nowrap font-medium text-fg">{g.patient.given_name} {g.patient.family_name}</span>
         {g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{walk && <Tag tone="info">walk-in</Tag>}{waited >= 0 && <Tag tone="warn">late · {waited} min</Tag>}</span>
-        <span className="font-mono text-11 text-faint">#{g.patient.record_number}{sample ? ` · ${sample}` : ''}{g.rows[0]?.order.last_at ? ` · ${large.scan_receive ? 'received' : 'collected'} ${hm(g.rows[0].order.last_at)}` : ''}</span></td>
+        <span className="mt-0.5 block whitespace-nowrap font-mono text-11 text-faint">#{g.patient.record_number}{sample ? ` · ${sample}` : ''}{g.rows[0]?.order.last_at ? ` · ${large.scan_receive ? 'received' : 'collected'} ${hm(g.rows[0].order.last_at)}` : ''}</span></td>
       {columns.map((c) => { if (!mine(c.key)) return <td key={c.key} className="px-1.5 py-2 text-end text-faint">·</td>
         const fit = fitted(g, c); const raw = valueOf(g, c.key); const flag = flagOf(fit, raw)
         if (WORKED_OUT.has(c.key)) return <td key={c.key} className="px-1.5 py-2 text-end"><span title="Worked out from the others" className={cn('inline-flex h-8 w-[4.5rem] items-center justify-end gap-1 rounded-md border border-dashed bg-surface px-2 tnum', flag ? CELL[flag] : 'border-line text-faint')}>
@@ -121,27 +133,95 @@ export function Results({ dept }: ScreenProps) {
           : <span className="relative inline-flex"><Input data-col={c.key} dense inputMode={c.kind === 'number' ? 'decimal' : undefined} value={raw} onKeyDown={down}
               onChange={(e) => set(g.patient.id, c.key, e.target.value)} aria-label={`${g.patient.given_name}: ${c.name}`}
               className={cn('w-[4.5rem] text-end tnum', c.kind === 'text' && 'w-24 text-start', flag ? CELL[flag] : '')} />
-              {flag && flag !== 'normal' && <span aria-hidden className={cn('pointer-events-none absolute end-1 top-0.5 text-11', flag === 'critical' ? 'text-danger' : 'text-warn')}>{flagMark(flag)}</span>}</span>}</td> })}
-      <td className="px-3 py-2 text-end"><Button size="sm" variant={critical ? 'danger' : 'primary'} disabled={!any} loading={busy === g.patient.id} onClick={() => void release(g)}>{large.second_check ? 'Release to check' : 'Release'}</Button></td>
+              {flag && flag !== 'normal' && <span aria-hidden className={cn('pointer-events-none absolute start-1.5 top-1/2 -translate-y-1/2 text-14 font-bold leading-none', flag === 'critical' ? 'text-danger' : 'text-warn')}>{flagMark(flag)}</span>}</span>}</td> })}
+      <td className={cn(PIN_END, 'px-3 py-2 text-end', tint)}><Button size="sm" variant={critical ? 'danger' : 'primary'} disabled={!any} loading={busy === g.patient.id} onClick={() => void release(g)}>{large.second_check ? 'Release to check' : 'Release'}</Button></td>
     </tr>,
-    notes.length > 0 && <tr key={`${g.patient.id} notes`} className="bg-hover"><td colSpan={columns.length + 2} className="px-3 pb-2"><div className="grid max-w-3xl gap-1">
+    notes.length > 0 && <tr key={`${g.patient.id} notes`} className="bg-hover"><td colSpan={columns.length + 2} className="px-3 pb-2"><div className="sticky start-3 grid max-w-[min(48rem,calc(100vw-5rem))] gap-1">
       {critical && <Callout tone="danger" title={`Critical: tell ${who} now`}>{notes.filter((x) => x.tone === 'danger').map((x) => x.text).join('; ')}. Then release.</Callout>}
       {notes.filter((x) => x.tone === 'warn').map((x) => <p key={x.text} className="flex items-center gap-1.5 text-12 text-muted"><TriangleAlert className="size-3.5 shrink-0 text-warn" />{x.text}</p>)}
     </div></td></tr>]
   }
 
-  return <ScreenFrame views={views} view={current ?? ''} onView={setSection}
+  // By patient: one patient's tests as a form, a row a field (↵ to the next field, after the last to the next patient)
+  const flagWord = (fl: string | null) => fl === 'critical' ? 'critical' : fl === 'high' ? 'high' : fl === 'low' ? 'low' : fl && fl !== 'normal' ? fl : ''
+  const nextField = (e: KeyboardEvent<HTMLElement>, n: number) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const all = [...document.querySelectorAll<HTMLElement>('[data-pf]')]; const next = all[all.indexOf(e.currentTarget) + 1]
+    if (next) next.focus(); else if (n > 1) { setAt((at + 1) % n); requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-pf]')?.focus()) }
+  }
+  /** the fields still to type for a patient (not worked out, not free text) */
+  const leftOf = (g: PatientGroup) => columnsOf(g.rows.map(serviceOf).filter((x): x is Service => !!x))
+    .filter((c) => !WORKED_OUT.has(c.key) && c.kind !== 'text' && valueOf(g, c.key).trim() === '').length
+  const patientCard = (g: PatientGroup, n: number) => {
+    const { notes, critical, who, any } = review(g)
+    const cols = columnsOf(g.rows.map(serviceOf).filter((x): x is Service => !!x))
+    const left = leftOf(g)
+    const sample = g.rows.find((r) => r.step_data?.specimen)?.step_data?.specimen
+    return <Card className="p-4">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line pb-2">
+        <span className="text-14 font-medium text-fg">{g.patient.given_name} {g.patient.family_name}</span>
+        <span className="font-mono text-11 text-faint">#{g.patient.record_number}{sample ? ` · ${sample}` : ''}{g.rows[0]?.order.last_at ? ` · ${large.scan_receive ? 'received' : 'collected'} ${hm(g.rows[0].order.last_at)}` : ''}</span>
+        {g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}
+        <span className="ms-auto text-12 text-muted">{left === 0 ? 'all typed' : `${left} to type`}</span>
+      </div>
+      <div className="grid grid-cols-[minmax(7rem,9rem)_8rem_4rem_6rem_4.5rem] items-center gap-x-2 gap-y-1 pt-2 text-13 max-sm:grid-cols-[1fr_7rem]">
+        {cols.map((c) => { const fit = fitted(g, c); const raw = valueOf(g, c.key); const flag = flagOf(fit, raw); const fl = flag && flag !== 'normal' ? flag : null
+          const label = `${g.patient.given_name}: ${c.name}`
+          return <div key={c.key} className="contents">
+            <span className="text-muted">{c.name.replace(' (worked out)', '')}{WORKED_OUT.has(c.key) && <span className="ms-1 text-11 text-faint">worked out</span>}</span>
+            {WORKED_OUT.has(c.key)
+              ? <span title="Worked out from the others" className={cn('inline-flex h-8 items-center justify-end rounded-md border border-dashed bg-surface px-2 tnum', flag ? CELL[flag] : 'border-line text-faint')}>{raw || '—'}</span>
+              : c.kind === 'choice'
+              ? <Select data-pf value={raw} onKeyDown={(e) => nextField(e, n)} onChange={(e) => set(g.patient.id, c.key, e.target.value)} aria-label={label} className="h-8 text-13"><option value="" />{(c.choices ?? []).map((x) => <option key={x} value={x}>{x}</option>)}</Select>
+              : <span className="relative inline-flex"><Input data-pf dense inputMode={c.kind === 'number' ? 'decimal' : undefined} autoComplete="off" value={raw} onFocus={(e) => e.target.select()} onKeyDown={(e) => nextField(e, n)}
+                  onChange={(e) => set(g.patient.id, c.key, e.target.value)} aria-label={label} className={cn('h-8 text-end tnum', c.kind === 'text' && 'text-start', fl ? CELL[fl] : '', fl && 'ps-6')} />
+                  {fl && <span aria-hidden className={cn('pointer-events-none absolute start-2 top-1/2 -translate-y-1/2 text-14 font-bold leading-none', fl === 'critical' ? 'text-danger' : 'text-warn')}>{flagMark(fl)}</span>}</span>}
+            <span className="text-12 text-faint max-sm:hidden">{c.unit ?? ''}</span><span className="text-12 text-faint tnum max-sm:hidden">{range(c)}</span>
+            <span className={cn('text-12 font-medium max-sm:hidden', fl === 'critical' ? 'text-danger' : 'text-warn')}>{fl ? flagWord(fl) : ''}</span>
+          </div> })}
+      </div>
+      {notes.length > 0 && <div className="mt-3 grid max-w-3xl gap-1">
+        {critical && <Callout tone="danger" title={`Critical: tell ${who} now`}>{notes.filter((x) => x.tone === 'danger').map((x) => x.text).join('; ')}. Then release.</Callout>}
+        {notes.filter((x) => x.tone === 'warn').map((x) => <p key={x.text} className="flex items-center gap-1.5 text-12 text-muted"><TriangleAlert className="size-3.5 shrink-0 text-warn" />{x.text}</p>)}</div>}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="text-12 text-faint"><Kbd>↵</Kbd> next field · after the last, the next patient</span>
+        <span className="ms-auto flex gap-2">
+          {n > 1 && <Button size="sm" variant="outline" onClick={() => setAt((at + 1) % n)}>Skip patient</Button>}
+          <Button size="sm" variant={critical ? 'danger' : 'primary'} disabled={!any} loading={busy === g.patient.id} onClick={() => void release(g)}>{large.second_check ? 'Release to check' : 'Release'}</Button></span>
+      </div>
+    </Card>
+  }
+  const here = Math.min(at, Math.max(groups.length - 1, 0))
+  // the section's patients beside the form: each with what is left (to type, ready, critical) and late; one opens its form
+  const open = (i: number) => { setAt(i); requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-pf]')?.focus()) }
+  const patientList = <Card className="overflow-hidden md:sticky md:top-3"><ul aria-label="Patients" className="max-h-48 overflow-y-auto md:max-h-[70vh]">
+    {groups.map((x, i) => { const on = i === here; const n = leftOf(x); const { critical } = review(x); const late = x.rows.some((r) => lateOf(r) != null)
+      return <li key={x.patient.id} className="border-t border-line first:border-t-0">
+        <button type="button" aria-current={on || undefined} onClick={() => open(i)} className={cn('grid w-full gap-0.5 px-3 py-2 text-start transition-colors hover:bg-hover focus-ring', on && 'rail bg-hover')}>
+          <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-13 font-medium text-fg">{x.patient.given_name} {x.patient.family_name}</span>
+            {x.priority !== 'routine' && <Tag tone="danger">{x.priority}</Tag>}</span>
+          <span className="flex flex-wrap items-center gap-x-1.5 text-11"><span className="font-mono text-faint">#{x.patient.record_number}</span>
+            {critical ? <span className="font-medium text-danger">critical</span> : n === 0 ? <span className="font-medium text-accent">ready to release</span> : <span className="text-muted">{n} to type</span>}
+            {late && <span className="font-medium text-warn">late</span>}</span>
+        </button></li> })}
+  </ul></Card>
+
+  return <ScreenFrame views={views} view={current ?? ''} onView={(v) => { setSection(v); setAt(0) }}
+    action={current !== CHECK && current ? <Segmented size="sm" aria-label="Layout" value={mode} onChange={setMode} options={[['grid', 'Grid'], ['patient', 'By patient']]} /> : undefined}
     search={<Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Record number or name" className="w-full sm:w-72" />}
     notice={said ? <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout> : error ? <Callout tone="danger" title="Not released">{error}</Callout> : undefined}>
     {notIn > 0 && <p className="text-12 text-muted">{notIn} {notIn === 1 ? 'test is' : 'tests are'} collected and not received yet: each waits for its tube's scan on Receive.</p>}
     {q.isLoading ? <Spinner label="Loading" /> : !current ? <Card><Empty>{large.scan_receive ? 'Nothing received is waiting for results.' : 'Nothing collected is waiting for results.'}</Empty></Card>
       : current === CHECK ? <ToCheck rows={checking} serviceOf={serviceOf} deptId={dept.id} onDone={(x) => { setSaid(x); setError(null) }} />
+      : mode === 'patient' ? (groups.length ? <div className="grid gap-3 md:grid-cols-[15rem_minmax(0,1fr)] md:items-start">{patientList}{patientCard(groups[here], groups.length)}</div>
+        : <Card><Empty>{f ? 'No match here.' : 'Nobody here.'}</Empty></Card>)
       : <Card className="overflow-x-auto"><table className="w-full text-13 tnum">
         <thead><tr className="border-b border-line align-bottom">
-          <th className="px-3 py-2 text-start text-11 font-medium uppercase tracking-[0.06em] text-faint">Patient</th>
+          <th className={cn(PIN_START, 'bg-surface px-3 py-2 text-start text-11 font-medium uppercase tracking-[0.06em] text-faint')}>Patient</th>
           {columns.map((c) => <th key={c.key} className="px-1.5 py-2 text-end font-normal"><span className="block text-12 font-semibold text-fg">{c.name.replace(' (worked out)', '')}{WORKED_OUT.has(c.key) && <span className="ms-1 text-11 font-normal text-faint">calc</span>}</span>
             <span className="block text-11 text-faint">{c.unit ?? ''}</span><span className="block text-11 text-faint">{range(c)}</span></th>)}
-          <th className="px-3 py-2" /></tr></thead>
+          <th className={cn(PIN_END, 'bg-surface px-3 py-2')} /></tr></thead>
         <tbody>{groups.length ? groups.flatMap(row) : <tr><td colSpan={columns.length + 2}><Empty>{f ? 'No match here.' : 'Nobody here.'}</Empty></td></tr>}</tbody>
       </table></Card>}
     {current !== CHECK && <p className="text-12 text-faint">Type down a column (<Kbd>↵</Kbd>) or across a row (Tab); ranges by age and sex; LDL and eGFR are worked out; a critical value shows its notice before Release.</p>}
