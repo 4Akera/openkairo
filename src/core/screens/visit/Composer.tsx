@@ -109,6 +109,10 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   const note = typedCmd?.note && items.length ? typedCmd.note(items, ctx) : null
   // a word that fits more than one test (never guessed): its choices; one chosen puts its code in the line
   const asks = items.filter((p) => p.function === 'order' && !p.params.service_id && Array.isArray(p.params.choices))
+  // the word still being typed is not asked about while its suggestions show: only a finished word is
+  const typing = sugg ? (text.split(/[,\s]+/).pop() ?? '').toLowerCase() : ''
+  const typingAsk = (p: Parsed) => !!typing && asks.includes(p) && String(p.params.word ?? '').toLowerCase() === typing
+  const settled = items.filter((p) => !typingAsk(p))
   function choose(p: Parsed, id: string) {
     const code = ctx.services.find((x) => x.id === id)?.code; const w = String(p.params.word ?? ''); const i = text.toLowerCase().lastIndexOf(w.toLowerCase())
     if (!code || !w || i < 0) return
@@ -183,6 +187,9 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   }
   const footer = blocking.length > 0 ? <span className="font-medium text-danger">{armed === key ? 'Enter again to go ahead despite the warning' : '↵ ↵ — twice, against the warning'}</span>
     : incomplete ? <span className="text-warn">{incomplete}</span> : null
+  // under the suggestions: the same, less what the word still being typed would ask
+  const settledMissing = settled.map(missing).find(Boolean) ?? null
+  const suggFooter = blocking.length > 0 ? footer : settledMissing ? <span className="text-warn">{settledMissing}</span> : null
 
   return <Card>
     <datalist id="oc-drugs">{DRUGS.map((d) => <option key={d.name} value={d.name} />)}</datalist>
@@ -208,14 +215,14 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
             className={cn('flex min-w-0 flex-col items-start rounded-lg bg-surface px-2.5 py-1.5 text-start ring-1 transition-colors', chosen ? 'ring-2 ring-accent' : on ? 'ring-accent-line' : 'ring-line hover:ring-line-strong')}>
             <span className="flex w-full items-center gap-2"><span className="truncate text-13 font-medium text-fg">{s.label}</span>{on && <Kbd className="ms-auto shrink-0 text-accent">{chosen ? '↵' : 'tab'}</Kbd>}</span>
             {s.detail && <span className="w-full truncate text-11 text-faint">{s.detail}</span>}</button> })}
-          {items.length > 0 && pick < 0 && <p className="text-11 text-faint sm:col-span-2"><Kbd>tab</Kbd> takes the first · <Kbd>↓</Kbd> chooses · <Kbd>↵</Kbd> adds as typed: <span className="text-muted">{items.map((x) => x.line).join(' · ')}</span></p>}
-          {pick < 0 && asks.map((p) => <div key={String(p.params.word)} role="group" aria-label={`Which “${String(p.params.word)}”`} className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
+          {settled.length > 0 && pick < 0 && <p className="text-11 text-faint sm:col-span-2"><Kbd>tab</Kbd> takes the first · <Kbd>↓</Kbd> chooses · <Kbd>↵</Kbd> adds as typed: <span className="text-muted">{settled.map((x) => x.line).join(' · ')}</span></p>}
+          {pick < 0 && asks.filter((p) => !typingAsk(p)).map((p) => <div key={String(p.params.word)} role="group" aria-label={`Which “${String(p.params.word)}”`} className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
             <span className="text-12 text-warn">“{String(p.params.word)}” fits {(p.params.choices as string[]).length}: which?</span>
             {(p.params.choices as string[]).map((id) => <Chip key={id} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(p, id)}>{ctx.services.find((x) => x.id === id)?.name ?? id}</Chip>)}</div>)}
           {pick < 0 && note && <div className="text-12 text-muted sm:col-span-2">{note}</div>}
           {/* what Enter would add as typed is still checked: its warnings show here too */}
           {pick < 0 && warnings.length > 0 && <ul className="grid gap-1 sm:col-span-2">{warnings.map((w, i) => <WarningItem key={i} w={w} />)}</ul>}
-          {pick < 0 && footer && <p className="text-11 sm:col-span-2">{footer}</p>}</div>}
+          {pick < 0 && suggFooter && <p className="text-11 sm:col-span-2">{suggFooter}</p>}</div>}
         {base?.errors.map((e) => <p key={e} className="px-3 pt-2 text-13 text-danger">{e}</p>)}
         {base?.skipped?.map((e) => <p key={e} className="px-3 pt-2 text-12 text-warn">Left out {e}</p>)}
         {refused && <p className="px-3 pt-2 text-13 text-danger">Your role cannot write a {refused.kind}.</p>}
@@ -230,7 +237,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
             {dupProblem && <Button size="sm" variant="outline" onClick={() => updateDup(dupProblem)}>Update {dupProblem.name}</Button>}
           </div> : undefined} />)}</div>}
         {!sugg && note && <div className="border-t border-line px-3 py-2 text-12 text-muted">{note}</div>}
-        {!sugg && !items.length && !base?.drawer && !base?.errors.length && !base?.hint && <p className="px-3 py-2 text-12 text-warn">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
+        {!sugg && !items.length && !base?.drawer && !base?.errors.length && !base?.hint && !base?.label && <p className="px-3 py-2 text-12 text-warn">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
         {!sugg && (items.length > 0 || base?.drawer) && <div className="flex items-center gap-3 border-t border-line px-3 py-2 text-11 text-faint">
           {footer ?? <span className="inline-flex items-center gap-1"><CornerDownLeft className="h-3 w-3" />{seed?.draftId ? 'save' : base?.drawer && !items.length ? 'open' : `add${items.length > 1 ? ` ${items.length}` : ''}`}</span>}
           <span><Kbd>tab</Kbd> edit fields</span><span><Kbd>esc</Kbd> {seed ? 'cancel' : 'clear'}</span>

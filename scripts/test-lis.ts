@@ -118,6 +118,8 @@ test('where /lab is offered: where the Laboratory takes orders from; elsewhere i
   assert.equal(suggest('/', at(), [], new Set())!.items.find((x) => x.label === '/lab')?.group, 'Laboratory', 'the / list: under the pack\'s own name')
   assert.equal(suggest('/lab dm', at(), [], new Set())!.items[0].label, 'DM follow-up', 'a preset offered by its shortcut')
   assert.equal(suggest('/lab troponin ? ch', at(), [], new Set()), null, 'the question: free words')
+  assert.equal(suggest('/lab ', at(), [], new Set()), null, 'nothing typed yet: no list'); assert.equal(suggest('/lab cbc, ', at(), [], new Set()), null, 'nor after a comma')
+  assert.equal(suggest('/lab c', at(), [], new Set())!.items[0].label, 'Complete blood count', 'from the first letter')
   // every service the Laboratory offers is /lab's, as the department has it: one that takes no sample (its own X-ray) shows no tube
   const lab = at('gp', [...LAB, svc('lcx', 'lcxr', 'Chest X-ray (lab)', 'lab', 'Imaging', [])])
   assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].detail, 'lcxr · Imaging', 'offered, with no tube')

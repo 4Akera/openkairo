@@ -116,14 +116,17 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
     if (rest.includes('?')) return null                                     // "? the question": free words
     const partial = rest.split(/[,\s]+/).pop() ?? ''
     if (/^(urgent|stat)$/i.test(partial)) return null
-    const p = partial.toLowerCase()
+    const p = partial.toLowerCase(); if (!p) return null                     // from the first letter typed: a catalogue grows long
     const from = oc?.orders && oc.pack ? ordersFrom(oc.pack, ctx) : null
     const pool = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!from || from.has(s.department_id ?? '')))
-    const hits = pool.filter((s) => !p || s.code.startsWith(p) || s.name.toLowerCase().includes(p)).slice(0, p ? 7 : 10)
+    // best first: its code, then its name, then a word of it, starting with what is typed; then anywhere in the name
+    const rank = (s: Ctx['services'][number]) => { const n = s.name.toLowerCase()
+      return s.code === p ? 0 : s.code.startsWith(p) ? 1 : n.startsWith(p) ? 2 : n.split(/[\s/,()·-]+/).some((w) => w.startsWith(p)) ? 3 : n.includes(p) ? 4 : 9 }
+    const hits = pool.map((s) => ({ s, r: rank(s) })).filter((x) => x.r < 9).sort((a, b) => a.r - b.r).slice(0, 7).map((x) => x.s)
     // a preset by its name or shortcut, for what it orders here
     const sets = p.length >= 2 ? ctx.templates.filter((x) => (x.shortcut?.startsWith(p) || x.name.toLowerCase().startsWith(p)) && x.items.some((i) => pool.some((s) => s.id === i.service_id))).slice(0, 2) : []
     // a department is asked with a question: "/order cardiology: …" (only as the first thing ordered; not from a pack's command)
-    const depts = !from && !/[,:]/.test(rest) && p ? ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().startsWith(p)).slice(0, 3) : []
+    const depts = !from && !/[,:]/.test(rest) ? ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().startsWith(p)).slice(0, 3) : []
     const where = (s: Ctx['services'][number]) => from ? s.section_name ?? ctx.departments.find((d) => d.id === s.department_id)?.name ?? '' : ctx.departments.find((d) => d.id === s.department_id)?.name ?? ''
     const items = [...sets.map((x) => ({ key: `t${x.id}`, label: x.name, detail: `preset · ${x.items.filter((i) => pool.some((s) => s.id === i.service_id)).length} tests`, insert: `${t.slice(0, t.length - partial.length)}${x.name.toLowerCase()}, ` })),
       ...hits.map((s) => ({ key: s.id, label: s.name, detail: [s.code, where(s), oc?.hint?.(s)].filter(Boolean).join(' · '), swatch: oc?.swatch?.(s) ?? undefined,
