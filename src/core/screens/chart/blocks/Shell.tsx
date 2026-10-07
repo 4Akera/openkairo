@@ -27,15 +27,15 @@ export function Shell({ time, icon: I, label, tags, bare, className, children, .
 }
 
 /** a presence move in words: Called 09:05 · Moved to Bed 5 10:12 */
-function moveWords(env: ReturnType<typeof useBlockEnv>, m: SetGroup['moves'][number]) {
+function moveWords(env: ReturnType<typeof useBlockEnv>, m: SetGroup['moves'][number], time = true) {
   const b = baseOf(m.type, env.org?.types); const d = m.data ?? {}
   const where = b === 'moved' ? env.org?.places.find((p) => p.id === d.place_id)?.name : b === 'transferred' ? placeName(env, d.to_department_id as string) : null
-  return `${MOVE_WORD[b] ?? words(b)}${where ? ` to ${where}` : ''} ${hm(m.recorded_at)}`
+  return `${MOVE_WORD[b] ?? words(b)}${where ? ` to ${where}` : ''}${time ? ` ${hm(m.recorded_at)}` : ''}`
 }
 /** a signed set's head: when it was signed, by whom, where; the visit's moves that went with it at the end */
 export function SetHead({ set }: { set: SetGroup }) {
-  const env = useBlockEnv(); const moves = set.moves.map((m) => moveWords(env, m))
-  const alone = !set.groups.length
+  const env = useBlockEnv(); const alone = !set.groups.length
+  const moves = set.moves.map((m) => moveWords(env, m, !alone))   // a move alone in its card shares the head's time
   return <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 bg-sunken px-4 py-2 text-12 text-faint tnum', !alone && 'border-b border-line')}>
     <span>{when(set.at)}</span>
     {set.author_id && <span className="font-medium text-fg">{personName(env, set.author_id) ?? 'Someone'}</span>}

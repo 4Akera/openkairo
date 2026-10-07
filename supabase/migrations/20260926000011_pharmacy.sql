@@ -353,7 +353,7 @@ declare v_product uuid := (p_args ->> 'product')::uuid; v_moves jsonb := '[]';
 begin
   -- what this pharmacy has, by product and batch: its own rows less what it gave
   create temp table if not exists pharmacy_on_hand (product_id uuid, batch text, expiry date, units int) on commit drop;
-  delete from pharmacy_on_hand;
+  delete from pharmacy_on_hand where true;
   insert into pharmacy_on_hand select x.product_id, x.batch, max(x.expiry), sum(x.q)::int from (
     select s.product_id, s.batch, s.expiry, s.quantity q from pharmacy.stock s where s.organization_id = p_org and s.department_id = p_department
     union all select g.product_id, g.batch, null::date, -g.quantity from pharmacy.given g where g.organization_id = p_org and g.department_id = p_department) x

@@ -77,7 +77,7 @@ export function ListRow({ number, name, age, status, who, minutes, next, selecte
   number: ReactNode; name: ReactNode; age: ReactNode; status?: ReactNode; who?: ReactNode; minutes?: number | null
   next?: boolean; selected?: boolean; enter?: boolean; muted?: boolean; onOpen?: () => void; actions?: ReactNode; marks?: RowMark[]; className?: string; hover?: boolean
 }) {
-  return <li aria-selected={selected || undefined} className={cn('group border-t border-line first:border-t-0', next && 'bg-accent-soft/70', selected && 'rail', selected && !next && 'bg-hover', className)}>
+  return <li aria-selected={selected || undefined} className={cn('group border-t border-line first:rounded-t-xl first:border-t-0 last:rounded-b-xl', next && 'bg-accent-soft/70', selected && 'rail', selected && !next && 'bg-hover', className)}>
     <div role={onOpen ? 'button' : undefined} tabIndex={onOpen ? -1 : undefined} onClick={onOpen}
       className={cn('grid grid-cols-[3rem_minmax(8rem,11rem)_3.5rem_minmax(0,1fr)_auto_3rem] items-center gap-2 px-4 py-2 text-13 max-sm:flex max-sm:flex-wrap max-sm:items-baseline max-sm:gap-x-2 max-sm:gap-y-0.5', onOpen && 'cursor-pointer', onOpen && hover && (next ? 'hover:bg-accent-soft' : 'hover:bg-hover'), muted && 'text-faint')}>
       <span className="font-mono text-12 text-faint tnum">{number}</span>
