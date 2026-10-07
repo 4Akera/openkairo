@@ -117,10 +117,9 @@ test('where /lab is offered: where the Laboratory takes orders from; elsewhere i
   assert.equal(suggest('/', at(), [], new Set())!.items.find((x) => x.label === '/lab')?.group, 'Laboratory', 'the / list: under the pack\'s own name')
   assert.equal(suggest('/lab dm', at(), [], new Set())!.items[0].label, 'DM follow-up', 'a preset offered by its shortcut')
   assert.equal(suggest('/lab troponin ? ch', at(), [], new Set()), null, 'the question: free words')
-  // the Laboratory's own X-ray (no sample collected, a report answers it) is /order's, never /lab's
+  // every service the Laboratory offers is /lab's, as the department has it: one that takes no sample (its own X-ray) shows no tube
   const lab = at('gp', [...LAB, svc('lcx', 'lcxr', 'Chest X-ray (lab)', 'lab', 'Imaging', [])])
-  assert.equal(suggest('/lab lcx', lab, [], new Set()), null, 'not suggested'); assert.match(err('/lab lcxr', lab), /No lab test “lcxr”/, 'not ordered')
-  assert.deepEqual(ok('/order lcxr', lab).map((p) => p.params.service_id), ['lcx'], '/order still orders it')
-  assert.ok(!suggest('/lab ', lab, [], new Set())!.items.some((x) => x.label.startsWith('Chest')), 'nor among the first offered')
+  assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].detail, 'lcxr · Imaging', 'offered, with no tube')
+  assert.deepEqual(ok('/lab lcxr', lab).map((p) => p.params.service_id), ['lcx'], 'ordered like any of its services')
 })
 console.log(`lis: ${n} groups passed`)

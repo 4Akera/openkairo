@@ -1,14 +1,14 @@
 // The laboratory's order word (spec/openCare.md §5.1 rule 1, added 2026-10-07; the pictures "Ordering"): /lab, offered wherever a
 // department using the pack works for this one, searching only its tests — by code, name, a preset's name or shortcut, "stat" and
 // "? the question"; a word that fits more than one is asked, never guessed (the base's orderRequests). Each test it suggests says
-// its tube; under the card, the tubes the patient will give and the fasting to tell them. Its tests are the ones a sample is collected
-// for (a collected step): a laboratory's X-ray or other report is /order's. Pure (npm run test:lis).
+// its tube; under the card, the tubes the patient will give and the fasting to tell them. It offers every service of those
+// departments; one that takes no sample (an X-ray a laboratory offers) shows no tube. Pure (npm run test:lis).
 import { ordersFrom, registerCommand } from '@core/screens/visit/commands'
 import { orderRequests, type Ctx, type Parsed } from '@core/screens/visit/parse'
 import { Cap } from './Cap'
 import { needsFasting, takesSpecimen, tubeOf, tubesFor } from './tubes'
 
-/** a lab test: a sample is collected for it (its steps say so; with none known, a test of a specimen section) */
+/** a test a sample is collected for, so it has a tube (its steps say so; with none known, a test of a specimen section) */
 export const sampled = (s: Pick<Ctx['services'][number], 'code' | 'section_name' | 'steps'>) => s.steps ? s.steps.includes('collected') : takesSpecimen(s)
 const word = (s: Pick<Ctx['services'][number], 'code' | 'section_name' | 'steps'>) => { if (!sampled(s)) return null
   const t = tubeOf(s); return t.cap === 'cup' ? 'cup' : `${t.word.split(' ·')[0].toLowerCase()} tube` }
@@ -28,5 +28,5 @@ export function TubesNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
 
 registerCommand({ name: 'lab', pack: 'lis', orders: true, groupTitle: 'Laboratory', title: 'Lab tests', label: 'Lab tests — from the Laboratory',
   example: '/lab cbc, lipid, hba1c · /lab dm follow-up · /lab troponin stat ? chest pain', action: 'write:order', writes: ['order'],
-  parse: (rest, ctx) => { if (!rest) return null; const from = ordersFrom('lis', ctx); return orderRequests(rest, ctx, (s) => from.has(s.department_id ?? '') && sampled(s), 'lab test') },
-  takes: sampled, hint: word, note: (items, ctx) => <TubesNote items={items} ctx={ctx} /> })
+  parse: (rest, ctx) => { if (!rest) return null; const from = ordersFrom('lis', ctx); return orderRequests(rest, ctx, (s) => from.has(s.department_id ?? ''), 'lab test') },
+  hint: word, note: (items, ctx) => <TubesNote items={items} ctx={ctx} /> })

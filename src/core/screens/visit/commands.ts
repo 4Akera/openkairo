@@ -26,8 +26,6 @@ export interface Command {
   parse: (rest: string, ctx: Ctx) => Result
   /** the command alone: an empty card to fill field by field, or the long note under the line */
   empty?: (ctx: Ctx) => Parsed[] | { drawer: { kind: string; text: string } }
-  /** an order command's own services among its departments' (the laboratory's: those a sample is collected for, never its X-ray) */
-  takes?: (s: Ctx['services'][number]) => boolean
   /** an order command's word on each service it suggests (the tube a test is drawn into) */
   hint?: (s: Ctx['services'][number]) => string | null
   /** a line under what the card holds (the tubes, fasting to tell the patient) */
