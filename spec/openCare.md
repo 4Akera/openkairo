@@ -919,7 +919,14 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   *Collected* or *Couldn't collect* with a reason the doctor sees) and *Results* (one grid per section, ranges by age and sex, flags as
   typed, the change check against the last result, calculated values such as LDL and eGFR). A critical value is only a notice —
   "Critical: tell Dr. X now", then *Release*; logging the call (who, when, read back) is later. Critical limits per test are the
-  laboratory director's to confirm in Settings (a starter list ships).
+  laboratory director's to confirm in Settings (a starter list ships). *Built 2026-10-07 (piece 5a):* the pack `lis` (its words
+  "Laboratory"; its role block cf; migration 12, privileges moved to 13): its starter setup `lis.laboratory` (Collect and Results in
+  place of the bench; 28 tests, ranges by sex and a child's where it differs, critical limits), `lis.sample` (S-MMDD-NNNN, a counter
+  per laboratory and day, through `public.pack_op`), the derived `lis.values` (each number a patient had, by analyte key, for the
+  change check, read with `read:lis.values`, which its technician — built on the base's lab technician — holds); Collect (tubes by
+  colour from the test or its section, the sample number on each collected step, fasting asked, couldn't collect with a reason);
+  a pack's own walk-in step (`registerWalkInStep`: the laboratory's /order line and its six most-asked tests). The demo's Laboratory
+  is the base's, served by the pack (`demo.serve`); Results is the bench's patient pages until piece 5b.
 - **Large lab (separate switches in the laboratory's settings, all off for a small lab):** sample labels (printed barcodes — waits
   for printing, whose first use is these labels), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
   list, patients called by number), results from analysers (a small outside program, as the network is closed to packs), release
