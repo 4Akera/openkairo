@@ -150,17 +150,21 @@ create table pharmacy.queue (
   timing        text,
   duration_days int,
   quantity      text,
-  status        text not null,             -- to_prepare · prepared · dispensed · cancelled
+  status        text not null,             -- to_prepare · prepared · owed · dispensed · cancelled
   prepared_at   timestamptz,
   dispensed_at  timestamptz,
   ordered_at    timestamptz not null,
   source_entries uuid[] not null,
+  instructions  text,                      -- the prescription's own words (with meals), for the directions in Arabic
+  warnings      jsonb not null default '[]',   -- what the prescriber was warned of (allergy, duplicate) and whether they signed anyway
+  owed          text,                      -- given in part: what is still owed (spec §5.3)
   primary key (organization_id, item)
 );
 
 -- recompute the rows of the orders these items are, answer or are about (the medication an order dispenses)
 create function pharmacy.queue_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
 declare es core.entries[]; k uuid; keys uuid[]; o1 core.entries; ol core.entries; m core.entries; d core.entries; v_answer text; v_status text; src uuid[];
+        v_warn jsonb;
 begin
   select coalesce(array_agg(e), '{}') into es from core.pack_entries(p_org, p_items) e;
   -- the order items: those given, those answered by the given ones, those about a given medication
@@ -191,7 +195,12 @@ begin
     v_status := case when ol.data ->> 'status' = 'revoked' or d.type = 'crossed_out' and false then 'cancelled'
                      when d.data ->> 'status' = 'completed' then 'dispensed'
                      when d.data ->> 'status' in ('cancelled', 'rejected', 'failed') then 'cancelled'
+                     when d.data -> 'pharmacy' ? 'owed' then 'owed'
                      when d.id is not null then 'prepared' else 'to_prepare' end;
+    -- the prescriber's warnings on the medicine (allergy, duplicate), and whether they signed anyway: the pharmacist checks them
+    select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('code', f ->> 'code', 'detail', f ->> 'detail', 'confirmed', (f ->> 'confirmed')::boolean))), '[]')
+      into v_warn from jsonb_array_elements(coalesce(m.findings, '[]')) f
+     where f ->> 'code' in ('allergy_clash', 'allergy_caution', 'duplicate_medication', 'duplicate_class');
     src := (select array_agg(distinct x.id) from core.pack_entries(p_org, array[k] || coalesce(m.item, k) || coalesce(d.item, k)) x
              where x.item in (k, coalesce(m.item, k), coalesce(d.item, k)));
     insert into pharmacy.queue values (p_org, k, core.survivor(p_org, o1.patient_id), (ol.data ->> 'department_id')::uuid, m.item, m.data -> 'drug' ->> 'text',
@@ -199,23 +208,26 @@ begin
       (m.data ->> 'duration_days')::int, m.data -> 'quantity' ->> 'value', v_status,
       -- clinical times, as base.orders' are
       case when d.id is not null then (select min(x.occurred_at) from core.pack_entries(p_org, array[d.item]) x where x.item = d.item) end,
-      case when v_status = 'dispensed' then d.occurred_at end, o1.occurred_at, coalesce(src, '{}'));
+      case when v_status = 'dispensed' then d.occurred_at end, o1.occurred_at, coalesce(src, '{}'), m.data ->> 'instructions', v_warn,
+      case when v_status = 'owed' then concat_ws(' ', d.data -> 'pharmacy' -> 'owed' ->> 'value', d.data -> 'pharmacy' -> 'owed' ->> 'unit') end);
   end loop;
 end $$;
 
 -- a dispense: its items; a result or a note never answers a dispensing order (the base's answer check), and only a pharmacy dispenses
 create function pharmacy.dispense_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 begin
-  if p_entry -> 'data' ->> 'status' = 'completed' and jsonb_array_length(coalesce(p_entry -> 'data' -> 'pharmacy' -> 'items', '[]')) = 0 then
+  if (p_entry -> 'data' ->> 'status' = 'completed' or p_entry -> 'data' -> 'pharmacy' ? 'owed') and jsonb_array_length(coalesce(p_entry -> 'data' -> 'pharmacy' -> 'items', '[]')) = 0 then
     return jsonb_build_array(jsonb_build_object('code', 'nothing_dispensed', 'level', 'refuse'));
   end if;
   return '[]';
 end $$;
 
 create function pharmacy.dispense_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
-  select case e -> 'data' ->> 'status' when 'completed' then 'Dispensed' when 'cancelled' then 'Not dispensed' else coalesce(initcap(e -> 'data' ->> 'step'), 'Dispensing') end ||
+  select case when e -> 'data' -> 'pharmacy' ? 'owed' then 'Given in part' else case e -> 'data' ->> 'status' when 'completed' then 'Dispensed' when 'cancelled' then 'Not dispensed'
+           else coalesce(initcap(e -> 'data' ->> 'step'), 'Dispensing') end end ||
     coalesce(' · ' || (select string_agg(concat_ws(' ', i -> 'drug' ->> 'text', i -> 'dose' ->> 'value', i -> 'dose' ->> 'unit', '× ' || (i -> 'quantity' ->> 'value')), ', ')
                        from jsonb_array_elements(e -> 'data' -> 'pharmacy' -> 'items') i), '') ||
+    case when e -> 'data' -> 'pharmacy' ? 'owed' then ' · owes ' || concat_ws(' ', e -> 'data' -> 'pharmacy' -> 'owed' ->> 'value', e -> 'data' -> 'pharmacy' -> 'owed' ->> 'unit') else '' end ||
     coalesce(' · ' || nullif(e -> 'data' ->> 'reason', ''), '')
 $$;
 
@@ -279,7 +291,9 @@ select core.declare_table('pharmacy.queue', 'pharmacy', 'pharmacy.queue_refresh(
 select core.declare_type('pharmacy.dispense', 1, 'pharmacy', '{"type":"object","additionalProperties":false,"required":["status"],
     "properties":{"status":{"enum":["in-progress","completed","cancelled","rejected"]},"step":{"type":"string"},"reason":{"type":"string"},"note":{"type":"string"},
       "pharmacy":{"type":"object","additionalProperties":false,"properties":{"items":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["drug","quantity"],
-        "properties":{"drug":{"$ref":"#/$defs/concept"},"dose":{"$ref":"#/$defs/quantity"},"quantity":{"$ref":"#/$defs/quantity"},"batch":{"type":"string"},"expiry":{"type":"string"},"note":{"type":"string"}}}}}}}}'::jsonb,
+        "properties":{"drug":{"$ref":"#/$defs/concept"},"dose":{"$ref":"#/$defs/quantity"},"quantity":{"$ref":"#/$defs/quantity"},"batch":{"type":"string"},"expiry":{"type":"string"},"note":{"type":"string"},
+          "instead_of":{"type":"string"},"directions":{"type":"string"}}}},
+        "owed":{"$ref":"#/$defs/quantity"},"received_by":{"type":"string"}}}}}'::jsonb,
   'pharmacy.dispense_line(jsonb)', array['Task', 'MedicationDispense'], base_type => 'step', checks => array['pharmacy.dispense_check(jsonb,jsonb)']::regprocedure[],
   to_fhir => 'pharmacy.dispense_fhir(jsonb)',
   feeds => array['pharmacy.queue'], labels => '{"en":"Dispense","ar":"صرف"}');
@@ -298,6 +312,11 @@ select core.declare_setting('pharmacy.late_after', 'pharmacy', 'department',
   labels => '{"en":"Late to collect"}', form => 'department',
   fields => '[{"key":"minutes","labels":{"en":"Prepared reads late after"},"unit":"min",
     "help":{"en":"A dispense prepared this long ago and not yet given is marked late on Dispensing."}}]');
+select core.declare_setting('pharmacy.prepare_first', 'pharmacy', 'department',
+  '{"type":"object","additionalProperties":false,"required":["prepare"],"properties":{"prepare":{"type":"boolean","default":false}}}',
+  labels => '{"en":"Prepare first"}', form => 'department',
+  fields => '[{"key":"prepare","labels":{"en":"Prepare first"},
+    "help":{"en":"To give → Prepared → Given, when one person prepares and another hands over (and for wards). Off: give straight away."}}]');
 select core.declare_setting('pharmacy.counselling', 'pharmacy', 'organization',
   '{"type":"object","additionalProperties":false,"required":["show"],"properties":{"show":{"type":"boolean","default":false},"note":{"type":"string","maxLength":400}}}',
   'pharmacy.counselling_check(jsonb,jsonb)', labels => '{"en":"Counselling when giving"}', form => 'pack',

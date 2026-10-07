@@ -133,10 +133,14 @@ select t.ok(count(*) = count(distinct name), 'each person''s name is unique') fr
 select t.ok(bool_and(p.id in (demo.id('pharmacy', 'patient:samia'), demo.id('pharmacy', 'patient:hamdy'), demo.id('pharmacy', 'patient:mona'), demo.id('journey', 'patient:mahmoud'))),
   'pharmacy writes only on its own patients and the journey''s') from core.entries e join core.patients p on p.id = e.patient_id
  where e.organization_id = demo.base('clinic') and e.type like 'pharmacy.%';
-select t.ok(array_agg(o.last_at order by o.last_at) = array[demo.ago(55), demo.ago(10)], 'prepared: one 55 minutes ago (late), one 10 (to collect)')
+select t.ok(array_agg(o.last_at order by o.last_at) = array[demo.ago(55)], 'prepared: one 55 minutes ago (late)')
   from base.orders o where o.organization_id = demo.base('clinic') and o.to_department_id = demo.id('pharmacy', 'department') and o.step_key = 'prepared' and o.status = 'in-progress';
+select t.ok(q.owed = '30 tablets' and q.status = 'owed', 'Hamdy''s metformin: one box given, 30 tablets owed') from pharmacy.queue q
+ where q.organization_id = demo.base('clinic') and q.patient_id = demo.id('pharmacy', 'patient:hamdy') and q.drug = 'Metformin';
+select t.ok(q.warnings @> '[{"code":"allergy_clash","confirmed":true}]', 'Samia''s Augmentin: the allergy the doctor signed over reaches the pharmacy') from pharmacy.queue q
+ where q.organization_id = demo.base('clinic') and q.patient_id = demo.id('pharmacy', 'patient:samia') and q.drug = 'Augmentin';
 select t.ok((select (data ->> 'minutes')::int from core.settings where key = 'pharmacy.late_after' and owner_id = demo.id('pharmacy', 'department')) = 30, 'late after 30 minutes there');
-select t.ok(count(*) filter (where status = 'completed') = 2 and count(*) filter (where status = 'active') = 1, 'two given, one still to prepare')
+select t.ok(count(*) filter (where status = 'completed') = 2 and count(*) filter (where status = 'active') = 2, 'two given, two still to give')
   from base.orders where organization_id = demo.base('clinic') and to_department_id = demo.id('pharmacy', 'department');
 select pg_temp.journey_in_order();
 select t.ok(exists (select 1 from base.orders o where o.organization_id = demo.base('clinic') and o.patient_id = demo.id('journey', 'patient:mahmoud')

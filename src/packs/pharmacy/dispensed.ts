@@ -11,9 +11,9 @@ import { shortDate } from '@core/ui/time'
 
 type Q = { value?: string; unit?: string }
 type Line = { drug?: { text?: string }; dose?: Q; quantity?: Q }
-type Data = { status?: string; reason?: string; pharmacy?: { items?: Line[] } }
+type Data = { status?: string; reason?: string; pharmacy?: { items?: Line[]; owed?: Q } }
 export interface SuppliedItem { product: string; dose: string | null; quantity: string | null }
-export interface Supplied { entry_id: string; at: string; department_id: string; state: 'given' | 'prepared' | 'not_given'; items: SuppliedItem[]; reason: string | null
+export interface Supplied { entry_id: string; at: string; department_id: string; state: 'given' | 'part' | 'prepared' | 'not_given'; items: SuppliedItem[]; reason: string | null
   medicine: string | null }   // the medicine it answers (named when it lists no products)
 
 const amount = (q: Q | undefined) => q?.value ? `${q.value}${q.unit ? ` ${q.unit}` : ''}` : null
@@ -29,7 +29,7 @@ export function answeredOf(rec: Rec | undefined, refersTo: string | null): strin
 /** each dispense, the newest first; one with no state it knows (none, or data blanked) is left out */
 export function suppliedOf(own: Own, rec?: Rec): Supplied[] {
   return own.shown.flatMap((e) => {
-    const d = (e.data ?? {}) as Data; const state = d.status ? STATE[d.status] : undefined
+    const d = (e.data ?? {}) as Data; const state = d.pharmacy?.owed ? 'part' : d.status ? STATE[d.status] : undefined   // given in part: the rest owed
     if (!state) return []
     return [{ entry_id: e.id, at: e.occurred_at, department_id: e.department_id, state, reason: d.reason ?? null, medicine: answeredOf(rec, e.refers_to),
       items: (d.pharmacy?.items ?? []).map((i) => ({ product: i.drug?.text || 'Medicine', dose: amount(i.dose), quantity: amount(i.quantity) })) }]
@@ -37,7 +37,7 @@ export function suppliedOf(own: Own, rec?: Rec): Supplied[] {
 }
 /** a supply's products and amounts: Metformin 1 g × 60 tablets; with none, the medicine it answers */
 export const whatText = (s: Supplied) => s.items.map((i) => [i.product, i.quantity && `× ${i.quantity}`].filter(Boolean).join(' ')).join(', ') || s.medicine || ''
-const given = (rows: Supplied[]) => rows.filter((r) => r.state === 'given')
+const given = (rows: Supplied[]) => rows.filter((r) => r.state === 'given' || r.state === 'part')
 
 /** how many were supplied; else how many wait prepared; else that it was not given */
 export function suppliedWord(rows: Supplied[]): ChipWord | null {

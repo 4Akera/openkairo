@@ -54,6 +54,35 @@ select t.ok(count(*) = 0, 'nothing to review for a dispense') from t.rows('base.
 select t.ok(string_agg(e ->> 'line', ' > ' order by (e ->> 'item_version')::int) = 'Prepared > Dispensed · Lithium 400 mg × 60', 'steps: ' || string_agg(e ->> 'line', ' > ' order by (e ->> 'item_version')::int))
   from jsonb_array_elements(public.read(jsonb_build_object('shape', 'item', 'item', '00000000-0000-0000-0000-0000000000e3', 'department_id', :'im')) -> 'entries') e where e ->> 'item' = '00000000-0000-0000-0000-0000000000e3';
 
+\echo '── given in part (spec §5.3): what goes now, what is owed; the queue says owed, the order stays open; the rest closes it'
+select t.as(:'dr');
+select t.landed(t.w(jsonb_build_array(
+  t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug":{"text":"Atorvastatin","codings":[{"system":"atc","code":"C10AA05"}]},"dosage":{"dose":{"value":"20","unit":"mg","ucum":"mg"},"timing":{"code":"OD"}},"duration_days":60,"instructions":"at bedtime","status":"active"}',
+    '00000000-0000-0000-0000-00000000ab01'),
+  t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'disp', 'code', 'dispense', 'name', 'Dispensing'), 'department_id', :'ph', 'priority', 'routine', 'status', 'active'),
+    '00000000-0000-0000-0000-00000000ab02', null, '00000000-0000-0000-0000-00000000ab01', 'about'))), 'atorvastatin sent');
+reset role;
+select t.ok(core.drain() >= 1, 'drained');
+set role authenticated;
+select t.as(:'pm');
+select t.ok(r ->> 'instructions' = 'at bedtime' and r -> 'warnings' = '[]', 'the queue carries the prescription''s own words, and no warning')
+  from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
+select t.refused(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","pharmacy":{"owed":{"value":"30","unit":"tablets"}}}', null, null, '00000000-0000-0000-0000-00000000ab02', 'answers')),
+  'nothing_dispensed', 'owing with nothing given');
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","pharmacy":{"items":[{"drug":{"text":"Lipitor 20"},"quantity":{"value":"30","unit":"tablets"},"instead_of":"Atorvastatin"}],"owed":{"value":"30","unit":"tablets"},"received_by":"his son Omar"}}',
+  '00000000-0000-0000-0000-00000000ab03', null, '00000000-0000-0000-0000-00000000ab02', 'answers')), 'one box of another brand now, thirty owed, to his son');
+select t.ok(r ->> 'status' = 'owed' and r ->> 'owed' = '30 tablets', 'the queue: owed 30 tablets') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
+select t.ok(r ->> 'status' = 'in-progress', 'the order stays open') from t.rows('base.orders', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed","pharmacy":{"items":[{"drug":{"text":"Atorvastatin 20 mg"},"quantity":{"value":"30","unit":"tablets"}}]}}',
+  '00000000-0000-0000-0000-00000000ab04', null, '00000000-0000-0000-0000-00000000ab02', 'answers')), 'the rest, a week later');
+select t.ok(r ->> 'status' = 'dispensed', 'the queue: dispensed') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
+select t.ok(r ->> 'status' = 'completed', 'the order is done') from t.rows('base.orders', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
+select t.as(:'dr');
+select t.ok(e ->> 'line' = 'Given in part · Lipitor 20 × 30 · owes 30 tablets', 'the part''s line in the record: ' || (e ->> 'line'))
+  from jsonb_array_elements(public.read(jsonb_build_object('shape', 'item', 'item', '00000000-0000-0000-0000-00000000ab03', 'department_id', :'im')) -> 'entries') e
+ where e ->> 'item' = '00000000-0000-0000-0000-00000000ab03';
+select t.as(:'pm');
+
 \echo '── pack on: a former pharmacist, now a nurse in the ward (which does not tick pharmacy), cannot alter a dispense'
 reset role;
 savepoint former;
@@ -106,6 +135,6 @@ select t.ok(not exists (select 1 from pharmacy.queue) and exists (select 1 from 
 select core.drain() as drained;
 set role authenticated;
 select t.as(:'pm');
-select t.ok(count(*) = 2, 'on again: its table caught up for the organization in the background') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
+select t.ok(count(*) = 3, 'on again: its table caught up for the organization in the background') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
 reset role;
 select t.ok(core.rebuild_check('00000000-0000-0000-0000-0000000000a1') = '[]'::jsonb, 'rebuild = live, the pack''s table included');

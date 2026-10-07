@@ -6,9 +6,9 @@
 import { registerRenderer, registerReplyForm } from '@core/renderers'
 import { registerScreen } from '@core/screens/registry'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
-import type { RequestQueueRow } from '@core/db/types'
-import { Chip, Field, Input, KV, Tag } from '@core/ui'
+import { KV, Tag } from '@core/ui'
 import { Dispensing } from './Dispensing'
+import { Check, toDispense, type Dispense } from './Check'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerRowMark } from '@core/screens/marks'
 import { registerSend } from '@core/screens/visit/send'
@@ -17,47 +17,14 @@ import { collectMark, collectWords, suppliedLine, suppliedOf, suppliedWord } fro
 import { Supplied } from './Section'
 import { ANSWER, DONE, QUEUE_DETAILS, REFUSALS, SEND_WORDS } from './answers'
 
-interface Dispense { given: boolean; reason: string }
-const PER_DAY: Record<string, number> = { OD: 1, BD: 2, TDS: 3, QDS: 4, q4h: 6, q6h: 4, q8h: 3, q12h: 2, once: 1, stat: 1 }
-const WHY_NOT = ['Out of stock', 'Patient declined', 'Interaction', 'Buys outside']
-
-/** what was prescribed, as given: the drug, its dose, and a quantity from frequency × days when both are known */
-function asGiven(r: RequestQueueRow) {
-  const d = (r.details ?? {}) as { drug?: { name?: string }; dose?: string; frequency?: string; duration_days?: number; quantity?: string }
-  if (!d.drug?.name) return null   // the pharmacy's list has not caught up with this prescription yet: nothing to give by name
-  const perDay = d.frequency ? PER_DAY[d.frequency] : undefined
-  const quantity = d.quantity ? Number(d.quantity) : perDay && d.duration_days ? Math.ceil(perDay * d.duration_days) : null
-  const [dose, unit] = (d.dose ?? '').split(' ')
-  return { drug: { text: d.drug.name }, ...(dose ? { dose: { value: dose, unit: unit || undefined } } : {}), quantity: { value: String(quantity ?? 1), unit: 'tablets', ucum: '{tbl}' } }
-}
-
-/** given, or not and why: the kit's chips (solid, one choice) and a field for a reason of its own (design-system.md §6.2) */
-function GivenOrNot({ request, value, onChange }: { request: RequestQueueRow; value: Dispense | undefined; onChange: (v: Dispense) => void }) {
-  const v = value ?? { given: true, reason: '' }
-  return <div className="grid gap-2">
-    <p className="text-14 font-medium text-fg">{request.display_line}</p>
-    <div className="flex flex-wrap items-center gap-1.5">
-      <Chip on={v.given} onClick={() => onChange({ given: true, reason: '' })}>Given</Chip>
-      <Chip on={!v.given} onClick={() => onChange({ given: false, reason: v.reason })}>Not given</Chip>
-      {!v.given && WHY_NOT.map((w) => <Chip key={w} on={v.reason === w} onClick={() => onChange({ given: false, reason: w })}>{w}</Chip>)}
-    </div>
-    {!v.given && <Field label="Or say why" className="max-w-sm"><Input data-v dense value={v.reason} onChange={(e) => onChange({ given: false, reason: e.target.value })} /></Field>}
-  </div>
-}
-
 registerReplyForm<Dispense>(ANSWER, {
   action: 'write:pharmacy.dispense',
   automatic: true,                      // a prescription the doctor sends; nobody orders dispensing by hand
-  quick: 'Give all',
+  quick: 'Give all',                    // a row with nothing to check (no warning): as written, in one click
   done: DONE,
   details: QUEUE_DETAILS,             // what to give, on each request, from its own table
-  Editor: GivenOrNot,
-  toWrite: (r, value) => {
-    const v = value ?? { given: true, reason: '' }
-    if (!v.given) return v.reason.trim() ? { type: 'pharmacy.dispense', data: { status: 'cancelled', reason: v.reason.trim() } } : null
-    const item = asGiven(r)
-    return item ? { type: 'pharmacy.dispense', data: { status: 'completed', pharmacy: { items: [item] } } } : null
-  },
+  Editor: Check,                      // the pharmacist's check (Check.tsx): amount, directions in Arabic, warnings, another brand, part, not given
+  toWrite: toDispense,
 })
 // where a prescription is sent, and the words on a medicine sent here: the composer's chip, the medicine list, the prescription block
 registerSend(ANSWER, SEND_WORDS)

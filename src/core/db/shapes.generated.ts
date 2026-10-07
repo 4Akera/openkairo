@@ -278,12 +278,16 @@ export interface PharmacyDispense {
   pharmacy?: {
     items?: {
       batch?: string
+      directions?: string
       dose?: Quantity
       drug: Concept
       expiry?: string
+      instead_of?: string
       note?: string
       quantity: Quantity
     }[]
+    owed?: Quantity
+    received_by?: string
   }
   reason?: string
   status: 'in-progress' | 'completed' | 'cancelled' | 'rejected'
@@ -471,6 +475,10 @@ export interface PharmacyCounsellingSetting {
 export interface PharmacyLateAfterSetting {
   minutes: number
 }
+/** setting pharmacy.prepare_first (pharmacy; owner department) */
+export interface PharmacyPrepareFirstSetting {
+  prepare: boolean
+}
 /** setting place.closed (base; owner place) */
 export interface PlaceClosedSetting {
   closed: boolean
@@ -580,6 +588,7 @@ export interface SettingData {
   'organization.time_zone': OrganizationTimeZoneSetting
   'pharmacy.counselling': PharmacyCounsellingSetting
   'pharmacy.late_after': PharmacyLateAfterSetting
+  'pharmacy.prepare_first': PharmacyPrepareFirstSetting
   'place.closed': PlaceClosedSetting
   'preset': PresetSetting
   'score.signed_off': ScoreSignedOffSetting

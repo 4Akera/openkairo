@@ -53,7 +53,8 @@ test('its answer: the last step\'s word and what each request carries come with 
   assert.equal(replyFormFor(ANSWER)?.done, 'Dispensed'); assert.deepEqual(Object.keys(FINAL_STEP), ['result', 'note'])
   const [d] = replyDetails(); assert.equal(d.table, 'pharmacy.queue'); assert.equal(d.action, 'read:pharmacy.queue'); assert.deepEqual(d.where('ph'), { department_id: 'ph' })
   assert.deepEqual(d.of({ item: 'o1', drug: 'Lithium', dose: '400 mg', timing: 'BD', duration_days: 30, quantity: '60', medication_item: 'm1', status: 'to_prepare' }),
-    { item: 'o1', details: { drug: { name: 'Lithium' }, dose: '400 mg', frequency: 'BD', duration_days: 30, quantity: '60', medication_item: 'm1' } })
+    { item: 'o1', details: { drug: { name: 'Lithium' }, dose: '400 mg', frequency: 'BD', duration_days: 30, quantity: '60', medication_item: 'm1',
+      instructions: undefined, warnings: [], owed: undefined, status: 'to_prepare' } })
 })
 test('a pack\'s refusal words come from the pack; a core code\'s words never change', () => {
   assert.equal(words('nothing_dispensed'), 'nothing dispensed')

@@ -881,13 +881,21 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   the desk's card), then *what for* (the bench's own services as big buttons; a pack may put its own line first: the laboratory's
   `/order` and its six most-asked tests, the pharmacy's `/rx`), *who asked* folded and optional (the outside doctor's name, `asked_by`
   on the order). It is an order like any other: it joins *To do*. A bench orders only for itself; a desk only for the benches it checks
-  in for. Results stay in the record; a walk-in's results to review go to the bench's own list.
+  in for. Results stay in the record; a walk-in's results to review go to the bench's own list. *Built 2026-10-07 (piece 1):*
+  `bench/WalkIn.tsx` (+ Walk-in, the + key), `bench/WhatFor.tsx` (also in the desk's patient card: a bench's name, "Laboratory…"),
+  `bench/walkins.ts`; the order's `asked_by`, kept in `base.orders`; `walk_in_elsewhere`; a service only ever sent from a chart (a
+  pack's automatic answer, as dispensing) is not offered; the lab technician and reception hold `write:order`.
 - **Pharmacy:** *To give*, *Prepared* (only with the setting *Prepare first*, off by default: one person prepares, another hands over;
   wards), *Owed*, *Given today*. A clean row gives in one click; a row with a mark (allergy, duplicate, dose, out of stock) opens the
   check: real amounts (boxes and strips from the pack size), directions in Arabic, the allergy that asks the doctor, out of stock given
   as another brand with the same active ingredient or partly owed, who received it. *Ask the doctor*: a card in the chart above the
   line and a line on the doctor's *To review* (not the queue, which the patient has left after Done; a queue mark only while still
-  there); any doctor of that department may answer; the answer goes back to the pharmacy's row at once.
+  there); any doctor of that department may answer; the answer goes back to the pharmacy's row at once. *Built 2026-10-07 (piece
+  2):* `pharmacy.queue` carries the prescription's own words, its warnings (the medicine's findings, `confirmed` when the doctor
+  signed anyway) and what is owed (status `owed`); the dispense takes `instead_of`, `directions`, `owed` and `received_by`;
+  `pharmacy.prepare_first`; `packs/pharmacy/Check.tsx` (the check), `directions.ts` (Arabic directions, the amount),
+  `substitutes.ts` (another brand, from the drug list's synonyms); the chart's Pharmacy section says Given in part. Asking the doctor
+  is piece 3; pack sizes (boxes and strips) come with stock.
 - **Stock (part of the pharmacy pack, its setting *Keep stock*, off by default):** products in the pharmacy's settings (brand, active
   ingredient, strength, form, pack size, EDA code, barcode); a small table of the pack's own for what comes in, moves and is counted
   (received with batch and expiry, moved, counted with a reason), only ever added to, who and when on every row, its own action; what

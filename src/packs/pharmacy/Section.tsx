@@ -1,12 +1,13 @@
 // The Pharmacy section of the chart's record panel (spec/openCare.md §5.1 rule 2): each dispense, the newest first — the products
-// and how much (or, not given, the medicine it answers), when, and its state in words (Given, Prepared, Not given and why). Read-only:
+// and how much (or, not given, the medicine it answers), when, and its state in words (Given, Given in part, Prepared, Not given and
+// why). Read-only:
 // a supply opens its entry in the center.
 import type { SectionBody } from '@core/screens/chart/sections'
 import { Empty, Tag, shortDate } from '@core/ui'
 import { suppliedOf, whatText, type Supplied as Row } from './dispensed'
 
 const STATE: Record<Row['state'], { word: string; tone: 'ok' | 'neutral' | 'warn' }> = {
-  given: { word: 'Given', tone: 'ok' }, prepared: { word: 'Prepared', tone: 'neutral' }, not_given: { word: 'Not given', tone: 'warn' } }
+  given: { word: 'Given', tone: 'ok' }, part: { word: 'Given in part', tone: 'warn' }, prepared: { word: 'Prepared', tone: 'neutral' }, not_given: { word: 'Not given', tone: 'warn' } }
 
 export function Supplied({ p, own }: SectionBody) {
   const rows = suppliedOf(own, p.rec)
