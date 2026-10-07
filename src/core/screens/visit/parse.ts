@@ -257,19 +257,19 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & 
 }
 
 // ── core's six commands, one per building block; a pack registers its own the same way ──
-registerCommand({ name: 'v', aliases: ['vitals', 'bp'], label: 'Vitals', example: '/v 148/92 84 37 86', action: 'write:vitals', writes: ['vitals'],
+registerCommand({ name: 'v', group: 'record', title: 'Vitals', aliases: ['vitals', 'bp'], label: 'Vitals', example: '/v 148/92 84 37 86', action: 'write:vitals', writes: ['vitals'],
   parse: (rest) => rest ? vitals(rest.split(/\s+/)) : null, empty: () => [{ function: 'vitals', kind: 'vitals', params: {}, line: '' }] })
-registerCommand({ name: 'rx', aliases: ['med'], label: 'Prescription', example: '/rx metformin 500 bd 30d for dm', action: 'write:medication', writes: ['medication'],
+registerCommand({ name: 'rx', group: 'orders', title: 'Prescription', aliases: ['med'], label: 'Prescription', example: '/rx metformin 500 bd 30d for dm', action: 'write:medication', writes: ['medication'],
   parse: (rest, ctx) => prescription(rest, ctx),
   empty: () => [{ function: 'medication', kind: 'prescription', line: '', params: { action: 'start', drug: { name: '' }, dose_number: null, dose_unit: null, route: null, frequency: null, prn: false, prn_reason_text: null, duration_days: null, instructions_text: null, problems: [] } }] })
-registerCommand({ name: 'dx', label: 'Problem', example: '/dx hypertension since 3y · /dx ? pneumonia', action: 'write:problem', writes: ['problem'],
+registerCommand({ name: 'dx', group: 'record', title: 'Diagnosis', label: 'Problem', example: '/dx hypertension since 3y · /dx ? pneumonia', action: 'write:problem', writes: ['problem'],
   parse: (rest, ctx) => rest ? problem(rest, ctx.now ?? new Date()) : null,
   empty: () => [{ function: 'problem', kind: 'problem', line: '', params: { action: 'add', name: '', code: null, status: 'active', certainty: 'confirmed', onset_on: null, text: null } }] })
 const NONE = /^(none|nka|nkda|no known (drug )?allerg(y|ies))$/i
-registerCommand({ name: 'al', aliases: ['allergy'], label: 'Allergy', example: '/al penicillin: rash severe · /al none', action: 'write:allergy', writes: ['allergy', 'list_review'],
+registerCommand({ name: 'al', group: 'record', title: 'Allergy', aliases: ['allergy'], label: 'Allergy', example: '/al penicillin: rash severe · /al none', action: 'write:allergy', writes: ['allergy', 'list_review'],
   parse: (rest) => !rest ? null : NONE.test(rest.trim()) ? { ok: [{ function: 'list_review', kind: 'review', params: { list: 'allergies', outcome: 'none_known' }, line: 'No known allergies' }] } : allergy(rest),
   empty: () => [{ function: 'allergy', kind: 'allergy', line: '', params: { action: 'add', substance: { name: '' }, kind: 'allergy', reactions_text: null, severity: null } }] })
-registerCommand({ name: 'order', label: 'Request — a service, or a department with a question', example: '/order hba1c, lipid · /order cardiology: chest pain', action: 'write:order', writes: ['order'],
+registerCommand({ name: 'order', group: 'orders', title: 'Order', label: 'Request — a service, or a department with a question', example: '/order hba1c, lipid · /order cardiology: chest pain', action: 'write:order', writes: ['order'],
   parse: (rest, ctx) => {
     if (!rest) return null
     const m = rest.match(/^([^:,]+):\s*([\s\S]+)$/)                                   // "cardiology: chest pain on effort" is a consult
@@ -278,15 +278,15 @@ registerCommand({ name: 'order', label: 'Request — a service, or a department 
     if (r && 'error' in r) { const c = consult(rest, ctx); if (c && 'ok' in c) return c }  // "cardiology chest pain": no such test, but a department
     return r
   } })
-registerCommand({ name: 'note', label: 'Long note under the line', example: '/note · or just type: hx: … · ex: … · plan: …', action: 'write:note', writes: ['note'],
+registerCommand({ name: 'note', group: 'record', title: 'Long note', label: 'Long note under the line', example: '/note · or just type: hx: … · ex: … · plan: …', action: 'write:note', writes: ['note'],
   parse: (rest, ctx) => rest ? { ok: [noteLine(rest, ctx)] } : null, empty: (ctx) => ({ drawer: { kind: ctx.noteKind ?? 'progress', text: '' } }) })
 // the base facts the banner shows (facts.ts)
-registerCommand({ name: 'preg', aliases: ['pregnant'], label: 'Pregnant or not', example: '/preg 12w · /preg lmp 2026-08-01 · /preg no · /preg end', action: 'write:pregnancy', writes: ['pregnancy'],
+registerCommand({ name: 'preg', group: 'safety', title: 'Pregnancy', aliases: ['pregnant'], label: 'Pregnant or not', example: '/preg 12w · /preg lmp 2026-08-01 · /preg no · /preg end', action: 'write:pregnancy', writes: ['pregnancy'],
   parse: (rest, ctx) => pregnancy(rest, ctx), empty: emptyPregnancy })
-registerCommand({ name: 'bf', aliases: ['breastfeeding'], label: 'Breastfeeding or not', example: '/bf · /bf no · /bf end', action: 'write:breastfeeding', writes: ['breastfeeding'],
+registerCommand({ name: 'bf', group: 'safety', title: 'Breastfeeding', aliases: ['breastfeeding'], label: 'Breastfeeding or not', example: '/bf · /bf no · /bf end', action: 'write:breastfeeding', writes: ['breastfeeding'],
   parse: (rest, ctx) => breastfeeding(rest, ctx), empty: emptyBreastfeeding })
-registerCommand({ name: 'alert', label: 'Alert — DNR, isolation (HBV, HCV), fall risk', example: '/alert dnr · /alert hbv · /alert fall · /alert end dnr', action: 'write:alert', writes: ['alert'],
+registerCommand({ name: 'alert', group: 'safety', title: 'Alert', label: 'Alert — DNR, isolation (HBV, HCV), fall risk', example: '/alert dnr · /alert hbv · /alert fall · /alert end dnr', action: 'write:alert', writes: ['alert'],
   parse: (rest, ctx) => alert(rest, ctx), empty: emptyAlert })
 // a score, worked out by the server as the card fills (score.ts); each score's alias too (/gcs)
-registerCommand({ name: 'score', label: 'Score — GCS and the rest, added up by the server', example: '/score gcs 4 5 6 · /gcs e4 v5 m6', action: 'write:score', writes: ['score'],
+registerCommand({ name: 'score', group: 'safety', title: 'Score', label: 'Score — GCS and the rest, added up by the server', example: '/score gcs 4 5 6 · /gcs e4 v5 m6', action: 'write:score', writes: ['score'],
   parse: (rest, ctx) => parseScore(rest, ctx), empty: emptyScore })

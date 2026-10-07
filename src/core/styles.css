@@ -160,6 +160,8 @@
 @utility rail-danger { --tw-inset-shadow: inset 3px 0 0 var(--danger);
   box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
   &:where([dir="rtl"] *) { --tw-inset-shadow: inset -3px 0 0 var(--danger); } }
+/* a pane that scrolls without a scroll bar (the chart and its record, owner 2026-10-07); the wheel, keys and touch still scroll it */
+@utility no-scrollbar { scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
 /* numbers line up in queues, grids and value tables */
 @utility tnum { font-variant-numeric: tabular-nums; }
 /* the one focus look: a 2px accent ring outside the control */

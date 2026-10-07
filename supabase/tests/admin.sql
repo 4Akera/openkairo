@@ -146,9 +146,9 @@ select t.ok((select recorded_at from core.entries where id = '00000000-0000-0000
   > (select max(recorded_at) from core.settings where organization_id = '00000000-0000-0000-0000-0000000000a1'), 'the note is later than the organization''s latest setting');
 set role authenticated;
 select t.as(:'ow');
-select public.write_setting(jsonb_build_object('key', 'department.patients_wait', 'owner_id', :'im', 'data', jsonb_build_object('wait', false))) ->> 'key' as patients_wait;
+select public.write_setting(jsonb_build_object('key', 'department.encounter_class', 'owner_id', :'im', 'data', jsonb_build_object('class', 'AMB'))) ->> 'key' as encounter_class;
 reset role;
-select t.ok((select max(recorded_at) from core.settings where key = 'department.patients_wait' and owner_id = :'im')
+select t.ok((select max(recorded_at) from core.settings where key = 'department.encounter_class' and owner_id = :'im')
   > (select recorded_at from core.entries where id = '00000000-0000-0000-0000-0000000001e2'), 'and a setting right after the note is later than the note');
 set role authenticated;
 

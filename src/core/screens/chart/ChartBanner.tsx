@@ -2,8 +2,8 @@
 // deceased) · where (the encounter in words: "In consult · follow-up · 12 min", "Admitted · Bed 3 · day 4"; none on /patient/:id with
 // nothing open here) · safety, the same in every department (model/banner.ts: allergies, the base alerts, critical results waiting,
 // which scrolls the record to them, pregnant or breastfeeding) · this department's pack words, two, then +n, which opens the rest as
-// a second line in place and folds it again (never a menu). The phone lives in the Summary. Back to the queue or the beds; the
-// actions at its end. No vitals (the Summary has them, with their trend) and no queue line (the queue is the clinic's home).
+// a second line in place and folds it again (never a menu). The phone lives in the Summary. The back arrow: my patient in consult back
+// to the waiting room, the visit open (owner, 2026-10-07), else back to the queue or the beds; the actions at its end. No vitals (the Summary has them, with their trend) and no queue line (the queue is the clinic's home).
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
@@ -13,7 +13,7 @@ import { useChart } from './context'
 import { Actions } from './Actions'
 import { startOf } from './model/encounter'
 import { safetyOf, whoOf, type SafetyItem } from './model/banner'
-import { stayWords, visitWords } from './model/visit'
+import { backOf, stayWords, visitWords } from './model/visit'
 import { packWordsOf, wordDefs, wordLines, type Spoken } from './words'
 import { useDepartment } from '../../hooks/organization'
 
@@ -37,7 +37,7 @@ export function ChartBanner({ next, assignee }: { next: QueueRow | null; assigne
   ]
   return <Banner name={who.name} sub={<>{who.sub}{who.deceased && <Badge className="ms-2">deceased</Badge>}</>} zones={zones}
     second={lines.second && <>{lines.second.map((w) => <Word key={`${w.key}:${w.word}`} w={w} />)}</>}
-    back={{ label: c.role.stay ? 'Back to the beds' : 'Back to the queue', onClick: () => navigate('/') }}
+    back={{ label: backOf(c.role), onClick: c.role.consult ? c.actions.backToWaiting : () => navigate('/') }}
     actions={<Actions next={next} assignee={assignee} />} />
 }
 

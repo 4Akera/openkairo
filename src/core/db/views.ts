@@ -45,7 +45,7 @@ export function directory(m: ServerMe): Organization {
   const all: Department[] = m.departments.map((d) => {
     return { id: d.id, name: d.name, work: d.work, type: WORK_TYPE[d.work], is_visited: d.work === 'visits' || d.work === 'stays',
       is_outside: d.work === 'outside', site_id: d.site_id, site_name: site(d.site_id), position: d.position, serves: ids(s.one('department.works_for', d.id)), checks_in_for: ids(s.one('department.checks_in_for', d.id)),
-      patients_wait: s.one('department.patients_wait', d.id)?.wait ?? true, review_results: s.one('department.review_results', d.id)?.level ?? 'critical',
+      review_results: s.one('department.review_results', d.id)?.level ?? 'critical',
       is_private: !!s.one('department.private', d.id)?.private, after_done: s.one('department.after_done', d.id)?.after ?? 'next', pack_cards: true,
       screens: d.screens ?? [], opens: d.opens ?? d.screens?.[0] ?? null, packs: d.packs ?? [], encounter_class: s.one('department.encounter_class', d.id)?.class ?? null,
       setup: s.one('department.setup', d.id)?.setup ?? null }

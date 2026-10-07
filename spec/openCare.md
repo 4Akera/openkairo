@@ -405,7 +405,7 @@ an `order` that `changes` the order. The performer's "not done" is a `step`. Pre
 | `seen` | seen by a clinician (written by the composer with the first clinical entry, or implied by `done`) | in-progress; participant ATND |
 | `transferred` | Send to…: the same visit moves to another department | location |
 | `left` | left before the end (not seen: cancelled; seen: finished + `aadvice`) | cancelled / finished |
-| `done` | the clinician's Done; `wait` (default the department's `patients_wait`) keeps the visit open while orders are out | finished; period.end |
+| `done` | the clinician's Done; `wait` (Wait for results; unsaid, true) keeps the visit open while orders are out | finished; period.end |
 | `admitted` | starts a stay item (`about` the visit it came from), department of work `stays`, optional place; admit source required | class IMP; admitSource |
 | `moved` | the stay moves to another place | location[] |
 | `discharged` | ends the stay; disposition required | finished; dischargeDisposition |
@@ -495,7 +495,7 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
 ### 4.6 Settings keys, actions, roles and screens
 - Settings keys: `organization.time_zone`, `organization.packs_used` and `score.signed_off` (declared by the core; the last written by
   `sign:score`, §5.1 rule 8), `organization.record_view` (visits ·
-  entries), `department.private`, `department.encounter_class`, `department.after_done` (next · queue), `department.patients_wait`,
+  entries), `department.private`, `department.encounter_class`, `department.after_done` (next · queue),
   `department.review_results`, `department.works_for` (a bench: department ids, or all), `department.checks_in_for` (a desk: the
   clinics it checks in for, or all), `department.packs` (the packs used here, §5.1 rule 1: each a known pack, on for the clinic, once:
   `unknown_pack`, `pack_off`, `duplicate`), `department.setup` (the starter setup it was made from, kept by the setup door, §5.2), `department.screens` (the Screens line: its tabs in order and which opens first; each
@@ -530,9 +530,11 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
     review", the patient's critical results waiting whoever they wait for (opens the review list); Pregnant · n wk (weeks from the
     LMP, or the weeks said plus the weeks since; past 44 weeks never ended, "Pregnancy · check (n wk)" in warn), Breastfeeding · then
     this department's pack words (`registerBannerWords`, `src/core/screens/chart/words.ts`): two, best ranked, then **+n**, which
-    opens the rest as a second line in the banner and folds it again (Fewer). No vitals: the Summary shows them with their trend. Actions: a clinic visit of mine in consult, **Done** (Sign N · Done → next, ⌘↵) and **More**, whose
-    choices (goes home / waits, → next or back to the queue, Not here, Return to waiting) open in a strip under the banner, never a menu
-    over the record; a stay, **Sign** (into the stay, no move) and **Discharge** (inline chooser); otherwise "with Dr. X — theirs to
+    opens the rest as a second line in the banner and folds it again (Fewer). No vitals: the Summary shows them with their trend. Actions: a clinic visit of mine in consult, **Done** (Sign N · Done → next, ⌘↵: signs and closes the
+    visit now; results that come later go to the review list) and, only while this visit has orders out (with those its drafts sign),
+    **Wait for results · n** (⌘⇧↵: Done, the visit open until they are answered); its back arrow sends the patient back to the waiting
+    room with the visit open, what is written signed into it (nothing written: as they were before the call, in their place, no
+    missed call). No More (owner, 2026-10-07): where Done goes next is `department.after_done`; Not here is the desk's. A stay, **Sign** (into the stay, no move) and **Discharge** (inline chooser); otherwise "with Dr. X — theirs to
     finish", **Sign N** (outside any visit) and **Start visit**.
   - *Center*: notices (the error line; the writer's warnings, Sign anyway), the composer (for `write:note | write:vitals | write:order`),
     the long note, the drafts drawn as the blocks they will be, then what the center shows (`?at=`): this visit's signed sets (one card

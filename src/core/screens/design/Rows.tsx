@@ -21,7 +21,7 @@ export function Rows() {
             { key: 'packs', label: 'This department', node: <><Tag>1 to collect</Tag><Tag>Chronic care due</Tag>
               <button type="button" aria-expanded={more} onClick={() => setMore(!more)} className="rounded-full px-1.5 text-12 font-medium text-accent hover:bg-hover focus-ring">{more ? 'Fewer' : '+1'}</button></> }]}
           second={more && <Tag>Growth due</Tag>}
-          actions={<><Button size="sm" variant="outline">Return to waiting</Button><Button size="sm">Done → next</Button></>} />
+          actions={<><Button size="sm" variant="outline">Wait for results · 2</Button><Button size="sm">Done → next</Button></>} />
       </div>
       <Banner size="compact" name={`${PATIENT.given_name} ${PATIENT.family_name}`} sub={PATIENT_SUB} flags={<span className="text-12 text-faint">No known allergies</span>}
         actions={<Button size="sm" variant="outline">Open the record</Button>} />

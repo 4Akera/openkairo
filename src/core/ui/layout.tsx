@@ -76,8 +76,9 @@ export function Tabs<T extends string>({ value, tabs, onChange, variant = 'line'
   </div>
 }
 
-/** The chart's frame: the encounter (60 %) and the record (40 %) side by side from 640 px of its own width (a container query, so
- *  it works in any box), tabs below that, on a phone. Both panes stay mounted, so the composer's line and drafts survive a tab change. */
+/** The chart's frame: the record (40 %) on the left and the encounter (60 %) on the right, side by side from 640 px of its own width
+ *  (a container query, so it works in any box), tabs below that, on a phone. Both panes stay mounted, so the composer's line and
+ *  drafts survive a tab change. */
 export function SplitPane({ main, aside, mainTab, asideTab, tab, onTab, className }: { main: ReactNode; aside: ReactNode; mainTab: ReactNode; asideTab: ReactNode; tab?: 'main' | 'aside'; onTab?: (t: 'main' | 'aside') => void; className?: string }) {
   const [own, setOwn] = useState<'main' | 'aside'>('main')
   const t = tab ?? own; const set = onTab ?? setOwn
@@ -85,11 +86,12 @@ export function SplitPane({ main, aside, mainTab, asideTab, tab, onTab, classNam
     <div className="sticky top-[var(--chart-top,0px)] z-sticky mb-4 bg-canvas px-4 @split:hidden">
       <Tabs aria-label="Chart" value={t} onChange={set} tabs={[{ id: 'main', label: mainTab }, { id: 'aside', label: asideTab }]} />
     </div>
-    {/* the encounter 60 %, the record 40 %, at every width from the split up (owner, 2026-09-28) */}
-    <div className="mx-auto grid max-w-chart gap-4 px-4 @split:grid-cols-[minmax(0,3fr)_minmax(15rem,2fr)]">
-      <section aria-label="Encounter" className={cn('min-w-0', t !== 'main' && '@max-split:hidden')}>{main}</section>
-      <aside aria-label="Record" className={cn('min-w-0 @split:sticky @split:top-[calc(var(--chart-top,0px)+1rem)] @split:max-h-[calc(100dvh-var(--chart-top,0px)-2rem)] @split:self-start @split:overflow-y-auto @split:overflow-x-hidden @split:overscroll-contain',
+    {/* the record 40 % on the left, the encounter 60 % on the right, at every width from the split up (owner, 2026-09-28; the record
+        moved to the left 2026-10-07) */}
+    <div className="mx-auto grid max-w-chart gap-4 px-4 @split:grid-cols-[minmax(15rem,2fr)_minmax(0,3fr)]">
+      <aside aria-label="Record" className={cn('min-w-0 @split:sticky @split:top-[calc(var(--chart-top,0px)+1rem)] @split:max-h-[calc(100dvh-var(--chart-top,0px)-2rem)] @split:self-start @split:overflow-y-auto @split:overflow-x-hidden @split:overscroll-contain no-scrollbar',
         t !== 'aside' && '@max-split:hidden')}>{aside}</aside>
+      <section aria-label="Encounter" className={cn('min-w-0', t !== 'main' && '@max-split:hidden')}>{main}</section>
     </div>
   </div>
 }

@@ -21,7 +21,7 @@ const REVIEW: [Department['review_results'], string][] = [['critical', 'Critical
 type EncounterClass = SettingData['department.encounter_class']['class']
 const CLASSES: [EncounterClass, string][] = [['AMB', 'Outpatient'], ['EMER', 'Emergency'], ['IMP', 'Inpatient'], ['OBSENC', 'Observation'], ['SS', 'Short stay'], ['VR', 'Virtual'], ['HH', 'Home health']]
 const classFor = (work: Department['work']): EncounterClass => work === 'stays' ? 'IMP' : 'AMB'
-type DeptDraft = { name: string; work: Department['work']; site_id: string | null; serves: (string | null)[]; patients_wait: boolean; review_results: Department['review_results']; is_private: boolean
+type DeptDraft = { name: string; work: Department['work']; site_id: string | null; serves: (string | null)[]; review_results: Department['review_results']; is_private: boolean
   after_done: Department['after_done']; encounter_class: EncounterClass; packs: string[]; screens: string[]; opens: string }
 const everyOrSome = (ids: (string | null)[]) => !ids.length || ids.includes(null) ? { all: true } : { departments: ids as string[] }
 
@@ -35,7 +35,6 @@ async function saveDepartment(a: { id: string; d: DeptDraft; was: Department | u
   if (d.work === 'bench') await one('department.works_for', everyOrSome(d.serves), !!was && same(was.serves, d.serves))
   if (d.work !== 'desk' && d.work !== 'outside') await one('department.after_done', { after: d.after_done }, was?.after_done === d.after_done)
   if (d.work === 'visits' || d.work === 'stays') {
-    await one('department.patients_wait', { wait: d.patients_wait }, was?.patients_wait === d.patients_wait)
     await one('department.review_results', { level: d.review_results }, was?.review_results === d.review_results)
     await one('department.private', { private: d.is_private }, was?.is_private === d.is_private)
     // unset, the default of the work holds: written only when the choice differs from what would be read
@@ -58,12 +57,12 @@ export function DepartmentsPage({ org }: { org: Organization }) {
   const open = (id: string, d: DeptDraft, isNew = false) => { save.reset(); retire.reset(); e.toggle(id, d, isNew) }
   // the draft of a department as it stands; the line as the department shows it (a pack screen not used here is back to what it stood in for)
   const draftOf = (d: Department): DeptDraft => { const line = lineHere(d, org.screens); const serves = d.work === 'desk' ? d.checks_in_for : d.serves
-    return { name: d.name, work: d.work, site_id: d.site_id, serves: served(serves), patients_wait: d.patients_wait, review_results: d.review_results, is_private: d.is_private,
+    return { name: d.name, work: d.work, site_id: d.site_id, serves: served(serves), review_results: d.review_results, is_private: d.is_private,
       after_done: d.after_done ?? 'next', encounter_class: d.encounter_class ?? classFor(d.work), packs: d.packs, screens: line.screens, opens: line.opens ?? '' } }
   // a setup applied under the open row changes its packs, line or rules: a clean draft follows, so a later Save never writes the old ones back
   const opened = !e.isNew ? org.departments.find((x) => x.id === e.id) : undefined
   if (opened && !e.dirty && JSON.stringify(draftOf(opened)) !== JSON.stringify(e.initial)) e.refresh(draftOf(opened))
-  const add = (work: Department['work'] = 'visits') => open(newId(), { name: '', work, site_id: null, serves: [null], patients_wait: true, review_results: 'critical', is_private: false, after_done: 'next',
+  const add = (work: Department['work'] = 'visits') => open(newId(), { name: '', work, site_id: null, serves: [null], review_results: 'critical', is_private: false, after_done: 'next',
     encounter_class: classFor(work), packs: [], screens: baseLine(work, org.screens), opens: baseLine(work, org.screens)[0] ?? '' }, true)
   const screenName = (k: string) => org.screens.find((s) => s.key === k)?.labels.en ?? `${k} (pack off)`
   const packName = (k: string) => org.packs.find((p) => p.key === k)?.name ?? k
@@ -97,8 +96,6 @@ export function DepartmentsPage({ org }: { org: Organization }) {
         <FormRow label="After Done" changed={e.changed('after_done')} hint="Where Done (or Release on a bench) takes you.">
           <Segmented value={d.after_done} onChange={(v) => e.set({ after_done: v })} options={[['next', 'Next patient'], ['queue', 'Back to the queue']]} /></FormRow>
         {rules && <>
-        <FormRow label="When results are still out at Done" changed={e.changed('patients_wait')} hint="Whether the patient stays for them or is sent home and called back.">
-          <Segmented value={d.patients_wait ? 'wait' : 'home'} onChange={(v) => e.set({ patients_wait: v === 'wait' })} options={[['wait', 'Patient waits'], ['home', 'Patient goes home']]} /></FormRow>
         <FormRow label="Results to review" changed={e.changed('review_results')} hint="Results for a patient who left before being seen again, and corrected results, always go to review.">
           <Segmented value={d.review_results} onChange={(v) => e.set({ review_results: v })} options={REVIEW} /></FormRow>
         <FormRow label="Notes" changed={e.changed('is_private')} hint={'In a private department every note is private: only the people who work here read it, and others see "Private note". Its medicines, results, problems, orders and its name stay visible to everyone who may read the record.'}>
@@ -125,7 +122,7 @@ export function DepartmentsPage({ org }: { org: Organization }) {
           <span className="w-48 truncate font-medium">{d.name}</span>
           {d.site_name && <span className="text-12 text-faint">{d.site_name}</span>}
           {d.is_visited && <span className="flex flex-wrap gap-1">
-            <Badge>{d.patients_wait ? 'Patient waits' : 'Goes home'}</Badge><Badge>Review: {REVIEW.find(([k]) => k === d.review_results)?.[1].toLowerCase()}</Badge>{d.is_private && <Badge tone="warn">Private department</Badge>}
+            <Badge>Review: {REVIEW.find(([k]) => k === d.review_results)?.[1].toLowerCase()}</Badge>{d.is_private && <Badge tone="warn">Private department</Badge>}
             {d.encounter_class && d.encounter_class !== classFor(d.work) && <Badge>{CLASSES.find(([k]) => k === d.encounter_class)?.[1] ?? d.encounter_class}</Badge>}</span>}
           {d.after_done === 'queue' && d.work !== 'desk' && d.work !== 'outside' && <Badge>Then: queue</Badge>}
           {d.packs.length > 0 && <Badge>Uses {d.packs.map(packName).join(', ')}</Badge>}

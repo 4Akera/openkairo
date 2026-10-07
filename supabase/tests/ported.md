@@ -53,7 +53,7 @@ The owner signs off the retired list. New suite names are in `supabase/tests/`; 
 | old check | now |
 |---|---|
 | ranges by sex saved; a reply type no pack provides refused (`bad_reply_type`) | review · "ranges by sex saved", refuses `bad_answer` |
-| default: critical only, patients wait | review · "Done waits for results" (defaults are the absence of a setting) |
+| default: critical only; Done waits unless told not to | review · "Done waits for results" (defaults are the absence of a setting) |
 | her: high for her range, no review while she waits | review · "high for her, no review while she waits" |
 | she leaves → not seen | review · "not seen → review" |
 | him: not waiting → done; normal later → not seen | review · "not waiting → done", "normal for him; not seen → review" |

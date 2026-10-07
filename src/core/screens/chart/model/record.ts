@@ -18,7 +18,8 @@ const listsOf = (rec: Rec): TableRead<ListRowData> => rec.tables['base.lists'] ?
 const versionsOf = (t: TableRead<ListRowData>, x: ListRowData) => x.source_entries.map((id) => t.entries[id]).filter((e): e is ServerEntry => !!e).sort((a, b) => a.item_version - b.item_version)
 const dateOf = (e: ServerEntry | undefined, fallback: string) => ymd(e?.occurred_at ?? fallback)
 const codeOf = (c: Concept | undefined) => { const x = c?.codings?.[0]; return x ? `${x.system}:${x.code}` : null }
-const OPEN = new Set(['active', 'in-progress', 'on-hold'])
+/** an order still out: not done, not stopped */
+export const OPEN = new Set(['active', 'in-progress', 'on-hold'])
 
 // ── problems ──
 const ACTIVE = new Set(['active', 'recurrence', 'relapse'])

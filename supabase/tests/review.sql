@@ -31,7 +31,7 @@ create or replace function pg_temp.review_of(p_item uuid) returns text language 
   select coalesce((select string_agg(r ->> 'why', ',') from t.rows('base.review', '00000000-0000-0000-0000-0000000000d1', jsonb_build_object('item', p_item)) r), 'none')
 $$;
 
-\echo '── the owner: CBC ranges by sex live on the service; defaults: critical only, patients wait'
+\echo '── the owner: CBC ranges by sex live on the service; defaults: critical only; Done waits unless told not to'
 select t.as(:'ow');
 select t.ok(jsonb_array_length(s -> 'data' -> 'fields' -> 0 -> 'ranges') = 2, 'ranges by sex saved') from (select public.write_setting(jsonb_build_object('key', 'service', 'owner_id', :'labd',
   'thing_id', :'cbc', 'data', jsonb_build_object('code', 'cbc', 'name', 'CBC', 'answer', 'result', 'fields', jsonb_build_array(jsonb_build_object('key', 'hb', 'name', 'Hb', 'unit', 'g/dL', 'ucum', 'g/dL',

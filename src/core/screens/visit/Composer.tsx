@@ -8,6 +8,7 @@ import type { Allergy, Medication, RecordView } from '../../db/types'
 import { Button, Callout, Card, Input, Kbd, cn, ymd } from '../../ui'
 import { ALLERGENS, DRUGS, PROBLEMS, allergyWarnings, doseWarnings, drugWarnings, duplicateMedication, duplicateProblem, type Warning } from './catalog'
 import { expand, suggest, type Expanded, type Suggestion } from './expand'
+import { SlashList } from './SlashList'
 import { CardItem, WarningItem } from './Card'
 import { lineOf, type Ctx, type Parsed } from './parse'
 import { commandsFor } from './commands'
@@ -181,11 +182,12 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       <div className="relative">
         {seed && <span className="absolute start-2 top-1/2 z-raised -translate-y-1/2 rounded-md bg-accent-soft px-2 py-0.5 text-12 font-medium text-accent ring-1 ring-accent-line">{seed.label}</span>}
         <Input ref={input} value={seed ? '' : text} onChange={(e) => { setSeed(null); setEdited(null); setText(e.target.value); setHi(-1); setPick(-1) }} onKeyDown={keyInput} autoFocus spellCheck={false} aria-label="Composer"
-          placeholder={seed ? '' : 'Type the note (hx: · ex: · plan:) — / for a command: /v /rx /dx /al /order /note — # for a preset'} className={cn('h-11 pe-24 font-mono text-14 placeholder:font-sans', seed && 'ps-40')} />
+          placeholder={seed ? '' : 'Write a note · / commands · # presets'} className={cn('h-11 pe-24 font-mono text-14 placeholder:font-sans', seed && 'ps-40')} />
         <span className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 text-faint"><button onClick={() => setHelp(!help)} className={cn('rounded-sm px-1.5 text-12 hover:text-muted focus-ring', help && 'text-accent')} aria-label="Help">?</button><Kbd>/</Kbd></span>
       </div>
       {open && <div ref={card} onKeyDown={keyCard} className="mt-2 overflow-hidden rounded-xl bg-raised shadow-sm ring-1 ring-line">
-        {sugg && <div className="grid gap-1.5 border-b border-line bg-sunken p-2 sm:grid-cols-2">{sugg.items.map((s, i) => { const on = pick === i || (pick < 0 && i === 0); const chosen = pick === i
+        {sugg && sugg.items[0]?.group && <SlashList items={sugg.items} pick={pick} onAccept={accept} />}
+        {sugg && !sugg.items[0]?.group && <div className="grid gap-1.5 border-b border-line bg-sunken p-2 sm:grid-cols-2">{sugg.items.map((s, i) => { const on = pick === i || (pick < 0 && i === 0); const chosen = pick === i
           return <button key={s.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => accept(s)}
             className={cn('flex min-w-0 flex-col items-start rounded-lg bg-surface px-2.5 py-1.5 text-start ring-1 transition-colors', chosen ? 'ring-2 ring-accent' : on ? 'ring-accent-line' : 'ring-line hover:ring-line-strong')}>
             <span className="flex w-full items-center gap-2"><span className="truncate text-13 font-medium text-fg">{s.label}</span>{on && <Kbd className="ms-auto shrink-0 text-accent">{chosen ? '↵' : 'tab'}</Kbd>}</span>

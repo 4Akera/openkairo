@@ -163,7 +163,7 @@ create index presence_place on base.presence (organization_id, place_id) where p
 create index presence_day on base.presence (organization_id, day);
 
 create function base.presence_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
-declare k uuid; keys uuid[]; v_e core.entries; f core.entries; r base.presence; b text; v_open int; v_src uuid[]; v_clin timestamptz; v_clin_by uuid; v_wait jsonb;
+declare k uuid; keys uuid[]; v_e core.entries; f core.entries; r base.presence; b text; v_open int; v_src uuid[]; v_clin timestamptz; v_clin_by uuid;
         v_called timestamptz;   -- when the call was written: what came after it is found in write order
 begin
   select coalesce(array_agg(distinct x), '{}') into keys from (
@@ -223,8 +223,9 @@ begin
         when 'left' then r.state := 'left'; r.ended_at := v_e.recorded_at;
         when 'done' then
           r.done_at := v_e.recorded_at; r.seen_at := coalesce(r.seen_at, v_e.occurred_at); r.seen_by := coalesce(r.seen_by, v_e.author_id);
-          v_wait := core.setting_at(p_org, 'department.patients_wait', r.department_id, v_e.recorded_at);
-          r.wait := coalesce((v_e.data ->> 'wait')::boolean, (v_wait ->> 'wait')::boolean, true);
+          -- the clinician says at Done whether the patient waits for the orders still out (owner, 2026-10-07: Done or Wait for
+          -- results); a writer that does not say waits
+          r.wait := coalesce((v_e.data ->> 'wait')::boolean, true);
           select count(*) into v_open from base.orders o where o.organization_id = p_org and o.visit_id = k
              and (o.answered_at is null or o.answered_at > v_e.occurred_at) and o.ordered_at <= v_e.occurred_at;
           if r.wait and v_open > 0 then r.state := 'pending'; r.ended_at := null; else r.state := 'done'; r.ended_at := v_e.recorded_at; end if;

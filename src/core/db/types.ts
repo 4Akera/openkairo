@@ -141,7 +141,7 @@ export interface PatientHit extends PatientBanner {
 }
 export interface Department {
   id: string; name: string; type: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; is_visited: boolean; is_outside?: boolean; site_id: string | null; site_name: string | null; position: number
-  serves: (string | null)[]; checks_in_for: (string | null)[]; patients_wait: boolean; review_results: 'critical' | 'abnormal' | 'all'; is_private: boolean; after_done: 'next' | 'queue'
+  serves: (string | null)[]; checks_in_for: (string | null)[]; review_results: 'critical' | 'abnormal' | 'all'; is_private: boolean; after_done: 'next' | 'queue'
   pack_cards: boolean; screens: string[]; opens: string | null; encounter_class: SettingData['department.encounter_class']['class'] | null
   packs: string[]   // the packs it uses: ticked here and on for the clinic (§5.1 rule 1)
   setup: string | null   // the starter setup it was made from (§5.2)

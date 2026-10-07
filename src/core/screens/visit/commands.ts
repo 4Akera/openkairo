@@ -16,6 +16,8 @@ export interface Command {
   example: string                   // a line that shows how it is typed
   action: string                    // the action a role needs to see it, e.g. write:prescription
   pack?: string                     // a pack's command shows only in a department that uses the pack
+  group?: 'record' | 'orders' | 'safety'   // where the / list shows it (a pack's commands sit under the pack's own name)
+  title?: string                    // its name in the / list, in a word or two ("Vitals", "Diagnosis"); else its label
   writes?: string[]                 // the write functions its drafts call: a department's version must call the same
   /** the text after the command → drafts (null: nothing typed yet) */
   parse: (rest: string, ctx: Ctx) => Result
@@ -49,6 +51,14 @@ export const allowed = (c: Command, ctx: Pick<Ctx, 'can' | 'packs'>) => (!ctx.ca
 /** where a pack's command works, for a department that does not use its pack */
 export const usedWhere = (name: string, departments: string[]) => departments.length ? `/${name} is used in: ${departments.join(', ')}`
   : `/${name} is not used in any department here — a department ticks its pack in Settings → Departments`
+/** the / list's groups, in order (owner, 2026-10-07): the base's three, then each pack's own */
+export const GROUPS: Record<string, string> = { record: 'Record', orders: 'Orders and medicines', safety: 'Safety and scores' }
+export const groupOf = (c: Pick<Command, 'group' | 'pack'>) => c.pack ?? c.group ?? 'record'
+export const groupName = (g: string) => GROUPS[g] ?? g.charAt(0).toUpperCase() + g.slice(1)
+const rank = (g: string) => { const i = Object.keys(GROUPS).indexOf(g); return i < 0 ? 99 : i }
+/** the commands in the / list's order: by group (the base's first, then packs by name), each group as registered */
+export const byGroup = <C extends Pick<Command, 'group' | 'pack'>>(cs: C[]) => cs.map((c, i) => ({ c, i }))
+  .sort((a, b) => rank(groupOf(a.c)) - rank(groupOf(b.c)) || groupOf(a.c).localeCompare(groupOf(b.c)) || a.i - b.i).map((x) => x.c)
 export const commandsFor = (ctx: Pick<Ctx, 'can' | 'packs' | 'departmentType' | 'packCards'>) => [...commands.values()].filter((c) => allowed(c, ctx)).map((c) => resolve(c, ctx))
 /** does any pack offer this department type its own commands or cards (Settings shows the switch only then) */
 export const offersFor = (departmentType: string) => overrides.some((o) => o.departmentType === departmentType) || cards.some((c) => c.departmentType === departmentType)

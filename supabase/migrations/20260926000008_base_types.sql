@@ -787,8 +787,6 @@ select core.declare_setting('department.encounter_class', 'base', 'department',
   '{"type":"object","additionalProperties":false,"required":["class"],"properties":{"class":{"enum":["AMB","EMER","IMP","OBSENC","SS","VR","HH"]}}}', labels => '{"en":"Kind of encounter"}');
 select core.declare_setting('department.after_done', 'base', 'department',
   '{"type":"object","additionalProperties":false,"required":["after"],"properties":{"after":{"enum":["next","queue"]}}}', labels => '{"en":"After Done"}');
-select core.declare_setting('department.patients_wait', 'base', 'department',
-  '{"type":"object","additionalProperties":false,"required":["wait"],"properties":{"wait":{"type":"boolean"}}}', labels => '{"en":"Patients wait for results"}');
 select core.declare_setting('department.review_results', 'base', 'department',
   '{"type":"object","additionalProperties":false,"required":["level"],"properties":{"level":{"enum":["critical","abnormal","all"]}}}', labels => '{"en":"Results to review"}');
 select core.declare_setting('department.works_for', 'base', 'department',
@@ -847,7 +845,7 @@ select core.declare_screen('base.beds', 'base', 'stays', '{"en":"Bed board"}', '
 -- missing and never overwrites what staff changed; each thing's id comes from its key ──
 select core.declare_setup('clinic', 'base', 'visits', '{"en":"Clinic"}',
   screens => '{"screens":["base.queue"],"opens":"base.queue"}',
-  settings => '{"department.patients_wait":{"wait":true},"department.review_results":{"level":"critical"},"department.after_done":{"after":"next"}}',
+  settings => '{"department.review_results":{"level":"critical"},"department.after_done":{"after":"next"}}',
   presets => '[{"name":"Follow-up visit","shortcut":"fu","lines":["Since the last visit:","Examination:","Plan:"]}]',
   help => '{"en":"Patients are seen in visits: a queue, results waited for, critical ones to review."}');
 select core.declare_setup('ward', 'base', 'stays', '{"en":"Ward"}',

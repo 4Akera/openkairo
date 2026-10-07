@@ -1,14 +1,14 @@
 // The composer's pure half (spec 05): a /command or a #preset expands to drafts, and the word being typed gets suggestions.
 import type { Template } from '../../db/types'
 import { suggestAllergens, suggestDrugs, suggestProblems } from './catalog'
-import { allowed, commandNamed, commandsFor, usedWhere } from './commands'
+import { allowed, byGroup, commandNamed, commandsFor, groupName, groupOf, usedWhere } from './commands'
 import { lineOf, parse, splitCommand, type Ctx, type Parsed, type Result } from './parse'
 import { aliasLine } from './score'
 
 /** errors stop the line; skipped are a preset's lines this patient's record cannot take — the rest of the preset still goes in */
 /** hint: a card that is not an error — a pack's command typed where its pack is not used says where it is (§5.1 rule 1) */
 export interface Expanded { items: Parsed[]; errors: string[]; skipped?: string[]; drawer?: { kind: string; text: string }; label?: string; hint?: string }
-export interface Suggestion { key: string; label: string; detail?: string; insert: string }
+export interface Suggestion { key: string; label: string; detail?: string; insert: string; title?: string; group?: string }
 
 // note commands that became labels: a preset line saved as "/plan review" still reads as "plan: review"
 const WAS_NOTE: Record<string, string> = { hx: 'hx', ex: 'ex', exam: 'ex', plan: 'plan', proc: 'proc' }
@@ -69,13 +69,18 @@ function preset(word: string, ctx: Ctx, presets: Template[]): Expanded | null {
 /** the line without its last "for <problem>" (a PRN's "for pain" before it stays) */
 const unlinked = (l: string) => { const [main, ...tail] = l.split(';'); const at = main.toLowerCase().lastIndexOf(' for '); return [at > 0 ? main.slice(0, at) : main, ...tail].join(';') }
 
+/** one short example for the / list: the first that is more than the bare command ("/bf · /bf no" → "/bf no") */
+const shortExample = (c: { name: string; example: string }) => { const parts = c.example.split(' · ').map((x) => x.trim())
+  return parts.find((x) => x !== `/${c.name}`) ?? parts[0] }
+
 /** what is being typed could be: a command or preset (after "/"), then a drug, a problem, an allergen, a service or a department */
 export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set<string>): { items: Suggestion[] } | null {
   const t = text.trimStart()
   if (t.startsWith('/') && !/\s/.test(t)) {                                 // "/": the commands only
     const w = t.slice(1).toLowerCase()
-    const cmds = commandsFor(ctx).filter((c) => [c.name, ...(c.aliases ?? [])].some((n) => n.startsWith(w)))
-    return cmds.length ? { items: cmds.map((c) => ({ key: `c${c.name}`, label: `/${c.name}`, detail: `${c.label} · ${c.example}`, insert: `/${c.name} ` })) } : null
+    const cmds = byGroup(commandsFor(ctx).filter((c) => [c.name, ...(c.aliases ?? [])].some((n) => n.startsWith(w))))
+    return cmds.length ? { items: cmds.map((c) => ({ key: `c${c.name}`, label: `/${c.name}`, title: c.title ?? c.label, detail: shortExample(c),
+      group: groupName(groupOf(c)), insert: `/${c.name} ` })) } : null
   }
   if (t.startsWith('#') && !/\s/.test(t)) {                                 // "#": the presets only
     const w = t.slice(1).toLowerCase()

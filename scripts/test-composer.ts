@@ -218,4 +218,12 @@ test('the facts\' guards: a bare /alert is no alert yet; an LMP that is not a da
   assert.match(no('/alert isolation AIDS'), /never names HIV/); assert.match(no('/alert human immunodeficiency virus'), /never names HIV/)
   assert.match(factMissing({ function: 'alert', params: { action: 'add', kind: 'other', text: 'Isolation B20' } }, '2026-10-06') ?? '', /never names HIV/)
 })
+test('the / list (owner, 2026-10-07): one column in groups, named in words, narrowing as typed', () => {
+  const all = suggest('/', ctx, [], new Set())!.items
+  const groups = [...new Set(all.map((x) => x.group))]
+  assert.deepEqual(groups.slice(0, 3), ['Record', 'Orders and medicines', 'Safety and scores'], 'the base groups first, in order')
+  assert.deepEqual(all.filter((x) => x.group === 'Record').map((x) => x.title), ['Vitals', 'Diagnosis', 'Allergy', 'Long note'])
+  assert.equal(all.find((x) => x.label === '/rx')!.title, 'Prescription'); assert.equal(all.find((x) => x.label === '/rx')!.detail, '/rx metformin 500 bd 30d for dm', 'one short example')
+  assert.deepEqual(suggest('/r', ctx, [], new Set())!.items.map((x) => x.label), ['/rx'], 'narrows as typed')
+})
 console.log(`composer: ${n} groups passed`)

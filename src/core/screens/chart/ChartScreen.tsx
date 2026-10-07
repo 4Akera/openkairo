@@ -18,7 +18,6 @@ import { Centered, SplitPane, Spinner, errorText } from '../../ui'
 import { nextPatient } from '../clinic/words'
 import type { ComposerHandle } from '../visit/Composer'
 import { ChartBanner } from './ChartBanner'
-import { DoneChoices } from './Actions'
 import { EncounterPane } from './center/EncounterPane'
 import { ChartContext, type Chart, type KindOrAll } from './context'
 import { ChartGlance } from './glance/ChartGlance'
@@ -52,6 +51,8 @@ export function ChartScreen() {
   const composer = useRef<ComposerHandle>(null)
   const me = org?.me.id ?? ''; const visit = rec.data?.visit ?? null
   const role = roleOf(visit, dept?.id, me)
+  // the chart scrolls without a scroll bar (owner, 2026-10-07); other screens keep theirs
+  useEffect(() => { const h = document.documentElement; h.classList.add('no-scrollbar'); return () => h.classList.remove('no-scrollbar') }, [])
   useEffect(() => { if (rec.data) rememberPatient({ ...rec.data.patient }) }, [rec.data?.patient.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // the next patient by the list's own rule: my Back patient (or an unclaimed one) first, else the first waiting
   const next = useMemo(() => nextPatient((queue.data?.rows ?? []).filter((r) => r.id !== visitId), me), [queue.data, visitId, me])
@@ -70,7 +71,8 @@ export function ChartScreen() {
   const kinds = useRef<KindOrAll[]>(['all']); const showKinds = useCallback((ks: KindOrAll[]) => { kinds.current = ks }, [])
   // a notice (an error, warnings to confirm, the discharge chooser) is in the center: under 640 px its tab comes forward
   useEffect(() => { if (actions.err || actions.warn || actions.discharging) setTab('main') }, [actions.err, actions.warn, actions.discharging]) // eslint-disable-line react-hooks/exhaustive-deps
-  // the keys, one listener (chart-plan.md §5.2): ⌘↵ Done (Sign in a stay; Sign N for someone else's patient) · / the composer ·
+  // the keys, one listener (chart-plan.md §5.2): ⌘↵ Done (Sign in a stay; Sign N for someone else's patient), ⌘⇧↵ Wait for results ·
+  // / the composer ·
   // Alt+P/M/A start /dx /rx /al · Alt+R the record's sections and back · 1–9 a section chip · [ ] the kind filter · Esc back to this visit
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -78,7 +80,7 @@ export function ChartScreen() {
       const alt = e.altKey && !e.metaKey && !e.ctrlKey
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         const act = cmdEnter(role, drafts)
-        if (act) { e.preventDefault(); if (act === 'sign') actions.sign(); else actions.done(!!dept && doneNext(dept)) }
+        if (act) { e.preventDefault(); if (act === 'sign') actions.sign(); else actions.done(!!dept && doneNext(dept), e.shiftKey) }
       } else if (e.key === '/' && !typing) { e.preventDefault(); setTab('main'); composer.current?.slash() }
       else if (alt && e.code === 'KeyR') {
         e.preventDefault()
@@ -93,7 +95,7 @@ export function ChartScreen() {
         const chip = document.querySelectorAll<HTMLElement>('#record-sections [data-chip]')[Number(e.key) - 1]
         if (chip) { e.preventDefault(); setTab('aside'); requestAnimationFrame(() => chip.click()) }
       } else if (e.key === 'Escape' && !typing) {
-        if (actions.more) actions.setMore(false); else if (at.scope !== 'encounter') open({ scope: 'encounter' })
+        if (at.scope !== 'encounter') open({ scope: 'encounter' })
       }
     }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
@@ -109,7 +111,6 @@ export function ChartScreen() {
   const review = rec.data.reviews.filter((x) => isForMe(x, me, dept.id)).length   // results waiting for my review
   return <ChartContext.Provider value={chart}><div className="pb-10">
     <ChartBanner key={patientId} next={next} assignee={fromQueue?.assignee_name ?? null} />
-    <DoneChoices next={next} />
     <SplitPane className="mt-4" tab={tab} onTab={setTab} mainTab={<>Encounter{drafts > 0 && <span className="text-accent tnum">· {drafts}</span>}</>}
       asideTab={<>Record{review > 0 && <span className="text-warn tnum">· {review}</span>}</>}
       main={<EncounterPane composer={composer} />}

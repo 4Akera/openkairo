@@ -7,7 +7,7 @@ import type { ServerEntry } from '../../../db/types'
 import { card } from '../../../db/views'
 import { useItem } from '../../../hooks/chart'
 import { rendererFor } from '../../../renderers'
-import { Button, KV, Kbd, Skeleton, cn, dateTime, errorText, longDate, ymd } from '../../../ui'
+import { KV, Kbd, Skeleton, cn, dateTime, errorText, longDate, ymd } from '../../../ui'
 import { baseOf, type ChartItem } from '../model/items'
 import { CROSSED_REASON, partialWords, stepWord } from '../model/labels'
 import { NotePrivacy } from './Privacy'
@@ -25,16 +25,23 @@ export function Details({ item, onClose, inset }: { item: ChartItem; onClose: ()
   // the order itself) joined with the read
   const held = [...item.versions, item.entry, ...item.later, ...(item.order ? [...item.order.steps, ...item.order.answers] : [])]
   const all = local ? held : q.data && [...new Map([...held, ...q.data].map((e) => [e.id, e])).values()]
-  return <div role="region" aria-label="Details" className={cn('grid gap-2 bg-sunken text-13', inset ? 'mt-2 rounded-lg p-3' : 'border-t border-line px-4 py-3')}>
-    <div className="flex items-center gap-2"><p className="text-11 font-semibold uppercase tracking-[0.08em] text-faint">Details</p>
-      <Button size="xs" variant="ghost" className="ms-auto" onClick={onClose}>Close <Kbd>esc</Kbd><X aria-hidden /></Button></div>
-    {item.draft ? <KV dense items={[['Not signed', 'Written with the others when you sign'], ['As typed', item.draft.line || '—']]} />
-      : !all ? (q.error ? <p role="alert" className="text-danger">{errorText(q.error)}</p> : <Skeleton lines={3} />)
-      : <Facts item={item} all={all} env={env} />}
+  return <div role="region" aria-label="Details" className={cn('grid gap-1.5 bg-sunken text-12', inset ? 'mt-2 rounded-lg px-3 py-2' : 'border-t border-line px-4 py-2')}>
+    {item.draft ? <Line onClose={onClose}>Not signed · written with the others when you sign · as typed: {item.draft.line || '—'}</Line>
+      : !all ? <Line onClose={onClose}>{q.error ? <span role="alert" className="text-danger">{errorText(q.error)}</span> : <Skeleton lines={1} />}</Line>
+      : <Facts item={item} all={all} env={env} onClose={onClose} />}
   </div>
 }
 
-function Facts({ item, all, env }: { item: ChartItem; all: ServerEntry[]; env: BlockEnv }) {
+/** the one line every Details opens with (owner, 2026-10-07: compact): who, where, when written and signed; Esc or × closes */
+function Line({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  return <div className="flex items-center gap-2">
+    <div className="min-w-0 flex-1 text-muted tnum">{children}</div>
+    <button type="button" onClick={onClose} aria-label="Close the details" className="inline-flex shrink-0 items-center gap-1 rounded-md px-1 text-faint hover:bg-hover hover:text-fg focus-ring">
+      <Kbd>esc</Kbd><X aria-hidden className="size-3.5" /></button>
+  </div>
+}
+
+function Facts({ item, all, env, onClose }: { item: ChartItem; all: ServerEntry[]; env: BlockEnv; onClose: () => void }) {
   const types = env.org?.types; const base = (e: ServerEntry) => baseOf(e.type, types)
   const versions = all.filter((e) => e.item === item.item).sort((a, b) => a.item_version - b.item_version)
   const related = all.filter((e) => e.item !== item.item).sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
@@ -43,8 +50,10 @@ function Facts({ item, all, env }: { item: ChartItem; all: ServerEntry[]; env: B
   const marks = related.filter((e) => base(e) === 'private' || base(e) === 'not_private'); const isPrivate = marks.at(-1) ? base(marks.at(-1)!) === 'private' : false
   const e = item.entry; const findings = (e.findings ?? []).filter((f) => f.confirmed || f.level === 'warn')
   const by = (x: ServerEntry) => [personName(env, x.author_id), placeName(env, x.department_id)].filter(Boolean).join(' · ') || '—'
-  const rows: [string, ReactNode][] = [['Written by', by(e)], ['When', clinical(e)]]
-  if (dateTime(e.recorded_at) !== dateTime(e.occurred_at)) rows.push(['Signed', dateTime(e.recorded_at)])
+  // the line: Sara Mahmoud · General Practice · written 01:01 · signed 01:03 (the clinical time at its precision; signed only if later)
+  const at = (iso: string) => ['day', 'month', 'year'].includes(e.precision) ? clinical(e) : when(iso)
+  const line = [by(e), `written ${at(e.occurred_at)}`, dateTime(e.recorded_at) !== dateTime(e.occurred_at) ? `signed ${when(e.recorded_at)}` : null].filter(Boolean).join(' · ')
+  const rows: [string, ReactNode][] = []
   if (versions.length > 1 || item.crossed) rows.push(['Versions', <ol className="grid gap-0.5">
     {versions.map((v) => <li key={v.id} className={cn('tnum', v.id !== e.id && 'text-muted')}>
       <span className="text-faint">v{v.item_version} · {when(v.recorded_at)} · {personName(env, v.author_id) ?? '—'} · </span>
@@ -61,7 +70,8 @@ function Facts({ item, all, env }: { item: ChartItem; all: ServerEntry[]; env: B
   if (reviews.length) rows.push(['Reviewed', reviews.map((r) => `${personName(env, r.author_id) ?? '—'} · ${when(r.recorded_at)}`).join('; ')])
   if (findings.length) rows.push(['Warnings', <ul className="grid gap-0.5">{findings.map((f, i) => <li key={i}>{f.detail ?? f.code}{f.confirmed && <span className="text-faint"> · signed anyway</span>}</li>)}</ul>])
   return <>
-    <KV dense labelWidth="6.5rem" items={rows} />
+    <Line onClose={onClose}>{line}</Line>
+    {rows.length > 0 && <KV dense labelWidth="6.5rem" items={rows} />}
     {PRIVACY.has(base(e)) && !e.hidden && <NotePrivacy entryId={e.id} patientId={e.patient_id} isPrivate={isPrivate} />}
   </>
 }

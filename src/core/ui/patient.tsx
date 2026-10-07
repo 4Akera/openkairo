@@ -40,15 +40,16 @@ export function Banner({ name, sub, context, flags, vitals, back, actions, strip
   </Card>
   if (zones) return <div ref={ref} className={cn('border-b border-line bg-surface/95 backdrop-blur', stuck && 'sticky top-0 z-sticky', className)}>
     {strip}
-    <div className="mx-auto flex max-w-chart flex-wrap items-start gap-x-3 gap-y-1.5 px-4 py-2">
+    <div className="mx-auto flex max-w-chart flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2">
       {backButton}
-      {/* one line of zones; under 640 px they wrap, without the thin lines, and nothing runs past the edge (the actions wrap first) */}
+      {/* one line of zones, on the same middle line as the back arrow and the actions (owner, 2026-10-07: the name sat higher than the
+          buttons); under 640 px they wrap, without the thin lines, and nothing runs past the edge (the actions wrap first) */}
       <div className="flex min-w-0 flex-1 basis-64 flex-wrap items-center gap-x-3 gap-y-1.5">
         <div role="group" aria-label="Patient" className="min-w-0">{who}</div>
         {zones.map((z) => <div key={z.key} role="group" aria-label={z.label} data-zone={z.key}
           className="flex min-w-0 max-w-full flex-wrap items-center gap-1 sm:border-s sm:border-line sm:ps-3">{z.node}</div>)}
       </div>
-      {actions && <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-2 self-center">{actions}</div>}
+      {actions && <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </div>
     {second && <div className="mx-auto flex max-w-chart flex-wrap items-center gap-1 px-4 pb-2 sm:ps-12">{second}</div>}
   </div>

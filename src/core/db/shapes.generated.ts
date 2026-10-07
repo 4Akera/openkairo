@@ -427,10 +427,6 @@ export interface DepartmentEncounterClassSetting {
 export interface DepartmentPacksSetting {
   packs: string[]
 }
-/** setting department.patients_wait (base; owner department) */
-export interface DepartmentPatientsWaitSetting {
-  wait: boolean
-}
 /** setting department.private (base; owner department) */
 export interface DepartmentPrivateSetting {
   private: boolean
@@ -573,7 +569,6 @@ export interface SettingData {
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
   'department.packs': DepartmentPacksSetting
-  'department.patients_wait': DepartmentPatientsWaitSetting
   'department.private': DepartmentPrivateSetting
   'department.review_results': DepartmentReviewResultsSetting
   'department.screens': DepartmentScreensSetting

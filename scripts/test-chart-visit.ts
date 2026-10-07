@@ -1,10 +1,10 @@
 // The patient screen's kept behaviours (chart-plan.md §2, build plan 3.10), as pure decisions: whose visit it is, the call on open, ⌘↵,
-// the banner's actions, what Done and Return to waiting write after the drafts, where Done goes, Done's other choices (owner D5), the
+// the banner's actions, what Done and back to waiting write after the drafts, where Done goes, Wait for results and the back arrow, the
 // stay words; and the center's kind filter over sets and the Whole record's two views. Run by npm run test:chart after test-chart.ts.
 import assert from 'node:assert/strict'
 import { setClinicTimeZone } from '../src/core/ui/time'
-import type { Department, PresenceRow, QueueRow, VisitRow } from '../src/core/db/types'
-import { afterDone, barOf, callsOnOpen, cmdEnter, doneChoices, doneLabel, roleOf, stayWords, visitMoves } from '../src/core/screens/chart/model/visit'
+import type { Department, OrderRow, PresenceRow, QueueRow, VisitRow } from '../src/core/db/types'
+import { afterDone, backOf, backReason, barOf, callsOnOpen, cmdEnter, doneLabel, ordersOut, roleOf, stayWords, visitMoves } from '../src/core/screens/chart/model/visit'
 import { byDate, bySet, byVisit, filterSets } from '../src/core/screens/chart/model/encounter'
 import { itemsOf } from '../src/core/screens/chart/model/items'
 import { E, T0, presence, types } from './chart-fixtures'
@@ -16,7 +16,7 @@ const visit = (over: Partial<VisitRow> = {}, state: PresenceRow['state'] = 'with
   status: 'in_consult', priority: 'routine', is_first: false, arrived_at: T0, present_at: T0, seen_at: null, ended_at: null, kind: 'visit', place_id: null, latest_entry: 'e0', version: 1,
   wait: null, presence: presence('v1', { state }), ...over })
 const stay = (state: PresenceRow['state'] = 'admitted', over: Partial<VisitRow> = {}) => visit({ kind: 'stay', status: state === 'admitted' ? 'admitted' : 'discharged', department_id: 'ward', assignee_id: null, ...over }, state)
-const dept = (over: Partial<Department> = {}) => ({ id: 'gp', work: 'visits', after_done: 'next', patients_wait: false, ...over }) as Department
+const dept = (over: Partial<Department> = {}) => ({ id: 'gp', work: 'visits', after_done: 'next', ...over }) as Department
 const omar = { id: 'v2', patient: { given_name: 'Omar' } } as QueueRow
 const yes = () => true
 
@@ -50,7 +50,7 @@ test('the banner\'s actions: a stay\'s Discharge (admitted, here, allowed, not o
   assert.equal((barOf(roleOf(null, 'ward', 'dr'), null, 0, dept({ id: 'ward', work: 'stays' }), yes) as { start: boolean }).start, false)
   assert.equal((barOf(roleOf(null, 'gp', 'dr'), null, 0, dept(), (a) => a !== 'write:checked_in') as { start: boolean }).start, false)
 })
-test('Done writes seen (unseen, something written) then done, each changing the one before; Return to waiting is sent out', () => {
+test('Done writes seen (unseen, something written) then done, each changing the one before; back to waiting is sent out', () => {
   const [seen, done] = visitMoves(visit(), 'gp', 3, { type: 'done', data: { wait: true } })
   assert.deepEqual([seen.type, seen.refers_to, seen.relation, done.type, done.refers_to, done.visit_id], ['seen', 'e0', 'changes', 'done', seen.id, 'v1']); assert.deepEqual(done.data, { wait: true })
   assert.deepEqual(visitMoves(visit({ seen_at: T0 }), 'gp', 3, { type: 'done', data: {} }).map((e) => [e.type, e.refers_to]), [['done', 'e0']])
@@ -62,12 +62,22 @@ test('Done goes to the next patient in place of this one, else the queue; anothe
   assert.deepEqual(afterDone(true, omar), { to: '/visit/v2', replace: true }); assert.deepEqual(afterDone(true, null), { to: '/', replace: false })
   assert.deepEqual(afterDone(false, omar), { to: '/', replace: false })
 })
-test('Done\'s label and its other choices (D5: in a strip, by department.patients_wait and after_done; Not here before seen)', () => {
+test('Done closes now; Wait for results only while this visit has orders out, with those its drafts sign (owner, 2026-10-07)', () => {
   assert.equal(doneLabel(2, dept(), omar), 'Sign 2 · Done → Omar'); assert.equal(doneLabel(0, dept({ after_done: 'queue' }), omar), 'Done')
-  assert.deepEqual(doneChoices(dept({ patients_wait: true }), visit(), omar, 0).map((c) => c.key), ['home', 'queue', 'not_here', 'return'])
-  const q = doneChoices(dept({ after_done: 'queue' }), visit({ seen_at: T0 }), omar, 2)
-  assert.deepEqual(q.map((c) => c.key), ['wait', 'next', 'return']); assert.equal(q[1].label, 'Done → next patient (Omar)'); assert.match(q[2].hint!, /Signs the 2 written/)
-  assert.deepEqual(doneChoices(dept({ after_done: 'queue' }), visit({ seen_at: T0 }), null, 0).map((c) => c.key), ['wait', 'return'])
+  const o = (over: Partial<OrderRow> = {}) => ({ visit_id: 'v1', status: 'active', answered_at: null, ...over })
+  assert.equal(ordersOut([o(), o({ status: 'in-progress' }), o({ answered_at: T0 }), o({ status: 'completed' }), o({ status: 'revoked' }), o({ visit_id: 'v0' })], 'v1', 0), 2,
+    'answered, finished, stopped or another visit\'s: not out')
+  assert.equal(ordersOut([], 'v1', 1), 1, 'an order in the drafts goes out with Done'); assert.equal(ordersOut([], 'v1', 0), 0, 'nothing out: no Wait for results')
+  assert.deepEqual(visitMoves(visit({ seen_at: T0 }), 'gp', 0, { type: 'done', data: { wait: false } }).map((e) => [e.type, e.data]), [['done', { wait: false }]])
+})
+test('the back arrow: my patient in consult back to the waiting room, the visit open; nothing written, as before the call (no missed call)', () => {
+  assert.equal(backOf(roleOf(visit(), 'gp', 'dr')), 'Back to waiting room')
+  assert.equal(backOf(roleOf(visit({ assignee_id: 'dr2' }), 'gp', 'dr')), 'Back to the queue', 'another clinician\'s: only back')
+  assert.equal(backOf(roleOf(stay(), 'ward', 'rn')), 'Back to the beds'); assert.equal(backOf(roleOf(null, 'gp', 'dr')), 'Back to the queue')
+  assert.equal(backReason(0), 'other', 'opened and nothing written: no missed call (Not here is the desk\'s)'); assert.equal(backReason(2), 'sent_out')
+  assert.deepEqual(visitMoves(visit(), 'gp', 0, { type: 'back_to_waiting', data: { reason: backReason(0) } }).map((e) => e.type), ['back_to_waiting'], 'nothing written: not seen')
+  const back = visitMoves(visit(), 'gp', 2, { type: 'back_to_waiting', data: { reason: backReason(2) } })
+  assert.deepEqual(back.map((e) => e.type), ['seen', 'back_to_waiting'], 'what is written is signed into the visit, seen first')
 })
 test('a stay in words: day 1 is the admission day in the clinic\'s zone; a discharged stay says how long', () => {
   const s = stay('admitted', { arrived_at: '2026-09-24T22:30:00Z' })                                     // 25 Sep in Cairo
