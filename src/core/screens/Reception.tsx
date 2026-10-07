@@ -82,14 +82,17 @@ export function ReceptionScreen({ dept }: ScreenProps) {
     box.current?.focus()
   }
 
-  const searchBox = <div className="relative w-full sm:w-96"><SearchIcon className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+  const searchBox = <div className="relative min-w-0 flex-1"><SearchIcon className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
     <Input ref={box} autoFocus value={q} onChange={(e) => { setQ(e.target.value); setCursor(0); setKbd(true) }} onKeyDown={onKey} aria-label="Find a patient"
       placeholder="Name, phone, national ID or number" className="ps-9" /></div>
+  const hint = !searching && !creating && usual && canSend && <p className="min-w-0 text-12 text-faint">Type a name, phone, national ID or number; <Kbd>↵</Kbd> sends to <span className="font-medium text-muted">{usual.name}</span>, the clinic this desk used last.</p>
   return (
-    <ScreenFrame search={!creating && searchBox} action={canCreate && !creating && <Button variant="outline" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New patient</Button>}
+    <ScreenFrame
       notice={said && <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout>}>
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
       <div className="grid min-w-0 content-start gap-3">
+        {!creating && <div className="flex items-center gap-2">{searchBox}{canCreate && <Button variant="outline" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New patient</Button>}</div>}
+        {hint}
         {searching && <Card className="p-3">
           <div className="flex flex-wrap gap-1.5" role="listbox" aria-label="Patients found" onMouseMove={(e) => kbd && movedMouse(e) && setKbd(false)}>
             {list.map((p, i) => <button key={p.id} type="button" tabIndex={-1} role="option" aria-selected={i === c} onClick={() => { setCursor(i); card.current?.focus() }}
@@ -118,7 +121,6 @@ export function ReceptionScreen({ dept }: ScreenProps) {
         {visits.open.error && <p className="text-14 text-danger">{errorText(visits.open.error)}</p>}
 
         {!searching && !creating && <>
-          {usual && canSend && <p className="px-1 text-12 text-faint">Type a name, phone, national ID or number; <Kbd>↵</Kbd> sends to <span className="font-medium text-muted">{usual.name}</span>, the clinic this desk used last.</p>}
           <Today rows={rows} doneToday={doneToday} /></>}
       </div>
 
