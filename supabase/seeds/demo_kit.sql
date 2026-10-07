@@ -133,7 +133,8 @@ begin
   perform public.setup(jsonb_build_object('setup', p_setup, 'department_id', p_id, 'name', p_name, 'position', p_position, 'apply', true));
 end $$;
 -- a pack serving a department the base made (the clinic's own Laboratory, which the laboratory pack now runs): the pack's own setup
--- applied to it as the owner, through the door; only a setup of the layer the file says it is, and only to the base's department
+-- applied to it as the owner, through the door, and its screens made the department's line; only a setup of the layer the file says
+-- it is, and only to the base's department
 create or replace function demo.serve(p_id uuid, p_setup text) returns void language plpgsql as $$
 begin
   if not exists (select 1 from core.setups s where s.key = p_setup and s.layer = current_setting('demo.layer', true)) then
@@ -144,6 +145,11 @@ begin
   end if;
   perform demo.as(demo.base('owner'));
   perform public.setup(jsonb_build_object('setup', p_setup, 'department_id', p_id, 'apply', true));
+  -- serving it, the pack's screens are its line (a setup applied later never overwrites a line already set)
+  if (select s.screens from core.setups s where s.key = p_setup) is not null
+     and core.setting_at(demo.base('clinic'), 'department.screens', p_id) is distinct from (select s.screens from core.setups s where s.key = p_setup) then
+    perform public.write_setting(jsonb_build_object('key', 'department.screens', 'owner_id', p_id, 'data', (select s.screens from core.setups s where s.key = p_setup)));
+  end if;
 end $$;
 create or replace function demo.department(p_id uuid, p_name text, p_work text, p_position int) returns void language plpgsql as $$
 begin

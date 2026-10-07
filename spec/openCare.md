@@ -926,7 +926,13 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   change check, read with `read:lis.values`, which its technician — built on the base's lab technician — holds); Collect (tubes by
   colour from the test or its section, the sample number on each collected step, fasting asked, couldn't collect with a reason);
   a pack's own walk-in step (`registerWalkInStep`: the laboratory's /order line and its six most-asked tests). The demo's Laboratory
-  is the base's, served by the pack (`demo.serve`); Results is the bench's patient pages until piece 5b.
+  is the base's, served by the pack (`demo.serve`: its setup, and its screens as the line). *Built 2026-10-07 (piece 5b):* Results
+  (`packs/lis/Results.tsx`): one grid per section of what was collected — a column per field (unit and range in the head), a cell
+  where the patient has that test; flags by the range that fits sex and age; LDL (Friedewald, not when TG ≥ 400) and eGFR (CKD-EPI
+  2021, adults) worked out; the change check against the patient's last value within 30 days (`lis.values`; a step for some tests,
+  a share for the rest); a critical value's notice (tell the doctor who asked; a walk-in, the patient or the doctor who asked), then
+  Release writes each test whose fields are all there as a final result. 19 more LOINC codes in the base's list (the panels, urea,
+  eGFR 2021, troponin, the serology). The demo: Rania and Osama, each with an earlier result, collected this morning.
 - **Large lab (separate switches in the laboratory's settings, all off for a small lab):** sample labels (printed barcodes — waits
   for printing, whose first use is these labels), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
   list, patients called by number), results from analysers (a small outside program, as the network is closed to packs), release

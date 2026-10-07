@@ -132,6 +132,15 @@ insert into core.codes (system, code, labels, props) select 'loinc', c, jsonb_bu
   ('60591-5', 'Patient summary document', '{}'), ('11450-4', 'Problem list', '{}'), ('10160-0', 'History of medication use', '{}'), ('48765-2', 'Allergies and adverse reactions', '{}'),
   ('30954-2', 'Relevant diagnostic tests/laboratory data', '{}'), ('11369-6', 'History of immunization', '{}'), ('47519-4', 'History of procedures', '{}'), ('8716-3', 'Vital signs', '{}')
 ) v(c, l, p);
+-- the laboratory's common tests (spec §5.3): the panels and the codes its starter catalogue reports, beside those above
+insert into core.codes (system, code, labels, props) select 'loinc', c, jsonb_build_object('en', l), p::jsonb from (values
+  ('24362-6', 'Renal function panel', '{}'), ('24325-3', 'Hepatic function panel', '{}'), ('24326-1', 'Electrolytes panel', '{}'), ('24356-8', 'Urinalysis panel', '{}'),
+  ('34714-6', 'INR (coagulation)', '{}'), ('4537-7', 'ESR (Westergren)', '{"ucum":"mm/h"}'), ('22664-7', 'Urea', '{"ucum":"mg/dL","allowed":["mg/dL","mmol/L"]}'),
+  ('98979-8', 'eGFR (CKD-EPI 2021)', '{"ucum":"mL/min/{1.73_m2}"}'), ('1968-7', 'Direct bilirubin', '{"ucum":"mg/dL","allowed":["mg/dL","umol/L"]}'),
+  ('13457-7', 'LDL cholesterol (calculated)', '{"ucum":"mg/dL","allowed":["mg/dL","mmol/L"]}'), ('19123-9', 'Magnesium', '{"ucum":"mg/dL","allowed":["mg/dL","mmol/L"]}'),
+  ('10839-9', 'Troponin I', '{"ucum":"ng/mL","allowed":["ng/mL","ng/L"]}'), ('2857-1', 'PSA', '{"ucum":"ng/mL"}'), ('21198-7', 'β-hCG', '{}'),
+  ('5196-1', 'HBsAg', '{}'), ('16128-1', 'HCV antibody', '{}'), ('882-1', 'ABO and Rh group', '{}'), ('2756-5', 'Urine pH', '{}'), ('2965-2', 'Urine specific gravity', '{}')
+) v(c, l, p) on conflict do nothing;
 insert into core.codes (system, code, labels) values ('ucum', 'mg/g', '{"en":"mg/g"}');
 
 -- HL7 code sets used by the mapping (free)
