@@ -822,6 +822,21 @@ begin
   where core.setups.layer = excluded.layer;
 end $$;
 
+-- a pack's operation on its own table that holds no entries (spec §5.3: the pharmacy's stock): a definer function of the pack (owned,
+-- in its schema, search_path pinned) taking (organization, department, user, arguments) and returning jsonb; public.pack_op runs it
+-- for the user signed in, only where they hold its action in a department that uses the pack
+create function core.declare_op(key text, layer text, fn regprocedure, action text) returns void language plpgsql as $$
+#variable_conflict use_variable
+begin
+  perform core.check_prefix(layer, key);
+  if not exists (select 1 from core.actions a where a.key = action) then perform core.refuse('unknown_action', action); end if;
+  if pg_get_function_identity_arguments(fn) <> 'p_org uuid, p_department uuid, p_user uuid, p_args jsonb' then
+    perform core.refuse('wrong_signature', format('op %s must take (p_org uuid, p_department uuid, p_user uuid, p_args jsonb)', fn));
+  end if;
+  insert into core.ops (key, layer, fn, action, hashes) values (key, layer, fn, action, jsonb_build_object('fn', core.check_fn(layer, fn, 'v', 'op')))
+  on conflict on constraint ops_pkey do update set fn = excluded.fn, action = excluded.action, hashes = excluded.hashes;
+end $$;
+
 create function core.declare_listener(layer text, types text[], refresh regprocedure) returns void language plpgsql as $$
 #variable_conflict use_variable
 declare t text;

@@ -20,8 +20,10 @@ import { replyFormFor } from '@core/renderers'
 import type { ScreenProps } from '@core/screens/registry'
 import { ageOf, ageSex, groupByPatient, matches, nextSteps, phaseOf, stepName, testsLine, type PatientGroup } from '@core/screens/bench/shared'
 import { Button, Callout, Card, Chip, Empty, Input, ListRow, NotForRole, ScreenFrame, Spinner, Tag, errorText, hm, minutesSince, type RowMark, type ScreenView } from '@core/ui'
-import { counselling, lateAfter, lateBy, prepareFirst, preparedSince } from './settings'
-import { detailsOf, type Dispense } from './Check'
+import { counselling, keepStock, lateAfter, lateBy, prepareFirst, preparedSince } from './settings'
+import { detailsOf, fullAmount, type Dispense } from './Check'
+import { batchFor, pickProduct, type Product } from './shelf'
+import { useStock } from './Stock'
 
 type View = 'give' | 'prepared' | 'owed' | 'done'
 type State = 'to_prepare' | 'prepared' | 'owed'
@@ -48,7 +50,15 @@ export function Dispensing({ dept }: ScreenProps) {
   const [cursor, setCursor] = useState(0); const [arrows, setArrows] = useState(false)    // arrows: the keys moved the cursor (shown as a bar)
   const box = useRef<HTMLInputElement>(null); const list = useRef<HTMLUListElement>(null)
   const f = find.trim().toLowerCase()
-  const prep = prepareFirst(org, dept.id)
+  const prep = prepareFirst(org, dept.id); const keep = keepStock(org, dept.id)
+  const stock = useStock(dept.id, null, keep); const products: Product[] = stock.data?.products ?? []
+  /** with stock kept: the product a give takes from (the brand given, if on the list) and its first-to-expire batch with enough */
+  const fromStock = (r: RequestQueueRow, v: Dispense): Partial<Dispense> => {
+    if (!keep || v.product_id) return {}
+    const p = pickProduct(products, v.drug || detailsOf(r).drug?.name || ''); if (!p) return {}
+    const units = v.quantity === undefined ? fullAmount(detailsOf(r)).value : Number(v.quantity)
+    return { product_id: p.id, ...(v.drug ? {} : { drug: p.brand }), ...(batchFor(p, units) ? { batch: batchFor(p, units)!.batch } : {}) }
+  }
   // every request sent here, the bench's whole work: the pack's form answers its own, the bench's page the rest
   const rows = q.data?.requests ?? []
   const of = (states: State[]) => groupByPatient(rows.filter((r) => states.includes(stateOf(r)))).filter((g) => matches(g.patient, f))
@@ -68,12 +78,14 @@ export function Dispensing({ dept }: ScreenProps) {
   const land = async (patient: string, items: EntryIn[]) => {
     if (!items.length) return
     setBusy(patient); setError(null)
-    try { await write(oneSet(items)); setOpen(null); setValues({}); setTo(null); refresh(qc) } catch (x) { setError(errorText(x)) } finally { setBusy(null) }
+    try { await write(oneSet(items)); setOpen(null); setValues({}); setTo(null); refresh(qc); void qc.invalidateQueries({ queryKey: ['pharmacy.stock', dept.id] }) }
+    catch (x) { setError(errorText(x)) } finally { setBusy(null) }
   }
   const formOf = (r: RequestQueueRow) => { const pf = replyFormFor(r.reply_type); return pf && can(pf.action) ? pf : undefined }
   /** each order its form gives as it stands (value undefined: as written), or as checked in the fold, given to whom it was */
   const answers = (g: PatientGroup, checked: boolean) => g.rows.flatMap((r) => {
-    const w = formOf(r)?.toWrite(r, checked ? { ...(values[r.order.item] ?? { given: true, reason: '' }), ...(to?.trim() ? { to: to.trim() } : {}) } : undefined)
+    const v: Dispense = checked ? { ...(values[r.order.item] ?? { given: true, reason: '' }), ...(to?.trim() ? { to: to.trim() } : {}) } : { given: true, reason: '' }
+    const w = formOf(r)?.toWrite(r, { ...v, ...fromStock(r, v) })
     return w ? [answerEntry(r, dept.id, w)] : [] })
   const toggle = (pid: string) => { setOpen(open === pid ? null : pid); setError(null); setTo(null) }
   const pick = (v: View) => { setView(v); setOpen(null); setCursor(0); box.current?.focus() }

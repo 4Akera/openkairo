@@ -284,6 +284,7 @@ export interface PharmacyDispense {
       expiry?: string
       instead_of?: string
       note?: string
+      product?: string
       quantity: Quantity
     }[]
     owed?: Quantity
@@ -475,6 +476,10 @@ export interface PharmacyCounsellingSetting {
   note?: string
   show: boolean
 }
+/** setting pharmacy.keep_stock (pharmacy; owner department) */
+export interface PharmacyKeepStockSetting {
+  keep: boolean
+}
 /** setting pharmacy.late_after (pharmacy; owner department) */
 export interface PharmacyLateAfterSetting {
   minutes: number
@@ -482,6 +487,19 @@ export interface PharmacyLateAfterSetting {
 /** setting pharmacy.prepare_first (pharmacy; owner department) */
 export interface PharmacyPrepareFirstSetting {
   prepare: boolean
+}
+/** setting pharmacy.product (pharmacy; owner department, many) */
+export interface PharmacyProductSetting {
+  atc?: string
+  barcode?: string
+  brand: string
+  eda_code?: string
+  form?: 'tablet' | 'capsule' | 'syrup' | 'suspension' | 'injection' | 'cream' | 'drops' | 'inhaler' | 'sachet' | 'other'
+  generic?: string
+  minimum?: number
+  pack_size: number
+  strength?: string
+  unit?: string
 }
 /** setting place.closed (base; owner place) */
 export interface PlaceClosedSetting {
@@ -592,8 +610,10 @@ export interface SettingData {
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
   'pharmacy.counselling': PharmacyCounsellingSetting
+  'pharmacy.keep_stock': PharmacyKeepStockSetting
   'pharmacy.late_after': PharmacyLateAfterSetting
   'pharmacy.prepare_first': PharmacyPrepareFirstSetting
+  'pharmacy.product': PharmacyProductSetting
   'place.closed': PlaceClosedSetting
   'preset': PresetSetting
   'score.signed_off': ScoreSignedOffSetting

@@ -8,6 +8,8 @@ import { registerScreen } from '@core/screens/registry'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import { KV, Tag } from '@core/ui'
 import { Dispensing } from './Dispensing'
+import { Stock } from './Stock'
+import { keepStock } from './settings'
 import { Check, toDispense, type Dispense } from './Check'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerRowMark } from '@core/screens/marks'
@@ -31,6 +33,8 @@ registerSend(ANSWER, SEND_WORDS)
 registerWords(REFUSALS)
 // its one screen for the work sent to it, in place of the bench (declared pharmacy.dispensing, replaces base.bench)
 registerScreen('pharmacy.dispensing', Dispensing)
+// its stock (spec §5.3): a tab only where the pharmacy keeps stock (its setting Keep stock)
+registerScreen('pharmacy.stock', Stock, (dept, org) => keepStock(org, dept.id))
 // its section in the chart: for anyone, shown in a department that uses the pack and wherever the patient has dispenses
 registerSection({ key: 'pharmacy.dispensed', title: 'Pharmacy', types: ['pharmacy.dispense'], fit: ANYONE, Body: Supplied,
   word: (x) => suppliedWord(suppliedOf(x.own)), summary: (x) => suppliedLine(suppliedOf(x.own, x.rec)) })

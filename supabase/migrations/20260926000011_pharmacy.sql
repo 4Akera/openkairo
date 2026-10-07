@@ -290,6 +290,131 @@ begin
   return out || jsonb_build_array(jsonb_build_object('resourceType', 'Task', 'id', v_item, 'output', outs));
 end $$;
 
+-- ── its stock (spec §5.3: part of the pack, its setting Keep stock): products in its settings (pharmacy.product, each pharmacy's), and
+-- this small table of its own for what comes in and what is counted — only ever added to, who and when on every row; what is given is
+-- the dispense records (pharmacy.given), never copied: on hand = received + counted − given. Read and written only through its
+-- operations (core.declare_op, public.pack_op), never by table privileges ──
+create table pharmacy.stock (
+  organization_id uuid not null,
+  id            uuid not null default gen_random_uuid(),
+  department_id uuid not null,               -- the pharmacy it is in
+  product_id    uuid not null,               -- a pharmacy.product of that pharmacy
+  batch         text,
+  expiry        date,                        -- the last day it may be given (the month printed, to its end)
+  kind          text not null check (kind in ('received', 'counted', 'expired', 'damaged')),
+  quantity      int not null,                -- units (tablets, capsules, bottles): in +, out −
+  supplier      text,
+  invoice       text,
+  reason        text,
+  author_id     uuid not null,
+  recorded_at   timestamptz not null default clock_timestamp(),   -- when written (several rows of one count keep their order)
+  primary key (organization_id, id)
+);
+create index stock_product on pharmacy.stock (organization_id, department_id, product_id);
+
+-- what was given from the stock: each thing a dispense gave from a product, by batch (a derived table, from the dispenses)
+create table pharmacy.given (
+  organization_id uuid not null,
+  item          uuid not null,             -- the dispense item
+  n             int not null,              -- its n-th thing given
+  patient_id    uuid not null,
+  department_id uuid not null,             -- the pharmacy that gave it
+  product_id    uuid not null,
+  batch         text,
+  quantity      int not null,              -- units
+  at            timestamptz not null,
+  source_entries uuid[] not null,
+  primary key (organization_id, item, n)
+);
+create function pharmacy.given_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
+declare k uuid; l core.entries;
+begin
+  delete from pharmacy.given where organization_id = p_org and item = any (p_items);
+  foreach k in array p_items loop
+    select x.* into l from core.pack_entries(p_org, array[k]) x where x.item = k order by x.item_version desc limit 1;
+    continue when l.id is null or l.type <> 'pharmacy.dispense' or coalesce(l.data ->> 'status', '') not in ('completed', 'in-progress');
+    insert into pharmacy.given
+    select p_org, k, i.n::int, core.survivor(p_org, l.patient_id), l.department_id, (i.x ->> 'product')::uuid, i.x ->> 'batch',
+           coalesce((i.x -> 'quantity' ->> 'value')::numeric, 0)::int, l.occurred_at,
+           (select coalesce(array_agg(e.id order by e.recorded_at), '{}') from core.pack_entries(p_org, array[k]) e where e.item = k)
+      from jsonb_array_elements(coalesce(l.data -> 'pharmacy' -> 'items', '[]')) with ordinality i(x, n) where i.x ? 'product';
+  end loop;
+end $$;
+
+-- 2027-05 → 31 May 2027 (a box says the month); a whole date as it is
+create function pharmacy.expiry_of(p text) returns date language sql immutable security definer set search_path = '' as $$
+  select case when p ~ '^\d{4}-\d{2}$' then (to_date(p || '-01', 'YYYY-MM-DD') + interval '1 month' - interval '1 day')::date
+              when p ~ '^\d{4}-\d{2}-\d{2}$' then p::date end
+$$;
+-- the Stock screen's read: each product of this pharmacy as its settings say, with what is on hand and its batches (first to expire
+-- first); with a product named, its last movements — received, counted, given — newest first
+create function pharmacy.stock_read(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare v_product uuid := (p_args ->> 'product')::uuid; v_moves jsonb := '[]';
+begin
+  -- what this pharmacy has, by product and batch: its own rows less what it gave
+  create temp table if not exists pharmacy_on_hand (product_id uuid, batch text, expiry date, units int) on commit drop;
+  delete from pharmacy_on_hand;
+  insert into pharmacy_on_hand select x.product_id, x.batch, max(x.expiry), sum(x.q)::int from (
+    select s.product_id, s.batch, s.expiry, s.quantity q from pharmacy.stock s where s.organization_id = p_org and s.department_id = p_department
+    union all select g.product_id, g.batch, null::date, -g.quantity from pharmacy.given g where g.organization_id = p_org and g.department_id = p_department) x
+   group by x.product_id, x.batch;
+  if v_product is not null then
+    select coalesce(jsonb_agg(m order by (m ->> 'at')::timestamptz desc), '[]') into v_moves from (
+      select m from (
+        select jsonb_strip_nulls(jsonb_build_object('at', s.recorded_at, 'kind', s.kind, 'units', s.quantity, 'batch', s.batch, 'expiry', s.expiry, 'supplier', s.supplier,
+                 'invoice', s.invoice, 'reason', s.reason, 'by', (select x.name from core.pack_staff(p_org, array[s.author_id]) x))) m, s.recorded_at at
+          from pharmacy.stock s where s.organization_id = p_org and s.department_id = p_department and s.product_id = v_product
+        union all
+        select jsonb_strip_nulls(jsonb_build_object('at', g.at, 'kind', 'given', 'units', -g.quantity, 'batch', g.batch)), g.at
+          from pharmacy.given g where g.organization_id = p_org and g.department_id = p_department and g.product_id = v_product) y
+      order by y.at desc limit 40) z;
+  end if;
+  return jsonb_build_object('moves', v_moves, 'products', coalesce((select jsonb_agg(jsonb_build_object('id', s.thing_id) || s.data || jsonb_build_object(
+      'on_hand', coalesce((select sum(h.units) from pharmacy_on_hand h where h.product_id = s.thing_id), 0),
+      'batches', coalesce((select jsonb_agg(jsonb_build_object('batch', h.batch, 'expiry', h.expiry, 'units', h.units) order by h.expiry nulls last)
+                            from pharmacy_on_hand h where h.product_id = s.thing_id and h.units > 0 and h.batch is not null), '[]'))
+    order by s.data ->> 'brand') from core.settings_at(p_org, 'pharmacy.product') s where s.owner_id = p_department), '[]'));
+end $$;
+
+-- the Stock screen's writes, each in one go (a refusal keeps nothing): receive a delivery (lines of product, batch, expiry, boxes), or
+-- a count (lines of product, units counted, and a reason for any difference: a new row each, nothing written before changes)
+create function pharmacy.stock_write(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare l jsonb; v_do text := p_args ->> 'do'; v_pack int; v_prod jsonb; v_exp date; v_have int; v_count int; n int := 0;
+begin
+  if v_do is null or v_do not in ('receive', 'count') then perform core.refuse('unknown_op', coalesce(v_do, 'nothing')); end if;
+  for l in select * from jsonb_array_elements(coalesce(p_args -> 'lines', '[]')) loop
+    select s.data into v_prod from core.settings_at(p_org, 'pharmacy.product') s where s.thing_id = (l ->> 'product_id')::uuid and s.owner_id = p_department;
+    if v_prod is null then perform core.refuse('unknown_product', coalesce(l ->> 'product_id', '')); end if;
+    v_pack := greatest(1, coalesce((v_prod ->> 'pack_size')::int, 1));
+    if v_do = 'receive' then
+      if coalesce((l ->> 'boxes')::int, 0) <= 0 then perform core.refuse('nothing_received', v_prod ->> 'brand'); end if;
+      if coalesce(trim(l ->> 'batch'), '') = '' then perform core.refuse('batch_missing', v_prod ->> 'brand'); end if;
+      v_exp := pharmacy.expiry_of(l ->> 'expiry');
+      if v_exp is null then perform core.refuse('expiry_missing', v_prod ->> 'brand'); end if;
+      if v_exp < current_date then perform core.refuse('expired_already', v_prod ->> 'brand'); end if;
+      insert into pharmacy.stock (organization_id, department_id, product_id, batch, expiry, kind, quantity, supplier, invoice, author_id)
+      values (p_org, p_department, (l ->> 'product_id')::uuid, trim(l ->> 'batch'), v_exp, 'received', (l ->> 'boxes')::int * v_pack,
+              nullif(trim(p_args ->> 'supplier'), ''), nullif(trim(p_args ->> 'invoice'), ''), p_user);
+      n := n + 1;
+    else
+      v_count := (l ->> 'units')::int;
+      if v_count is null or v_count < 0 then perform core.refuse('bad_count', v_prod ->> 'brand'); end if;
+      -- on hand now: its own rows less what it gave (as the read sums them)
+      select coalesce(sum(x.q), 0)::int into v_have from (
+        select s.quantity q from pharmacy.stock s where s.organization_id = p_org and s.department_id = p_department and s.product_id = (l ->> 'product_id')::uuid
+        union all select -g.quantity from pharmacy.given g where g.organization_id = p_org and g.department_id = p_department and g.product_id = (l ->> 'product_id')::uuid) x;
+      if v_count <> v_have then
+        if coalesce(trim(l ->> 'reason'), '') = '' then perform core.refuse('reason_missing', v_prod ->> 'brand'); end if;
+        insert into pharmacy.stock (organization_id, department_id, product_id, kind, quantity, reason, author_id)
+        values (p_org, p_department, (l ->> 'product_id')::uuid, case lower(trim(l ->> 'reason')) when 'expired' then 'expired' when 'damaged' then 'damaged' else 'counted' end,
+                v_count - v_have, trim(l ->> 'reason'), p_user);
+        n := n + 1;
+      end if;
+    end if;
+  end loop;
+  return jsonb_build_object('rows', n);
+end $$;
+
 -- the counselling note shown when giving: shown needs words (the form shows the refusal next to the note)
 create function pharmacy.counselling_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select case when coalesce((p_data ->> 'show')::boolean, false) and coalesce(trim(p_data ->> 'note'), '') = ''
@@ -298,29 +423,36 @@ $$;
 
 reset role;
 
-grant select, delete on pharmacy.queue to core_eraser;
-grant execute on function pharmacy.queue_refresh(uuid, uuid[]) to core_eraser;
+grant select, delete on pharmacy.queue, pharmacy.given to core_eraser;
+grant execute on function pharmacy.queue_refresh(uuid, uuid[]), pharmacy.given_refresh(uuid, uuid[]) to core_eraser;
 
 select core.declare_action('write:pharmacy.dispense', 'pharmacy', 'department', '{"en":"Dispense"}');
 select core.declare_action('read:pharmacy.queue', 'pharmacy', 'department', '{"en":"Read the dispensing queue"}');
+select core.declare_action('write:pharmacy.stock', 'pharmacy', 'department', '{"en":"Receive and count stock"}');
 select core.declare_table('pharmacy.queue', 'pharmacy', 'pharmacy.queue_refresh(uuid,uuid[])', 'read:pharmacy.queue');
+select core.declare_table('pharmacy.given', 'pharmacy', 'pharmacy.given_refresh(uuid,uuid[])', 'read:pharmacy.queue');
+select core.declare_op('pharmacy.stock', 'pharmacy', 'pharmacy.stock_read(uuid,uuid,uuid,jsonb)', 'read:pharmacy.queue');
+select core.declare_op('pharmacy.stock_write', 'pharmacy', 'pharmacy.stock_write(uuid,uuid,uuid,jsonb)', 'write:pharmacy.stock');
 select core.declare_type('pharmacy.dispense', 1, 'pharmacy', '{"type":"object","additionalProperties":false,"required":["status"],
     "properties":{"status":{"enum":["in-progress","completed","cancelled","rejected"]},"step":{"type":"string"},"reason":{"type":"string"},"note":{"type":"string"},
       "pharmacy":{"type":"object","additionalProperties":false,"properties":{"items":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["drug","quantity"],
         "properties":{"drug":{"$ref":"#/$defs/concept"},"dose":{"$ref":"#/$defs/quantity"},"quantity":{"$ref":"#/$defs/quantity"},"batch":{"type":"string"},"expiry":{"type":"string"},"note":{"type":"string"},
-          "instead_of":{"type":"string"},"directions":{"type":"string"}}}},
+          "instead_of":{"type":"string"},"directions":{"type":"string"},"product":{"type":"string","format":"uuid"}}}},
         "owed":{"$ref":"#/$defs/quantity"},"received_by":{"type":"string"}}}}}'::jsonb,
   'pharmacy.dispense_line(jsonb)', array['Task', 'MedicationDispense'], base_type => 'step', checks => array['pharmacy.dispense_check(jsonb,jsonb)']::regprocedure[],
   to_fhir => 'pharmacy.dispense_fhir(jsonb)',
-  feeds => array['pharmacy.queue'], labels => '{"en":"Dispense","ar":"صرف"}');
+  feeds => array['pharmacy.queue', 'pharmacy.given'], labels => '{"en":"Dispense","ar":"صرف"}');
 select core.declare_listener('pharmacy', array['order', 'medication', 'question', 'reviewed'], 'pharmacy.queue_refresh(uuid,uuid[])');
 -- its one screen for the work sent to a pharmacy: the bench's list and actions for dispensing, so it stands in for the bench (§5.1 rule 4)
 select core.declare_screen('pharmacy.dispensing', 'pharmacy', 'bench', '{"en":"Dispensing"}', 'read:pharmacy.queue', array['base.bench']);
+-- its stock, shown only where the pharmacy keeps stock (pharmacy.keep_stock)
+select core.declare_screen('pharmacy.stock', 'pharmacy', 'bench', '{"en":"Stock"}', 'read:pharmacy.queue');
 select core.declare_role('00000000-0000-0000-0000-00000000ca01', 'pharmacy.pharmacist', 'pharmacy', 'Pharmacist', array[
-  'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out', 'write:question'], '{"en":"Pharmacist"}');
--- a plain role (§5.2): the store keeper sees what is to prepare and what waits, so the shelves keep up; it writes nothing
+  'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out', 'write:question',
+  'write:pharmacy.stock'], '{"en":"Pharmacist"}');
+-- a plain role (§5.2): the store keeper sees what is to prepare and what waits, so the shelves keep up, and receives and counts the stock
 select core.declare_role('00000000-0000-0000-0000-00000000ca02', 'pharmacy.store_keeper', 'pharmacy', 'Store keeper', array[
-  'read:patients', 'read:bench', 'read:pharmacy.queue'], '{"en":"Store keeper"}');
+  'read:patients', 'read:bench', 'read:pharmacy.queue', 'write:pharmacy.stock'], '{"en":"Store keeper"}');
 -- its settings (§5.1 rule 7), each drawn by the automatic form: how long a prepared dispense waits before Dispensing marks it late, per
 -- pharmacy (on the department's card); the counselling note shown when giving, for the clinic (on the pack's page)
 select core.declare_setting('pharmacy.late_after', 'pharmacy', 'department',
@@ -333,6 +465,18 @@ select core.declare_setting('pharmacy.prepare_first', 'pharmacy', 'department',
   labels => '{"en":"Prepare first"}', form => 'department',
   fields => '[{"key":"prepare","labels":{"en":"Prepare first"},
     "help":{"en":"To give → Prepared → Given, when one person prepares and another hands over (and for wards). Off: give straight away."}}]');
+select core.declare_setting('pharmacy.keep_stock', 'pharmacy', 'department',
+  '{"type":"object","additionalProperties":false,"required":["keep"],"properties":{"keep":{"type":"boolean","default":false}}}',
+  labels => '{"en":"Keep stock"}', form => 'department',
+  fields => '[{"key":"keep","labels":{"en":"Keep stock"},
+    "help":{"en":"Products, deliveries, counts and the Stock screen. Each Give takes from the stock, first to expire first."}}]');
+-- a product the pharmacy stocks (one per brand, strength and pack): written by whoever receives and counts stock there
+select core.declare_setting('pharmacy.product', 'pharmacy', 'department',
+  '{"type":"object","additionalProperties":false,"required":["brand","pack_size"],"properties":{"brand":{"type":"string","minLength":1},
+    "generic":{"type":"string"},"atc":{"type":"string"},"strength":{"type":"string"},
+    "form":{"enum":["tablet","capsule","syrup","suspension","injection","cream","drops","inhaler","sachet","other"]},
+    "pack_size":{"type":"integer","minimum":1},"unit":{"type":"string"},"minimum":{"type":"integer","minimum":0},"eda_code":{"type":"string"},"barcode":{"type":"string"}}}',
+  many => true, labels => '{"en":"Product"}', action => 'write:pharmacy.stock');
 select core.declare_setting('pharmacy.counselling', 'pharmacy', 'organization',
   '{"type":"object","additionalProperties":false,"required":["show"],"properties":{"show":{"type":"boolean","default":false},"note":{"type":"string","maxLength":400}}}',
   'pharmacy.counselling_check(jsonb,jsonb)', labels => '{"en":"Counselling when giving"}', form => 'pack',
@@ -341,7 +485,7 @@ select core.declare_setting('pharmacy.counselling', 'pharmacy', 'organization',
 -- its starter setup (§5.2): a pharmacy ticks the pack, opens on Dispensing, sends its prescriptions through one step (prepared) and
 -- marks a prepared dispense late after half an hour; the counselling note is the clinic's, on the pack's page
 select core.declare_setup('pharmacy.pharmacy', 'pharmacy', 'bench', '{"en":"Pharmacy"}', packs => array['pharmacy'],
-  screens => '{"screens":["pharmacy.dispensing"],"opens":"pharmacy.dispensing"}',
+  screens => '{"screens":["pharmacy.dispensing","pharmacy.stock"],"opens":"pharmacy.dispensing"}',
   settings => '{"pharmacy.late_after":{"minutes":30},"department.works_for":{"all":true}}',
   services => '[{"code":"dispense","name":"Dispensing","answer":"pharmacy.dispense","steps":["prepared"]}]',
   help => '{"en":"Dispenses what the clinics prescribe: prepared, then given."}');

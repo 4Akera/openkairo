@@ -34,7 +34,7 @@ $$;
 
 \echo '── the base declares a Clinic, a Ward, a Laboratory and a Front desk; pharmacy declares its Pharmacy'
 select t.ok((select array_agg(key order by key) from core.setups where layer = 'base') = array['clinic', 'front_desk', 'laboratory', 'ward'], 'the base''s four setups');
-select t.ok(work = 'bench' and packs = array['pharmacy'] and screens -> 'screens' = '["pharmacy.dispensing"]' and settings ? 'pharmacy.late_after'
+select t.ok(work = 'bench' and packs = array['pharmacy'] and screens -> 'screens' = '["pharmacy.dispensing","pharmacy.stock"]' and settings ? 'pharmacy.late_after'
   and not settings ? 'pharmacy.counselling' and jsonb_array_length(services) = 1, 'Pharmacy: ticks pharmacy, opens on Dispensing, its service and late_after (the counselling note is the clinic''s)')
   from core.setups where key = 'pharmacy.pharmacy';
 select t.ok(jsonb_array_length(places) = 8 and settings -> 'department.encounter_class' = '{"class":"IMP"}', 'Ward: eight beds, inpatient stays') from core.setups where key = 'ward';

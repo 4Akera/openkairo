@@ -352,6 +352,14 @@ create table core.listeners (
   hashes      jsonb not null default '{}',
   primary key (layer, refresh)
 );
+-- a pack's operations on a table of its own that holds no entries (spec §5.3: the pharmacy's stock): the one door is public.pack_op
+create table core.ops (
+  key         text primary key,
+  layer       text not null references core.layers,
+  fn          regprocedure not null,
+  action      text not null references core.actions,
+  hashes      jsonb not null default '{}'
+);
 create table core.purposes (
   key         text primary key,
   labels      jsonb not null default '{}'

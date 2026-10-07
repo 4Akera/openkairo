@@ -153,12 +153,16 @@ select core.drain() as drained;
 select t.ok(not exists (select 1 from core.entries e where e.id = '00000000-0000-0000-0000-0000000000e7' and not (core.hidden(e.organization_id, '00000000-0000-0000-0000-0000000000b1', array[e.id]) @> array[e.id])),
   'the note is private (Dr Ali may not read it)');
 create temp table pack_rows_now (tbl text, item uuid, sources uuid[], body text);
+create temp table pack_scanned (tbl text);
 do $$ declare d record; begin
   for d in select x.key, x.relation from core.derived x join core.layers l on l.key = x.layer where l.is_pack loop
     execute format('insert into pack_rows_now select %L, x.item, x.source_entries, to_jsonb(x)::text from %s x', d.key, d.relation);
+    insert into pack_scanned values (d.key);
   end loop;
 end $$;
-select t.ok(count(distinct tbl) = (select count(*) from core.derived x join core.layers l on l.key = x.layer where l.is_pack), 'every pack table scanned: ' || string_agg(distinct tbl, ', '))
+select t.ok(count(distinct tbl) = (select count(*) from core.derived x join core.layers l on l.key = x.layer where l.is_pack), 'every pack table scanned: ' || string_agg(distinct tbl, ', ' order by tbl))
+  from pack_scanned;
+select t.ok(count(distinct tbl) >= 1, 'with rows: ' || string_agg(distinct tbl, ', ' order by tbl))
   from pack_rows_now;
 select t.ok(exists (select 1 from pack_rows_now where tbl = 'pharmacy.queue' and body like '%Lithium%'), 'what is never private is copied (the queue names the medicine)');
 select t.ok(not exists (select 1 from pack_rows_now where body like '%ROWRULE-93%' or body like '%93.93%'), 'no private value of another item lands in a pack table');

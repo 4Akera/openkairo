@@ -453,6 +453,21 @@ begin
   return jsonb_build_object('pack', v_layer, 'requeued', n + m);
 end $$;
 
+-- ── a pack's own operation (spec §5.3, core.declare_op): for the user signed in, the pack on for the clinic and used by the
+-- department, the user holding the operation's action there; the pack's function gets the organization, department, user and
+-- arguments, and answers or refuses ──
+create function public.pack_op(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare me core.users := core.me(); v_org uuid := me.organization_id; o core.ops; v_dept uuid := (p ->> 'department_id')::uuid; r jsonb;
+begin
+  select * into o from core.ops x where x.key = p ->> 'op';
+  if not found then perform core.refuse('unknown_op', p ->> 'op'); end if;
+  if not core.layer_on(v_org, o.layer) then perform core.refuse('pack_off', o.layer); end if;
+  if v_dept is null or not core.department_uses(v_org, v_dept, o.layer) then perform core.refuse('not_used_here', o.layer); end if;
+  if not core.may(me.id, o.action, v_dept) then perform core.refuse('not_allowed', o.action); end if;
+  execute format('select %s($1, $2, $3, $4)', o.fn::oid::regproc) into r using v_org, v_dept, me.id, coalesce(p -> 'args', '{}'::jsonb);
+  return r;
+end $$;
+
 -- ── settings (§3.4): shape, key check, may; organization and place keys need the action everywhere. A refusal names its field when it
 -- can (the hint): the shape's, by core.shape_field; a check's, by its finding's field ──
 create function public.write_setting(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
@@ -801,7 +816,7 @@ alter default privileges in schema public revoke execute on functions from publi
 grant execute on function core.may_listen(text) to authenticated;
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
   public.save(text, jsonb), public.remove(text, uuid), public.save_patient(jsonb), public.merge_patients(jsonb), public.write_setting(jsonb),
-  public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb), public.retry_pack(jsonb) to authenticated;
+  public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb), public.retry_pack(jsonb), public.pack_op(jsonb) to authenticated;
 -- the base and the packs call these core helpers from their own definer functions
 grant execute on function core.may(uuid, text, uuid), core.may_somewhere(uuid, text), core.setting_at(uuid, text, uuid, timestamptz),
   core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.uuid7(),

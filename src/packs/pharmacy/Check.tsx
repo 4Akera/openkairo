@@ -7,14 +7,19 @@
 import { useState } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { useWrite } from '@core/hooks/writes'
+import { useDepartment } from '@core/hooks/organization'
 import { newId, oneSet } from '@core/db/entries'
 import type { RequestQueueRow } from '@core/db/types'
 import type { EntryBody } from '@core/db/rpc'
-import { Button, Callout, Chip, Input, cn, errorText, hm } from '@core/ui'
+import { Button, Callout, Chip, Input, Tag, cn, errorText, hm } from '@core/ui'
 import { amountToGive, arabicDirections, parseDose } from './directions'
 import { sameMedicine } from './substitutes'
+import { inBoxes, pickProduct, productsFor } from './shelf'
+import { keepStock } from './settings'
+import { useStock } from './Stock'
 
-export interface Dispense { given: boolean; reason: string; drug?: string; quantity?: string; anyway?: string; to?: string }
+export interface Dispense { given: boolean; reason: string; drug?: string; quantity?: string; anyway?: string; to?: string
+  product_id?: string; batch?: string }   // with stock kept: the product and the batch it is given from (first to expire)
 export interface Warning { code: string; detail?: string; confirmed?: boolean }
 /** the pharmacy's question to the doctor about this order, and their answer (action: give_anyway or changed) */
 export interface Asked { text: string; at: string; answer?: string; action?: string; answered_by?: string; answered_at?: string }
@@ -49,7 +54,8 @@ export function toDispense(r: Pick<RequestQueueRow, 'details'>, value: Dispense 
   const owe = full.value - now
   const dose = parseDose(d.dose); const drug = v.drug?.trim() || d.drug.name
   const item = { drug: { text: drug }, ...(dose ? { dose: { value: String(dose.value), ...(dose.unit ? { unit: dose.unit } : {}) } } : {}), quantity: { value: String(now), unit: full.unit },
-    ...(drug !== d.drug.name ? { instead_of: d.drug.name } : {}), ...(directionsOf(d) ? { directions: directionsOf(d) } : {}) }
+    ...(drug !== d.drug.name ? { instead_of: d.drug.name } : {}), ...(directionsOf(d) ? { directions: directionsOf(d) } : {}),
+    ...(v.product_id ? { product: v.product_id } : {}), ...(v.batch ? { batch: v.batch } : {}) }
   const why = v.anyway?.trim() || ((d.warnings ?? []).length ? doctorSaid : null)
   return { type: 'pharmacy.dispense' as const, data: { status: owe > 0 ? 'in-progress' as const : 'completed' as const, ...(why ? { note: `Given over a warning: ${why}` } : {}),
     pharmacy: { items: [item], ...(owe > 0 ? { owed: { value: String(owe), unit: full.unit } } : {}), ...(v.to?.trim() ? { received_by: v.to.trim() } : {}) } } }
@@ -66,6 +72,12 @@ export function Check({ request, value, onChange }: { request: RequestQueueRow; 
     refers_to: request.order.latest_entry, relation: 'about', data: { text } }]), { onSuccess: () => setAsking(null) })
   const suggestion = warnings.length ? `${warnings.map(warningWord).join('; ')}. Change ${d.drug?.name ?? 'it'}?` : `About ${d.drug?.name ?? 'this prescription'}: `
   const same = d.drug?.name ? sameMedicine(d.drug.name) : null
+  // with stock kept: the product given (the brand named, or the one chosen), what is on hand, the others with the same active ingredient
+  const { org } = useDepartment(); const pharmacyId = request.order.to_department_id ?? ''; const keep = keepStock(org, pharmacyId)
+  const stock = useStock(pharmacyId, null, keep); const match = keep ? productsFor(stock.data?.products ?? [], v.drug || d.drug?.name || '') : null
+  const product = keep ? pickProduct(stock.data?.products ?? [], v.drug || d.drug?.name || '') : null; const short = !!product && product.on_hand < now
+  const others = keep ? [...(match?.same ?? []).filter((p) => p.on_hand > 0).map((p) => ({ name: p.brand, words: `${p.brand} · ${inBoxes(p.on_hand, p.pack_size)}` })),
+    ...(same?.others ?? []).filter((b) => !(match?.same ?? []).some((p) => p.brand === b)).map((b) => ({ name: b, words: b }))] : (same?.others ?? []).map((b) => ({ name: b, words: b }))
   const set = (x: Partial<Dispense>) => onChange({ ...v, ...x })
   const link = (k: 'brand' | 'part' | 'not', words: string) => <button type="button" aria-expanded={open === k} onClick={() => setOpen(open === k ? null : k)}
     className={cn('rounded-sm text-12 hover:underline focus-ring', open === k ? 'font-medium text-fg' : 'text-accent')}>{words}</button>
@@ -79,6 +91,11 @@ export function Check({ request, value, onChange }: { request: RequestQueueRow; 
         <span className="text-muted">{full.unit}</span></label>}
     </div>
     {v.given && directionsOf(d) && <p dir="rtl" lang="ar" className="text-14 text-muted">{directionsOf(d)}</p>}
+    {v.given && keep && <p className="flex flex-wrap items-center gap-2 text-12 text-muted">{product
+      ? <>{product.brand !== (v.drug || d.drug?.name) && <span>Gives <b className="font-medium text-fg">{product.brand}</b> ·</span>}
+          In stock: <b className={cn('font-medium', short ? 'text-warn' : 'text-fg')}>{inBoxes(product.on_hand, product.pack_size)}</b>{now > 0 && <span>· giving {inBoxes(now, product.pack_size)}</span>}
+          {short && <Tag tone={product.on_hand > 0 ? 'warn' : 'danger'}>{product.on_hand > 0 ? 'not enough' : 'out of stock'}</Tag>}</>
+      : <><Tag tone="warn">not on this pharmacy's stock list</Tag>{(match?.same ?? []).some((p) => p.on_hand > 0) && <span>— another brand is (Another brand…)</span>}</>}</p>}
     {v.given && now < full.value && now > 0 && <p className="text-12 text-warn">Given in part: {full.value - now} {full.unit} owed — the patient comes back for the rest (Owed).</p>}
     {v.given && warnings.map((w) => <Callout key={w.code} tone={w.code === 'allergy_clash' ? 'danger' : 'warn'} title={warningWord(w)}>
       {w.confirmed ? 'The doctor was warned and signed anyway. ' : ''}Give it only with a reason, or not at all.</Callout>)}
@@ -94,11 +111,11 @@ export function Check({ request, value, onChange }: { request: RequestQueueRow; 
       <Button size="sm" variant="ghost" onClick={() => setAsking(null)}>Cancel</Button>
       {w.error && <span className="text-12 text-danger">{errorText(w.error)}</span>}</div>}
     <div className="flex flex-wrap items-center gap-3">
-      {same && same.others.length > 0 && link('brand', 'Another brand…')}{link('part', 'Give part…')}{link('not', v.given ? 'Not given…' : 'Not given')}
+      {others.length > 0 && link('brand', 'Another brand…')}{link('part', 'Give part…')}{link('not', v.given ? 'Not given…' : 'Not given')}
       {!asked && asking === null && warnings.length === 0 && <button type="button" onClick={() => setAsking(suggestion)} className="rounded-sm text-12 text-accent hover:underline focus-ring">Ask the doctor…</button>}
     </div>
-    {open === 'brand' && same && <div className="flex flex-wrap items-center gap-1.5 text-13"><span className="text-muted">Same medicine ({same.generic}):</span>
-      {same.others.map((b) => <Chip key={b} on={v.drug === b} onClick={() => set({ drug: v.drug === b ? undefined : b, given: true })}>{b}</Chip>)}</div>}
+    {open === 'brand' && others.length > 0 && <div className="flex flex-wrap items-center gap-1.5 text-13"><span className="text-muted">Same medicine{same ? ` (${same.generic})` : ''}:</span>
+      {others.map((b) => <Chip key={b.name} on={v.drug === b.name} onClick={() => set({ drug: v.drug === b.name ? undefined : b.name, given: true })}>{b.words}</Chip>)}</div>}
     {open === 'part' && <div className="flex flex-wrap items-center gap-2 text-13"><span className="text-muted">Now</span>
       <Input dense inputMode="numeric" value={v.quantity ?? String(full.value)} onChange={(e) => set({ quantity: e.target.value, given: true })} className="w-16 text-end tnum" />
       <span className="text-muted">of {full.value} {full.unit}; the rest is owed.</span></div>}

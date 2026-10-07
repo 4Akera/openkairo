@@ -5,6 +5,8 @@
 import { settingIn } from '@core/screens/settings/form/model'
 import type { Organization, RequestQueueRow } from '@core/db/types'
 
+/** this pharmacy keeps stock (products, deliveries, counts, the Stock tab; each Give takes from it) */
+export const keepStock = (org: Organization | undefined, departmentId: string) => settingIn(org, 'pharmacy.keep_stock', departmentId).keep ?? false
 /** this pharmacy prepares first (the Prepared step and view), else gives straight away */
 export const prepareFirst = (org: Organization | undefined, departmentId: string) => settingIn(org, 'pharmacy.prepare_first', departmentId).prepare ?? false
 /** minutes a prepared dispense may wait in this pharmacy before it reads late */

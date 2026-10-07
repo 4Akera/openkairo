@@ -11,6 +11,7 @@ const WORDS: Record<string, string> = {
   already_admitted: 'Already admitted', not_a_visit: 'A stay is not a clinic visit: sign, move a bed or discharge', bed_taken: 'That bed is taken',
   wrong_work: 'Patients are not checked in there', not_served: 'That department does not work for this one',
   walk_in_elsewhere: 'A bench takes walk-ins only for itself; the desk only for the benches it checks in for',
+  unknown_op: 'That is not something this screen can do', not_used_here: 'This department does not use that pack',
   same_department: 'Already there', bad_visit: 'Not a move of this visit', unknown_service: 'That service is not offered any more', wrong_department: 'Another department answers it',
   order_closed: 'That order is closed', wrong_answer: 'This order is answered another way', unknown_step: 'Not a step of this service', other_department: 'This patient is in another department', reserved_step: 'The bench uses that word for an order — name the step otherwise', has_answers: 'It has answers already: it stays', already_crossed_out: 'Already crossed out',
   never_private: 'Only notes and results can be private', reason_missing: 'A reason is needed', bad_target: 'That cannot be pointed at',

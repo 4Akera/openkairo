@@ -2,7 +2,7 @@ import { createElement, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDepartment } from '../hooks/organization'
 import { Centered, Empty, Card, FRAME, NotForRole, ScreenTabs, Spinner } from '../ui'
-import { drawable, screenFor } from './registry'
+import { drawable, screenFor, shownHere } from './registry'
 import { screensOf, tabRow, tabSearch } from './line'
 import './base'
 
@@ -15,7 +15,7 @@ export function DepartmentScreen() {
   // More is opened for one department: the next one starts folded (no effect resets it)
   const [more, setMore] = useState<string | null>(null)
   if (!dept || !org) return <Centered><Spinner /></Centered>
-  const row = tabRow(dept, org.screens, can, drawable, params.get('tab'), more === dept.id)
+  const row = tabRow(dept, org.screens, can, (k) => drawable(k) && shownHere(k, dept, org), params.get('tab'), more === dept.id)
   const Screen = row.current ? screenFor(row.current) : undefined
   // nothing to show: screens this role does not open here, or none on the line
   if (!row.first.length) return <div className={`${FRAME} py-6`}>{screensOf(dept, org.screens, drawable).length ? <NotForRole>{dept.name}'s screens are not for your role.</NotForRole>

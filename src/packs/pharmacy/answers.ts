@@ -13,4 +13,6 @@ export const SEND_WORDS: SendWords = { to: 'pharmacy', field: 'Pharmacy', chip: 
 export const QUEUE_DETAILS: ReplyDetails = { table: 'pharmacy.queue', action: 'read:pharmacy.queue', where: (departmentId) => ({ department_id: departmentId }),
   of: (r) => ({ item: String(r.item), details: { drug: { name: r.drug }, dose: r.dose, frequency: r.timing, duration_days: r.duration_days, quantity: r.quantity,
     medication_item: r.medication_item, instructions: r.instructions, warnings: r.warnings ?? [], owed: r.owed, status: r.status, question: r.question ?? undefined } }) }
-export const REFUSALS: Record<string, string> = { nothing_dispensed: 'Say what was given' }
+export const REFUSALS: Record<string, string> = { nothing_dispensed: 'Say what was given', unknown_product: 'That product is not on this pharmacy\'s list',
+  nothing_received: 'Say how many boxes came', batch_missing: 'Write the batch number on the box', expiry_missing: 'Write the expiry on the box (2027-05)',
+  expired_already: 'That batch has already expired: do not receive it', reason_missing: 'Say why the count differs', bad_count: 'Count in whole units' }

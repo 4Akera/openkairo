@@ -13,7 +13,7 @@ alter default privileges for role pack_pharmacy revoke execute on functions from
 
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
   public.save(text, jsonb), public.remove(text, uuid), public.save_patient(jsonb), public.merge_patients(jsonb), public.write_setting(jsonb),
-  public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb), public.retry_pack(jsonb), public.my_users() to authenticated;
+  public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb), public.retry_pack(jsonb), public.pack_op(jsonb), public.my_users() to authenticated;
 grant execute on function core.may_listen(text), core.may_read_file(text), core.may_upload_file(text) to authenticated;
 
 -- a pack's schema: nothing callable by PUBLIC, now and later

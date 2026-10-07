@@ -906,7 +906,15 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   (received with batch and expiry, moved, counted with a reason), only ever added to, who and when on every row, its own action; what
   is given is the dispense records, never copied (on hand = received − given − adjusted, per place and batch; each Give takes the
   first to expire). Not chart entries; the table is the original data (not rebuilt from entries). Screens: *Stock* (All · Low ·
-  Expiring · Out of stock, pharmacy or main store; a product's movements), *Receive* a delivery, *Count* a shelf.
+  Expiring · Out of stock, pharmacy or main store; a product's movements), *Receive* a delivery, *Count* a shelf. *Built 2026-10-07
+  (piece 4):* `pharmacy.keep_stock`, `pharmacy.product` (many, per pharmacy, written with `write:pharmacy.stock`, which the
+  pharmacist and the store keeper hold), `pharmacy.stock` (its own table: received, counted, expired, damaged; clock time), and the
+  derived `pharmacy.given` (each thing a dispense gave from a product, by batch). A pack's own table is reached through one core door,
+  `public.pack_op`, and the operations a pack declares (`core.declare_op`: owned, definer, pinned, its action checked in a department
+  that uses the pack); such an operation counts as registered, so it may read its own pack's derived tables (it returns no patient
+  data). The Stock tab (`registerScreen(…, shown)`: only where the pharmacy keeps stock); each give records its product and its batch,
+  first to expire (a generic prescribed: the brand with the most on hand); the check shows what is on hand. Main store and moving
+  stock between places come with transfers, next.
 - **Laboratory:** *Collect* (tubes by colour, the sample number written on them until labels print, fasting asked at the grey tube,
   *Collected* or *Couldn't collect* with a reason the doctor sees) and *Results* (one grid per section, ranges by age and sex, flags as
   typed, the change check against the last result, calculated values such as LDL and eGFR). A critical value is only a notice —

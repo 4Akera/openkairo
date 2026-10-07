@@ -40,7 +40,7 @@ select t.ok(core.department_uses(:'org', :'ph', 'base') and core.department_uses
 select t.ok(not core.department_uses(:'org', :'ph', 'pharmacy'), 'pharmacy is on for the clinic, not yet ticked here');
 select public.write_setting(jsonb_build_object('key', 'department.packs', 'owner_id', :'ph', 'data', '{"packs":["pharmacy"]}'::jsonb)) ->> 'key' as ticked;
 select t.ok(core.department_uses(:'org', :'ph', 'pharmacy'), 'ticked: the pharmacy uses it');
-select t.ok(d -> 'screens' = '["pharmacy.dispensing"]', 'ticked with no line set: the pack''s screen in place of the bench (one tick brings the tab)')
+select t.ok(d -> 'screens' = '["pharmacy.dispensing","pharmacy.stock"]', 'ticked with no line set: the pack''s screens, Dispensing in place of the bench and Stock (one tick brings the tabs; Stock shows where the pharmacy keeps stock)')
   from jsonb_array_elements(public.read('{"shape":"me"}') -> 'departments') d where d ->> 'id' = :'ph';
 select t.ok(d -> 'screens' = '["base.bench"]', 'the lab, not ticked: the bench') from jsonb_array_elements(public.read('{"shape":"me"}') -> 'departments') d where d ->> 'id' = :'lab';
 select t.ok(not core.department_uses(:'org', :'lab', 'pharmacy'), 'the lab does not');
