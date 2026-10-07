@@ -953,7 +953,12 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   normal results by themselves are placeholders on the card, read-only with a small *later* beside them (a field declared `later`
   holds its value by the shape's `const`; `core.check_fields` refuses one without). The queue's row carries its latest step's data
   (the sample number, a reason) and its latest answer. The demo adds Nabil (a lipid profile collected two and a half hours ago), two
-  walk-ins waiting to be collected (Dina; Omar, stat) and the senior, Hala Mansour (senior@demo.com).
+  walk-ins waiting to be collected (Dina; Omar, stat) and the senior, Hala Mansour (senior@demo.com). *Fixed 2026-10-07:* a sample
+  number is the patient's tests', not a screen's — `lis.sample` takes the orders and gives the same number on every screen that opens
+  them (a reload, another user, later) until a tube is sent back, then a new one, never the rejected one (`lis.sample_orders` keeps
+  which orders each number went to; the rejected step carries its number); before, each screen drew its own, so the tubes could carry
+  one number and the record another. Receive says why a number finds nothing (never given; given to whom and not marked Collected
+  yet; saved under another number, via `lis.sample_of`) and receives by hand a tube with no number or one that will not scan.
 
 ---
 

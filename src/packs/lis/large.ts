@@ -52,3 +52,14 @@ export function scanned(rows: RequestQueueRow[], typed: string) {
   const k = sampleKey(typed); const mine = rows.filter((r) => r.step_data?.specimen && sampleKey(r.step_data.specimen) === k && inLab(r))
   return { toReceive: mine.filter((r) => r.order.step_key === 'collected'), already: mine.filter((r) => r.order.step_key === 'received') }
 }
+/** why a scanned number finds nothing to receive, from the orders it was given to (lis.sample_of): never given; given but not marked
+ *  Collected yet; or its tubes saved under another number */
+export function notFound(rows: RequestQueueRow[], typed: string, items: string[]): string {
+  const k = sampleKey(typed); const mine = rows.filter((r) => items.includes(r.item))
+  if (!items.length) return `${k}: no sample was given this number. Check the tube.`
+  if (!mine.length) return `${k}: its tests are no longer waiting here.`
+  const p = mine[0].patient; const who = `${p.given_name} ${p.family_name}`
+  const other = mine.find((r) => r.order.status !== 'on-hold' && r.step_data?.specimen && sampleKey(r.step_data.specimen) !== k)?.step_data?.specimen
+  if (other) return `${k} was given to ${who}, whose tubes were saved as ${other}. Scan that, and correct the tubes.`
+  return `${k} is ${who}'s, but not marked Collected yet: finish it on Collect, then scan again.`
+}

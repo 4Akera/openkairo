@@ -69,8 +69,11 @@ export function Collect({ dept }: ScreenProps) {
   const views: ScreenView<View>[] = [{ id: 'todo', label: 'To collect', count: waiting.length, needs: 'warn' }, { id: 'collected', label: 'Collected', count: collected.length },
     { id: 'not', label: "Couldn't collect", count: couldnt.length }]
   const serviceOf = (r: RequestQueueRow) => org?.services.find((s) => s.id === r.order.service_id)
-  const sample = useQuery({ queryKey: ['lis.sample', dept.id, open], enabled: !!open && view === 'todo', staleTime: Number.POSITIVE_INFINITY,
-    queryFn: () => packOp<{ sample: string }>('lis.sample', dept.id) })
+  // the open patient's number: the laboratory's for these orders (the same on every screen until collected), a new one for a tube sent back
+  const openG = waiting.find((g) => g.patient.id === open)
+  const items = openG?.rows.map((r) => r.item) ?? []; const rejected = openG?.rows.find((r) => r.order.status === 'on-hold')?.step_data?.specimen
+  const sample = useQuery({ queryKey: ['lis.sample', dept.id, open, items.join(','), rejected], enabled: !!openG && view === 'todo', staleTime: Number.POSITIVE_INFINITY,
+    queryFn: () => packOp<{ sample: string }>('lis.sample', dept.id, { items, not: rejected }) })
   const toggle = (pid: string) => { setOpen(open === pid ? null : pid); setFasting(null); setWhy(null); setError(null) }
   // call a ticket to my chair (take: one another chair called), and open it to collect
   const call = async (t: Ticket, g: PatientGroup, take = false) => {
@@ -102,7 +105,7 @@ export function Collect({ dept }: ScreenProps) {
       who={g.rows[0]?.from_department_name ?? undefined} minutes={g.since ? minutesSince(g.since) : null} onOpen={() => toggle(g.patient.id)}
       actions={view === 'todo' && can('write:step') ? <span className="flex gap-1.5">
         {chair && t && t.chair !== chair && <Button size="sm" variant="ghost" loading={busy === `call ${t.number}`} onClick={() => void call(t, g, elsewhere)}><Megaphone />{elsewhere ? 'Call here' : 'Call'}</Button>}
-        <Button size="sm" variant={isOpen ? 'primary' : 'outline'} aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>Collect</Button></span> : undefined} />,
+        <Button size="sm" variant={isOpen ? 'ghost' : 'outline'} aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : 'Collect'}</Button></span> : undefined} />,
       isOpen && view === 'todo' && fold(g)]
   }
   // the fold to collect: the sample number, the tubes by colour, fasting where it matters, then Collected or why not

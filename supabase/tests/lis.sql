@@ -23,6 +23,25 @@ select t.ok((public.pack_op(jsonb_build_object('op', 'lis.sample', 'department_i
 select t.ok((public.pack_op(jsonb_build_object('op', 'lis.sample', 'department_id', :'labd')) ->> 'sample') ~ '^S-[0-9]{4}-0002$', 'the next: …-0002');
 select t.refuses($q$select public.pack_op('{"op":"lis.sample","department_id":"00000000-0000-0000-0000-0000000000d1"}')$q$, 'not_used_here');
 
+\echo '── a number is the patient''s tests'', not a screen''s: the same orders, the same number, until a tube is sent back'
+create temp table sn as select public.pack_op(jsonb_build_object('op', 'lis.sample', 'department_id', :'labd', 'args', jsonb_build_object('items',
+  jsonb_build_array('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b2')))) ->> 'sample' v;
+grant select on sn to authenticated;
+select t.ok(v ~ '-0003$', 'two orders: the next number') from sn;
+select t.ok((public.pack_op(jsonb_build_object('op', 'lis.sample', 'department_id', :'labd', 'args', jsonb_build_object('items',
+  jsonb_build_array('00000000-0000-0000-0000-0000000000b2')))) ->> 'sample') = (select v from sn), 'another screen opening the same orders: the same number');
+select t.ok((public.pack_op(jsonb_build_object('op', 'lis.sample', 'department_id', :'labd', 'args', jsonb_build_object('items',
+  jsonb_build_array('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b3')))) ->> 'sample') = (select v from sn), 'a test asked for later joins it');
+create temp table sn2 as select public.pack_op(jsonb_build_object('op', 'lis.sample', 'department_id', :'labd', 'args', jsonb_build_object('items',
+  jsonb_build_array('00000000-0000-0000-0000-0000000000b1'), 'not', (select v from sn)))) ->> 'sample' v;
+grant select on sn2 to authenticated;
+select t.ok((select v from sn2) <> (select v from sn), 'a tube sent back: a new number, never the one rejected');
+select t.ok((public.pack_op(jsonb_build_object('op', 'lis.sample', 'department_id', :'labd', 'args', jsonb_build_object('items',
+  jsonb_build_array('00000000-0000-0000-0000-0000000000b1'), 'not', (select v from sn)))) ->> 'sample') = (select v from sn2), 'opened again: that new number stays');
+select t.ok((public.pack_op(jsonb_build_object('op', 'lis.sample_of', 'department_id', :'labd', 'args', jsonb_build_object('sample', ' ' || lower((select v from sn)))))
+  -> 'items') @> '["00000000-0000-0000-0000-0000000000b3"]', 'whose a number is (as typed): the orders it was given to');
+select t.ok(public.pack_op(jsonb_build_object('op', 'lis.sample_of', 'department_id', :'labd', 'args', '{"sample":"S-0101-9999"}'::jsonb)) -> 'items' = '[]', 'a number never given: none');
+
 \echo '── the earlier values: a final result''s numbers, by analyte key, for its technician'
 select t.as(:'dr');
 select t.landed(t.w(t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'cbc', 'code', 'cbc', 'name', 'CBC'), 'department_id', :'labd', 'priority', 'routine', 'status', 'active'),

@@ -2,7 +2,9 @@
 // large lab's switch). Each scan of a sample number (S-MMDD-NNNN, written on the tubes until labels print) marks its tests received
 // — a received step on each order — and says where each tube goes; Results types only what was received. An unknown number, or one
 // already in, says so. A tube that cannot be used (haemolysed, clotted, too little) is rejected: its tests go back to Collect for a new
-// sample, held with the reason. Views: Not arrived (collected, not scanned), Received (waiting for results), Sent back.
+// sample, held with the reason. Views: Not arrived (collected, not scanned; Receive by hand there for a tube with no number or one that
+// will not scan), Received (waiting for results), Sent back. A number that
+// finds nothing says why: never given, given but not marked Collected yet, or its tubes saved under another number.
 import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ScanLine } from 'lucide-react'
@@ -10,14 +12,14 @@ import { useDepartment } from '@core/hooks/organization'
 import { useRequestQueue } from '@core/hooks/reads'
 import { refresh } from '@core/hooks/writes'
 import { answerEntry, oneSet } from '@core/db/entries'
-import { write } from '@core/db/rpc'
+import { packOp, write } from '@core/db/rpc'
 import type { RequestQueueRow } from '@core/db/types'
 import type { ScreenProps } from '@core/screens/registry'
 import { ageSex, groupByPatient, matches, type PatientGroup } from '@core/screens/bench/shared'
 import { Button, Callout, Card, Chip, Empty, Input, Kbd, ListRow, ScreenFrame, Spinner, Tag, errorText, hm, minutesSince, type ScreenView } from '@core/ui'
 import { Cap } from './Collect'
 import { tubesFor } from './tubes'
-import { inLab as open, sampleKey, scanned } from './large'
+import { inLab as open, notFound, sampleKey, scanned } from './large'
 
 type View = 'wait' | 'in' | 'back'
 export const REJECTS = ['Haemolysed', 'Clotted', 'Too little', 'Wrong tube', 'No number']
@@ -43,19 +45,28 @@ export function Receive({ dept }: ScreenProps) {
   const receive = async () => {
     const typed = scan.trim(); if (!typed) return
     const { toReceive, already } = scanned(rows, typed); setScan('')
-    if (!toReceive.length) { setSaid(already.length ? { tone: 'warn', words: `${sampleKey(typed)} is in already (${hm(already[0].order.last_at)}).` } : { tone: 'danger', words: `${sampleKey(typed)}: no sample waiting with this number.` }); return }
+    if (!toReceive.length && already.length) { setSaid({ tone: 'warn', words: `${sampleKey(typed)} is in already (${hm(already[0].order.last_at)}).` }); return }
+    if (!toReceive.length) {   // whose the number is, to say why it is not here
+      const of = await packOp<{ items: string[] }>('lis.sample_of', dept.id, { sample: typed }).catch(() => ({ items: [] as string[] }))
+      setSaid({ tone: 'danger', words: notFound(rows, typed, of.items) }); return
+    }
+    await take(toReceive, sampleKey(typed))
+  }
+  // a received step on each order, and where each tube goes; by a scan, or by hand for a tube with no number or one that will not scan
+  const take = async (rs: RequestQueueRow[], label: string) => {
     setBusy(true)
     try {
-      await write(oneSet(toReceive.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'in-progress', ...(serviceOf(r)?.steps.includes('received') ? { step: 'received' } : {}),
+      await write(oneSet(rs.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'in-progress', ...(serviceOf(r)?.steps.includes('received') ? { step: 'received' } : {}),
         specimen: r.step_data?.specimen } }))))
-      const p = toReceive[0].patient; const where = tubesOf(toReceive).map(({ tube, tests }) => `${tube.word.split(' ·')[0]} → ${[...new Set(tests.map((t) => t.row.section_name ?? 'Other'))].join(', ')}`)
-      setSaid({ tone: 'accent', words: `${sampleKey(typed)} · ${p.given_name} ${p.family_name} · ${where.join(' · ')}` }); refresh(qc)
+      const p = rs[0].patient; const where = tubesOf(rs).map(({ tube, tests }) => `${tube.word.split(' ·')[0]} → ${[...new Set(tests.map((t) => t.row.section_name ?? 'Other'))].join(', ')}`)
+      setSaid({ tone: 'accent', words: `${label} · ${p.given_name} ${p.family_name} · ${where.join(' · ')}` }); refresh(qc)
     } catch (x) { setSaid({ tone: 'danger', words: errorText(x) }) } finally { setBusy(false); box.current?.focus() }
   }
   const reject = async (g: PatientGroup, rs: RequestQueueRow[], why: string, tube: string) => {
     setBusy(true)
     try {
-      await write(oneSet(rs.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'on-hold', reason: `Rejected: ${why.toLowerCase()}` } }))))
+      // held with why and the number rejected: Collect gives the new sample another number
+      await write(oneSet(rs.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'on-hold', reason: `Rejected: ${why.toLowerCase()}`, specimen: r.step_data?.specimen } }))))
       setRejecting(null); setSaid({ tone: 'warn', words: `${g.patient.given_name} ${g.patient.family_name}: the ${tube.toLowerCase()} tube went back to Collect (${why.toLowerCase()}) for a new sample` }); refresh(qc)
     } catch (x) { setSaid({ tone: 'danger', words: errorText(x) }) } finally { setBusy(false) }
   }
@@ -69,7 +80,9 @@ export function Receive({ dept }: ScreenProps) {
           : <><span className="font-mono text-12 font-semibold text-fg">{n}</span>{tubes.map(({ tube }) => <Cap key={tube.cap} cap={tube.cap} />)}
             <span className="truncate">{[...new Set(g.rows.map((r) => r.section_name ?? 'Other'))].join(', ')}</span></>}</>}
       minutes={g.rows[0]?.order.last_at ? minutesSince(g.rows[0].order.last_at) : null}
-      actions={view === 'in' && may ? <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => setRejecting(isOpen ? null : g.patient.id)}>Reject a tube</Button> : undefined} />,
+      actions={view === 'in' && may ? <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => setRejecting(isOpen ? null : g.patient.id)}>Reject a tube</Button>
+        : view === 'wait' && may ? <Button size="sm" variant="ghost" disabled={busy} title="For a tube with no number, or one that will not scan"
+          aria-label={`Receive ${g.patient.given_name} ${g.patient.family_name}'s tubes by hand`} onClick={() => void take(g.rows, n || 'No number')}>Receive</Button> : undefined} />,
       isOpen && <li key={`${g.patient.id} reject`} className="grid gap-2 border-t border-line bg-sunken p-4">
         {tubes.map(({ tube, tests }) => <div key={tube.cap} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
           <Cap cap={tube.cap} big /><span className="w-36 text-13 font-medium text-fg">{tube.word}</span><span className="text-13 text-muted">{tests.map((t) => t.name).join(' · ')}</span>

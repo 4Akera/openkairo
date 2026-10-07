@@ -14,7 +14,10 @@ select core.create_pack('lis');
 
 set role pack_lis;
 
--- ── the sample numbers: one counter per laboratory and day; S-MMDD-NNNN, written on the tubes until labels print ──
+-- ── the sample numbers: one counter per laboratory and day; S-MMDD-NNNN, written on the tubes until labels print. A number is the
+-- patient's tests', not a screen's: the same orders get the same number however many screens open them, until a tube of it is sent
+-- back (then a new one, never the one rejected); a test asked for later joins it while it waits. Each number keeps the orders it was
+-- given to, so Receive can say whose a number is that never arrived ──
 create table lis.samples (
   organization_id uuid not null,
   department_id uuid not null,
@@ -22,17 +25,49 @@ create table lis.samples (
   last          int not null default 0,
   primary key (organization_id, department_id, day)
 );
+create table lis.sample_orders (
+  organization_id uuid not null,
+  department_id uuid not null,
+  sample        text not null,             -- S-MMDD-NNNN
+  day           date not null,
+  items         uuid[] not null,           -- the orders it was given to; never the patient
+  at            timestamptz not null default clock_timestamp(),
+  primary key (organization_id, department_id, sample)
+);
 -- the clinic's today
 create function lis.today(p_org uuid) returns date language sql stable security definer set search_path = '' as $$
   select (now() at time zone coalesce(core.setting_at(p_org, 'organization.time_zone', p_org) ->> 'zone', 'Africa/Cairo'))::date
 $$;
+-- the number for these orders (args.items): today's newest number given to any of them, unless it is the one sent back (args.not);
+-- else the next of the day. With no orders, the next number
 create function lis.next_sample(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare v_day date := lis.today(p_org); n int;
+declare v_day date := lis.today(p_org); n int; v_items uuid[] := array(select x::uuid from jsonb_array_elements_text(coalesce(p_args -> 'items', '[]')) x);
+        v_had lis.sample_orders; v_sample text;
 begin
+  if cardinality(v_items) > 200 then perform core.refuse('too_many', 'items'); end if;
+  perform pg_advisory_xact_lock(hashtextextended('lis.samples ' || p_department::text || v_day::text, 0));
+  if cardinality(v_items) > 0 then
+    select x.* into v_had from lis.sample_orders x where x.organization_id = p_org and x.department_id = p_department and x.day = v_day and x.items && v_items
+     order by x.at desc limit 1;
+    if v_had.sample is not null and v_had.sample is distinct from p_args ->> 'not' then
+      update lis.sample_orders x set items = array(select distinct z from unnest(x.items || v_items) z order by z)
+       where x.organization_id = p_org and x.department_id = p_department and x.sample = v_had.sample and not x.items @> v_items;
+      return jsonb_build_object('sample', v_had.sample);
+    end if;
+  end if;
   insert into lis.samples as s (organization_id, department_id, day, last) values (p_org, p_department, v_day, 1)
   on conflict (organization_id, department_id, day) do update set last = s.last + 1 returning s.last into n;
-  return jsonb_build_object('sample', 'S-' || to_char(v_day, 'MMDD') || '-' || lpad(n::text, 4, '0'));
+  v_sample := 'S-' || to_char(v_day, 'MMDD') || '-' || lpad(n::text, 4, '0');
+  if cardinality(v_items) > 0 then
+    insert into lis.sample_orders (organization_id, department_id, sample, day, items) values (p_org, p_department, v_sample, v_day, v_items);
+  end if;
+  return jsonb_build_object('sample', v_sample);
 end $$;
+-- whose a number is (Receive, for one that never arrived): the orders it was given to, the newest of that text
+create function lis.sample_of(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language sql volatile security definer set search_path = '' as $$
+  select jsonb_build_object('items', coalesce((select to_jsonb(x.items) from lis.sample_orders x where x.organization_id = p_org and x.department_id = p_department
+    and x.sample = upper(regexp_replace(coalesce(p_args ->> 'sample', ''), '\s+', '', 'g')) order by x.at desc limit 1), '[]'))
+$$;
 
 -- ── the queue tickets (collection chairs): a number for one patient's tests of the day, in the order they came, called to a chair. It
 -- names the orders, never the patient; a ticket gains a test asked for later; a chair calls the next with no chair, or takes one ──
@@ -121,6 +156,7 @@ select core.declare_action('read:lis.values', 'lis', 'department', '{"en":"Read 
 select core.declare_table('lis.values', 'lis', 'lis.values_refresh(uuid,uuid[])', 'read:lis.values');
 select core.declare_listener('lis', array['result'], 'lis.values_refresh(uuid,uuid[])');
 select core.declare_op('lis.sample', 'lis', 'lis.next_sample(uuid,uuid,uuid,jsonb)', 'write:step');
+select core.declare_op('lis.sample_of', 'lis', 'lis.sample_of(uuid,uuid,uuid,jsonb)', 'read:bench');
 select core.declare_op('lis.tickets', 'lis', 'lis.tickets_of(uuid,uuid,uuid,jsonb)', 'read:bench');
 select core.declare_op('lis.call', 'lis', 'lis.call(uuid,uuid,uuid,jsonb)', 'write:step');
 select core.declare_action('approve:lis.results', 'lis', 'department', '{"en":"Approve results another person released (the second check)"}');

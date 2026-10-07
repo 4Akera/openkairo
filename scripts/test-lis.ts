@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { MOST_ASKED, needsFasting, testsIn, tubeOf, tubesFor } from '../src/packs/lis/tubes'
 import { changeOf, columnsOf, workedOut } from '../src/packs/lis/grid'
-import { byArrival, lateBy, nextUp, nowAt, sampleKey, scanned, sectionKey, targetOf, ticketOf, type Large, type Ticket } from '../src/packs/lis/large'
+import { byArrival, lateBy, nextUp, notFound, nowAt, sampleKey, scanned, sectionKey, targetOf, ticketOf, type Large, type Ticket } from '../src/packs/lis/large'
 import type { RequestQueueRow } from '../src/core/db/types'
 
 let n = 0
@@ -69,5 +69,13 @@ test('receive: a scan names the samples collected under its number, whatever its
   assert.deepEqual(scanned(rows, 's-1007-0002').toReceive.map((r) => r.item), ['1', '2'])
   assert.deepEqual(scanned(rows, 'S-1007-0003').already.map((r) => r.item), ['3']); assert.equal(scanned(rows, 'S-1007-0003').toReceive.length, 0)
   assert.equal(scanned(rows, 'S-1007-0004').toReceive.length, 0, 'sent back: no longer waiting under its number')
+})
+test('receive: a number that finds nothing says why, from the orders it was given to', () => {
+  const R = (item: string, step_key: string | null, specimen?: string) => ({ item, patient: { given_name: 'Adam', family_name: 'Fouda' }, step_data: specimen ? { specimen } : null, reply: null,
+    order: { step_key, status: step_key ? 'in-progress' : 'active' } }) as unknown as RequestQueueRow
+  assert.match(notFound([], 's-1007-0009', []), /^S-1007-0009: no sample was given this number/)
+  assert.match(notFound([R('a', 'collected', 'S-1007-0005')], 'S-1007-0009', ['a']), /given to Adam Fouda, whose tubes were saved as S-1007-0005/)
+  assert.match(notFound([R('a', null)], 'S-1007-0009', ['a']), /Adam Fouda's, but not marked Collected yet/)
+  assert.match(notFound([R('b', null)], 'S-1007-0009', ['a']), /no longer waiting/)
 })
 console.log(`lis: ${n} groups passed`)
