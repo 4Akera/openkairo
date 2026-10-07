@@ -18,7 +18,7 @@ deployment, so nothing here needs a data migration.
  │ PACKS   pharmacy.* …  own types (often extending a base type), checks, visibility rules (hide only), │
  │         settings, screens. React to other layers' types after commit.                               │
  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
- │ BASE    all meaning: 37 types, presence, privacy, checks, derived tables, the review loop,         │
+ │ BASE    all meaning: 38 types, presence, privacy, checks, derived tables, the review loop,         │
  │         code systems and their rows, settings keys, FHIR mappings. Always on; released with core.  │
  ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
  │ CORE    people · patients · places · registry · settings · codes · counters · files · datatypes    │
@@ -379,7 +379,8 @@ FHIR's own code wherever the meaning matches, so the mapping is identity and the
 | `step` | the performing department's progress on an order · status (received · accepted · rejected · in-progress · on-hold · completed · cancelled · failed), step key (one of the service's steps), reason, specimen number. The first step `answers` the order; later steps `change` it | Task (fulfil); the key is businessStatus | HL7 task status |
 | `result` | an answer to an order, or an outside result · code, status (preliminary · final · corrected · amended), analytes[{key, code, name, value, text, interpretation, reference range copied at write, critical range}], conclusion, attachments | DiagnosticReport + Observation per analyte, id `{item}-{key}` | LOINC, UCUM, v3 ObservationInterpretation |
 | `procedure` | something done · code, status, performed time, body site, outcome, reason | Procedure | local |
-| `reviewed` | the requester saw an answer (`about` → result or step) | Task (review), completed | — |
+| `question` | the department an order went to asks whoever ordered it (`about` → the order; §5.3: the pharmacy asks the doctor); on their To review until answered | Communication (about the ServiceRequest) | — |
+| `reviewed` | the requester saw an answer (`about` → result or step), or answers a question (`note`, `action`: give_anyway · changed) | Task (review), completed | — |
 | `alert` | a standing warning (DNR, isolation for HBV or HCV, fall risk, other) · concept, status (active · inactive), period; ended by an inactive version that `changes` it, once; never names HIV (`names_hiv`) | Flag | local (`local.alert`: dnr, isolation_hbv, isolation_hcv, fall_risk…) |
 | `pregnancy` | pregnant or not, a base fact (§5.1 rule 3) · status (current · ended), pregnant, LMP (partial date) or weeks (0–45), reason (why it ended), note; ended by a version that `changes` it, once | Observation 82810-3 (LA15173-0 Pregnant · LA26683-5 Not pregnant; LMP 8665-2 or 49051-6 weeks as a component; ended: effectivePeriod) | LOINC |
 | `breastfeeding` | breastfeeding or not, a base fact · status (current · ended), breastfeeding, note | Observation 63895-7, valueBoolean | LOINC |
@@ -894,8 +895,12 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   2):* `pharmacy.queue` carries the prescription's own words, its warnings (the medicine's findings, `confirmed` when the doctor
   signed anyway) and what is owed (status `owed`); the dispense takes `instead_of`, `directions`, `owed` and `received_by`;
   `pharmacy.prepare_first`; `packs/pharmacy/Check.tsx` (the check), `directions.ts` (Arabic directions, the amount),
-  `substitutes.ts` (another brand, from the drug list's synonyms); the chart's Pharmacy section says Given in part. Asking the doctor
-  is piece 3; pack sizes (boxes and strips) come with stock.
+  `substitutes.ts` (another brand, from the drug list's synonyms); the chart's Pharmacy section says Given in part. Pack sizes
+  (boxes and strips) come with stock. *Built 2026-10-07 (piece 3):* the base type `question` (`about` an open order, from the
+  department it went to; Communication) puts a `question` row on the requester's To review (*Pharmacy asks*, Answer); the chart shows
+  it as a card above the line (`chart/center/Questions.tsx`): Give it anyway (a reviewed entry, action `give_anyway`) or Change (the
+  medicine stopped and its order revoked with the answer, action `changed`, then /rx opened); the pharmacy's table carries the
+  question and the answer, and a doctor's "give it anyway" is the pharmacist's reason. Lab technicians and pharmacists may ask.
 - **Stock (part of the pharmacy pack, its setting *Keep stock*, off by default):** products in the pharmacy's settings (brand, active
   ingredient, strength, form, pack size, EDA code, barcode); a small table of the pack's own for what comes in, moves and is counted
   (received with batch and expiry, moved, counted with a reason), only ever added to, who and when on every row, its own action; what

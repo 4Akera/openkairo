@@ -31,7 +31,7 @@ export function ClinicHome({ dept }: ScreenProps) {
     : toReview.length ? <ToReview cards={toReview} rule={dept.review_results} departmentId={dept.id} /> : <Card><Empty>Nothing to review.</Empty></Card>)
 }
 
-const REASON: Record<string, [Tone, string]> = { critical: ['danger', 'critical'], abnormal: ['warn', 'abnormal'], not_seen: ['info', 'patient not seen'], corrected: ['warn', 'corrected'], result: ['neutral', 'result'], rejected: ['warn', 'not done'], flag: ['warn', 'flagged'] }
+const REASON: Record<string, [Tone, string]> = { critical: ['danger', 'critical'], abnormal: ['warn', 'abnormal'], not_seen: ['info', 'patient not seen'], corrected: ['warn', 'corrected'], result: ['neutral', 'result'], rejected: ['warn', 'not done'], flag: ['warn', 'flagged'], question: ['warn', 'asks'] }
 /** My results to review: the line opens the patient's chart with that result in the center (?at=entry:); Reviewed writes a reviewed
  *  entry about the result and the row closes */
 function ToReview({ cards, rule, departmentId }: { cards: EntryCard[]; rule: Department['review_results']; departmentId: string }) {
@@ -42,9 +42,10 @@ function ToReview({ cards, rule, departmentId }: { cards: EntryCard[]; rule: Dep
     {cards.map((c) => { const p = (c as unknown as { patient?: { given_name: string; family_name: string } }).patient; const reason = c.request?.review_reason; return <li key={c.id} className="flex items-center border-t border-line pe-3">
       <button type="button" title={why} onClick={() => navigate(`/patient/${c.patient_id}?at=entry:${c.id}`)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2 text-start text-13 hover:bg-hover focus-ring">
         <span className="w-48 shrink-0 truncate font-medium">{p?.given_name} {p?.family_name}</span>
-        {reason && <Tag tone={REASON[reason]?.[0] ?? 'neutral'}>{REASON[reason]?.[1] ?? reason}</Tag>}
+        {reason && <Tag tone={REASON[reason]?.[0] ?? 'neutral'}>{reason === 'question' ? `${c.department_name ?? ''} asks`.trim() : REASON[reason]?.[1] ?? reason}</Tag>}
         <span className={cn('min-w-0 flex-1 truncate', c.flag && c.flag !== 'normal' && flagClass(c.flag))}>{c.display_line}</span><Compared c={c} /></button>
-      <Button size="sm" variant="ghost" disabled={w.isPending} onClick={() => w.mutate(oneSet([reviewed(c.id, c.patient_id!, departmentId)]))}>Reviewed</Button></li> })}
+      {reason === 'question' ? <Button size="sm" variant="outline" onClick={() => navigate(`/patient/${c.patient_id}`)}>Answer</Button>
+        : <Button size="sm" variant="ghost" disabled={w.isPending} onClick={() => w.mutate(oneSet([reviewed(c.id, c.patient_id!, departmentId)]))}>Reviewed</Button>}</li> })}
   </ul></Card>
 }
 

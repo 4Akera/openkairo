@@ -1,19 +1,26 @@
 // The pharmacist's check of one medicine (spec/openCare.md §5.3; the picture "Pharmacy · the check"): what was written, the amount to
 // give (changeable: less is given in part and the rest owed), the directions in Arabic, the prescriber's warnings (an allergy, a
 // duplicate: it is not given until the pharmacist says why, or asks the doctor), another brand with the same active ingredient, or not
-// given and why. toDispense turns it into the pack's dispense, the same for Give all (nothing changed) and Give (as checked).
+// given and why. Ask the doctor (spec §5.3) sends a question about the order to whoever prescribed it (the chart and their To review);
+// their answer shows here, and "give it anyway" from them is the reason. toDispense turns it into the pack's dispense, the same for Give
+// all (nothing changed) and Give (as checked).
 import { useState } from 'react'
+import { MessageSquare } from 'lucide-react'
+import { useWrite } from '@core/hooks/writes'
+import { newId, oneSet } from '@core/db/entries'
 import type { RequestQueueRow } from '@core/db/types'
 import type { EntryBody } from '@core/db/rpc'
-import { Callout, Chip, Input, cn } from '@core/ui'
+import { Button, Callout, Chip, Input, cn, errorText, hm } from '@core/ui'
 import { amountToGive, arabicDirections, parseDose } from './directions'
 import { sameMedicine } from './substitutes'
 
 export interface Dispense { given: boolean; reason: string; drug?: string; quantity?: string; anyway?: string; to?: string }
 export interface Warning { code: string; detail?: string; confirmed?: boolean }
+/** the pharmacy's question to the doctor about this order, and their answer (action: give_anyway or changed) */
+export interface Asked { text: string; at: string; answer?: string; action?: string; answered_by?: string; answered_at?: string }
 /** what a request to the pharmacy carries (answers.ts QUEUE_DETAILS, from the pack's own table) */
 export interface Details { drug?: { name?: string }; dose?: string; frequency?: string; duration_days?: number; quantity?: string; instructions?: string
-  warnings?: Warning[]; owed?: string; status?: string }
+  warnings?: Warning[]; owed?: string; status?: string; question?: Asked }
 export const detailsOf = (r: Pick<RequestQueueRow, 'details'>) => (r.details ?? {}) as Details
 const WHY_NOT = ['Out of stock', 'Patient declined', 'Buys outside']
 const WARNING: Record<string, (d?: string) => string> = { allergy_clash: (d) => `Allergy${d ? `: ${d}` : ''}`, allergy_caution: (d) => `Allergy, related${d ? `: ${d}` : ''}`,
@@ -35,14 +42,16 @@ export function toDispense(r: Pick<RequestQueueRow, 'details'>, value: Dispense 
   const d = detailsOf(r); const v = value ?? { given: true, reason: '' }
   if (!v.given) return v.reason.trim() ? { type: 'pharmacy.dispense' as const, data: { status: 'cancelled' as const, reason: v.reason.trim() } } : null
   if (!d.drug?.name) return null   // the pharmacy's list has not caught up with this prescription yet: nothing to give by name
-  if ((d.warnings ?? []).length && !v.anyway?.trim()) return null
+  const doctorSaid = d.question?.action === 'give_anyway' ? `${d.question.answered_by ?? 'The doctor'}: ${d.question.answer ?? 'give it anyway'}` : null
+  if ((d.warnings ?? []).length && !v.anyway?.trim() && !doctorSaid) return null
   const full = fullAmount(d); const now = v.quantity === undefined ? full.value : Number(v.quantity)
   if (!(now > 0) || now > full.value) return null
   const owe = full.value - now
   const dose = parseDose(d.dose); const drug = v.drug?.trim() || d.drug.name
   const item = { drug: { text: drug }, ...(dose ? { dose: { value: String(dose.value), ...(dose.unit ? { unit: dose.unit } : {}) } } : {}), quantity: { value: String(now), unit: full.unit },
     ...(drug !== d.drug.name ? { instead_of: d.drug.name } : {}), ...(directionsOf(d) ? { directions: directionsOf(d) } : {}) }
-  return { type: 'pharmacy.dispense' as const, data: { status: owe > 0 ? 'in-progress' as const : 'completed' as const, ...(v.anyway?.trim() ? { note: `Given over a warning: ${v.anyway.trim()}` } : {}),
+  const why = v.anyway?.trim() || ((d.warnings ?? []).length ? doctorSaid : null)
+  return { type: 'pharmacy.dispense' as const, data: { status: owe > 0 ? 'in-progress' as const : 'completed' as const, ...(why ? { note: `Given over a warning: ${why}` } : {}),
     pharmacy: { items: [item], ...(owe > 0 ? { owed: { value: String(owe), unit: full.unit } } : {}), ...(v.to?.trim() ? { received_by: v.to.trim() } : {}) } } }
 }
 
@@ -50,7 +59,12 @@ export function Check({ request, value, onChange }: { request: RequestQueueRow; 
   const d = detailsOf(request); const v = value ?? { given: true, reason: '' }
   const [open, setOpen] = useState<'brand' | 'part' | 'not' | null>(v.given ? null : 'not')
   const full = fullAmount(d); const now = v.quantity === undefined ? full.value : Number(v.quantity)
-  const warnings = d.warnings ?? []; const held = warnings.length > 0 && !v.anyway?.trim()
+  const warnings = d.warnings ?? []; const asked = d.question; const doctorSays = asked?.action === 'give_anyway'
+  const held = warnings.length > 0 && !v.anyway?.trim() && !doctorSays
+  const w = useWrite(); const [asking, setAsking] = useState<string | null>(null)
+  const ask = (text: string) => w.mutate(oneSet([{ id: newId(), type: 'question', patient_id: request.patient.id, department_id: request.order.to_department_id ?? '', visit_id: null,
+    refers_to: request.order.latest_entry, relation: 'about', data: { text } }]), { onSuccess: () => setAsking(null) })
+  const suggestion = warnings.length ? `${warnings.map(warningWord).join('; ')}. Change ${d.drug?.name ?? 'it'}?` : `About ${d.drug?.name ?? 'this prescription'}: `
   const same = d.drug?.name ? sameMedicine(d.drug.name) : null
   const set = (x: Partial<Dispense>) => onChange({ ...v, ...x })
   const link = (k: 'brand' | 'part' | 'not', words: string) => <button type="button" aria-expanded={open === k} onClick={() => setOpen(open === k ? null : k)}
@@ -68,10 +82,20 @@ export function Check({ request, value, onChange }: { request: RequestQueueRow; 
     {v.given && now < full.value && now > 0 && <p className="text-12 text-warn">Given in part: {full.value - now} {full.unit} owed — the patient comes back for the rest (Owed).</p>}
     {v.given && warnings.map((w) => <Callout key={w.code} tone={w.code === 'allergy_clash' ? 'danger' : 'warn'} title={warningWord(w)}>
       {w.confirmed ? 'The doctor was warned and signed anyway. ' : ''}Give it only with a reason, or not at all.</Callout>)}
-    {v.given && warnings.length > 0 && <div className="flex flex-wrap items-center gap-2">
-      <Input dense value={v.anyway ?? ''} onChange={(e) => set({ anyway: e.target.value })} placeholder="Give anyway: why (tolerated it before, the doctor confirmed…)" className="w-full max-w-md" /></div>}
+    {asked && <Callout tone={asked.answer ? (asked.action === 'give_anyway' ? 'ok' : 'info') : 'info'} icon={MessageSquare}
+      title={asked.answer ? `${asked.answered_by ?? 'The doctor'} answered${asked.answered_at ? ` at ${hm(asked.answered_at)}` : ''}` : `Asked the doctor at ${hm(asked.at)} — waiting`}>
+      {asked.answer ?? asked.text}</Callout>}
+    {v.given && warnings.length > 0 && !doctorSays && <div className="flex flex-wrap items-center gap-2">
+      <Input dense value={v.anyway ?? ''} onChange={(e) => set({ anyway: e.target.value })} placeholder="Give anyway: why (tolerated it before…)" className="w-full max-w-md" />
+      {!asked && asking === null && <Button size="sm" variant="outline" onClick={() => setAsking(suggestion)}><MessageSquare />Ask the doctor</Button>}</div>}
+    {asking !== null && <div className="flex flex-wrap items-center gap-2">
+      <Input dense autoFocus value={asking} onChange={(e) => setAsking(e.target.value)} className="w-full max-w-xl" aria-label="The question to the doctor" />
+      <Button size="sm" onClick={() => ask(asking.trim())} disabled={!asking.trim()} loading={w.isPending}>Send</Button>
+      <Button size="sm" variant="ghost" onClick={() => setAsking(null)}>Cancel</Button>
+      {w.error && <span className="text-12 text-danger">{errorText(w.error)}</span>}</div>}
     <div className="flex flex-wrap items-center gap-3">
       {same && same.others.length > 0 && link('brand', 'Another brand…')}{link('part', 'Give part…')}{link('not', v.given ? 'Not given…' : 'Not given')}
+      {!asked && asking === null && warnings.length === 0 && <button type="button" onClick={() => setAsking(suggestion)} className="rounded-sm text-12 text-accent hover:underline focus-ring">Ask the doctor…</button>}
     </div>
     {open === 'brand' && same && <div className="flex flex-wrap items-center gap-1.5 text-13"><span className="text-muted">Same medicine ({same.generic}):</span>
       {same.others.map((b) => <Chip key={b} on={v.drug === b} onClick={() => set({ drug: v.drug === b ? undefined : b, given: true })}>{b}</Chip>)}</div>}

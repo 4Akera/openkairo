@@ -262,7 +262,7 @@ create table base.review (
   organization_id uuid not null,
   item          uuid not null,             -- the result, step or flagged item
   patient_id    uuid not null,
-  why           text not null,             -- result · abnormal · critical · not_seen · corrected · rejected · flag
+  why           text not null,             -- result · abnormal · critical · not_seen · corrected · rejected · flag · question
   level         text,                      -- normal · abnormal · critical
   critical      boolean not null default false,
   for_user      uuid,
@@ -316,6 +316,14 @@ begin
             v_o.from_department_id, v_o.item, v_o.visit_id, l.id, l.recorded_at,
             (select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
         end if;
+      end if;
+    end if;
+    -- a question about an order (spec §5.3): for whoever asked for the order, until they answer it (a reviewed entry about it)
+    if b = 'question' and not v_reviewed then
+      select x.* into v_o from base.orders x where x.organization_id = p_org and x.item = (select t.item from core.entries t where t.organization_id = p_org and t.id = f.refers_to);
+      if v_o.item is not null then
+        insert into base.review values (p_org, k, core.survivor(p_org, l.patient_id), 'question', null, false, v_o.requester_id, v_o.from_department_id, v_o.item, v_o.visit_id,
+          l.id, l.recorded_at, (select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') from core.entries x where x.organization_id = p_org and x.item = k));
       end if;
     end if;
     -- a flagged entry: a review row for its department, until someone reviews it

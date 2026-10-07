@@ -34,6 +34,8 @@ function marksOf(g: PatientGroup, prepared: boolean): RowMark[] {
   return [...(ws.some((w) => w.code.startsWith('allergy')) ? [{ key: 'allergy', word: 'allergy', tone: 'danger' as const }] : []),
     ...(ws.some((w) => w.code.startsWith('duplicate')) ? [{ key: 'dup', word: 'duplicate', tone: 'warn' as const }] : []),
     ...(age < 12 ? [{ key: 'child', word: `child · ${age} y`, tone: 'info' as const }] : []),
+    ...(g.rows.some((r) => detailsOf(r).question && !detailsOf(r).question?.answer) ? [{ key: 'asked', word: 'asked the doctor', tone: 'info' as const }] : []),
+    ...(g.rows.some((r) => detailsOf(r).question?.answer) ? [{ key: 'answered', word: 'doctor answered', tone: 'ok' as const }] : []),
     ...(prepared ? [{ key: 'prep', word: 'prepared' }] : [])]
 }
 const checkable = (g: PatientGroup) => g.rows.some((r) => (detailsOf(r).warnings ?? []).length > 0)

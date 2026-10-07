@@ -12,5 +12,5 @@ export const SEND_WORDS: SendWords = { to: 'pharmacy', field: 'Pharmacy', chip: 
 // what to give, on each request: the medication its order is about, where the reader holds read:pharmacy.queue
 export const QUEUE_DETAILS: ReplyDetails = { table: 'pharmacy.queue', action: 'read:pharmacy.queue', where: (departmentId) => ({ department_id: departmentId }),
   of: (r) => ({ item: String(r.item), details: { drug: { name: r.drug }, dose: r.dose, frequency: r.timing, duration_days: r.duration_days, quantity: r.quantity,
-    medication_item: r.medication_item, instructions: r.instructions, warnings: r.warnings ?? [], owed: r.owed, status: r.status } }) }
+    medication_item: r.medication_item, instructions: r.instructions, warnings: r.warnings ?? [], owed: r.owed, status: r.status, question: r.question ?? undefined } }) }
 export const REFUSALS: Record<string, string> = { nothing_dispensed: 'Say what was given' }

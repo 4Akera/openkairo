@@ -329,6 +329,10 @@ export interface Procedure {
   reason?: string
   status: 'preparation' | 'in-progress' | 'not-done' | 'on-hold' | 'stopped' | 'completed'
 }
+/** question v1 (base) */
+export interface Question {
+  text: string
+}
 /** result v1 (base) */
 export type Result = {
   analytes?: {
@@ -563,6 +567,7 @@ export interface EntryData {
   'private': Private
   'problem': Problem
   'procedure': Procedure
+  'question': Question
   'result': Result
   'reviewed': Reviewed
   'score': Score

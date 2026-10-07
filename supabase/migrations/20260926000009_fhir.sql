@@ -325,6 +325,18 @@ create function base.reviewed_fhir(p jsonb) returns jsonb language sql stable se
   from (select base.fhir_own(p) o) x
 $$;
 
+-- a question about an order (spec §5.3): a Communication about the ServiceRequest, from whoever asked to whoever ordered it
+create function base.question_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_array(base.fhir_head(p, 'Communication') || jsonb_strip_nulls(jsonb_build_object(
+    'status', case when base.fhir_gone(p) then 'entered-in-error' else 'completed' end, 'subject', base.fhir_subject(p),
+    'about', (select jsonb_build_array(base.fhir_ref('ServiceRequest', t.item::text)) from core.entries t where t.organization_id = (p ->> 'org')::uuid and t.id = (o ->> 'refers_to')::uuid),
+    'recipient', (select jsonb_build_array(base.fhir_ref('PractitionerRole', x.requester_id::text)) from core.entries t join base.orders x on x.organization_id = t.organization_id and x.item = t.item
+                   where t.organization_id = (p ->> 'org')::uuid and t.id = (o ->> 'refers_to')::uuid),
+    'sent', core.fhir_instant((o ->> 'recorded_at')::timestamptz), 'sender', base.fhir_ref('PractitionerRole', o ->> 'author_id'),
+    'payload', jsonb_build_array(jsonb_build_object('contentString', o -> 'data' ->> 'text')))))
+  from (select base.fhir_own(p) o) x
+$$;
+
 -- a result: a DiagnosticReport and one Observation per analyte, id {item}-{key}, or uuid v5(item, key) when that is too long
 create function base.result_fhir(p jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare o jsonb := base.fhir_own(p); v_org uuid := (p ->> 'org')::uuid; v_item text := p -> 'entries' -> 0 ->> 'item'; v_status text; obs jsonb := '[]'; a jsonb; v_id text; v_order text;
@@ -479,6 +491,7 @@ select core.declare_fhir('step', 1, 'base.step_fhir(jsonb)');
 select core.declare_fhir('result', 1, 'base.result_fhir(jsonb)');
 select core.declare_fhir('procedure', 1, 'base.procedure_fhir(jsonb)');
 select core.declare_fhir('reviewed', 1, 'base.reviewed_fhir(jsonb)');
+select core.declare_fhir('question', 1, 'base.question_fhir(jsonb)');
 select core.declare_fhir('alert', 1, 'base.alert_fhir(jsonb)');
 select core.declare_fhir('pregnancy', 1, 'base.pregnancy_fhir(jsonb)');
 select core.declare_fhir('breastfeeding', 1, 'base.breastfeeding_fhir(jsonb)');

@@ -1,7 +1,7 @@
 -- The pharmacy pack's day (spec/openCare.md §5.1 rule 9, §5.3): its own three patients on its main path. Each is seen in General
 -- Practice this morning (the base's doctor prescribes and sends it to the Pharmacy, supabase/seeds/pharmacy.sql), then the
 -- pharmacist works on it: one prescription prepared nearly an hour ago and still not collected, with a second the doctor signed
--- over her penicillin allergy (the pharmacist's check shows it); one given in part ten minutes ago (one box now, the rest owed)
+-- over her penicillin allergy (the pharmacist's check shows it, and the pharmacist has asked the doctor); one given in part ten minutes ago (one box now, the rest owed)
 -- with a second still to give; and one given this morning. Times relative to the load; ids in the pack's namespace; a reload
 -- erases these patients first (demo.patient).
 
@@ -37,6 +37,9 @@ begin
     demo.gp('problem', v, 126, demo.problem('I10', 'Essential hypertension'))) || pg_temp.rx(v, 125, demo.med('Amlodipine', 'C08CA01', 10, 'mg', 'OD', '{"duration_days":30}'), o1)
     || pg_temp.rx(v, 124, demo.med('Augmentin', 'J01CR02', 1, 'g', 'BID', '{"duration_days":7,"instructions":"after meals"}'), o5), 120);
   perform pg_temp.dispense(o1, 55, '{"status":"in-progress","step":"prepared"}');
+  -- the pharmacist asked the doctor about the Augmentin five minutes ago: on Dr. Ali's To review and in Samia's chart until he answers
+  perform demo.w(demo.id('pharmacy', 'pharmacist'), jsonb_build_array(demo.e('question', demo.id('pharmacy', 'department'), null, demo.ago(5),
+    '{"text":"Allergy: Penicillins (a rash last spring). Change Augmentin 1 g twice a day?"}', null, o5, 'about')));
 
   -- given in part ten minutes ago (one box of thirty now, thirty owed); a second prescription still to give
   perform demo.patient(demo.id('pharmacy', 'patient:hamdy'), array['Hamdy', 'Lotfi'], 'Shalaby', 'male', demo.born(51, 180), '+201225560913');

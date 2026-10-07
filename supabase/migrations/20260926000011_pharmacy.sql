@@ -158,13 +158,14 @@ create table pharmacy.queue (
   instructions  text,                      -- the prescription's own words (with meals), for the directions in Arabic
   warnings      jsonb not null default '[]',   -- what the prescriber was warned of (allergy, duplicate) and whether they signed anyway
   owed          text,                      -- given in part: what is still owed (spec §5.3)
+  question      jsonb,                     -- the pharmacy asked the doctor (spec §5.3): text, at; when answered, answer, action, answered_by, answered_at
   primary key (organization_id, item)
 );
 
 -- recompute the rows of the orders these items are, answer or are about (the medication an order dispenses)
 create function pharmacy.queue_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
 declare es core.entries[]; k uuid; keys uuid[]; o1 core.entries; ol core.entries; m core.entries; d core.entries; v_answer text; v_status text; src uuid[];
-        v_warn jsonb;
+        v_warn jsonb; qn core.entries; rv core.entries; v_q jsonb;
 begin
   select coalesce(array_agg(e), '{}') into es from core.pack_entries(p_org, p_items) e;
   -- the order items: those given, those answered by the given ones, those about a given medication
@@ -172,7 +173,13 @@ begin
     select e.item x from unnest(es) e where e.item = any (p_items) and e.type = any (core.kinds('order'))
     union select o.item from unnest(es) a join core.pack_entries(p_org, (select array_agg(y.item) from unnest(es) y)) o on o.id = a.refers_to
      where a.item = any (p_items) and a.relation = 'answers' and o.type = any (core.kinds('order'))
-    union select e.item from unnest(es) e where e.relation = 'about' and e.type = any (core.kinds('order'))) q;
+    union select e.item from unnest(es) e where e.relation = 'about' and e.type = any (core.kinds('order'))
+    -- a question about an order, or the answer to one: the order it is about
+    union select o.item from unnest(es) a join unnest(es) o on o.id = a.refers_to
+     where a.item = any (p_items) and a.relation = 'about' and a.type = any (core.kinds('question')) and o.type = any (core.kinds('order'))
+    union select o.item from unnest(es) r join unnest(es) a on a.id = r.refers_to, core.pack_entries(p_org, array[a.item]) o
+     where r.item = any (p_items) and r.type = any (core.kinds('reviewed')) and a.type = any (core.kinds('question')) and o.id = a.refers_to
+       and o.type = any (core.kinds('order'))) q;
   delete from pharmacy.queue where organization_id = p_org and item = any (keys);
   foreach k in array keys loop
     select e.* into o1 from core.pack_entries(p_org, array[k]) e where e.item = k and e.item_version = 1;
@@ -197,6 +204,15 @@ begin
                      when d.data ->> 'status' in ('cancelled', 'rejected', 'failed') then 'cancelled'
                      when d.data -> 'pharmacy' ? 'owed' then 'owed'
                      when d.id is not null then 'prepared' else 'to_prepare' end;
+    -- the pharmacy's latest question about it, and the doctor's answer
+    qn := null; rv := null; v_q := null;
+    select x.* into qn from core.pack_entries(p_org, array[k]) x where x.type = any (core.kinds('question')) and x.relation = 'about'
+       and x.refers_to in (select t.id from core.pack_entries(p_org, array[k]) t where t.item = k) order by x.recorded_at desc limit 1;
+    if qn.id is not null then
+      select x.* into rv from core.pack_entries(p_org, array[qn.item]) x where x.type = any (core.kinds('reviewed')) and x.refers_to = qn.id order by x.recorded_at desc limit 1;
+      v_q := jsonb_strip_nulls(jsonb_build_object('text', qn.data ->> 'text', 'at', qn.recorded_at, 'answer', rv.data ->> 'note', 'action', rv.data ->> 'action', 'answered_at', rv.recorded_at,
+        'answered_by', (select s.name from core.pack_staff(p_org, array[rv.author_id]) s)));
+    end if;
     -- the prescriber's warnings on the medicine (allergy, duplicate), and whether they signed anyway: the pharmacist checks them
     select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('code', f ->> 'code', 'detail', f ->> 'detail', 'confirmed', (f ->> 'confirmed')::boolean))), '[]')
       into v_warn from jsonb_array_elements(coalesce(m.findings, '[]')) f
@@ -209,7 +225,7 @@ begin
       -- clinical times, as base.orders' are
       case when d.id is not null then (select min(x.occurred_at) from core.pack_entries(p_org, array[d.item]) x where x.item = d.item) end,
       case when v_status = 'dispensed' then d.occurred_at end, o1.occurred_at, coalesce(src, '{}'), m.data ->> 'instructions', v_warn,
-      case when v_status = 'owed' then concat_ws(' ', d.data -> 'pharmacy' -> 'owed' ->> 'value', d.data -> 'pharmacy' -> 'owed' ->> 'unit') end);
+      case when v_status = 'owed' then concat_ws(' ', d.data -> 'pharmacy' -> 'owed' ->> 'value', d.data -> 'pharmacy' -> 'owed' ->> 'unit') end, v_q);
   end loop;
 end $$;
 
@@ -297,11 +313,11 @@ select core.declare_type('pharmacy.dispense', 1, 'pharmacy', '{"type":"object","
   'pharmacy.dispense_line(jsonb)', array['Task', 'MedicationDispense'], base_type => 'step', checks => array['pharmacy.dispense_check(jsonb,jsonb)']::regprocedure[],
   to_fhir => 'pharmacy.dispense_fhir(jsonb)',
   feeds => array['pharmacy.queue'], labels => '{"en":"Dispense","ar":"صرف"}');
-select core.declare_listener('pharmacy', array['order', 'medication'], 'pharmacy.queue_refresh(uuid,uuid[])');
+select core.declare_listener('pharmacy', array['order', 'medication', 'question', 'reviewed'], 'pharmacy.queue_refresh(uuid,uuid[])');
 -- its one screen for the work sent to a pharmacy: the bench's list and actions for dispensing, so it stands in for the bench (§5.1 rule 4)
 select core.declare_screen('pharmacy.dispensing', 'pharmacy', 'bench', '{"en":"Dispensing"}', 'read:pharmacy.queue', array['base.bench']);
 select core.declare_role('00000000-0000-0000-0000-00000000ca01', 'pharmacy.pharmacist', 'pharmacy', 'Pharmacist', array[
-  'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out'], '{"en":"Pharmacist"}');
+  'read:patients', 'read:bench', 'read:pharmacy.queue', 'read:queue', 'write:pharmacy.dispense', 'write:note', 'write:crossed_out', 'write:question'], '{"en":"Pharmacist"}');
 -- a plain role (§5.2): the store keeper sees what is to prepare and what waits, so the shelves keep up; it writes nothing
 select core.declare_role('00000000-0000-0000-0000-00000000ca02', 'pharmacy.store_keeper', 'pharmacy', 'Store keeper', array[
   'read:patients', 'read:bench', 'read:pharmacy.queue'], '{"en":"Store keeper"}');

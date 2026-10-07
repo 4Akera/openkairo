@@ -114,6 +114,10 @@ create function base.procedure_line(e jsonb) returns text language sql stable se
   select (e -> 'data' -> 'concept' ->> 'text') || case when e -> 'data' ->> 'status' <> 'completed' then ' · ' || (e -> 'data' ->> 'status') else '' end ||
     coalesce(' · ' || nullif(e -> 'data' ->> 'outcome', ''), '')
 $$;
+-- a question about an order (spec §5.3: the pharmacy asks the doctor)
+create function base.question_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
+  select 'Question: ' || (e -> 'data' ->> 'text')
+$$;
 create function base.reviewed_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
   select 'Reviewed' || coalesce(' · ' || nullif(e -> 'data' ->> 'note', ''), '')
 $$;
@@ -521,6 +525,20 @@ begin
 end $$;
 
 -- reviewed: about an answer or a flagged entry
+-- a question is about an open order, asked by the department the order was sent to (the pharmacy of the prescription it answers)
+create function base.question_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p_entry ->> 'organization_id')::uuid; t core.entries; o base.orders;
+begin
+  if p_entry ->> 'relation' is distinct from 'about' then return jsonb_build_array(base.find('bad_target', 'refuse', 'a question is about an order')); end if;
+  t := base.target(p_entry, p_set);
+  if t.id is null or not (t.type = any (core.kinds('order'))) then return jsonb_build_array(base.find('bad_target', 'refuse', 'a question is about an order')); end if;
+  select * into o from base.orders x where x.organization_id = v_org and x.item = t.item;
+  if o.to_department_id is distinct from (p_entry ->> 'department_id')::uuid then
+    return jsonb_build_array(base.find('wrong_department', 'refuse', 'only the department it was sent to asks about an order'));
+  end if;
+  if o.status in ('completed', 'revoked', 'rejected', 'cancelled') then return jsonb_build_array(base.find('order_closed')); end if;
+  return '[]';
+end $$;
 create function base.reviewed_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare t core.entries;
 begin
@@ -721,6 +739,11 @@ begin
       "properties":{"concept":%1$s,"status":{"enum":["preparation","in-progress","not-done","on-hold","stopped","completed"]},"performed":%2$s,
         "body_site":%1$s,"outcome":{"type":"string"},"reason":{"type":"string"},"note":{"type":"string"}}}', concept, pdate)::jsonb,
     'base.procedure_line(jsonb)', array['Procedure'], checks => array['base.kind_check(jsonb,jsonb)']::regprocedure[], feeds => array['base.presence'], labels => '{"en":"Procedure"}');
+  -- a question about an order (spec §5.3): it waits on the requester's To review until a reviewed entry answers it (its note, and its
+  -- action: give_anyway or changed)
+  perform core.declare_type('question', 1, 'base', '{"type":"object","additionalProperties":false,"required":["text"],"properties":{"text":{"type":"string","minLength":1}}}'::jsonb,
+    'base.question_line(jsonb)', array['Communication'], checks => array['base.question_check(jsonb,jsonb)']::regprocedure[],
+    feeds => array['base.review'], labels => '{"en":"Question","ar":"سؤال"}');
   perform core.declare_type('reviewed', 1, 'base', '{"type":"object","additionalProperties":false,"properties":{"note":{"type":"string"},"action":{"type":"string"}}}'::jsonb,
     'base.reviewed_line(jsonb)', array['Task'], checks => array['base.reviewed_check(jsonb,jsonb)']::regprocedure[],
     feeds => array['base.review'], in_record => false, labels => '{"en":"Reviewed"}');
@@ -911,6 +934,6 @@ select core.declare_role('00000000-0000-0000-0000-00000000c004', 'reception', 'b
   'write:left', 'write:crossed_out', 'write:order'], '{"en":"Reception"}');
 select core.declare_role('00000000-0000-0000-0000-00000000c005', 'lab_technician', 'base', 'Lab technician', array[
   'read:patients', 'read:bench', 'read:queue', 'write:step', 'write:result', 'write:note', 'write:crossed_out', 'write:checked_in', 'write:called', 'write:done',
-  'write:here', 'write:not_here', 'write:left', 'write:order'], '{"en":"Lab technician"}');
+  'write:here', 'write:not_here', 'write:left', 'write:order', 'write:question'], '{"en":"Lab technician"}');
 
 grant execute on function base.eg_national_id_check(text, jsonb) to postgres;

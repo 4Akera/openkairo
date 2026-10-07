@@ -157,7 +157,7 @@ function Waiting({ p, s }: { p: Panel; s: S }) {
       <Fact onOpen={() => p.open(x.row.entry_id)} className="font-medium">{x.name}</Fact>
       {!x.critical && flagWord(x.flag) && <span className="text-12 text-warn">{flagWord(x.flag)}</span>}
       <span className="text-12 text-faint tnum">{shortDate(x.row.at)}</span>
-      {p.writes('write:reviewed') && <Reviewed p={p} entryId={x.row.entry_id} />}
+      {p.writes('write:reviewed') && (x.row.why === 'question' ? <span className="text-12 text-faint">answer it above the line</span> : <Reviewed p={p} entryId={x.row.entry_id} />)}
     </div>)}
     {orders.map((o) => <p key={o.row.item} className="flex flex-wrap items-baseline gap-x-1.5">
       <Fact onOpen={() => p.open(o.row.latest_entry)} className="font-medium">{o.name}</Fact>{o.medicine && <span className="text-muted">{o.medicine}</span>}
