@@ -143,6 +143,8 @@
 }
 
 /* ── 3. motion, layers and the few utilities the kit shares ── */
+/* a specimen tube's cap colour: the laboratory's own code, the same in both themes (a pack's tube draws it, with its word) */
+:root { --tube-purple: #8e6cc9; --tube-yellow: #e2b93b; --tube-grey: #9aa3a6; --tube-blue: #4f8fd6; --tube-red: #d0504a; --tube-cup: #f2e6b8; }
 :root { --dur-fast: 120ms; --dur-base: 180ms; --dur-slow: 260ms; --z-raised: 10; --z-sticky: 30; --z-popover: 40; --z-overlay: 50; --z-toast: 60; }
 @media (prefers-reduced-motion: reduce) { :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; } }
 @utility duration-fast { transition-duration: var(--dur-fast); }

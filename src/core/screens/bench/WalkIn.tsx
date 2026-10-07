@@ -2,7 +2,7 @@
 // above the list (never over it). First who — one search by name, phone or record number; ↑↓ ↵ picks, or New patient (the desk's
 // card, here). Then what for (WhatFor.tsx, the same in the desk's patient card) — the bench's own services as big buttons, any number;
 // who asked folded and optional. Start writes one order per service for this bench (walkins.ts); the patient joins To do. Esc closes.
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createElement, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Plus, X } from 'lucide-react'
 import { usePatientSearch } from '../../hooks/reads'
 import { useWrite } from '../../hooks/writes'
@@ -11,7 +11,7 @@ import type { Department, PatientHit, Service } from '../../db/types'
 import { Card, Input, Kbd, cn, errorText } from '../../ui'
 import { NewPatient } from '../../shell/NewPatient'
 import { walkInOrders } from './walkins'
-import { WhatFor } from './WhatFor'
+import { walkInStepFor } from './WhatFor'
 
 const LABEL = 'text-11 font-semibold uppercase tracking-[0.06em] text-faint'
 const fullName = (p: Pick<PatientHit, 'given_name' | 'family_name'>) => `${p.given_name} ${p.family_name}`
@@ -66,7 +66,8 @@ export function WalkIn({ dept, onClose, onStarted }: { dept: Department; onClose
     </Card>
     <Card className={cn('grid content-start gap-3 p-4 ring-1', who ? 'ring-accent-line' : 'ring-line')}>
       <p className={LABEL}>Then · what for</p>
-      {who ? <WhatFor key={who.id} bench={dept} busy={w.isPending} error={w.error} onStart={start} note="They join To do like any order; it stays in the record." />
+      {/* the bench's packs may give their own step (the registry's, so drawn by createElement, never defined here) */}
+      {who ? createElement(walkInStepFor(dept.packs), { key: who.id, bench: dept, busy: w.isPending, error: w.error, onStart: start, note: 'They join To do like any order; it stays in the record.' })
         : <p className="text-13 text-faint">Pick the patient first.</p>}
     </Card>
   </div>

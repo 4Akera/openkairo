@@ -1,19 +1,29 @@
 // A walk-in's second step, "what for" (spec/openCare.md §5.3), the same on the bench's card and in the desk's patient card: the bench's
 // own services as big buttons, any number; who asked folded and optional; Start (⌘↵) hands back the services and who asked.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { useDepartment } from '../../hooks/organization'
 import { replyFormFor } from '../../renderers'
 import type { Department, Organization, Service } from '../../db/types'
 import { Button, Callout, Input, Kbd, cn, errorText } from '../../ui'
 import { startWords, walkInServices } from './walkins'
 
+/** what a walk-in's second step gets: the bench, and Start with the services and who asked */
+export interface WhatForProps { bench: Pick<Department, 'id'>; busy: boolean; error: unknown; onStart: (services: Service[], askedBy?: string) => void; note?: ReactNode }
+const steps = new Map<string, ComponentType<WhatForProps>>()
+/** a pack's own second step for the benches that use it (the laboratory's: the /order line and its most-asked tests); once per pack */
+export function registerWalkInStep(pack: string, Step: ComponentType<WhatForProps>) {
+  if (steps.has(pack)) { console.error(`openCare: ${pack}'s walk-in step is taken`); return }
+  steps.set(pack, Step)
+}
+/** the second step for a bench: the first of its packs that gives one, else the base's (its services as big buttons) */
+export const walkInStepFor = (packs: string[]): ComponentType<WhatForProps> => packs.map((p) => steps.get(p)).find(Boolean) ?? WhatFor
+
 /** what a walk-in may ask for at this bench: its services, but not one only ever sent from a chart (a pack's automatic answer, as
  *  dispensing: a prescription the doctor sends) */
 export const benchOffers = (org: Organization | undefined, benchId: string) =>
   walkInServices(org?.services ?? [], benchId).filter((s) => !replyFormFor(s.reply_type)?.automatic)
 
-export function WhatFor({ bench, busy, error, onStart, note }: { bench: Pick<Department, 'id'>; busy: boolean; error: unknown
-  onStart: (services: Service[], askedBy?: string) => void; note?: ReactNode }) {
+export function WhatFor({ bench, busy, error, onStart, note }: WhatForProps) {
   const { org } = useDepartment()
   const services = benchOffers(org, bench.id)
   const [picked, setPicked] = useState<string[]>([]); const [asked, setAsked] = useState<string | null>(null)

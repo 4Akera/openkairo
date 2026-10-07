@@ -1,4 +1,4 @@
-import { useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from 'react'
+import { createElement, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, MapPin, X } from 'lucide-react'
 import { savePatient } from '../../db/rpc'
@@ -11,7 +11,7 @@ import { Button, Input, Kbd, Select, Tag, cn, errorText, minutesSince } from '..
 import { ageSex, duration, fullName, type ClinicRow } from './words'
 import { GlanceVisits } from '../chart/glance/ChartGlance'
 import { walkInOrders } from '../bench/walkins'
-import { WhatFor } from '../bench/WhatFor'
+import { walkInStepFor } from '../bench/WhatFor'
 
 /** a key for each clinic: its first free letter ("P" Psychiatry); M U L G E ↵ are the card's own */
 function clinicKeys(clinics: Department[]) {
@@ -126,9 +126,9 @@ export function PatientCard({ handle, p, clinics, benches = [], usual, rows, can
     {walkTo && dept && <div className="grid gap-2 rounded-lg bg-sunken p-3">
       <p className="flex items-center gap-2 text-12 text-muted"><span className="font-semibold uppercase tracking-[0.06em] text-faint">{walkTo.name} · what for</span>a walk-in
         <button type="button" onClick={() => setWalkTo(null)} aria-label="Close" className="ms-auto inline-flex items-center gap-1 rounded-md px-1 text-faint hover:text-fg focus-ring"><Kbd>esc</Kbd><X className="size-3.5" /></button></p>
-      <WhatFor key={walkTo.id} bench={walkTo} busy={w.isPending} error={w.error} note={`Joins ${walkTo.name}'s To do.`}
-        onStart={(services, askedBy) => w.mutate(oneSet(walkInOrders({ patientId: p.id, from: dept.id, to: walkTo.id, services, askedBy })), {
-          onSuccess: () => { rememberPatient(p); onSaid(`${fullName(p)} → ${walkTo.name} · ${services.map((s) => s.name).join(', ')}`); onDone() } })} />
+      {createElement(walkInStepFor(walkTo.packs), { key: walkTo.id, bench: walkTo, busy: w.isPending, error: w.error, note: `Joins ${walkTo.name}'s To do.`,
+        onStart: (services, askedBy) => w.mutate(oneSet(walkInOrders({ patientId: p.id, from: dept.id, to: walkTo.id, services, askedBy })), {
+          onSuccess: () => { rememberPatient(p); onSaid(`${fullName(p)} → ${walkTo.name} · ${services.map((s) => s.name).join(', ')}`); onDone() } }) })}
     </div>}
     {moving && <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-sunken p-2"><span className="text-12 text-faint">Move to</span>
       {clinics.filter((c) => c.id !== clinic?.id).map((c) => <Button key={c.id} size="sm" variant="outline" disabled={busy} onClick={() => void moveTo(c)}>{c.name}{keys.get(c.id) && <Kbd className="ms-1">{keys.get(c.id)!.toUpperCase()}</Kbd>}</Button>)}

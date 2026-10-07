@@ -132,6 +132,19 @@ begin
   perform demo.as(demo.base('owner'));
   perform public.setup(jsonb_build_object('setup', p_setup, 'department_id', p_id, 'name', p_name, 'position', p_position, 'apply', true));
 end $$;
+-- a pack serving a department the base made (the clinic's own Laboratory, which the laboratory pack now runs): the pack's own setup
+-- applied to it as the owner, through the door; only a setup of the layer the file says it is, and only to the base's department
+create or replace function demo.serve(p_id uuid, p_setup text) returns void language plpgsql as $$
+begin
+  if not exists (select 1 from core.setups s where s.key = p_setup and s.layer = current_setting('demo.layer', true)) then
+    raise exception using message = 'outside_namespace', detail = format('%s is not %s''s setup', p_setup, current_setting('demo.layer', true)), errcode = 'P0001';
+  end if;
+  if p_id::text not like '00000000-0000-0000-0000-%' then
+    raise exception using message = 'outside_namespace', detail = format('%s is not a department of the base''s', p_id), errcode = 'P0001';
+  end if;
+  perform demo.as(demo.base('owner'));
+  perform public.setup(jsonb_build_object('setup', p_setup, 'department_id', p_id, 'apply', true));
+end $$;
 create or replace function demo.department(p_id uuid, p_name text, p_work text, p_position int) returns void language plpgsql as $$
 begin
   perform demo.mine(p_id);

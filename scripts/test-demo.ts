@@ -89,7 +89,7 @@ test('each seed and day says its layer first (demo.layer), so the kit refuses a 
   // a department is made from a starter setup (§5.2), never row by row
   for (const f of seedFiles.filter((x) => !x.endsWith('demo_kit.sql'))) {
     assert.doesNotMatch(read(f), /demo\.(department|place|tick|screen)\(/, `${f} makes its departments from setups`)
-    assert.match(read(f), /demo\.setup\(/, `${f} runs a setup`)
+    assert.match(read(f), /demo\.(setup|serve)\(/, `${f} runs a setup (its own department's, or a base department it serves)`)
   }
 })
 test('the sign-in page lists the generated logins, grouped by department, and types none itself', () => {
