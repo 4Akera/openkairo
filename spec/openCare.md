@@ -572,7 +572,8 @@ pack builds against.
 
 ### 4.7 The composer
 The composer turns typed lines into one set. `/v 120/80 88` becomes `vitals` with codings by stable key; `/dx` a `problem`; `/rx` a
-`medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s; `/preg 12w` (or `lmp 2026-08-01`, `no`,
+`medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s (a word fitting two services asked, never guessed; a pack
+that answers orders adds its own word, the laboratory's `/lab cbc, dm follow-up, troponin stat ? chest pain`, §5.1 rule 1); `/preg 12w` (or `lmp 2026-08-01`, `no`,
 `end delivered`) a `pregnancy`, `/bf` (`no`, `end`) a `breastfeeding` and `/alert dnr · hbv · hcv · fall · <words>` (`end dnr`) an
 `alert`, each with its card, changing or ending the fact that stands (an alert never names HIV); `/score gcs 4 5 6` (or a score's
 alias, `/gcs e4 v5 m6`) a `score`, its card asking the server as it fills (§5.1 rule 8); a plain line a `note`; `!` a `private`
@@ -614,7 +615,20 @@ it works ("/x is used in: …").
   everything together: the pack's tabs on the department's Screens line, its chart section (rule 2), its composer commands, its
   banner words and its marks on the department's lists. Where a pack is not ticked, its commands are not offered; the composer says
   where they work ("/anc is used in: ObGyn clinic"). Unticking hides these there and keeps every entry; a patient's section still
-  shows by rule 2 when they have its data. A pack off for the clinic cannot be ticked anywhere.
+  shows by rule 2 when they have its data. A pack off for the clinic cannot be ticked anywhere. *Added 2026-10-07 (owner):* a pack that
+  answers orders (the laboratory, the pharmacy, later radiology) offers its order command where a department using it **works for**
+  this one, not where it is ticked: `/lab` shows in every department the Laboratory serves (its `department.works_for`), searches only
+  that pack's services there, and typed elsewhere says where it orders from ("/lab orders from: Laboratory"). Its words are the
+  pack's own, declared with the command (radiology's `/xr`, `/us`, `/ct`, each its section), never typed by an admin; the department
+  comes from the pack's starter setup; the admin decides only which departments use the pack and whom each serves. A word fitting
+  two services is never guessed (the card under the line asks), and the base's `/order` still searches everything. *Built
+  2026-10-07:* a command declares `orders` (and `groupTitle`, its group's words in the / list); `notHere` says why one is not offered
+  (where it is used, or where it orders from; in the department itself, "a test asked for here starts as a walk-in");
+  `orderRequests` (`visit/parse.ts`) reads codes, names, a preset's name or shortcut, `stat`/`urgent` and `? the question` (kept as
+  the order's question), and `matchesOf` takes every best match at the first step that finds any, so more than one is asked (its
+  choices in the card and under the suggestions; one chosen puts its code in the line; nothing is added until it is). A pack's order
+  command may add a word to each test it suggests (`hint`) and a line under the card (`note`): the laboratory's `/lab`
+  (`packs/lis/order.tsx`) says each test's tube and, under the card, the tubes and the fasting to tell the patient.
 - **Rule 2 · a pack's section in the chart.** It shows when this department uses the pack *and* the patient fits it, or when the
   patient already has that pack's data. Each pack declares its fit once, by age and sex (Pregnancy: women 10–55; Growth: under 19);
   a clinic cannot change it. Base sections always show. Every other section waits behind **More · n**, which opens in place as more

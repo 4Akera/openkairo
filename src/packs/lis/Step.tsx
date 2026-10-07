@@ -7,7 +7,7 @@ import { benchOffers, type WhatForProps } from '@core/screens/bench/WhatFor'
 import { startWords } from '@core/screens/bench/walkins'
 import { Button, Callout, Chip, Input, Kbd, errorText } from '@core/ui'
 import { MOST_ASKED, testsIn, tubesFor } from './tubes'
-import { Cap } from './Collect'
+import { Cap } from './Cap'
 
 export function OrderStep({ bench, busy, error, onStart, note }: WhatForProps) {
   const { org } = useDepartment(); const tests = benchOffers(org, bench.id)

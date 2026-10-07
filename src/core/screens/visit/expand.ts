@@ -1,7 +1,7 @@
 // The composer's pure half (spec 05): a /command or a #preset expands to drafts, and the word being typed gets suggestions.
 import type { Template } from '../../db/types'
 import { suggestAllergens, suggestDrugs, suggestProblems } from './catalog'
-import { allowed, byGroup, commandNamed, commandsFor, groupName, groupOf, usedWhere } from './commands'
+import { allowed, byGroup, commandNamed, commandsFor, groupName, groupOf, notHere, ordersFrom } from './commands'
 import { lineOf, parse, splitCommand, type Ctx, type Parsed, type Result } from './parse'
 import { aliasLine } from './score'
 
@@ -33,7 +33,7 @@ export function expand(text: string, ctx: Ctx, presets: Template[]): Expanded | 
   const cmd = commandNamed(word, ctx)
   if (!cmd && presets.some((x) => x.shortcut === word.toLowerCase())) return { items: [], errors: [`${word} is a preset — type #${word.toLowerCase()}`] }
   if (cmd) {
-    if (cmd.pack && ctx.packs && !ctx.packs.includes(cmd.pack)) return { items: [], errors: [], hint: usedWhere(cmd.name, ctx.usedIn?.(cmd.pack) ?? []) }
+    const away = notHere(cmd, ctx); if (away) return { items: [], errors: [], hint: away }   // where it is used, or where it orders from
     if (!allowed(cmd, ctx)) return { items: [], errors: [`/${cmd.name} is not open to your role here`] }
     const r = rest ? cmd.parse(rest, ctx) : null
     if (r) return wrap('ok' in r ? { ok: r.ok.map((p) => ({ action: cmd.action, ...p })) } : r)
@@ -80,7 +80,7 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
     const w = t.slice(1).toLowerCase()
     const cmds = byGroup(commandsFor(ctx).filter((c) => [c.name, ...(c.aliases ?? [])].some((n) => n.startsWith(w))))
     return cmds.length ? { items: cmds.map((c) => ({ key: `c${c.name}`, label: `/${c.name}`, title: c.title ?? c.label, detail: shortExample(c),
-      group: groupName(groupOf(c)), insert: `/${c.name} ` })) } : null
+      group: c.groupTitle ?? groupName(groupOf(c)), insert: `/${c.name} ` })) } : null
   }
   if (t.startsWith('#') && !/\s/.test(t)) {                                 // "#": the presets only
     const w = t.slice(1).toLowerCase()
@@ -110,14 +110,22 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
       ...suggestDrugs(rest, 4).map((d) => ({ name: d.name, detail: d.allergy_class ? `drug · class: ${d.allergy_class.replace(/_/g, ' ')}` : 'drug' }))].filter((x) => !seen.has(x.name) && seen.add(x.name) && x.name.toLowerCase() !== rest.trim().toLowerCase())
     return hits.length ? { items: hits.slice(0, 7).map((x) => ({ key: x.name, label: x.name, detail: x.detail, insert: `${m[1]} ${x.name}: ` })) } : null
   }
-  if (cmd === 'order') {                                                    // every service another department offers, with its department
+  const oc = commandNamed(m[1].slice(1), ctx)
+  if (cmd === 'order' || oc?.orders) {                                      // /order: every service another department offers; a pack's (/lab): its own
+    if (rest.includes('?')) return null                                     // "? the question": free words
     const partial = rest.split(/[,\s]+/).pop() ?? ''
     if (/^(urgent|stat)$/i.test(partial)) return null
     const p = partial.toLowerCase()
-    const hits = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!p || s.code.startsWith(p) || s.name.toLowerCase().includes(p))).slice(0, p ? 7 : 10)
-    // a department is asked with a question: "/order cardiology: …" (only as the first thing ordered)
-    const depts = !/[,:]/.test(rest) && p ? ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().startsWith(p)).slice(0, 3) : []
-    const items = [...hits.map((s) => ({ key: s.id, label: s.name, detail: `${s.code} · ${ctx.departments.find((d) => d.id === s.department_id)?.name ?? ''}`, insert: `${t.slice(0, t.length - partial.length)}${s.code}, ` })),
+    const from = oc?.orders && oc.pack ? ordersFrom(oc.pack, ctx) : null
+    const pool = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!from || from.has(s.department_id ?? '')))
+    const hits = pool.filter((s) => !p || s.code.startsWith(p) || s.name.toLowerCase().includes(p)).slice(0, p ? 7 : 10)
+    // a preset by its name or shortcut, for what it orders here
+    const sets = p.length >= 2 ? ctx.templates.filter((x) => (x.shortcut?.startsWith(p) || x.name.toLowerCase().startsWith(p)) && x.items.some((i) => pool.some((s) => s.id === i.service_id))).slice(0, 2) : []
+    // a department is asked with a question: "/order cardiology: …" (only as the first thing ordered; not from a pack's command)
+    const depts = !from && !/[,:]/.test(rest) && p ? ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().startsWith(p)).slice(0, 3) : []
+    const where = (s: Ctx['services'][number]) => from ? s.section_name ?? ctx.departments.find((d) => d.id === s.department_id)?.name ?? '' : ctx.departments.find((d) => d.id === s.department_id)?.name ?? ''
+    const items = [...sets.map((x) => ({ key: `t${x.id}`, label: x.name, detail: `preset · ${x.items.filter((i) => pool.some((s) => s.id === i.service_id)).length} tests`, insert: `${t.slice(0, t.length - partial.length)}${x.name.toLowerCase()}, ` })),
+      ...hits.map((s) => ({ key: s.id, label: s.name, detail: [s.code, where(s), oc?.hint?.(s)].filter(Boolean).join(' · '), insert: `${t.slice(0, t.length - partial.length)}${s.code}, ` })),
       ...depts.map((d) => ({ key: `d${d.id}`, label: `${d.name}: …`, detail: 'a consult — type the question', insert: `${m[1]} ${d.name}: ` }))]
     return items.length ? { items } : null
   }

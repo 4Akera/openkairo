@@ -6,6 +6,7 @@ import { DoctorSide } from './doctor'
 import { BenchWalkIn } from './bench'
 import { RxCount, RxReceive, RxSettings, RxStock } from './stock'
 import { LabAnalysers, LabChairs, LabReceive, LabSettings } from './biglab'
+import { OrderAsk, OrderList, OrderScan, OrderSet, OrderTyping, OrderWhere } from './order'
 
 const LIST: { id: string; title: string; note: string; Page: ComponentType }[] = [
   { id: 'bench-walkin', title: 'Any bench · a walk-in', note: 'Two steps: first who (search, or New patient), then what for (this room\'s services); who asked folded.', Page: BenchWalkIn },
@@ -23,6 +24,12 @@ const LIST: { id: string; title: string; note: string; Page: ComponentType }[] =
   { id: 'lab-chairs', title: 'Large lab · collection chairs', note: 'My chair, the patient called by number, labels printed at Collected; only the next few listed.', Page: LabChairs },
   { id: 'lab-receive', title: 'Large lab · scan to receive', note: 'One scan box; each tube received and routed; a rejected tube goes back for a new sample.', Page: LabReceive },
   { id: 'lab-analysers', title: 'Large lab · results from analysers', note: 'Normal results go out by themselves; people see only what a rule stopped.', Page: LabAnalysers },
+  { id: 'order-list', title: 'Ordering · the / list', note: '/lab is the laboratory pack\'s word, under its own name; offered because the Laboratory works for this department.', Page: OrderList },
+  { id: 'order-typing', title: 'Ordering · typing /lab', note: 'Only the lab\'s tests, each with its code, section and tube; tab takes the first.', Page: OrderTyping },
+  { id: 'order-ask', title: 'Ordering · a word that fits more than one', note: 'Never guessed: the draft asks which, and Sign waits for it.', Page: OrderAsk },
+  { id: 'order-set', title: 'Ordering · a preset, stat and the question', note: 'A preset\'s name brings its tests, each removable; the lab adds the tubes and fasting; stat and ? the question are the only extras.', Page: OrderSet },
+  { id: 'order-where', title: 'Ordering · where /lab is not offered', note: 'Typed in a department the Laboratory does not serve, it says where it orders from.', Page: OrderWhere },
+  { id: 'order-scan', title: 'Ordering · later, radiology', note: 'A radiology pack would bring /xr /us /ct, each its section: the same card.', Page: OrderScan },
   { id: 'doctor', title: "Doctor · what comes back", note: 'To review: the pharmacy\'s questions beside the results; Answer opens the chart, where the question is a card.', Page: DoctorSide },
 ]
 

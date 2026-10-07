@@ -22,6 +22,7 @@ import { isWalkIn } from '@core/screens/bench/walkins'
 import { WalkIn } from '@core/screens/bench/WalkIn'
 import { Button, Callout, Card, Chip, Empty, Input, Kbd, ListRow, ScreenFrame, Segmented, Spinner, Tag, errorText, hm, minutesSince, type ScreenView } from '@core/ui'
 import { needsFasting, tubesFor } from './tubes'
+import { Cap } from './Cap'
 import { byArrival, largeOf, nextUp, nowAt, ticketOf, type Ticket } from './large'
 
 type View = 'todo' | 'collected' | 'not'
@@ -39,10 +40,6 @@ function useChair(deptId: string, chairs: number): [number | null, (n: number | 
   return [c && c <= chairs ? c : null, set]
 }
 
-/** a tube's cap, its colour by the laboratory's own code and never alone (its word beside it) */
-export const Cap = ({ cap, big }: { cap: string; big?: boolean }) =>
-  <span aria-hidden className={big ? 'inline-block h-5 w-3.5 shrink-0 rounded-sm ring-1 ring-inset ring-line-strong' : 'inline-block h-3.5 w-2.5 shrink-0 rounded-sm ring-1 ring-inset ring-line-strong'}
-    style={{ background: `var(--tube-${cap})` }} />
 
 export function Collect({ dept }: ScreenProps) {
   const q = useRequestQueue(dept.id); const qc = useQueryClient(); const { org, can } = useDepartment()

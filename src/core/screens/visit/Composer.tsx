@@ -5,13 +5,13 @@ import { sendTarget } from './send'
 import { useDrafts, useDraftsFor } from '../../hooks/drafts'
 import { useComposer, type Seed } from '../../hooks/composer'
 import type { Allergy, Medication, RecordView } from '../../db/types'
-import { Button, Callout, Card, Input, Kbd, cn, ymd } from '../../ui'
+import { Button, Callout, Card, Chip, Input, Kbd, cn, ymd } from '../../ui'
 import { ALLERGENS, DRUGS, PROBLEMS, allergyWarnings, doseWarnings, drugWarnings, duplicateMedication, duplicateProblem, type Warning } from './catalog'
 import { expand, suggest, type Expanded, type Suggestion } from './expand'
 import { SlashList } from './SlashList'
 import { CardItem, WarningItem } from './Card'
-import { lineOf, type Ctx, type Parsed } from './parse'
-import { commandsFor } from './commands'
+import { lineOf, splitCommand, type Ctx, type Parsed } from './parse'
+import { commandNamed, commandsFor } from './commands'
 import { factMissing, standingOf } from './facts'
 import { scoreMissing, tableOf, type ScoreParams } from './score'
 import { useFacts } from '../../hooks/chart'
@@ -95,7 +95,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
         return q.duration_days != null && !Number.isInteger(q.duration_days) ? 'Days are whole days' : null
       case 'problem': return q.action === 'add' && !String(q.name ?? '').trim() ? 'Name the problem' : null
       case 'allergy': return q.action === 'add' && !String(q.substance?.name ?? '').trim() ? 'Name the substance' : null
-      case 'order': return q.service_id ? null : !q.to_department_id ? 'Choose the department' : !String(q.question_text ?? '').trim() ? 'Type the question' : null
+      case 'order': return q.service_id ? null : Array.isArray(q.choices) ? `Choose which “${q.word}” you mean` : !q.to_department_id ? 'Choose the department' : !String(q.question_text ?? '').trim() ? 'Type the question' : null
       case 'note': return String(q.text ?? '').trim() ? null : 'The note is empty'
       case 'pregnancy': case 'breastfeeding': case 'alert': return factMissing(p, ymd(new Date().toISOString()))
       case 'score': return scoreMissing(q as ScoreParams, tableOf(ctx.scores, q.score, q.version))
@@ -104,6 +104,16 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     return null
   }
   const warnings = items.flatMap(warningsOf)
+  // the command's own line under what the card holds (the lab's tubes and fasting)
+  const typedCmd = !seed && text.trimStart().startsWith('/') ? commandNamed(splitCommand(text)[0], ctx) : undefined
+  const note = typedCmd?.note && items.length ? typedCmd.note(items, ctx) : null
+  // a word that fits more than one test (never guessed): its choices; one chosen puts its code in the line
+  const asks = items.filter((p) => p.function === 'order' && !p.params.service_id && Array.isArray(p.params.choices))
+  function choose(p: Parsed, id: string) {
+    const code = ctx.services.find((x) => x.id === id)?.code; const w = String(p.params.word ?? ''); const i = text.toLowerCase().lastIndexOf(w.toLowerCase())
+    if (!code || !w || i < 0) return
+    setText(text.slice(0, i) + code + text.slice(i + w.length)); setEdited(null); setPick(-1); input.current?.focus()
+  }
   const blocking = warnings.filter((w) => w.level === 'block')
   const refused = items.find((p) => !can(p.action ?? FN_ACTION[p.function] ?? 'write:note')) ?? (base?.drawer && !can('write:note') ? { kind: 'note' } : undefined)
   const incomplete = items.map(missing).find(Boolean) ?? null
@@ -193,6 +203,10 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
             <span className="flex w-full items-center gap-2"><span className="truncate text-13 font-medium text-fg">{s.label}</span>{on && <Kbd className="ms-auto shrink-0 text-accent">{chosen ? '↵' : 'tab'}</Kbd>}</span>
             {s.detail && <span className="w-full truncate text-11 text-faint">{s.detail}</span>}</button> })}
           {items.length > 0 && pick < 0 && <p className="text-11 text-faint sm:col-span-2"><Kbd>tab</Kbd> takes the first · <Kbd>↓</Kbd> chooses · <Kbd>↵</Kbd> adds as typed: <span className="text-muted">{items.map((x) => x.line).join(' · ')}</span></p>}
+          {pick < 0 && asks.map((p) => <div key={String(p.params.word)} role="group" aria-label={`Which “${String(p.params.word)}”`} className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
+            <span className="text-12 text-warn">“{String(p.params.word)}” fits {(p.params.choices as string[]).length}: which?</span>
+            {(p.params.choices as string[]).map((id) => <Chip key={id} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(p, id)}>{ctx.services.find((x) => x.id === id)?.name ?? id}</Chip>)}</div>)}
+          {pick < 0 && note && <div className="text-12 text-muted sm:col-span-2">{note}</div>}
           {/* what Enter would add as typed is still checked: its warnings show here too */}
           {pick < 0 && warnings.length > 0 && <ul className="grid gap-1 sm:col-span-2">{warnings.map((w, i) => <WarningItem key={i} w={w} />)}</ul>}
           {pick < 0 && footer && <p className="text-11 sm:col-span-2">{footer}</p>}</div>}
@@ -209,6 +223,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
             {dup && <Button size="sm" variant="outline" onClick={() => changeDup(dup)}>Change its dose instead</Button>}
             {dupProblem && <Button size="sm" variant="outline" onClick={() => updateDup(dupProblem)}>Update {dupProblem.name}</Button>}
           </div> : undefined} />)}</div>}
+        {!sugg && note && <div className="border-t border-line px-3 py-2 text-12 text-muted">{note}</div>}
         {!sugg && !items.length && !base?.drawer && !base?.errors.length && !base?.hint && <p className="px-3 py-2 text-12 text-warn">{base?.label ?? 'Type a command after /, or write the note without it'}</p>}
         {!sugg && (items.length > 0 || base?.drawer) && <div className="flex items-center gap-3 border-t border-line px-3 py-2 text-11 text-faint">
           {footer ?? <span className="inline-flex items-center gap-1"><CornerDownLeft className="h-3 w-3" />{seed?.draftId ? 'save' : base?.drawer && !items.length ? 'open' : `add${items.length > 1 ? ` ${items.length}` : ''}`}</span>}

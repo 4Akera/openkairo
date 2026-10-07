@@ -136,6 +136,11 @@ function Vitals({ q, set }: { q: Q; set: (p: Q) => void }) {
 }
 
 function Req({ q, set, ctx }: { q: Q; set: (p: Q) => void; ctx: Ctx }) {
+  // a word that fits more than one: asked here, never guessed (§5.1 rule 1, added 2026-10-07)
+  if (!q.service_id && Array.isArray(q.choices)) return <div role="group" aria-label={`Which “${q.word}”`} className="flex flex-wrap gap-1.5">
+    {(q.choices as string[]).map((id) => { const s = ctx.services.find((x) => x.id === id)
+      return <Chip key={id} onClick={() => set({ service_id: id, choices: undefined, word: undefined })}>{s?.name ?? id}
+        <span className="text-faint">{s?.section_name ?? ctx.departments.find((d) => d.id === s?.department_id)?.name ?? ''}</span></Chip> })}</div>
   if (!q.service_id) return <div className="grid gap-1.5">
     <FormRow inline label="To"><Select aria-label="Consult department" value={q.to_department_id ?? ''} onChange={(e) => set({ to_department_id: e.target.value })} className={cn(small, 'w-52')}>{ctx.departments.filter((d) => d.id !== ctx.departmentId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</Select>
       <Segmented size="sm" aria-label="Priority" value={q.priority ?? 'routine'} onChange={(v) => set({ priority: v })} options={[['routine', 'Routine'], ['urgent', 'Urgent'], ['stat', 'Stat']]} /></FormRow>

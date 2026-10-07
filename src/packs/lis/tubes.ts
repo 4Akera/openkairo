@@ -11,6 +11,10 @@ const BY_CODE: Record<string, Cap> = { cbc: 'purple', esr: 'purple', hba1c: 'pur
 const BY_SECTION: Record<string, Cap> = { Haematology: 'purple', Coagulation: 'blue', 'Urine & stool': 'cup' }
 type Test = { code: string; name: string; section_name?: string | null }
 
+// the sections whose tests are a specimen (a lab may hold others, an imaging section: no tube)
+const SPECIMEN = new Set(['Haematology', 'Coagulation', 'Chemistry', 'Hormones', 'Serology', 'Urine & stool'])
+/** does the test take a specimen (a tube or a cup): a known test, or one of a specimen section */
+export const takesSpecimen = (t: Pick<Test, 'code' | 'section_name'>) => t.code in BY_CODE || SPECIMEN.has(t.section_name ?? '')
 /** the tube a test is drawn into: by the test, else by its section, else a yellow gel tube (chemistry, hormones, serology) */
 export const tubeOf = (t: Pick<Test, 'code' | 'section_name'>): Tube => TUBES[BY_CODE[t.code] ?? BY_SECTION[t.section_name ?? ''] ?? 'yellow']
 /** the tubes a patient needs: each with the tests drawn into it, in a fixed order (purple, yellow, grey, blue, red, cup) */

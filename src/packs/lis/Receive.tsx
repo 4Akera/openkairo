@@ -17,7 +17,7 @@ import type { RequestQueueRow } from '@core/db/types'
 import type { ScreenProps } from '@core/screens/registry'
 import { ageSex, groupByPatient, matches, type PatientGroup } from '@core/screens/bench/shared'
 import { Button, Callout, Card, Chip, Empty, Input, Kbd, ListRow, ScreenFrame, Spinner, Tag, errorText, hm, minutesSince, type ScreenView } from '@core/ui'
-import { Cap } from './Collect'
+import { Cap } from './Cap'
 import { tubesFor } from './tubes'
 import { inLab as open, notFound, sampleKey, scanned } from './large'
 

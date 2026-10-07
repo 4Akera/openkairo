@@ -10,8 +10,8 @@
 
 export interface Ctx {
   services: { id: string; code: string; name: string; department_id: string | null; section_name?: string | null }[]
-  templates: { id: string; name: string; items: { service_id: string }[] }[]
-  departments: { id: string; name: string }[]
+  templates: { id: string; name: string; items: { service_id: string }[]; shortcut?: string | null }[]
+  departments: { id: string; name: string; packs?: string[] }[]     // packs: the ones each uses (a pack's order command orders from them)
   problems: { id: string; name: string }[]          // on the list and drafted this visit
   departmentId: string                                // this department: its own services are not requested from here
   now?: Date
@@ -26,7 +26,7 @@ export interface Ctx {
   scores?: ScoreTable[]                               // the score tables (read 'me'): /score and each score's alias (/gcs)
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
-import { allowed, commandNamed, registerCommand, usedWhere } from './commands'
+import { allowed, commandNamed, notHere, registerCommand } from './commands'
 import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, factLine, pregnancy, type StandingFacts } from './facts'
 import { aliasLine, emptyScore, parseScore, scoreLine, type ScoreParams } from './score'
 import type { ScoreTable } from '../../db/types'
@@ -75,6 +75,18 @@ export function findNamed<T extends { name: string; code?: string }>(items: T[],
     ?? items.find((x) => norm(x.name).startsWith(s)) ?? items.find((x) => norm(x.name).split(/[\s/,()-]+/).some((w) => w.startsWith(s) && s.length >= 3))
     ?? (ABBR[s] ? items.find((x) => norm(x.name).includes(ABBR[s])) : undefined)
     ?? (s.length >= 2 && !s.includes(' ') ? items.find((x) => norm(x.name).split(/[\s/,()-]+/).map((w) => w[0]).join('').includes(s)) : undefined) ?? null   // "dm" → diabetes mellitus
+}
+
+/** every best match of a typed word or phrase, at the first of findNamed's steps that finds any (a code, a name, its start, a word's
+ *  start, a shorthand, the initials): one is the thing meant; more than one is asked, never guessed */
+export function matchesOf<T extends { name: string; code?: string }>(items: T[], q: string): T[] {
+  const s = norm(q); if (!s) return []
+  const words = (x: T) => norm(x.name).split(/[\s/,()-]+/)
+  const steps: ((x: T) => boolean)[] = [(x) => !!x.code && norm(x.code) === s, (x) => norm(x.name) === s, (x) => norm(x.name).startsWith(s),
+    (x) => s.length >= 3 && words(x).some((w) => w.startsWith(s)), (x) => !!ABBR[s] && norm(x.name).includes(ABBR[s]),
+    (x) => s.length >= 2 && !s.includes(' ') && words(x).map((w) => w[0]).join('').includes(s)]
+  for (const f of steps) { const hit = items.filter(f); if (hit.length) return hit }
+  return []
 }
 
 const POSITIONAL: [string, string, number, number][] = [['pulse', 'P', 20, 250], ['temperature', 'T', 30, 45], ['weight', 'Wt', 1, 400], ['spo2', 'SpO₂', 50, 100]]
@@ -144,22 +156,31 @@ function prescription(rest: string, ctx: Ctx): Result {
   return { ok: [{ function: 'medication', kind: 'prescription', line, typed: [...typed], params: { action: 'start', drug: known ? { name, code: `atc:${known.atc}` } : { name }, dose_number: dose, dose_unit: dose !== null ? unit : null, route, frequency: freq, prn, prn_reason_text: prnReason, duration_days: duration, instructions_text: instructions, problems: forProblem ? [{ id: forProblem.id, name: forProblem.name }] : [], send } }] }
 }
 
-function requests(rest: string, ctx: Ctx): Result {
+/** services asked for on one line: their codes or names, a preset's name (or shortcut) for its services, "stat" or "urgent", and "? the
+ *  question" for them all. scope: only these services (a pack's order command, /lab: the Laboratory's); a word that fits more than one
+ *  is asked (its choices, in the card), never guessed (§5.1 rule 1, added 2026-10-07) */
+export function orderRequests(rest: string, ctx: Ctx, scope?: (s: Ctx['services'][number]) => boolean, noun = 'service'): Result {
   let priority = 'routine'
-  const text = rest.replace(/\b(urgent|stat)\b/gi, (m) => { priority = m.toLowerCase(); return '' })
-  const offered = ctx.services.filter((s) => s.department_id !== ctx.departmentId)
+  const at = rest.indexOf('?'); const question = at >= 0 ? rest.slice(at + 1).trim() : ''
+  const text = (at >= 0 ? rest.slice(0, at) : rest).replace(/\b(urgent|stat)\b/gi, (m) => { priority = m.toLowerCase(); return '' })
+  const offered = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!scope || scope(s)))
   const out: Parsed[] = []; const missing: string[] = []
-  const add = (s: Ctx['services'][number]) => { if (!out.some((o) => o.params.service_id === s.id)) out.push({ function: 'order', kind: 'request', params: { service_id: s.id, priority }, line: `${s.name}${priority !== 'routine' ? ` (${priority})` : ''} → ${ctx.departments.find((d) => d.id === s.department_id)?.name ?? '?'}` }) }
+  const extra = { priority, ...(question ? { question_text: question } : {}) }
+  const tail = `${priority !== 'routine' ? ` (${priority})` : ''}${question ? ` ? ${question}` : ''}`
+  const add = (s: Ctx['services'][number]) => { if (!out.some((o) => o.params.service_id === s.id)) out.push({ function: 'order', kind: 'request', params: { service_id: s.id, ...extra }, line: `${s.name}${tail} → ${ctx.departments.find((d) => d.id === s.department_id)?.name ?? '?'}` }) }
+  const ask = (word: string, hits: Ctx['services']) => out.push({ function: 'order', kind: 'request', params: { choices: hits.map((s) => s.id), word, ...extra }, line: `“${word}”: ${hits.length} fit — choose one` })
+  const take = (word: string): boolean => { const hits = matchesOf(offered, word); if (hits.length === 1) add(hits[0]); else if (hits.length > 1) ask(word, hits); return hits.length > 0 }
   for (const seg of text.split(',').map((x) => x.trim()).filter(Boolean)) {
-    const tpl = findNamed(ctx.templates, seg)
-    if (tpl && norm(tpl.name).startsWith(norm(seg)) && seg.length >= 3) { tpl.items.forEach((i) => { const s = offered.find((x) => x.id === i.service_id); if (s) add(s) }); continue }
-    const whole = findNamed(offered, seg)
-    if (whole) { add(whole); continue }
-    for (const w of seg.split(/\s+/)) { const s = findNamed(offered, w); if (s) add(s); else missing.push(w) }
+    const tpl = ctx.templates.find((t) => t.shortcut && norm(t.shortcut) === norm(seg)) ?? (seg.length >= 3 ? ctx.templates.find((t) => norm(t.name).startsWith(norm(seg))) : undefined)
+    const inTpl = tpl ? tpl.items.map((i) => offered.find((x) => x.id === i.service_id)).filter((x): x is Ctx['services'][number] => !!x) : []
+    if (inTpl.length) { inTpl.forEach(add); continue }
+    if (take(seg)) continue
+    for (const w of seg.split(/\s+/)) if (!take(w)) missing.push(w)
   }
-  if (missing.length) return { error: `No service “${missing.join('”, “')}”` }
+  if (missing.length) return { error: `No ${noun} “${missing.join('”, “')}”` }
   return out.length ? { ok: out } : null
 }
+const requests = (rest: string, ctx: Ctx) => orderRequests(rest, ctx)
 
 function consult(rest: string, ctx: Ctx): Result {
   const words = rest.trim().split(/\s+/)
@@ -224,8 +245,8 @@ export function parse(input: string, ctx: Ctx): Result {
   const [word, rest] = aliasLine(splitCommand(s), ctx, !!commandNamed(splitCommand(s)[0], ctx))   // /gcs … is /score gcs …
   const cmd = commandNamed(word, ctx)
   if (!cmd) return { error: `No command /${word} — type / to see them` }
-  // the department before the role: a pack's command here says where it works (a preset's line too)
-  if (cmd.pack && ctx.packs && !ctx.packs.includes(cmd.pack)) return { error: usedWhere(cmd.name, ctx.usedIn?.(cmd.pack) ?? []) }
+  // the department before the role: a pack's command here says where it works, or where it orders from (a preset's line too)
+  const away = notHere(cmd, ctx); if (away) return { error: away }
   if (!allowed(cmd, ctx)) return { error: `/${cmd.name} is not open to your role here` }
   const r = cmd.parse(rest, ctx)
   return r && 'ok' in r ? { ok: r.ok.map((p) => ({ action: cmd.action, ...p })) } : r     // a draft carries the action its command needs
@@ -245,9 +266,10 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & 
     case 'allergy': return q.action === 'refute' ? `Refuted: ${q.substance?.name}` : `${q.kind === 'intolerance' ? 'Intolerance' : 'Allergy'}: ${q.substance?.name}${q.reactions_text ? ` — ${q.reactions_text}` : ''}${q.severity ? ` (${q.severity})` : ''}`
     case 'order': {
       const dname = (id: string | null | undefined) => ctx?.departments.find((d) => d.id === id)?.name ?? '?'
+      if (!q.service_id && Array.isArray(q.choices)) return `“${q.word}”: ${q.choices.length} fit — choose one`
       if (!q.service_id) return `Consult ${dname(q.to_department_id)}: ${q.question_text ?? ''}`
       const svc = ctx?.services.find((x) => x.id === q.service_id)
-      return `${svc?.name ?? 'Request'}${q.priority && q.priority !== 'routine' ? ` (${q.priority})` : ''} → ${dname(svc?.department_id)}`
+      return `${svc?.name ?? 'Request'}${q.priority && q.priority !== 'routine' ? ` (${q.priority})` : ''}${q.question_text ? ` ? ${q.question_text}` : ''} → ${dname(svc?.department_id)}`
     }
     case 'note': return String(q.text ?? '')
     case 'pregnancy': case 'breastfeeding': case 'alert': return factLine(p)
@@ -269,7 +291,7 @@ const NONE = /^(none|nka|nkda|no known (drug )?allerg(y|ies))$/i
 registerCommand({ name: 'al', group: 'record', title: 'Allergy', aliases: ['allergy'], label: 'Allergy', example: '/al penicillin: rash severe · /al none', action: 'write:allergy', writes: ['allergy', 'list_review'],
   parse: (rest) => !rest ? null : NONE.test(rest.trim()) ? { ok: [{ function: 'list_review', kind: 'review', params: { list: 'allergies', outcome: 'none_known' }, line: 'No known allergies' }] } : allergy(rest),
   empty: () => [{ function: 'allergy', kind: 'allergy', line: '', params: { action: 'add', substance: { name: '' }, kind: 'allergy', reactions_text: null, severity: null } }] })
-registerCommand({ name: 'order', group: 'orders', title: 'Order', label: 'Request — a service, or a department with a question', example: '/order hba1c, lipid · /order cardiology: chest pain', action: 'write:order', writes: ['order'],
+registerCommand({ name: 'order', group: 'orders', title: 'Order', label: 'Request — a service, or a department with a question', example: '/order hba1c, lipid · /order cxr ? pneumonia · /order cardiology: chest pain', action: 'write:order', writes: ['order'],
   parse: (rest, ctx) => {
     if (!rest) return null
     const m = rest.match(/^([^:,]+):\s*([\s\S]+)$/)                                   // "cardiology: chest pain on effort" is a consult

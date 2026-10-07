@@ -1,10 +1,14 @@
 // The laboratory (spec/openCare.md §5.3), as pure decisions: tubes, fasting, the tests a typed line names; the large lab's switches
-// (late by section, tickets and chairs, a scan's samples).   npm run test:lis
+// (late by section, tickets and chairs, a scan's samples); its order word, /lab (§5.1 rule 1, added).   npm run test:lis
 import assert from 'node:assert/strict'
 import { MOST_ASKED, needsFasting, testsIn, tubeOf, tubesFor } from '../src/packs/lis/tubes'
 import { changeOf, columnsOf, workedOut } from '../src/packs/lis/grid'
 import { byArrival, lateBy, nextUp, notFound, nowAt, sampleKey, scanned, sectionKey, targetOf, ticketOf, type Large, type Ticket } from '../src/packs/lis/large'
 import type { RequestQueueRow } from '../src/core/db/types'
+import '../src/packs/lis/order'
+import { lineOf, parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
+import { suggest } from '../src/core/screens/visit/expand'
+import { commandsFor } from '../src/core/screens/visit/commands'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -77,5 +81,43 @@ test('receive: a number that finds nothing says why, from the orders it was give
   assert.match(notFound([R('a', 'collected', 'S-1007-0005')], 'S-1007-0009', ['a']), /given to Adam Fouda, whose tubes were saved as S-1007-0005/)
   assert.match(notFound([R('a', null)], 'S-1007-0009', ['a']), /Adam Fouda's, but not marked Collected yet/)
   assert.match(notFound([R('b', null)], 'S-1007-0009', ['a']), /no longer waiting/)
+})
+// /lab: a GP clinic the Laboratory (which uses the pack) works for; Radiology's chest X-ray is not the lab's; Physiotherapy it does not serve
+const svc = (id: string, code: string, name: string, department_id: string, section_name = 'Chemistry') => ({ id, code, name, department_id, section_name })
+const LAB = [svc('cbc', 'cbc', 'Complete blood count', 'lab', 'Haematology'), svc('creat', 'creat', 'Creatinine', 'lab'), svc('crp', 'crp', 'CRP', 'lab'), svc('lipids', 'lipids', 'Lipid profile', 'lab'),
+  svc('fbs', 'fbs', 'Fasting glucose', 'lab'), svc('tni', 'troponin', 'Troponin I', 'lab'), svc('cxr', 'cxr', 'Chest X-ray', 'rad', 'Imaging')]
+const DEPTS = [{ id: 'gp', name: 'General Practice', packs: [] }, { id: 'lab', name: 'Laboratory', packs: ['lis'] }, { id: 'rad', name: 'Radiology', packs: [] }, { id: 'physio', name: 'Physiotherapy', packs: [] }]
+const at = (departmentId = 'gp', services = LAB): Ctx => ({ services, departments: DEPTS, problems: [], departmentId, packs: [],
+  templates: [{ id: 't1', name: 'DM follow-up', shortcut: 'dm', items: [{ service_id: 'creat' }, { service_id: 'lipids' }, { service_id: 'cxr' }] }] })
+const ok = (line: string, c = at()): Parsed[] => { const r = parse(line, c); if (!r || !('ok' in r)) throw new Error(`${line}: ${JSON.stringify(r)}`); return r.ok }
+const err = (line: string, c = at()) => { const r = parse(line, c); if (!r || !('error' in r)) throw new Error(`${line}: no error`); return r.error }
+test('/lab: only the Laboratory\'s tests; a preset by its name or shortcut (its lab tests); stat and ? the question', () => {
+  assert.deepEqual(ok('/lab cbc, creat').map((p) => p.params.service_id), ['cbc', 'creat'])
+  assert.match(err('/lab cxr'), /No lab test “cxr”/, 'Radiology\'s, not the lab\'s')
+  assert.deepEqual(ok('/lab dm').map((p) => p.params.service_id), ['creat', 'lipids'], 'the preset by its shortcut: its lab tests only')
+  assert.deepEqual(ok('/lab dm follow').map((p) => p.params.service_id), ['creat', 'lipids'], 'by its name')
+  const [t] = ok('/lab troponin stat ? chest pain since morning')
+  assert.deepEqual(t.params, { service_id: 'tni', priority: 'stat', question_text: 'chest pain since morning' })
+  assert.equal(t.line, 'Troponin I (stat) ? chest pain since morning → Laboratory')
+})
+test('never guessed: a word that fits more than one is asked, in /order too; a code is never in doubt', () => {
+  const [a] = ok('/lab cr'); assert.deepEqual(a.params.choices, ['creat', 'crp']); assert.equal(a.params.service_id, undefined); assert.equal(a.line, '“cr”: 2 fit — choose one')
+  assert.deepEqual(ok('/lab crp').map((p) => p.params.service_id), ['crp'], 'its code')
+  assert.deepEqual(ok('/order cr').map((p) => p.params.choices), [['creat', 'crp']], '/order asks too')
+  assert.equal(lineOf({ ...a, params: { ...a.params, service_id: 'crp', choices: undefined } }, at()), 'CRP → Laboratory', 'chosen: the line follows')
+})
+test('where /lab is offered: where the Laboratory takes orders from; elsewhere it says where it orders from', () => {
+  assert.ok(commandsFor(at()).some((c) => c.name === 'lab'))
+  const physio = at('physio', LAB.filter((s) => s.department_id !== 'lab'))   // the lab does not work for it: its tests are not offered there
+  assert.ok(!commandsFor(physio).some((c) => c.name === 'lab'))
+  assert.equal(err('/lab cbc', physio), '/lab orders from Laboratory, which does not take orders from Physiotherapy. /order shows what this department can order.')
+  assert.match(err('/lab cbc', at('lab')), /^\/lab orders from this department/)
+  const s = suggest('/lab cr', at(), [], new Set())!.items
+  assert.deepEqual(s.map((x) => x.label), ['Creatinine', 'CRP']); assert.equal(s[0].detail, 'creat · Chemistry · yellow tube')
+  assert.equal(suggest('/', at(), [], new Set())!.items.find((x) => x.label === '/lab')?.group, 'Laboratory', 'the / list: under the pack\'s own name')
+  assert.equal(suggest('/lab dm', at(), [], new Set())!.items[0].label, 'DM follow-up', 'a preset offered by its shortcut')
+  assert.equal(suggest('/lab troponin ? ch', at(), [], new Set()), null, 'the question: free words')
+  const lab = at('gp', [...LAB, svc('lcx', 'lcxr', 'Chest X-ray (lab)', 'lab', 'Imaging')])
+  assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].detail, 'lcxr · Imaging', 'no specimen, no tube')
 })
 console.log(`lis: ${n} groups passed`)
