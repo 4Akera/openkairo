@@ -40,7 +40,7 @@ select t.ok(work = 'bench' and packs = array['pharmacy'] and screens -> 'screens
 select t.ok(jsonb_array_length(places) = 8 and settings -> 'department.encounter_class' = '{"class":"IMP"}', 'Ward: eight beds, inpatient stays') from core.setups where key = 'ward';
 select t.as(:'ow');
 select t.ok((select jsonb_agg(x ->> 'key' order by x ->> 'key') from jsonb_array_elements(public.read('{"shape":"me"}') -> 'registry' -> 'setups') x)
-  = '["clinic", "front_desk", "laboratory", "pharmacy.pharmacy", "ward"]', 'read me lists every setup of the layers on here');
+  = '["clinic", "front_desk", "laboratory", "pharmacy.pharmacy", "pharmacy.store", "ward"]', 'read me lists every setup of the layers on here');
 
 \echo '── a declaration is checked once'
 select core.declare_pack('spare', 1, '{}', '{"en":"Spare"}');

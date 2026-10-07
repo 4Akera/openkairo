@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { amountToGive, ar, arabicDirections } from '../src/packs/pharmacy/directions'
 import { bareName, sameMedicine } from '../src/packs/pharmacy/substitutes'
-import { batchFor, inBoxes, pickProduct, productsFor, stateOf, type Product } from '../src/packs/pharmacy/shelf'
+import { batchFor, boxesToMinimum, inBoxes, lowAt, pickProduct, productsFor, stateOf, type Elsewhere, type Product } from '../src/packs/pharmacy/shelf'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -51,5 +51,12 @@ test('stock: amounts in boxes; out, low, expiring; the batch to give (first to e
   const shelfOf = [P({ id: 'g', on_hand: 360 }), P({ id: 'c', brand: 'Cidophage 500', on_hand: 0 })]
   assert.equal(pickProduct(shelfOf, 'Cidophage 500')?.id, 'g', 'the brand named is out: the other brand of it'); assert.equal(pickProduct(shelfOf, 'Metformin')?.id, 'g')
   assert.equal(pickProduct(shelfOf, 'Glucophage 500')?.id, 'g'); assert.equal(pickProduct(shelfOf, 'Nexium 40'), null)
+})
+test('the store: what is low at the other places (out first), and the boxes back to each one\'s minimum', () => {
+  const E = (department_id: string, product_id: string, units: number, minimum: number): Elsewhere => ({ department_id, product_id, units, minimum })
+  const aug = { id: 'aug', pack_size: 14 }; const away = [E('ph', 'aug', 112, 15), E('ward', 'aug', 0, 5), E('ph', 'glu', 600, 10), E('ip', 'aug', 300, 10)]
+  assert.deepEqual(lowAt(aug, away).map((e) => e.department_id), ['ward', 'ph'], 'out at the ward first, then the pharmacy (8 boxes of 15); the inpatient pharmacy is fine')
+  assert.equal(boxesToMinimum(E('ph', 'aug', 112, 15), 14), 7, '8 boxes there, 15 the minimum: 7 more')
+  assert.equal(boxesToMinimum(E('ward', 'aug', 0, 5), 14), 5); assert.equal(boxesToMinimum(E('ph', 'aug', 205, 15), 14), 1, 'never less than a box')
 })
 console.log(`pharmacy: ${n} groups passed`)

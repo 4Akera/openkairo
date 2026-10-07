@@ -930,8 +930,17 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   `public.pack_op`, and the operations a pack declares (`core.declare_op`: owned, definer, pinned, its action checked in a department
   that uses the pack); such an operation counts as registered, so it may read its own pack's derived tables (it returns no patient
   data). The Stock tab (`registerScreen(…, shown)`: only where the pharmacy keeps stock); each give records its product and its batch,
-  first to expire (a generic prescribed: the brand with the most on hand); the check shows what is on hand. Main store and moving
-  stock between places come with transfers, next.
+  first to expire (a generic prescribed: the brand with the most on hand); the check shows what is on hand. *Built 2026-10-07 (piece
+  7, the main store; owner: one step, no requests, the store and the pharmacies only, the store a department of the pack):* the
+  products are the clinic's one list (`pharmacy.product`, the organization's, written with `write:pharmacy.stock` held anywhere) and
+  each place that keeps stock has its own minimums (`pharmacy.minimums`, a table a place; a place keeps a product it has a minimum
+  of or that moved there). The starter setup `pharmacy.store` (Main store: the pack, Keep stock, Stock its one tab, no dispensing).
+  Send (`do: 'send'` through `pharmacy.stock_write`) moves lines to another place that keeps stock in one step: a `sent` row here and
+  an `arrived` row there, one `transfer_id`, the batch and its expiry with it, never more of a batch than is here (`not_enough`;
+  elsewhere `not_a_stock_place`). The read gives every product with this place's on hand, batches, minimum and `kept`, and what the
+  other places have against their minimums (`elsewhere`), so a store's **Low at pharmacies** view lists what to send, and Send adds
+  what a place is low on, in the boxes back to its minimum. Movements say "Sent to …" and "From …", in boxes. Wards' stock comes
+  with a ward pack.
 - **Laboratory:** *Collect* (tubes by colour, the sample number written on them until labels print, fasting asked at the grey tube,
   *Collected* or *Couldn't collect* with a reason the doctor sees) and *Results* (one grid per section, ranges by age and sex, flags as
   typed, the change check against the last result, calculated values such as LDL and eGFR). A critical value is only a notice —

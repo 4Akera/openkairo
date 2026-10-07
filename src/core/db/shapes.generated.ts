@@ -502,11 +502,15 @@ export interface PharmacyKeepStockSetting {
 export interface PharmacyLateAfterSetting {
   minutes: number
 }
+/** setting pharmacy.minimums (pharmacy; owner department) */
+export interface PharmacyMinimumsSetting {
+  minimums: Record<string, number>
+}
 /** setting pharmacy.prepare_first (pharmacy; owner department) */
 export interface PharmacyPrepareFirstSetting {
   prepare: boolean
 }
-/** setting pharmacy.product (pharmacy; owner department, many) */
+/** setting pharmacy.product (pharmacy; owner organization, many) */
 export interface PharmacyProductSetting {
   atc?: string
   barcode?: string
@@ -514,7 +518,6 @@ export interface PharmacyProductSetting {
   eda_code?: string
   form?: 'tablet' | 'capsule' | 'syrup' | 'suspension' | 'injection' | 'cream' | 'drops' | 'inhaler' | 'sachet' | 'other'
   generic?: string
-  minimum?: number
   pack_size: number
   strength?: string
   unit?: string
@@ -631,6 +634,7 @@ export interface SettingData {
   'pharmacy.counselling': PharmacyCounsellingSetting
   'pharmacy.keep_stock': PharmacyKeepStockSetting
   'pharmacy.late_after': PharmacyLateAfterSetting
+  'pharmacy.minimums': PharmacyMinimumsSetting
   'pharmacy.prepare_first': PharmacyPrepareFirstSetting
   'pharmacy.product': PharmacyProductSetting
   'place.closed': PlaceClosedSetting

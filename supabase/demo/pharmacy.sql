@@ -63,15 +63,23 @@ begin
   perform pg_temp.dispense(o4, 150, pg_temp.given('Amoxicillin 500 mg', 'J01CA04', 21, 'capsules'));
 end $$;
 
--- the stock's day (spec §5.3): the store keeper received this morning's delivery — Augmentin below its minimum, Nexium's batch
--- expiring in five weeks, nothing of Cidophage (out of stock); through the pack's door, as the screen writes it
+-- the stock's day (spec §5.3): the store keeper received this morning's delivery at the Pharmacy — Augmentin below its minimum, Nexium's
+-- batch expiring in five weeks, nothing of Cidophage (out of stock) — and the main store's, from which he sent the Pharmacy its Lipitor;
+-- so the store sees two products low at the Pharmacy. Through the pack's door, as the screen writes it
 do $$
-declare dept uuid := demo.id('pharmacy', 'department');
+declare dept uuid := demo.id('pharmacy', 'department'); store uuid := demo.id('pharmacy', 'store');
 begin
   perform demo.as(demo.id('pharmacy', 'store keeper'));
   perform public.pack_op(jsonb_build_object('op', 'pharmacy.stock_write', 'department_id', dept, 'args', jsonb_build_object('do', 'receive',
     'supplier', 'Ibn Sina Pharma', 'invoice', 'INV-55821', 'lines', (select jsonb_agg(jsonb_build_object('product_id', demo.id('pharmacy', 'product:' || l.brand), 'batch', l.batch,
       'expiry', to_char(demo.now() + make_interval(days => l.days), 'YYYY-MM'), 'boxes', l.boxes)) from (values
       ('Glucophage 500', '23K114', 240, 12), ('Augmentin 1 g', 'AUG2309', 120, 8), ('Nexium 40', 'NX4471', 40, 31), ('Concor 5', 'C5-778', 700, 44),
-      ('Norvasc 10', 'NV2201', 420, 20), ('Lipitor 20', 'LP0901', 540, 10), ('Panadol Extra', 'PX0912', 520, 120)) l(brand, batch, days, boxes)))));
+      ('Norvasc 10', 'NV2201', 420, 20), ('Panadol Extra', 'PX0912', 520, 120)) l(brand, batch, days, boxes)))));
+  perform public.pack_op(jsonb_build_object('op', 'pharmacy.stock_write', 'department_id', store, 'args', jsonb_build_object('do', 'receive',
+    'supplier', 'Ibn Sina Pharma', 'invoice', 'INV-60110', 'lines', (select jsonb_agg(jsonb_build_object('product_id', demo.id('pharmacy', 'product:' || l.brand), 'batch', l.batch,
+      'expiry', to_char(demo.now() + make_interval(days => l.days), 'YYYY-MM'), 'boxes', l.boxes)) from (values
+      ('Glucophage 500', '24A031', 300, 300), ('Cidophage 500', 'CD5512', 310, 150), ('Augmentin 1 g', 'AUG2309', 120, 96), ('Nexium 40', 'NX4520', 200, 70),
+      ('Concor 5', 'C5-801', 720, 200), ('Norvasc 10', 'NV2240', 450, 150), ('Lipitor 20', 'LP0901', 540, 60), ('Panadol Extra', 'PX0950', 560, 600)) l(brand, batch, days, boxes)))));
+  perform public.pack_op(jsonb_build_object('op', 'pharmacy.stock_write', 'department_id', store, 'args', jsonb_build_object('do', 'send', 'to', dept,
+    'lines', jsonb_build_array(jsonb_build_object('product_id', demo.id('pharmacy', 'product:Lipitor 20'), 'batch', 'LP0901', 'boxes', 10)))));
 end $$;

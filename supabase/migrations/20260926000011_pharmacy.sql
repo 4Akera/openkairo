@@ -298,11 +298,13 @@ create table pharmacy.stock (
   organization_id uuid not null,
   id            uuid not null default gen_random_uuid(),
   department_id uuid not null,               -- the pharmacy it is in
-  product_id    uuid not null,               -- a pharmacy.product of that pharmacy
+  product_id    uuid not null,               -- a pharmacy.product (the clinic's one list)
   batch         text,
   expiry        date,                        -- the last day it may be given (the month printed, to its end)
-  kind          text not null check (kind in ('received', 'counted', 'expired', 'damaged')),
+  kind          text not null check (kind in ('received', 'counted', 'expired', 'damaged', 'sent', 'arrived')),
   quantity      int not null,                -- units (tablets, capsules, bottles): in +, out −
+  other_department_id uuid,                  -- sent: the place it went to; arrived: the place it came from
+  transfer_id   uuid,                        -- the one send that wrote both rows (sent here, arrived there)
   supplier      text,
   invoice       text,
   reason        text,
@@ -346,44 +348,64 @@ create function pharmacy.expiry_of(p text) returns date language sql immutable s
   select case when p ~ '^\d{4}-\d{2}$' then (to_date(p || '-01', 'YYYY-MM-DD') + interval '1 month' - interval '1 day')::date
               when p ~ '^\d{4}-\d{2}-\d{2}$' then p::date end
 $$;
--- the Stock screen's read: each product of this pharmacy as its settings say, with what is on hand and its batches (first to expire
--- first); with a product named, its last movements — received, counted, given — newest first
+-- the Stock screen's read: every product of the clinic's one list with what this place has of it and its batches (first to expire
+-- first), its minimum here, and whether this place keeps it (a minimum set here, or anything that moved here); what the other places
+-- that keep stock have of the products they keep, against their minimums (a store sends what a pharmacy runs low on); with a product
+-- named, its last movements here — received, sent, arrived, counted, given — newest first
 create function pharmacy.stock_read(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare v_product uuid := (p_args ->> 'product')::uuid; v_moves jsonb := '[]';
+declare v_product uuid := (p_args ->> 'product')::uuid; v_moves jsonb := '[]'; v_min jsonb := coalesce(core.setting_at(p_org, 'pharmacy.minimums', p_department) -> 'minimums', '{}');
 begin
-  -- what this pharmacy has, by product and batch: its own rows less what it gave
-  create temp table if not exists pharmacy_on_hand (product_id uuid, batch text, expiry date, units int) on commit drop;
+  -- what each place has, by product and batch: its own rows less what it gave
+  create temp table if not exists pharmacy_on_hand (department_id uuid, product_id uuid, batch text, expiry date, units int) on commit drop;
   delete from pharmacy_on_hand where true;
-  insert into pharmacy_on_hand select x.product_id, x.batch, max(x.expiry), sum(x.q)::int from (
-    select s.product_id, s.batch, s.expiry, s.quantity q from pharmacy.stock s where s.organization_id = p_org and s.department_id = p_department
-    union all select g.product_id, g.batch, null::date, -g.quantity from pharmacy.given g where g.organization_id = p_org and g.department_id = p_department) x
-   group by x.product_id, x.batch;
+  insert into pharmacy_on_hand select x.department_id, x.product_id, x.batch, max(x.expiry), sum(x.q)::int from (
+    select s.department_id, s.product_id, s.batch, s.expiry, s.quantity q from pharmacy.stock s where s.organization_id = p_org
+    union all select g.department_id, g.product_id, g.batch, null::date, -g.quantity from pharmacy.given g where g.organization_id = p_org) x
+   group by x.department_id, x.product_id, x.batch;
   if v_product is not null then
     select coalesce(jsonb_agg(m order by (m ->> 'at')::timestamptz desc), '[]') into v_moves from (
       select m from (
         select jsonb_strip_nulls(jsonb_build_object('at', s.recorded_at, 'kind', s.kind, 'units', s.quantity, 'batch', s.batch, 'expiry', s.expiry, 'supplier', s.supplier,
-                 'invoice', s.invoice, 'reason', s.reason, 'by', (select x.name from core.pack_staff(p_org, array[s.author_id]) x))) m, s.recorded_at at
+                 'invoice', s.invoice, 'reason', s.reason, 'other', s.other_department_id, 'by', (select x.name from core.pack_staff(p_org, array[s.author_id]) x))) m, s.recorded_at at
           from pharmacy.stock s where s.organization_id = p_org and s.department_id = p_department and s.product_id = v_product
         union all
         select jsonb_strip_nulls(jsonb_build_object('at', g.at, 'kind', 'given', 'units', -g.quantity, 'batch', g.batch)), g.at
           from pharmacy.given g where g.organization_id = p_org and g.department_id = p_department and g.product_id = v_product) y
       order by y.at desc limit 40) z;
   end if;
-  return jsonb_build_object('moves', v_moves, 'products', coalesce((select jsonb_agg(jsonb_build_object('id', s.thing_id) || s.data || jsonb_build_object(
-      'on_hand', coalesce((select sum(h.units) from pharmacy_on_hand h where h.product_id = s.thing_id), 0),
+  return jsonb_build_object('moves', v_moves,
+    'products', coalesce((select jsonb_agg(jsonb_build_object('id', s.thing_id) || s.data || jsonb_build_object(
+      'on_hand', coalesce((select sum(h.units) from pharmacy_on_hand h where h.department_id = p_department and h.product_id = s.thing_id), 0),
       'batches', coalesce((select jsonb_agg(jsonb_build_object('batch', h.batch, 'expiry', h.expiry, 'units', h.units) order by h.expiry nulls last)
-                            from pharmacy_on_hand h where h.product_id = s.thing_id and h.units > 0 and h.batch is not null), '[]'))
-    order by s.data ->> 'brand') from core.settings_at(p_org, 'pharmacy.product') s where s.owner_id = p_department), '[]'));
+                            from pharmacy_on_hand h where h.department_id = p_department and h.product_id = s.thing_id and h.units > 0 and h.batch is not null), '[]'),
+      'minimum', (v_min ->> s.thing_id::text)::int,
+      'kept', v_min ? s.thing_id::text or exists (select 1 from pharmacy_on_hand h where h.department_id = p_department and h.product_id = s.thing_id))
+    order by s.data ->> 'brand') from core.settings_at(p_org, 'pharmacy.product') s), '[]'),
+    -- the other places that keep stock (the pack used there, Keep stock on): what they have of each product they keep a minimum of
+    'elsewhere', coalesce((select jsonb_agg(jsonb_build_object('department_id', k.owner_id, 'product_id', m.key::uuid, 'minimum', (m.value #>> '{}')::int,
+        'units', coalesce((select sum(h.units) from pharmacy_on_hand h where h.department_id = k.owner_id and h.product_id = m.key::uuid), 0)))
+      from core.settings_at(p_org, 'pharmacy.keep_stock') k
+      cross join lateral jsonb_each(coalesce(core.setting_at(p_org, 'pharmacy.minimums', k.owner_id) -> 'minimums', '{}')) m
+     where k.owner_id <> p_department and coalesce((k.data ->> 'keep')::boolean, false) and core.department_uses(p_org, k.owner_id, 'pharmacy')), '[]'));
 end $$;
 
--- the Stock screen's writes, each in one go (a refusal keeps nothing): receive a delivery (lines of product, batch, expiry, boxes), or
--- a count (lines of product, units counted, and a reason for any difference: a new row each, nothing written before changes)
+-- the Stock screen's writes, each in one go (a refusal keeps nothing): receive a delivery (lines of product, batch, expiry, boxes); a
+-- count (lines of product, units counted, and a reason for any difference: a new row each, nothing written before changes); or send to
+-- another place that keeps stock (lines of product, batch, boxes): in one step — it leaves here (sent) and is there (arrived) at once,
+-- its batch and expiry with it, never more of a batch than is here
 create function pharmacy.stock_write(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare l jsonb; v_do text := p_args ->> 'do'; v_pack int; v_prod jsonb; v_exp date; v_have int; v_count int; n int := 0;
+declare l jsonb; v_do text := p_args ->> 'do'; v_pack int; v_prod jsonb; v_exp date; v_have int; v_count int; n int := 0; v_to uuid; v_units int; v_send uuid := gen_random_uuid();
 begin
-  if v_do is null or v_do not in ('receive', 'count') then perform core.refuse('unknown_op', coalesce(v_do, 'nothing')); end if;
+  if v_do is null or v_do not in ('receive', 'count', 'send') then perform core.refuse('unknown_op', coalesce(v_do, 'nothing')); end if;
+  if v_do = 'send' then
+    v_to := (p_args ->> 'to')::uuid;
+    if v_to is null or v_to = p_department or not coalesce((core.setting_at(p_org, 'pharmacy.keep_stock', v_to) ->> 'keep')::boolean, false)
+       or not core.department_uses(p_org, v_to, 'pharmacy') then
+      perform core.refuse('not_a_stock_place', coalesce(p_args ->> 'to', 'nowhere'));
+    end if;
+  end if;
   for l in select * from jsonb_array_elements(coalesce(p_args -> 'lines', '[]')) loop
-    select s.data into v_prod from core.settings_at(p_org, 'pharmacy.product') s where s.thing_id = (l ->> 'product_id')::uuid and s.owner_id = p_department;
+    select s.data into v_prod from core.settings_at(p_org, 'pharmacy.product') s where s.thing_id = (l ->> 'product_id')::uuid;
     if v_prod is null then perform core.refuse('unknown_product', coalesce(l ->> 'product_id', '')); end if;
     v_pack := greatest(1, coalesce((v_prod ->> 'pack_size')::int, 1));
     if v_do = 'receive' then
@@ -395,6 +417,19 @@ begin
       insert into pharmacy.stock (organization_id, department_id, product_id, batch, expiry, kind, quantity, supplier, invoice, author_id)
       values (p_org, p_department, (l ->> 'product_id')::uuid, trim(l ->> 'batch'), v_exp, 'received', (l ->> 'boxes')::int * v_pack,
               nullif(trim(p_args ->> 'supplier'), ''), nullif(trim(p_args ->> 'invoice'), ''), p_user);
+      n := n + 1;
+    elsif v_do = 'send' then
+      v_units := coalesce((l ->> 'boxes')::int * v_pack, (l ->> 'units')::int, 0);
+      if v_units <= 0 then perform core.refuse('nothing_sent', v_prod ->> 'brand'); end if;
+      if coalesce(trim(l ->> 'batch'), '') = '' then perform core.refuse('batch_missing', v_prod ->> 'brand'); end if;
+      -- that batch here: its own rows less what was given of it
+      select coalesce(sum(x.q), 0)::int, max(x.e) into v_have, v_exp from (
+        select s.quantity q, s.expiry e from pharmacy.stock s where s.organization_id = p_org and s.department_id = p_department and s.product_id = (l ->> 'product_id')::uuid and s.batch = trim(l ->> 'batch')
+        union all select -g.quantity, null from pharmacy.given g where g.organization_id = p_org and g.department_id = p_department and g.product_id = (l ->> 'product_id')::uuid and g.batch = trim(l ->> 'batch')) x;
+      if v_units > v_have then perform core.refuse('not_enough', format('%s, batch %s: %s here', v_prod ->> 'brand', trim(l ->> 'batch'), v_have)); end if;
+      insert into pharmacy.stock (organization_id, department_id, product_id, batch, expiry, kind, quantity, other_department_id, transfer_id, author_id) values
+        (p_org, p_department, (l ->> 'product_id')::uuid, trim(l ->> 'batch'), v_exp, 'sent', -v_units, v_to, v_send, p_user),
+        (p_org, v_to, (l ->> 'product_id')::uuid, trim(l ->> 'batch'), v_exp, 'arrived', v_units, p_department, v_send, p_user);
       n := n + 1;
     else
       v_count := (l ->> 'units')::int;
@@ -470,13 +505,18 @@ select core.declare_setting('pharmacy.keep_stock', 'pharmacy', 'department',
   labels => '{"en":"Keep stock"}', form => 'department',
   fields => '[{"key":"keep","labels":{"en":"Keep stock"},
     "help":{"en":"Products, deliveries, counts and the Stock screen. Each Give takes from the stock, first to expire first."}}]');
--- a product the pharmacy stocks (one per brand, strength and pack): written by whoever receives and counts stock there
-select core.declare_setting('pharmacy.product', 'pharmacy', 'department',
+-- a product (one per brand, strength and pack): the clinic's one list, so a box sent from the store is the same product where it
+-- arrives; written by whoever receives and counts stock somewhere. Each place keeps its own minimums (in boxes), one table a place
+select core.declare_setting('pharmacy.product', 'pharmacy', 'organization',
   '{"type":"object","additionalProperties":false,"required":["brand","pack_size"],"properties":{"brand":{"type":"string","minLength":1},
     "generic":{"type":"string"},"atc":{"type":"string"},"strength":{"type":"string"},
     "form":{"enum":["tablet","capsule","syrup","suspension","injection","cream","drops","inhaler","sachet","other"]},
-    "pack_size":{"type":"integer","minimum":1},"unit":{"type":"string"},"minimum":{"type":"integer","minimum":0},"eda_code":{"type":"string"},"barcode":{"type":"string"}}}',
+    "pack_size":{"type":"integer","minimum":1},"unit":{"type":"string"},"eda_code":{"type":"string"},"barcode":{"type":"string"}}}',
   many => true, labels => '{"en":"Product"}', action => 'write:pharmacy.stock');
+select core.declare_setting('pharmacy.minimums', 'pharmacy', 'department',
+  '{"type":"object","additionalProperties":false,"required":["minimums"],"properties":{"minimums":{"type":"object","default":{},
+    "additionalProperties":{"type":"integer","minimum":0}}}}',
+  labels => '{"en":"Stock minimums"}', action => 'write:pharmacy.stock');
 select core.declare_setting('pharmacy.counselling', 'pharmacy', 'organization',
   '{"type":"object","additionalProperties":false,"required":["show"],"properties":{"show":{"type":"boolean","default":false},"note":{"type":"string","maxLength":400}}}',
   'pharmacy.counselling_check(jsonb,jsonb)', labels => '{"en":"Counselling when giving"}', form => 'pack',
@@ -489,3 +529,7 @@ select core.declare_setup('pharmacy.pharmacy', 'pharmacy', 'bench', '{"en":"Phar
   settings => '{"pharmacy.late_after":{"minutes":30},"department.works_for":{"all":true}}',
   services => '[{"code":"dispense","name":"Dispensing","answer":"pharmacy.dispense","steps":["prepared"]}]',
   help => '{"en":"Dispenses what the clinics prescribe: prepared, then given."}');
+-- the main store (owner, 2026-10-07): stock only — receives from suppliers and sends on to the pharmacies in one step; no dispensing
+select core.declare_setup('pharmacy.store', 'pharmacy', 'bench', '{"en":"Main store"}', packs => array['pharmacy'],
+  screens => '{"screens":["pharmacy.stock"],"opens":"pharmacy.stock"}', settings => '{"pharmacy.keep_stock":{"keep":true}}',
+  help => '{"en":"Stock only: receives from suppliers and sends on to the pharmacies. No dispensing."}');

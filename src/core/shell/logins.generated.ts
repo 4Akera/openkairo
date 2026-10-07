@@ -32,4 +32,7 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'pharm@demo.com', name: 'Dr. Reem Hamdy', role: 'Pharmacist' },
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
   ] },
+  { department: 'Main store', departmentId: '1d64cf4d-60f9-5945-a245-e9764b6c294f', people: [
+    { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
+  ] },
 ]

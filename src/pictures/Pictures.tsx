@@ -7,6 +7,7 @@ import { BenchWalkIn } from './bench'
 import { RxCount, RxReceive, RxSettings, RxStock } from './stock'
 import { LabAnalysers, LabChairs, LabReceive, LabSettings } from './biglab'
 import { OrderAsk, OrderList, OrderScan, OrderSet, OrderTyping, OrderWhere } from './order'
+import { StoreArrived, StoreSend, StoreSetup, StoreStock } from './store'
 
 const LIST: { id: string; title: string; note: string; Page: ComponentType }[] = [
   { id: 'bench-walkin', title: 'Any bench · a walk-in', note: 'Two steps: first who (search, or New patient), then what for (this room\'s services); who asked folded.', Page: BenchWalkIn },
@@ -30,6 +31,10 @@ const LIST: { id: string; title: string; note: string; Page: ComponentType }[] =
   { id: 'order-set', title: 'Ordering · a preset, stat and the question', note: 'A preset\'s name brings its tests, each removable; the lab adds the tubes and fasting; stat and ? the question are the only extras.', Page: OrderSet },
   { id: 'order-where', title: 'Ordering · where /lab is not offered', note: 'Typed in a department the Laboratory does not serve, it says where it orders from.', Page: OrderWhere },
   { id: 'order-scan', title: 'Ordering · later, radiology', note: 'A radiology pack would bring /xr /us /ct, each its section: the same card.', Page: OrderScan },
+  { id: 'store-stock', title: 'Main store · its stock', note: 'A department with Stock only; Send beside Receive and Count; Low at pharmacies shows what to send without being asked.', Page: StoreStock },
+  { id: 'store-send', title: 'Main store · sending to a pharmacy', note: 'One step: to a pharmacy, lines with the first batch to expire and what the pharmacy has; sent is there.', Page: StoreSend },
+  { id: 'store-arrived', title: 'Pharmacy · what came from the store', note: 'In its movements beside a supplier\'s delivery and what was given; nothing to confirm.', Page: StoreArrived },
+  { id: 'store-setup', title: 'Main store · its setup and the products', note: 'A setup of its own (pharmacy pack, Keep stock, no dispensing); the products one list for the clinic, a minimum per place.', Page: StoreSetup },
   { id: 'doctor', title: "Doctor · what comes back", note: 'To review: the pharmacy\'s questions beside the results; Answer opens the chart, where the question is a card.', Page: DoctorSide },
 ]
 
