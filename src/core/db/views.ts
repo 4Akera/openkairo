@@ -1,7 +1,7 @@
 // The screens' view models, built from what read() returns (spec/openCare.md §3.10). Pure: no fetching here.
 import type {
   Allergy, Card, DeceasedRow, Department, Flag, Identity, ListReview, ListRowData, Medication, OrderRow, Organization, PatientBanner, PatientHit, Place, PresenceRow, Problem,
-  QueueRow, RecentRow, RecordView, RequestQueueRow, ServerEntry, ServerMe, ServerRecord, Service, ServiceField, SettingRow, TableRead, Template, Value, ValueRow, VisitRow, VisitStatus,
+  QueueRow, RecentRow, RecordView, Reply, RequestQueueRow, ServerEntry, ServerMe, ServerRecord, Service, ServiceField, SettingRow, StepData, TableRead, Template, Value, ValueRow, VisitRow, VisitStatus,
 } from './types'
 import type { EntryData, SettingData } from './shapes.generated'
 
@@ -166,14 +166,15 @@ export function benchRow(x: OrderRow, read: TableRead<OrderRow>, o: Organization
   return { ...c, occurred_at: x.ordered_at, author_name: userName(o, x.requester_id), service_id: x.service_id, patient: { id: x.patient_id, record_number: b.record_number, given_name: b.given_name, family_name: b.family_name, sex: b.sex, born_on: b.born_on, here },
     from_department_name: nameOf(o, x.from_department_id), requester_name: userName(o, x.requester_id), question_text: asked?.question ?? null,
     section_name: svc?.section_name ?? null, service_name: x.service_name, reply_type: svc?.reply_type ?? asked?.service.answer ?? 'result',
-    assignee_id: null, details: asked?.details ?? null, order: x }
+    assignee_id: null, details: asked?.details ?? null, order: x, step_data: x.step_entry ? (read.entries[x.step_entry]?.data as StepData | undefined) ?? null : null, reply: replyOf(x, read, o) }
 }
-export function recentRow(x: OrderRow, read: TableRead<OrderRow>, o: Organization | undefined): RecentRow {
-  const base = benchRow(x, read, o)
+/** an order's latest answer; its time is its clinical time, as the order's answered_at is */
+function replyOf(x: OrderRow, read: TableRead<OrderRow>, o: Organization | undefined): Reply | null {
   const last = x.answers.length ? read.entries[x.answers[x.answers.length - 1]] : undefined
-  // the reply's time is its clinical time, as the order's answered_at is
-  return { ...base, reply: last ? { id: last.id, item: last.item, version: last.item_version, data: last.data ?? {}, author_name: userName(o, last.author_id), recorded_at: last.occurred_at, is_final: dataOf(last, 'result', o?.types)?.status !== 'preliminary' } : null }
+  return last ? { id: last.id, item: last.item, version: last.item_version, data: last.data ?? {}, author_id: last.author_id ?? null, author_name: userName(o, last.author_id),
+    recorded_at: last.occurred_at, is_final: dataOf(last, 'result', o?.types)?.status !== 'preliminary' } : null
 }
+export const recentRow = (x: OrderRow, read: TableRead<OrderRow>, o: Organization | undefined): RecentRow => ({ ...benchRow(x, read, o), reply: replyOf(x, read, o) })
 
 // ── the lists: a row as the screens show it, built from any version of its item (the chart draws the version before a change too) ──
 type Types = Organization['types'] | undefined

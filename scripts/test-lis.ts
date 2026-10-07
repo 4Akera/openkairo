@@ -1,7 +1,10 @@
-// The laboratory's day one (spec/openCare.md §5.3), as pure decisions: tubes, fasting, the tests a typed line names.   npm run test:lis
+// The laboratory (spec/openCare.md §5.3), as pure decisions: tubes, fasting, the tests a typed line names; the large lab's switches
+// (late by section, tickets and chairs, a scan's samples).   npm run test:lis
 import assert from 'node:assert/strict'
 import { MOST_ASKED, needsFasting, testsIn, tubeOf, tubesFor } from '../src/packs/lis/tubes'
 import { changeOf, columnsOf, workedOut } from '../src/packs/lis/grid'
+import { byArrival, lateBy, nextUp, nowAt, sampleKey, scanned, sectionKey, targetOf, ticketOf, type Large, type Ticket } from '../src/packs/lis/large'
+import type { RequestQueueRow } from '../src/core/db/types'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -38,5 +41,33 @@ test('results: the columns once each; LDL and eGFR worked out; the change check 
   assert.deepEqual(changeOf('hb', 7.4, { value: 12.9, at: ago(6) }, today), { was: 12.9, days: 6 }, 'Hb down 5.5 g/dL')
   assert.equal(changeOf('hb', 11, { value: 12.9, at: ago(6) }, today), null, 'Hb within 3')
   assert.equal(changeOf('creat', 3.9, { value: 1.0, at: ago(45) }, today), null, 'older than 30 days: no check'); assert.equal(changeOf('creat', 3.9, undefined, today), null)
+})
+test("turnaround: a section's target, by its key; late only past it, and only with targets on", () => {
+  const L: Large = { turnaround: true, targets: { haematology: 60, chemistry: 120, urine_stool: 60 }, second_check: false, scan_receive: false, chairs: 0 }
+  assert.deepEqual(['Urine & stool', 'Chemistry', ' Hormones '].map(sectionKey), ['urine_stool', 'chemistry', 'hormones'])
+  assert.equal(targetOf(L, 'Urine & stool'), 60); assert.equal(targetOf(L, 'Serology'), null, 'a section with no target'); assert.equal(targetOf({ ...L, turnaround: false }, 'Chemistry'), null)
+  const now = Date.parse('2026-10-07T12:00:00Z'); const ago = (m: number) => new Date(now - m * 60_000).toISOString()
+  assert.equal(lateBy(ago(150), 120, now), 150); assert.equal(lateBy(ago(90), 120, now), null); assert.equal(lateBy(ago(150), null, now), null); assert.equal(lateBy(null, 120, now), null)
+})
+test("chairs: numbered as they came; my chair's patient is the last it called still waiting; next is stat first, then the lowest number with no chair", () => {
+  const g = (id: string, oldest: string, priority: 'stat' | 'routine' = 'routine') => ({ oldest, priority, rows: [{ item: `o-${id}` }] as RequestQueueRow[] })
+  const a = g('a', '2026-10-07T08:00:00Z'); const b = g('b', '2026-10-07T07:30:00Z'); const c = g('c', '2026-10-07T09:00:00Z', 'stat'); const d = g('d', '2026-10-07T08:30:00Z')
+  assert.deepEqual(byArrival([a, b, c, d]).map((x) => x.rows[0].item), ['o-b', 'o-a', 'o-d', 'o-c'])
+  const T = (number: number, item: string, chair: number | null = null, called_at: string | null = null): Ticket => ({ number, items: [item], chair, called_at })
+  const ts = [T(1, 'o-b', 1, '2026-10-07T09:10:00Z'), T(2, 'o-a'), T(3, 'o-d', 2, '2026-10-07T09:12:00Z'), T(4, 'o-c'), T(5, 'o-gone', 1, '2026-10-07T09:20:00Z')]
+  assert.equal(ticketOf(d, ts)?.number, 3)
+  assert.equal(nowAt(1, [a, b, c, d], ts)?.ticket.number, 1, 'chair 1 called #5 later, but #5 is collected: #1 is still its patient')
+  assert.equal(nowAt(3, [a, b, c, d], ts), null)
+  assert.equal(nextUp([a, b, c, d], ts)?.ticket.number, 4, 'the stat one jumps the line')
+  assert.equal(nextUp([a, b, d], ts)?.ticket.number, 2, 'then the lowest number no chair called')
+  assert.equal(nextUp([b, d], ts), null, 'everyone called')
+})
+test('receive: a scan names the samples collected under its number, whatever its case; one in already says so', () => {
+  const R = (item: string, specimen: string, step_key: string, status = 'in-progress') => ({ item, step_data: { specimen }, reply: null, order: { step_key, status } }) as unknown as RequestQueueRow
+  const rows = [R('1', 'S-1007-0002', 'collected'), R('2', 'S-1007-0002', 'collected'), R('3', 'S-1007-0003', 'received'), R('4', 'S-1007-0004', 'collected', 'on-hold')]
+  assert.equal(sampleKey(' s-1007-0002 '), 'S-1007-0002')
+  assert.deepEqual(scanned(rows, 's-1007-0002').toReceive.map((r) => r.item), ['1', '2'])
+  assert.deepEqual(scanned(rows, 'S-1007-0003').already.map((r) => r.item), ['3']); assert.equal(scanned(rows, 'S-1007-0003').toReceive.length, 0)
+  assert.equal(scanned(rows, 'S-1007-0004').toReceive.length, 0, 'sent back: no longer waiting under its number')
 })
 console.log(`lis: ${n} groups passed`)

@@ -459,6 +459,24 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
+/** setting lis.large (lis; owner department) */
+export interface LisLargeSetting {
+  analysers: false
+  auto_release: false
+  chairs: number
+  labels: 'written'
+  scan_receive: boolean
+  second_check: boolean
+  targets: {
+    chemistry: number
+    coagulation: number
+    haematology: number
+    hormones: number
+    serology: number
+    urine_stool: number
+  }
+  turnaround: boolean
+}
 /** setting organization.packs_used (core; owner organization) */
 export interface OrganizationPacksUsedSetting {
   packs: string[]
@@ -606,6 +624,7 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
+  'lis.large': LisLargeSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting

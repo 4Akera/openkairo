@@ -3,7 +3,9 @@
 -- base's own types (steps for collected and received, results), so the order's status, the review loop and FHIR stay the base's. It
 -- adds: its starter setup (the tests most asked for in Egypt, with ranges by sex and age and critical limits for the laboratory's
 -- director to confirm); the sample number a collection gets (a counter of its own, through public.pack_op); and each value a patient
--- had, for the change check (a derived table, fed by a listener on the base's results).
+-- had, for the change check (a derived table, fed by a listener on the base's results). A large lab switches on, each on its own: turnaround
+-- targets per section, a second person who checks, scan to receive, collection chairs (its queue tickets, a table of its own); sample
+-- labels and results from analysers are drawn as placeholders, for later.
 
 set client_min_messages = warning;
 
@@ -20,12 +22,65 @@ create table lis.samples (
   last          int not null default 0,
   primary key (organization_id, department_id, day)
 );
+-- the clinic's today
+create function lis.today(p_org uuid) returns date language sql stable security definer set search_path = '' as $$
+  select (now() at time zone coalesce(core.setting_at(p_org, 'organization.time_zone', p_org) ->> 'zone', 'Africa/Cairo'))::date
+$$;
 create function lis.next_sample(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare v_day date := (now() at time zone coalesce(core.setting_at(p_org, 'organization.time_zone', p_org) ->> 'zone', 'Africa/Cairo'))::date; n int;
+declare v_day date := lis.today(p_org); n int;
 begin
   insert into lis.samples as s (organization_id, department_id, day, last) values (p_org, p_department, v_day, 1)
   on conflict (organization_id, department_id, day) do update set last = s.last + 1 returning s.last into n;
   return jsonb_build_object('sample', 'S-' || to_char(v_day, 'MMDD') || '-' || lpad(n::text, 4, '0'));
+end $$;
+
+-- ── the queue tickets (collection chairs): a number for one patient's tests of the day, in the order they came, called to a chair. It
+-- names the orders, never the patient; a ticket gains a test asked for later; a chair calls the next with no chair, or takes one ──
+create table lis.tickets (
+  organization_id uuid not null,
+  department_id uuid not null,
+  day           date not null,
+  number        int not null,
+  items         uuid[] not null,           -- the orders it is for
+  chair         int,                       -- the chair it was called to
+  called_at     timestamptz,
+  called_by     uuid,
+  primary key (organization_id, department_id, day, number)
+);
+-- Collect's read: each group of orders (a patient's, in the order to number them) gets today's ticket, a new one where none of its
+-- orders has one yet; returns today's tickets
+create function lis.tickets_of(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare v_day date := lis.today(p_org); g jsonb; v_items uuid[]; v_n int;
+begin
+  if jsonb_array_length(coalesce(p_args -> 'groups', '[]')) > 1000 then perform core.refuse('too_many', 'groups'); end if;
+  perform pg_advisory_xact_lock(hashtextextended('lis.tickets ' || p_department::text || v_day::text, 0));
+  for g in select x from jsonb_array_elements(coalesce(p_args -> 'groups', '[]')) x loop
+    v_items := array(select y::uuid from jsonb_array_elements_text(g) y);
+    continue when cardinality(v_items) = 0;
+    if exists (select 1 from lis.tickets t where t.organization_id = p_org and t.department_id = p_department and t.day = v_day and t.items && v_items) then
+      update lis.tickets t set items = array(select distinct z from unnest(t.items || v_items) z order by z)
+       where t.organization_id = p_org and t.department_id = p_department and t.day = v_day and t.items && v_items and not t.items @> v_items;
+    else
+      select coalesce(max(t.number), 0) + 1 into v_n from lis.tickets t where t.organization_id = p_org and t.department_id = p_department and t.day = v_day;
+      insert into lis.tickets (organization_id, department_id, day, number, items) values (p_org, p_department, v_day, v_n, v_items);
+    end if;
+  end loop;
+  return jsonb_build_object('tickets', (select coalesce(jsonb_agg(jsonb_build_object('number', t.number, 'items', t.items, 'chair', t.chair, 'called_at', t.called_at)
+    order by t.number), '[]') from lis.tickets t where t.organization_id = p_org and t.department_id = p_department and t.day = v_day));
+end $$;
+-- Call: today's ticket to a chair of this laboratory (one its settings count); one called to another chair only when taken
+create function lis.call(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare v_day date := lis.today(p_org); v_chair int := (p_args ->> 'chair')::int; t lis.tickets;
+begin
+  if v_chair is null or v_chair < 1 or v_chair > coalesce((core.setting_at(p_org, 'lis.large', p_department) ->> 'chairs')::int, 0) then
+    perform core.refuse('no_such_chair', coalesce(p_args ->> 'chair', 'none'));
+  end if;
+  select x.* into t from lis.tickets x where x.organization_id = p_org and x.department_id = p_department and x.day = v_day and x.number = (p_args ->> 'number')::int for update;
+  if t.number is null then perform core.refuse('unknown_ticket', coalesce(p_args ->> 'number', 'none')); end if;
+  if t.chair is not null and t.chair <> v_chair and not coalesce((p_args ->> 'take')::boolean, false) then perform core.refuse('called_elsewhere', 'Chair ' || t.chair); end if;
+  update lis.tickets x set chair = v_chair, called_at = now(), called_by = p_user
+   where x.organization_id = p_org and x.department_id = p_department and x.day = v_day and x.number = t.number;
+  return jsonb_build_object('number', t.number, 'chair', v_chair);
 end $$;
 
 -- ── each value a patient had (the change check): every final, corrected or amended result's numbers, by analyte key ──
@@ -66,19 +121,56 @@ select core.declare_action('read:lis.values', 'lis', 'department', '{"en":"Read 
 select core.declare_table('lis.values', 'lis', 'lis.values_refresh(uuid,uuid[])', 'read:lis.values');
 select core.declare_listener('lis', array['result'], 'lis.values_refresh(uuid,uuid[])');
 select core.declare_op('lis.sample', 'lis', 'lis.next_sample(uuid,uuid,uuid,jsonb)', 'write:step');
--- its technician (§5.2: a role built on a base role): all a lab technician holds, and the earlier values for the change check
+select core.declare_op('lis.tickets', 'lis', 'lis.tickets_of(uuid,uuid,uuid,jsonb)', 'read:bench');
+select core.declare_op('lis.call', 'lis', 'lis.call(uuid,uuid,uuid,jsonb)', 'write:step');
+select core.declare_action('approve:lis.results', 'lis', 'department', '{"en":"Approve results another person released (the second check)"}');
+-- its technician (§5.2: a role built on a base role): all a lab technician holds, and the earlier values for the change check; its
+-- senior also approves what another released, where the laboratory has a second person check
 select core.declare_role('00000000-0000-0000-0000-00000000cf01', 'lis.technician', 'lis', 'Lab technician', array['read:lis.values'], '{"en":"Lab technician"}',
   built_on => '00000000-0000-0000-0000-00000000c005');
+select core.declare_role('00000000-0000-0000-0000-00000000cf02', 'lis.senior', 'lis', 'Lab senior', array['read:lis.values', 'approve:lis.results'], '{"en":"Lab senior"}',
+  built_on => '00000000-0000-0000-0000-00000000c005');
 
--- its two screens, in place of the bench: Collect (whose sample is next: tubes, the sample number, collected) and Results (by section)
+-- its screens, in place of the bench: Collect (whose sample is next: tubes, the sample number, collected), Receive (tubes scanned in
+-- as they arrive, a tab only where the laboratory scans to receive) and Results (by section)
 select core.declare_screen('lis.collect', 'lis', 'bench', '{"en":"Collect"}', 'read:bench', array['base.bench']);
+select core.declare_screen('lis.receive', 'lis', 'bench', '{"en":"Receive"}', 'read:bench');
 select core.declare_screen('lis.results', 'lis', 'bench', '{"en":"Results"}', 'read:bench');
+
+-- the large lab (spec §5.3), each switch on its own and all off for a small lab, on the laboratory's card: turnaround targets per
+-- section (minutes from the sample's last step: collected, or received where tubes are scanned in), a second person checks (Release
+-- writes a preliminary result; a senior approves it final), scan to receive, collection chairs (0: one list). Printed labels, results
+-- from analysers and releasing normal ones by themselves are placeholders, held at their const until they are built
+select core.declare_setting('lis.large', 'lis', 'department',
+  '{"type":"object","additionalProperties":false,"required":["turnaround","targets","second_check","scan_receive","chairs","labels","analysers","auto_release"],
+    "properties":{"turnaround":{"type":"boolean","default":false},
+      "targets":{"type":"object","additionalProperties":false,"required":["haematology","coagulation","chemistry","hormones","serology","urine_stool"],"properties":{
+        "haematology":{"type":"integer","minimum":5,"maximum":10080,"default":60},"coagulation":{"type":"integer","minimum":5,"maximum":10080,"default":60},
+        "chemistry":{"type":"integer","minimum":5,"maximum":10080,"default":120},"hormones":{"type":"integer","minimum":5,"maximum":10080,"default":240},
+        "serology":{"type":"integer","minimum":5,"maximum":10080,"default":240},"urine_stool":{"type":"integer","minimum":5,"maximum":10080,"default":60}}},
+      "second_check":{"type":"boolean","default":false},"scan_receive":{"type":"boolean","default":false},
+      "chairs":{"type":"integer","minimum":0,"maximum":12,"default":0},
+      "labels":{"enum":["written","printed"],"const":"written","default":"written"},
+      "analysers":{"type":"boolean","const":false,"default":false},"auto_release":{"type":"boolean","const":false,"default":false}}}',
+  labels => '{"en":"Large lab"}', form => 'department',
+  fields => '[{"key":"turnaround","labels":{"en":"Turnaround targets"},"help":{"en":"A sample waiting past its section''s target turns amber on Results, and Late counts it."}},
+    {"key":"targets","labels":{"en":"Targets"},"help":{"en":"Minutes from collected (or received, where tubes are scanned in) to released."}},
+    {"key":"targets.haematology","labels":{"en":"Haematology"},"unit":"min"},{"key":"targets.coagulation","labels":{"en":"Coagulation"},"unit":"min"},
+    {"key":"targets.chemistry","labels":{"en":"Chemistry"},"unit":"min"},{"key":"targets.hormones","labels":{"en":"Hormones"},"unit":"min"},
+    {"key":"targets.serology","labels":{"en":"Serology"},"unit":"min"},{"key":"targets.urine_stool","labels":{"en":"Urine & stool"},"unit":"min"},
+    {"key":"second_check","labels":{"en":"Second person checks"},"help":{"en":"Release sends a preliminary result; a lab senior approves it on To check, never their own."}},
+    {"key":"scan_receive","labels":{"en":"Scan to receive"},"help":{"en":"Tubes are scanned in as they arrive (the Receive tab); a rejected tube goes back to Collect for a new sample."}},
+    {"key":"chairs","labels":{"en":"Collection chairs"},"help":{"en":"Each collector picks a chair and calls the next patient by number. 0: one list for all."}},
+    {"key":"labels","labels":{"en":"Sample labels"},"help":{"en":"Printed barcode labels for each tube, when printing comes."},"later":true,
+     "choices":{"written":{"en":"Written number"},"printed":{"en":"Printed barcode"}}},
+    {"key":"analysers","labels":{"en":"Results from analysers"},"help":{"en":"Results come in from the machines; people check them."},"later":true},
+    {"key":"auto_release","labels":{"en":"Release normal results by themselves"},"help":{"en":"No flag, no big change, the analyser content: it goes out."},"later":true}]');
 
 -- its starter setup (§5.2): the Laboratory, its two screens, and the tests most asked for in Egypt (mg/dL as Egyptian labs report). The
 -- ranges are adults' by sex, with a child's where it differs; the critical limits are a common starting list (spec §5.3): the
 -- laboratory's director confirms or changes each in Settings
 select core.declare_setup('lis.laboratory', 'lis', 'bench', '{"en":"Laboratory"}', packs => array['lis'],
-  screens => '{"screens":["lis.collect","lis.results"],"opens":"lis.collect"}',
+  screens => '{"screens":["lis.collect","lis.receive","lis.results"],"opens":"lis.collect"}',
   settings => '{"department.works_for":{"all":true}}',
   help => '{"en":"Collects samples (tubes by colour, a sample number) and reports results by section, with ranges, the change check and critical values."}',
   services => $j$[

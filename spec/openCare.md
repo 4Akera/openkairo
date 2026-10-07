@@ -937,6 +937,23 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   for printing, whose first use is these labels), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
   list, patients called by number), results from analysers (a small outside program, as the network is closed to packs), release
   normal results by themselves (no flag, no big change, the analyser content), a second person checks, turnaround targets per section.
+  *Built 2026-10-07 (piece 6):* one card on the laboratory's page, `lis.large` (all off by default). *Turnaround targets* (minutes per
+  section from the sample's last step — collected, or received where tubes are scanned in): a row past its target turns amber with
+  "late · n min", and Results opens a *Late* view gathering them. *A second person checks*: Release writes a preliminary result (the
+  doctor sees it as preliminary; a critical one reaches the doctor at once), *To check* shows each patient's report with every value
+  there to change, and Approve writes each result's next version final — never one's own release, only a lab senior (`lis.senior`,
+  `approve:lis.results`); the base now reads a final that replaces a preliminary as the result's first final, not a correction.
+  *Scan to receive*: the Receive tab (`lis.receive`, shown only then) takes a sample number, marks its tests received (a received
+  step) and says where each tube goes; Results types only what was received; a tube rejected (haemolysed, clotted, too little, wrong
+  tube, no number) holds its tests with the reason and sends them back to Collect as *new sample*, where a new number is given.
+  *Collection chairs* (0–12): a collector picks a chair (kept in the browser), each patient's tests of the day get a ticket number in
+  the order they came (`lis.tickets`, the pack's own table, naming the orders, never the patient; `lis.tickets` and `lis.call`
+  through `public.pack_op`), Call next calls the next with no chair (stat first) and the chair's card holds who it called, ready to
+  collect; one another chair called is taken only on purpose (`called_elsewhere`). Sample labels, results from analysers and releasing
+  normal results by themselves are placeholders on the card, read-only with a small *later* beside them (a field declared `later`
+  holds its value by the shape's `const`; `core.check_fields` refuses one without). The queue's row carries its latest step's data
+  (the sample number, a reason) and its latest answer. The demo adds Nabil (a lipid profile collected two and a half hours ago), two
+  walk-ins waiting to be collected (Dina; Omar, stat) and the senior, Hala Mansour (senior@demo.com).
 
 ---
 

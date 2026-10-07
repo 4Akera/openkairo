@@ -168,4 +168,14 @@ test('pharmacy: the counselling note shows only when the clinic turned it on wit
   assert.deepEqual(formOf(TALK).map((x) => x.kind), ['yesno', 'text'])
 })
 
+test('a placeholder (later): drawn read-only with its tag, held at its const by the same check as the server\'s', () => {
+  const HELD: SettingKey = { key: 'probe.held', layer: 'probe', owner_kind: 'department', many: false, labels: { en: 'Held' }, form: 'department',
+    shape: { type: 'object', additionalProperties: false, properties: { on: { type: 'boolean', default: false }, machines: { type: 'boolean', const: false, default: false } } },
+    fields: [{ key: 'on', labels: { en: 'On' } }, { key: 'machines', labels: { en: 'From the machines' }, later: true }] }
+  assert.deepEqual(formOf(HELD).map((x) => [x.name, !!x.later]), [['on', false], ['machines', true]])
+  assert.deepEqual(validate(HELD.shape, { on: true, machines: true }), { machines: 'Not in the right form' }, 'a placeholder cannot be switched on')
+  const html = renderToStaticMarkup(createElement(AutoForm, { decl: HELD, nodes: formOf(HELD), value: defaultsOf(HELD.shape), onChange: () => {}, errors: {}, disabled: false }))
+  assert.match(html, /From the machines/); assert.match(html, />later</); assert.match(html, /<fieldset disabled=""/)
+})
+
 console.log(`settings: ${n} groups passed`)

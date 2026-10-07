@@ -305,7 +305,9 @@ begin
           v_waiting := v_p.item is not null and ((v_p.state in ('pending', 'back', 'called', 'with', 'waiting') and v_p.here)
                                                or (v_p.state = 'done' and v_p.done_at >= l.recorded_at));
           v_rule := coalesce(core.setting_at(p_org, 'department.review_results', v_o.from_department_id, l.recorded_at) ->> 'level', 'critical');
-          v_why := case when l.replaces is not null then 'corrected'
+          -- a version replacing a released one is a correction; the final that replaces a preliminary is the result's first final
+          v_why := case when l.replaces is not null and coalesce((select x.data ->> 'status' from core.entries x where x.organization_id = p_org and x.id = l.replaces), 'final')
+                                                     not in ('preliminary', 'registered') then 'corrected'
                         when not v_waiting then 'not_seen'
                         when v_level = 'critical' then 'critical'
                         when v_rule = 'abnormal' and v_level = 'abnormal' then 'abnormal'

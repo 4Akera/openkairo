@@ -64,6 +64,11 @@ select t.refuses($$select core.declare_setting('probe.x', 'probe', 'department',
 select t.refuses($$select core.declare_setting('probe.x', 'probe', 'department', '{"type":"object","properties":{"a":{"enum":[1,2]}}}',
   form => 'department', fields => '[{"key":"a","labels":{"en":"A"},"choices":{"3":{"en":"Three"}}}]')$$, 'unknown_choice');
 select t.refuses($$select core.declare_setting('probe.x', 'probe', 'department', '{"type":"object","properties":{"a":{"type":"integer"}}}', fields => '{"a":1}')$$, 'bad_fields');
+select t.refuses($$select core.declare_setting('probe.x', 'probe', 'department', '{"type":"object","properties":{"a":{"type":"boolean"}}}',
+  form => 'department', fields => '[{"key":"a","labels":{"en":"A"},"later":true}]')$$, 'bad_fields');   -- a placeholder holds its value by a const
+select core.declare_setting('probe.y', 'probe', 'department', '{"type":"object","properties":{"a":{"type":"boolean","const":false}}}',
+  form => 'department', fields => '[{"key":"a","labels":{"en":"A"},"later":true}]');
+select t.ok(exists (select 1 from core.setting_keys k where k.key = 'probe.y' and k.fields -> 0 -> 'later' = 'true'), 'a placeholder (later) with its const is declared');
 
 \echo '── the probe: one setting with every kind of field (a choice, a number with its unit, text, yes/no, a small table, a list, a sub-section)'
 select core.declare_setting('probe.everything', 'probe', 'organization', '{"type":"object","additionalProperties":false,"required":["scale"],"properties":{

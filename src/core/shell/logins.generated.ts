@@ -24,6 +24,7 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'nurse@demo.com', name: 'Sara Mahmoud', role: 'Nurse' },
   ] },
   { department: 'Laboratory', departmentId: '00000000-0000-0000-0000-00000000d003', people: [
+    { email: 'senior@demo.com', name: 'Hala Mansour', role: 'Lab senior' },
     { email: 'lab@demo.com', name: 'Karim Fawzy', role: 'Lab technician' },
     { email: 'lab@demo.com', name: 'Karim Fawzy', role: 'Lab technician' },
     { email: 'collect@demo.com', name: 'Mona Saber', role: 'Lab technician' },

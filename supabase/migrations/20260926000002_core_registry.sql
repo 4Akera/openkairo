@@ -506,7 +506,7 @@ $$;
 -- what a form needs, checked once at declaration: each field names a node of the shape, once, with its words; a unit only on a number,
 -- choices only of its enum (on a list, of its items': the chips to tick; matched as text, so a number's too); a form shows on a pack's
 -- page (a clinic-wide setting of a pack) or a department's card (a per-department one), only for a pack, one value per owner, and then
--- every node it draws has its words
+-- every node it draws has its words; a field declared later (a placeholder, drawn read-only) holds its value by the shape's const
 create function core.check_fields(p_key text, p_layer text, p_owner text, p_many boolean, p_shape jsonb, p_fields jsonb, p_form text) returns void language plpgsql as $$
 declare f jsonb; nd jsonb; v jsonb; c text; v_owner text := case p_form when 'pack' then 'organization' when 'department' then 'department' end;
 begin
@@ -520,6 +520,7 @@ begin
     nd := (select n.node from core.shape_nodes(p_shape) n where n.path = f ->> 'key');
     if nd is null then perform core.refuse('unknown_field', p_key || ': ' || coalesce(f ->> 'key', '(no key)')); end if;
     if coalesce(f -> 'labels' ->> 'en', '') = '' then perform core.refuse('label_missing', p_key || ': ' || (f ->> 'key')); end if;
+    if f ? 'later' and (f -> 'later' <> 'true'::jsonb or not nd ? 'const') then perform core.refuse('bad_fields', p_key || ': ' || (f ->> 'key') || ' later, with no const'); end if;
     v := case when core.node_is(nd, array['array']) and nd ? 'items' then nd -> 'items' else nd end;   -- a list's unit and choices are its items'
     if f ? 'unit' and not core.node_is(v, array['number', 'integer']) then perform core.refuse('unit_not_number', p_key || ': ' || (f ->> 'key')); end if;
     if f ? 'choices' and exists (select 1 from jsonb_object_keys(f -> 'choices') x

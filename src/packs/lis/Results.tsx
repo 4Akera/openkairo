@@ -4,7 +4,9 @@
 // the range that fits the patient's sex and age, the values worked out (LDL, eGFR, dashed), the change check against the patient's
 // last value within 30 days (check the sample before release). A critical value is only a notice — tell the doctor who asked (or, a
 // walk-in, the patient or the doctor who asked), then Release, which writes each test whose fields are all there as a final result.
-// ↵ moves down the column, Tab across.
+// ↵ moves down the column, Tab across. The large lab's switches (large.ts): turnaround targets (a row past its section's target turns
+// amber, and Late gathers them all), a second person checks (Release writes a preliminary result, To check approves it), scan to
+// receive (a sample is typed only once received).
 import { useState, type KeyboardEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
@@ -21,8 +23,11 @@ import { flagOf } from '@core/screens/bench/BenchPatient'
 import { isWalkIn } from '@core/screens/bench/walkins'
 import { Button, Callout, Card, Empty, Input, Kbd, ScreenFrame, Select, Spinner, Tag, cn, errorText, flagMark, hm, type ScreenView } from '@core/ui'
 import { WORKED_OUT, changeOf, columnsOf, workedOut, type Prev } from './grid'
+import { largeOf, lateBy, targetOf } from './large'
+import { ToCheck, toCheck } from './Check'
 
 const started = (r: RequestQueueRow) => !!r.order.step_key || (!!r.request?.step && r.request.step !== 'sent')
+const LATE = '~late'; const CHECK = '~check'
 const CELL = { high: 'border-line font-semibold text-warn', low: 'border-line font-semibold text-warn', critical: 'border-danger bg-danger-soft font-semibold text-danger', normal: 'border-line text-fg' }
 const range = (f: Pick<ServiceField, 'reference_low' | 'reference_high'>) => f.reference_low != null && f.reference_high != null ? `${f.reference_low}–${f.reference_high}`
   : f.reference_high != null ? `≤ ${f.reference_high}` : f.reference_low != null ? `≥ ${f.reference_low}` : ''
@@ -35,10 +40,20 @@ export function Results({ dept }: ScreenProps) {
   const [busy, setBusy] = useState<string | null>(null); const [said, setSaid] = useState<string | null>(null); const [error, setError] = useState<string | null>(null)
   const f = find.trim().toLowerCase()
   const serviceOf = (r: RequestQueueRow): Service | undefined => org?.services.find((s) => s.id === r.order.service_id)
-  const waiting = (q.data?.requests ?? []).filter((r) => started(r) && serviceOf(r)?.fields.length)
+  const large = largeOf(org, dept.id)
+  const rows = (q.data?.requests ?? []).filter((r) => serviceOf(r)?.fields.length)
+  // to type: collected (or received, where tubes are scanned in), not sent back for a new sample, nothing released yet
+  const waiting = rows.filter((r) => started(r) && r.order.status !== 'on-hold' && !r.reply && (!large.scan_receive || r.order.step_key === 'received'))
+  const notIn = large.scan_receive ? rows.filter((r) => r.order.step_key === 'collected' && r.order.status !== 'on-hold' && !r.reply).length : 0
+  const checking = rows.filter(toCheck)
+  const lateOf = (r: RequestQueueRow) => lateBy(r.order.last_at, targetOf(large, r.section_name))
+  const late = waiting.filter((r) => lateOf(r) != null)
   const sections = [...new Set(waiting.map((r) => r.section_name ?? 'Other'))].sort()
-  const current = section && sections.includes(section) ? section : sections[0] ?? null
-  const groups = groupByPatient(waiting.filter((r) => (r.section_name ?? 'Other') === current)).filter((g) => matches(g.patient, f))
+  const views0 = [...(large.turnaround && late.length ? [LATE] : []), ...sections, ...(large.second_check ? [CHECK] : [])]
+  // opens on Late when anything is late, else the first section, else To check when something waits there
+  const current = section && views0.includes(section) ? section : views0.find((x) => x !== CHECK) ?? (large.second_check && checking.length ? CHECK : null)
+  const inView = (r: RequestQueueRow) => current === LATE ? lateOf(r) != null : (r.section_name ?? 'Other') === current
+  const groups = groupByPatient(waiting.filter(inView)).filter((g) => matches(g.patient, f))
   const tests = [...new Map(groups.flatMap((g) => g.rows).map((r) => [r.order.service_id, serviceOf(r)])).values()].filter((s): s is Service => !!s)
   const columns = columnsOf(tests)
   const ids = [...new Set(waiting.map((r) => r.patient.id))]
@@ -58,9 +73,10 @@ export function Results({ dept }: ScreenProps) {
     setBusy(g.patient.id); setError(null)
     try {
       const all = Object.fromEntries(columns.map((c) => [c.key, valueOf(g, c.key)]))
-      await write(oneSet(rows.map((r) => resultEntry(r, dept.id, serviceOf(r)!.fields.map((x) => fitted(g, x)), all, '', true))))
+      // a second person checks: released as preliminary, made final on To check
+      await write(oneSet(rows.map((r) => resultEntry(r, dept.id, serviceOf(r)!.fields.map((x) => fitted(g, x)), all, '', !large.second_check))))
       setVals((x) => { const { [g.patient.id]: _, ...rest } = x; void _; return rest })
-      setSaid(`${g.patient.given_name} ${g.patient.family_name}: ${rows.map((r) => r.service_name).join(', ')} released`); refresh(qc)
+      setSaid(`${g.patient.given_name} ${g.patient.family_name}: ${rows.map((r) => r.service_name).join(', ')} ${large.second_check ? 'released, to check' : 'released'}`); refresh(qc)
     } catch (x) { setError(errorText(x)) } finally { setBusy(null) }
   }
   // ↵ moves down the column (the next patient's cell of the same field)
@@ -69,8 +85,10 @@ export function Results({ dept }: ScreenProps) {
     const cell = e.currentTarget; const col = cell.dataset.col; const cells = [...document.querySelectorAll<HTMLElement>(`[data-col="${col}"]`)]
     const next = cells[cells.indexOf(cell) + 1]; if (next) { e.preventDefault(); next.focus() }
   }
-  const views: ScreenView<string>[] = sections.map((s) => { const gs = groupByPatient(waiting.filter((r) => (r.section_name ?? 'Other') === s))
-    return { id: s, label: s, count: gs.length } })
+  const views: ScreenView<string>[] = [
+    ...(large.turnaround && late.length ? [{ id: LATE, label: 'Late', count: groupByPatient(late).length, needs: 'warn' as const }] : []),
+    ...sections.map((s) => ({ id: s, label: s, count: groupByPatient(waiting.filter((r) => (r.section_name ?? 'Other') === s)).length })),
+    ...(large.second_check ? [{ id: CHECK, label: 'To check', count: groupByPatient(checking).length, needs: 'warn' as const }] : [])]
 
   const row = (g: PatientGroup) => {
     const mine = (key: string) => g.rows.some((r) => serviceOf(r)?.fields.some((x) => x.key === key))
@@ -88,10 +106,11 @@ export function Results({ dept }: ScreenProps) {
     const who = walk ? (g.rows.find((r) => r.order.asked_by)?.order.asked_by ? `the patient or ${g.rows.find((r) => r.order.asked_by)!.order.asked_by}` : 'the patient')
       : g.rows[0]?.requester_name ?? g.rows[0]?.from_department_name ?? 'the doctor who asked'
     const any = g.rows.some((r) => { const s = serviceOf(r); return s && ready(g, s) })
-    return [<tr key={g.patient.id} className={cn('border-t border-line', notes.length > 0 && 'bg-hover')}>
+    const waited = Math.max(...g.rows.map((r) => lateOf(r) ?? -1)); const sample = g.rows.find((r) => r.step_data?.specimen)?.step_data?.specimen
+    return [<tr key={g.patient.id} className={cn('border-t border-line', waited >= 0 ? 'bg-warn-soft' : notes.length > 0 && 'bg-hover')}>
       <td className="px-3 py-2"><span className="flex items-center gap-2"><span className="font-medium text-fg">{g.patient.given_name} {g.patient.family_name}</span>
-        {g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{walk && <Tag tone="info">walk-in</Tag>}</span>
-        <span className="font-mono text-11 text-faint">#{g.patient.record_number}{g.rows[0]?.order.last_at ? ` · collected ${hm(g.rows[0].order.last_at)}` : ''}</span></td>
+        {g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{walk && <Tag tone="info">walk-in</Tag>}{waited >= 0 && <Tag tone="warn">late · {waited} min</Tag>}</span>
+        <span className="font-mono text-11 text-faint">#{g.patient.record_number}{sample ? ` · ${sample}` : ''}{g.rows[0]?.order.last_at ? ` · ${large.scan_receive ? 'received' : 'collected'} ${hm(g.rows[0].order.last_at)}` : ''}</span></td>
       {columns.map((c) => { if (!mine(c.key)) return <td key={c.key} className="px-1.5 py-2 text-end text-faint">·</td>
         const fit = fitted(g, c); const raw = valueOf(g, c.key); const flag = flagOf(fit, raw)
         if (WORKED_OUT.has(c.key)) return <td key={c.key} className="px-1.5 py-2 text-end"><span title="Worked out from the others" className={cn('inline-flex h-8 w-[4.5rem] items-center justify-end gap-1 rounded-md border border-dashed bg-surface px-2 tnum', flag ? CELL[flag] : 'border-line text-faint')}>
@@ -103,7 +122,7 @@ export function Results({ dept }: ScreenProps) {
               onChange={(e) => set(g.patient.id, c.key, e.target.value)} aria-label={`${g.patient.given_name}: ${c.name}`}
               className={cn('w-[4.5rem] text-end tnum', c.kind === 'text' && 'w-24 text-start', flag ? CELL[flag] : '')} />
               {flag && flag !== 'normal' && <span aria-hidden className={cn('pointer-events-none absolute end-1 top-0.5 text-11', flag === 'critical' ? 'text-danger' : 'text-warn')}>{flagMark(flag)}</span>}</span>}</td> })}
-      <td className="px-3 py-2 text-end"><Button size="sm" variant={critical ? 'danger' : 'primary'} disabled={!any} loading={busy === g.patient.id} onClick={() => void release(g)}>Release</Button></td>
+      <td className="px-3 py-2 text-end"><Button size="sm" variant={critical ? 'danger' : 'primary'} disabled={!any} loading={busy === g.patient.id} onClick={() => void release(g)}>{large.second_check ? 'Release to check' : 'Release'}</Button></td>
     </tr>,
     notes.length > 0 && <tr key={`${g.patient.id} notes`} className="bg-hover"><td colSpan={columns.length + 2} className="px-3 pb-2"><div className="grid max-w-3xl gap-1">
       {critical && <Callout tone="danger" title={`Critical: tell ${who} now`}>{notes.filter((x) => x.tone === 'danger').map((x) => x.text).join('; ')}. Then release.</Callout>}
@@ -114,7 +133,9 @@ export function Results({ dept }: ScreenProps) {
   return <ScreenFrame views={views} view={current ?? ''} onView={setSection}
     search={<Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Record number or name" className="w-full sm:w-72" />}
     notice={said ? <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout> : error ? <Callout tone="danger" title="Not released">{error}</Callout> : undefined}>
-    {q.isLoading ? <Spinner label="Loading" /> : !current ? <Card><Empty>Nothing collected is waiting for results.</Empty></Card>
+    {notIn > 0 && <p className="text-12 text-muted">{notIn} {notIn === 1 ? 'test is' : 'tests are'} collected and not received yet: each waits for its tube's scan on Receive.</p>}
+    {q.isLoading ? <Spinner label="Loading" /> : !current ? <Card><Empty>{large.scan_receive ? 'Nothing received is waiting for results.' : 'Nothing collected is waiting for results.'}</Empty></Card>
+      : current === CHECK ? <ToCheck rows={checking} serviceOf={serviceOf} deptId={dept.id} onDone={(x) => { setSaid(x); setError(null) }} />
       : <Card className="overflow-x-auto"><table className="w-full text-13 tnum">
         <thead><tr className="border-b border-line align-bottom">
           <th className="px-3 py-2 text-start text-11 font-medium uppercase tracking-[0.06em] text-faint">Patient</th>
@@ -123,6 +144,6 @@ export function Results({ dept }: ScreenProps) {
           <th className="px-3 py-2" /></tr></thead>
         <tbody>{groups.length ? groups.flatMap(row) : <tr><td colSpan={columns.length + 2}><Empty>{f ? 'No match here.' : 'Nobody here.'}</Empty></td></tr>}</tbody>
       </table></Card>}
-    <p className="text-12 text-faint">Type down a column (<Kbd>↵</Kbd>) or across a row (Tab); ranges by age and sex; LDL and eGFR are worked out; a critical value shows its notice before Release.</p>
+    {current !== CHECK && <p className="text-12 text-faint">Type down a column (<Kbd>↵</Kbd>) or across a row (Tab); ranges by age and sex; LDL and eGFR are worked out; a critical value shows its notice before Release.</p>}
   </ScreenFrame>
 }

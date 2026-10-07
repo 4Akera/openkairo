@@ -1,10 +1,10 @@
 // The automatic form (spec/openCare.md §5.1 rule 7): a setting's fields drawn from its declared shape and words, from the kit only.
 // A choice as chips, a number with its unit, words, yes/no, a small table with rows to add and remove, a list to add to, a sub-section
 // as a group; each error (the form's own check, or the server's refusal that names the field) sits under its field. Disabled, it is the
-// same form, read-only (a fieldset: every control inside it).
+// same form, read-only (a fieldset: every control inside it). A placeholder (declared later) is drawn read-only, "later" beside it.
 import { useState, type ReactNode } from 'react'
 import { Plus, X } from 'lucide-react'
-import { Button, Chip, Fieldset, FormRow, IconButton, Input, NumberInput, Segmented, Textarea, cn } from '../../../ui'
+import { Button, Chip, Fieldset, FormRow, IconButton, Input, NumberInput, Segmented, Tag, Textarea, cn } from '../../../ui'
 import type { Schema } from '../../../db/types'
 import { defaultsOf, errorWithin, join, same, type Errors, type FormNode } from './model'
 import type { SettingEditorProps } from './registry'
@@ -27,6 +27,10 @@ function Fields({ nodes, at, value, onChange, errors }: At & { nodes: FormNode[]
       {n.help && <p className="-mt-2 text-12 text-faint">{n.help}</p>}
       <Control node={n} at={p} value={value[n.name]} onChange={set(n.name)} errors={errors} /><Err e={errors[p]} />
     </Fieldset>
+    if (n.later) return <FormRow key={n.name} label={<span className="text-muted">{n.label}</span>} hint={n.help ?? undefined}>
+      <span className="flex flex-wrap items-center gap-2"><fieldset disabled className="contents"><Control node={n} at={p} value={value[n.name]} onChange={set(n.name)} errors={errors} /></fieldset>
+        <Tag title="Not in use yet: it comes in a later version">later</Tag></span>
+    </FormRow>
     return <FormRow key={n.name} label={<span>{n.label}{!n.required && n.kind !== 'yesno' && <span className="ms-1.5 text-12 font-normal text-faint">optional</span>}</span>}
       hint={n.help ?? undefined}>
       <Control node={n} at={p} value={value[n.name]} onChange={set(n.name)} errors={errors} /><Err e={errors[p]} />

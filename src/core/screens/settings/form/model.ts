@@ -6,11 +6,12 @@
 //   clean      what the form sends: blank words and unset values left out
 //   initialOf  the value to start from: as saved (less what the shape no longer names), else the shape's defaults
 //   placeErrors each error where the form draws one: an undrawn path moves to its nearest drawn place, else over the Save
+// A field declared later is a placeholder: drawn, read-only, with a small "later" beside it (its value held by the shape).
 import type { FieldDecl, Schema, SettingKey, SettingRow } from '../../../db/types'
 import type { SettingData } from '../../../db/shapes.generated'
 
 type Defs = Record<string, Schema>
-interface Base { name: string; path: string; label: string; help: string | null; required: boolean; schema: Schema }
+interface Base { name: string; path: string; label: string; help: string | null; required: boolean; schema: Schema; later?: boolean }
 export type FormNode = Base & (
   | { kind: 'choice'; options: { key: string; value: unknown; label: string }[] }
   | { kind: 'number'; integer: boolean; unit: string | null; min: number | null; max: number | null; placeholder: string | null }
@@ -43,7 +44,7 @@ function childrenOf(s: Schema, path: string, fields: FieldDecl[], defs: Defs): F
 }
 function nodeOf(name: string, path: string, schema: Schema, required: boolean, fields: FieldDecl[], defs: Defs): FormNode {
   const f = fields.find((x) => x.key === path)
-  const base: Base = { name, path, label: words(f?.labels) ?? humane(name), help: words(f?.help), required, schema }
+  const base: Base = { name, path, label: words(f?.labels) ?? humane(name), help: words(f?.help), required, schema, ...(f?.later ? { later: true } : {}) }
   if (refName(schema)) return { ...base, kind: 'other' }    // a datatype (a quantity, a coding): a pack's own editor draws it
   const s = schema; const types = typesOf(s); const dflt = s.default === undefined ? null : String(s.default)
   if (Array.isArray(s.enum)) return { ...base, kind: 'choice', options: (s.enum as unknown[]).filter((v) => v !== null).map((v) => ({ key: String(v), value: v, label: words(f?.choices?.[String(v)]) ?? String(v) })) }

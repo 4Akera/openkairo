@@ -42,7 +42,8 @@ export interface SettingRow { key: string; thing_id: string; owner_id: string | 
 /** a JSON schema as declared (the subset the shapes use) */
 export type Schema = { [k: string]: unknown }
 /** one field of a setting's form, in order: its path through the shape (rows.dose), its words, its unit, its choices' words (§5.1 rule 7) */
-export interface FieldDecl { key: string; labels: Record<string, string>; help?: Record<string, string>; unit?: string; choices?: Record<string, Record<string, string>> }
+/** later: a placeholder, drawn but not yet in use (its value held at the shape's const; spec §5.3) */
+export interface FieldDecl { key: string; labels: Record<string, string>; help?: Record<string, string>; unit?: string; choices?: Record<string, Record<string, string>>; later?: boolean }
 /** a declared setting key, with what its automatic form needs; form: where it shows (the pack's page, the department's card), or null */
 export interface SettingKey { key: string; layer: string; owner_kind: 'organization' | 'department' | 'place'; many: boolean; labels: Record<string, string>
   shape: Schema; fields: FieldDecl[]; form: 'pack' | 'department' | null; action?: string | null }
@@ -132,8 +133,12 @@ export interface RequestQueueRow extends Card {
   patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; born_on: string; here?: boolean }
   from_department_name: string | null; requester_name: string | null; question_text: string | null; section_name: string | null; service_name: string | null; reply_type: string | null
   assignee_id: string | null; details?: Record<string, unknown> | null; order: OrderRow
+  step_data?: StepData | null   // its latest step's data (the sample number, a reason)
+  reply?: Reply | null          // its latest answer, where it has one (a preliminary waits to be made final)
 }
-export interface RecentRow extends RequestQueueRow { reply: { id: string; item: string; version: number; data: Record<string, unknown>; author_name: string | null; recorded_at: string; is_final: boolean } | null }
+export interface StepData { status?: string; step?: string; reason?: string; specimen?: string; note?: string }
+export interface Reply { id: string; item: string; version: number; data: Record<string, unknown>; author_id: string | null; author_name: string | null; recorded_at: string; is_final: boolean }
+export interface RecentRow extends RequestQueueRow { reply: Reply | null }
 export interface RequestQueue { requests: RequestQueueRow[]; recent: RecentRow[]; done_today: number }
 export interface FieldRange { gender: 'female' | 'male' | null; age_low: number | null; age_high: number | null; low: number | null; high: number | null; critical_low: number | null; critical_high: number | null }
 export interface PatientHit extends PatientBanner {
