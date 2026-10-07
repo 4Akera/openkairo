@@ -703,7 +703,8 @@ it works ("/x is used in: …").
   yes/no, a number with its unit; while it fills, the card asks the server (debounced, a late answer to older inputs dropped) and shows
   each item's points, the total and the band in its words; Done waits for the server's answer to what the card holds and writes it. A
   pack's score is offered and written only where the department uses the pack. Signing a version off is the setting
-  `score.signed_off` (`sign:score`, which the Doctor holds; who and when are the setting's); Settings → Scores shows each table, the
+  `score.signed_off` (`sign:score`, which the Doctor holds — any doctor may sign a score off, decided with the owner 2026-10-07; who
+  and when are the setting's); Settings → Scores shows each table, the
   sign-off or "not signed off for this clinic" (the score still works), Sign off and Withdraw, and earlier versions folded. The base's
   score is the Glasgow Coma Scale (1974, LOINC 9269-2), which every department uses.
 - **Rule 9 · each pack brings its own demo.** Its own 2–3 patients for its main path, with real-sounding, unique names and believable

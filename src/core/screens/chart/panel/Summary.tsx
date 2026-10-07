@@ -72,7 +72,7 @@ export function Summary({ p }: { p: Panel }) {
       <Item label="Last vitals">
         {s.vitals.at ? <>
           <p className="mb-1 text-12 text-faint tnum">{taken(s.vitals.at)}</p>
-          <div className="grid grid-cols-3 gap-x-2 gap-y-1.5 @md:grid-cols-4">{s.vitals.tiles.map((t) => <Tile key={t.key} t={t} onOpen={() => p.open(t.entry_id)} />)}</div>
+          <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 @md:grid-cols-4">{s.vitals.tiles.map((t) => <Tile key={t.key} t={t} onOpen={() => p.open(t.entry_id)} />)}</div>
         </> : <p className="text-faint">No vitals recorded</p>}
       </Item>
       {s.results.show && <Item label="Key results">
@@ -124,10 +124,10 @@ function NoneKnown({ p, checked, at }: { p: Panel; checked: boolean; at: ListRev
 
 /** a vital: its latest value and its change against the value before (a trend, never a flag); its own date when older than the reading */
 function Tile({ t, onOpen }: { t: VitalTile; onOpen: () => void }) {
-  return <button type="button" onClick={onOpen} title={t.before ? `was ${t.before}` : undefined} className="-m-1 min-w-0 rounded-md p-1 text-start hover:bg-hover focus-ring">
-    <span className="flex items-baseline gap-1 text-12 text-muted">{t.label}{t.trend && <span className="text-faint"><span aria-hidden>{t.trend}</span><span className="sr-only">, was {t.before},</span></span>}</span>
-    <span className="flex flex-wrap items-baseline gap-x-1"><span className="text-16 font-semibold text-fg">{t.value}</span>{t.unit && <span className="text-11 text-faint">{t.unit}</span>}</span>
-    {t.own && <span className="block text-11 text-faint tnum">{shortDate(t.at)}</span>}
+  return <button type="button" onClick={onOpen} title={t.before ? `was ${t.before}` : undefined} className="-mx-1 flex min-w-0 flex-wrap items-baseline gap-x-1 rounded-md px-1 py-0.5 text-start hover:bg-hover focus-ring">
+    <span className="text-11 text-muted">{t.label}{t.trend && <span className="text-faint"><span aria-hidden>{t.trend}</span><span className="sr-only">, was {t.before},</span></span>}</span>
+    <span className="text-13 font-semibold text-fg">{t.value}</span>{t.unit && <span className="text-11 text-faint">{t.unit}</span>}
+    {t.own && <span className="text-11 text-faint tnum">{shortDate(t.at)}</span>}
   </button>
 }
 

@@ -2,6 +2,7 @@
 // opened from the record (read-only) — read by visit, with the answers to its orders (the bench writes them with no visit) and the
 // set heads' presence moves; a stay by day, with Since yesterday on top; a clinic patient back with results, Since Done. The entries
 // outside any visit (the record's first page, as Record.tsx's Between visits), and one entry opened from a link or the record.
+import { ClipboardList } from 'lucide-react'
 import { useMemo, type ReactNode } from 'react'
 import { useEntryPages, useItem } from '../../../hooks/chart'
 import { useDepartment } from '../../../hooks/organization'
@@ -23,6 +24,15 @@ export function Sets({ sets, empty }: { sets: SetGroup[]; empty: ReactNode }) {
 }
 const Earlier = ({ q }: { q: { hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown } }) =>
   q.hasNextPage ? <Button size="sm" variant="ghost" className="justify-self-start" loading={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>Earlier</Button> : null
+
+/** the open encounter before anything is signed: a quiet card that points at the line below */
+function FreshVisit({ stay }: { stay: boolean }) {
+  return <div className="grid justify-items-center gap-1.5 rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
+    <span className="mb-1 grid size-10 place-items-center rounded-full bg-sunken text-faint"><ClipboardList aria-hidden className="size-5" /></span>
+    <p className="text-14 font-medium text-fg">{stay ? 'This stay is just beginning' : 'A clean page'}</p>
+    <p className="max-w-xs text-13 text-muted">Notes, orders and results you sign will gather here. Start on the line below, or type <kbd className="rounded-sm border border-line-strong bg-sunken px-1 font-mono text-12">/</kbd> to see what you can add.</p>
+  </div>
+}
 
 /** a visit or a stay: this encounter (current), or an older one */
 export function VisitTimeline({ id, current }: { id: string; current?: boolean }) {
@@ -47,7 +57,8 @@ export function VisitTimeline({ id, current }: { id: string; current?: boolean }
     {digest && win && <SinceDigest digest={digest} since={win.since} />}
     {q.isPending && !entries.length ? <Skeleton lines={3} />
       : stay && row ? <DayGroups days={byDay(sets, startOf(row, s.tables['base.presence']), row.ended_at ?? undefined)} filtered={c.kind !== 'all'} />
-      : <Sets sets={sets} empty={c.kind !== 'all' ? 'None of these in this visit' : current ? 'Nothing signed in this visit yet' : 'Nothing signed in this visit'} />}
+      : !sets.length && c.kind === 'all' && current ? <FreshVisit stay={stay} />
+      : <Sets sets={sets} empty={c.kind !== 'all' ? 'None of these in this visit' : 'Nothing signed in this visit'} />}
     {q.error && <Callout tone="danger">{q.error.message}</Callout>}
     <Earlier q={q} />
   </>
