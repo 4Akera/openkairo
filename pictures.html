@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light dark" />
+<title>openCare · pictures</title>
+<script>
+  // the pictures for the owner (dev only, not in the build): the same theme start as index.html
+  (function () {
+    var p = 'system'; try { var v = localStorage.getItem('oc.theme'); if (v === 'light' || v === 'dark') p = v } catch (e) {}
+    var dark = p === 'dark' || (p === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var d = document.documentElement; d.setAttribute('data-theme', dark ? 'dark' : 'light'); d.setAttribute('data-theme-pref', p);
+  })();
+</script>
+<style>
+  /* a specimen tube's cap colour is the lab's own code, not a theme colour; when the lab is built these become kit tokens */
+  :root { --tube-purple: #8e6cc9; --tube-yellow: #e2b93b; --tube-grey: #9aa3a6; --tube-blue: #4f8fd6; --tube-red: #d0504a; }
+</style></head>
+<body><div id="root"></div><script type="module" src="/src/pictures/main.tsx"></script></body></html>

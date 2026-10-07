@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 @source not "../../scripts";   /* the codemod's map names raw classes; they are not the app's */
+@source "../pictures";        /* the owner's pictures (dev only, /pictures.html): their classes too */
 
 /* openCare design system (design-system.md §2–3). The one place colours, sizes, radii, shadows and motion are defined.
    Screens and packs use the utilities these produce (bg-surface, text-muted, border-line …) and the kit in src/core/ui.

@@ -872,6 +872,38 @@ it works ("/x is used in: …").
   the composer's chip, the list's Send, the prescription's and the list's state words); its reply form says its last step (`done`)
   and what its requests carry from its own table (`details`); its refusals' words come from it (`registerWords`, `db/words.ts`).
 
+### 5.3 The first packs: pharmacy and laboratory (decided with the owner from pictures, 2026-10-07)
+The pictures (`/pictures.html`, `src/pictures/`, dev only) are the agreed screens. Built in pieces, one at a time, each committed and
+shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day one; (3) asking the doctor; (4) the pharmacy's stock;
+(5) the laboratory pack; (6) the large lab's switches.
+- **Walk-ins (base, every bench):** a patient with no order from inside openCare — a paper request, or who asks. Started on any bench
+  (`N`, *Walk-in*) or at the desk, with one card in two steps: first *who* (one search by name, phone or record number, *New patient*
+  the desk's card), then *what for* (the bench's own services as big buttons; a pack may put its own line first: the laboratory's
+  `/order` and its six most-asked tests, the pharmacy's `/rx`), *who asked* folded and optional (the outside doctor's name, `asked_by`
+  on the order). It is an order like any other: it joins *To do*. A bench orders only for itself; a desk only for the benches it checks
+  in for. Results stay in the record; a walk-in's results to review go to the bench's own list.
+- **Pharmacy:** *To give*, *Prepared* (only with the setting *Prepare first*, off by default: one person prepares, another hands over;
+  wards), *Owed*, *Given today*. A clean row gives in one click; a row with a mark (allergy, duplicate, dose, out of stock) opens the
+  check: real amounts (boxes and strips from the pack size), directions in Arabic, the allergy that asks the doctor, out of stock given
+  as another brand with the same active ingredient or partly owed, who received it. *Ask the doctor*: a card in the chart above the
+  line and a line on the doctor's *To review* (not the queue, which the patient has left after Done; a queue mark only while still
+  there); any doctor of that department may answer; the answer goes back to the pharmacy's row at once.
+- **Stock (part of the pharmacy pack, its setting *Keep stock*, off by default):** products in the pharmacy's settings (brand, active
+  ingredient, strength, form, pack size, EDA code, barcode); a small table of the pack's own for what comes in, moves and is counted
+  (received with batch and expiry, moved, counted with a reason), only ever added to, who and when on every row, its own action; what
+  is given is the dispense records, never copied (on hand = received − given − adjusted, per place and batch; each Give takes the
+  first to expire). Not chart entries; the table is the original data (not rebuilt from entries). Screens: *Stock* (All · Low ·
+  Expiring · Out of stock, pharmacy or main store; a product's movements), *Receive* a delivery, *Count* a shelf.
+- **Laboratory:** *Collect* (tubes by colour, the sample number written on them until labels print, fasting asked at the grey tube,
+  *Collected* or *Couldn't collect* with a reason the doctor sees) and *Results* (one grid per section, ranges by age and sex, flags as
+  typed, the change check against the last result, calculated values such as LDL and eGFR). A critical value is only a notice —
+  "Critical: tell Dr. X now", then *Release*; logging the call (who, when, read back) is later. Critical limits per test are the
+  laboratory director's to confirm in Settings (a starter list ships).
+- **Large lab (separate switches in the laboratory's settings, all off for a small lab):** sample labels (printed barcodes — waits
+  for printing, whose first use is these labels), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
+  list, patients called by number), results from analysers (a small outside program, as the network is closed to packs), release
+  normal results by themselves (no flag, no big change, the analyser content), a second person checks, turnaround targets per section.
+
 ---
 
 ## 6. Standards
