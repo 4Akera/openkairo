@@ -29,4 +29,4 @@ export function TubesNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
 registerCommand({ name: 'lab', pack: 'lis', orders: true, groupTitle: 'Laboratory', title: 'Lab tests', label: 'Lab tests — from the Laboratory',
   example: '/lab cbc, lipid, hba1c · /lab dm follow-up · /lab troponin stat ? chest pain', action: 'write:order', writes: ['order'],
   parse: (rest, ctx) => { if (!rest) return null; const from = ordersFrom('lis', ctx); return orderRequests(rest, ctx, (s) => from.has(s.department_id ?? ''), 'lab test') },
-  hint: word, note: (items, ctx) => <TubesNote items={items} ctx={ctx} /> })
+  hint: word, swatch: (s) => sampled(s) ? `var(--tube-${tubeOf(s).cap})` : null, note: (items, ctx) => <TubesNote items={items} ctx={ctx} /> })

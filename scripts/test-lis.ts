@@ -112,14 +112,16 @@ test('where /lab is offered: where the Laboratory takes orders from; elsewhere i
   assert.ok(!commandsFor(physio).some((c) => c.name === 'lab'))
   assert.equal(err('/lab cbc', physio), '/lab orders from Laboratory, which does not take orders from Physiotherapy. /order shows what this department can order.')
   assert.match(err('/lab cbc', at('lab')), /^\/lab orders from this department/)
-  const s = suggest('/lab cr', at(), [], new Set())!.items
+  const sg = suggest('/lab cr', at(), [], new Set())!; const s = sg.items
   assert.deepEqual(s.map((x) => x.label), ['Creatinine', 'CRP']); assert.equal(s[0].detail, 'creat · Chemistry · yellow tube')
+  assert.ok(sg.list, 'drawn as a list, one test a row'); assert.equal(s[0].swatch, 'var(--tube-yellow)', 'its tube\'s colour beside it')
   assert.equal(suggest('/', at(), [], new Set())!.items.find((x) => x.label === '/lab')?.group, 'Laboratory', 'the / list: under the pack\'s own name')
   assert.equal(suggest('/lab dm', at(), [], new Set())!.items[0].label, 'DM follow-up', 'a preset offered by its shortcut')
   assert.equal(suggest('/lab troponin ? ch', at(), [], new Set()), null, 'the question: free words')
   // every service the Laboratory offers is /lab's, as the department has it: one that takes no sample (its own X-ray) shows no tube
   const lab = at('gp', [...LAB, svc('lcx', 'lcxr', 'Chest X-ray (lab)', 'lab', 'Imaging', [])])
   assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].detail, 'lcxr · Imaging', 'offered, with no tube')
+  assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].swatch, undefined, 'nor a colour')
   assert.deepEqual(ok('/lab lcxr', lab).map((p) => p.params.service_id), ['lcx'], 'ordered like any of its services')
 })
 console.log(`lis: ${n} groups passed`)

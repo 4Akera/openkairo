@@ -197,7 +197,13 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
       </div>
       {open && <div ref={card} onKeyDown={keyCard} className="mt-2 overflow-hidden rounded-xl bg-raised shadow-sm ring-1 ring-line">
         {sugg && sugg.items[0]?.group && <SlashList items={sugg.items} pick={pick} onAccept={accept} />}
-        {sugg && !sugg.items[0]?.group && <div className="grid gap-1.5 border-b border-line bg-sunken p-2 sm:grid-cols-2">{sugg.items.map((s, i) => { const on = pick === i || (pick < 0 && i === 0); const chosen = pick === i
+        {sugg && !sugg.items[0]?.group && <div className={cn('border-b border-line bg-sunken', sugg.list ? 'flex flex-col gap-0.5 p-1.5' : 'grid gap-1.5 p-2 sm:grid-cols-2')}>{sugg.items.map((s, i) => { const on = pick === i || (pick < 0 && i === 0); const chosen = pick === i
+          // an order's tests: one per row, as the picture (the list narrows as it is typed; tab takes the first)
+          if (sugg.list) return <button key={s.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => accept(s)}
+            className={cn('flex w-full min-w-0 items-center gap-3 rounded-md px-2.5 py-1 text-start transition-colors focus-ring', chosen ? 'bg-surface ring-2 ring-accent' : on ? 'bg-surface ring-1 ring-accent-line' : 'hover:bg-hover')}>
+            <span className="grid min-w-0 flex-1"><span className="truncate text-13 text-fg">{s.label}</span>{s.detail && <span className="truncate text-11 text-faint">{s.detail}</span>}</span>
+            {s.swatch && <span aria-hidden className="inline-block h-3.5 w-2.5 shrink-0 rounded-sm ring-1 ring-inset ring-line-strong" style={{ background: s.swatch }} />}
+            {on ? <Kbd className="shrink-0 text-accent">{chosen ? '↵' : 'tab'}</Kbd> : <span className="w-7 shrink-0" />}</button>
           return <button key={s.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => accept(s)}
             className={cn('flex min-w-0 flex-col items-start rounded-lg bg-surface px-2.5 py-1.5 text-start ring-1 transition-colors', chosen ? 'ring-2 ring-accent' : on ? 'ring-accent-line' : 'ring-line hover:ring-line-strong')}>
             <span className="flex w-full items-center gap-2"><span className="truncate text-13 font-medium text-fg">{s.label}</span>{on && <Kbd className="ms-auto shrink-0 text-accent">{chosen ? '↵' : 'tab'}</Kbd>}</span>

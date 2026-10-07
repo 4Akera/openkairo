@@ -16,10 +16,8 @@ select demo.setup(demo.base('ward'), 'ward', 'Medical Ward', 4);
 select demo.setup(demo.base('lab'), 'laboratory', 'Laboratory', 5);
 
 -- what this clinic changed since, as staff would in Settings: a private department (spec §4.3: every note and result written there is
--- private); the lab's chest X-ray, answered with a note; a psychiatry consult
+-- private); a psychiatry consult
 select demo.setting('department.private', demo.base('psychiatry'), null, '{"private":true}');
-select demo.setting('service', demo.base('lab'), '00000000-0000-0000-0000-00000000c005', $j${
-  "code":"cxr","name":"Chest X-ray","section":"Imaging","coding":{"system":"loinc","code":"36643-5"},"answer":"note"}$j$);
 select demo.setting('service', demo.base('psychiatry'), '00000000-0000-0000-0000-00000000c008', $j${"code":"psych","name":"Psychiatry consult","answer":"note"}$j$);
 
 -- the clinic's presets: a /shortcut and lines the composer runs; services it orders

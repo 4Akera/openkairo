@@ -862,7 +862,8 @@ it works ("/x is used in: …").
   its layer's namespace is refused `outside_namespace` (the base's fixed ids and `demo.id('base', …)`; a pack's `demo.id(<pack>, …)`;
   the journey's patient, any layer's). The demo's departments are made from setups (`demo.setup`): Front desk, General Practice and
   Psychiatry (Clinic), the Medical Ward (Ward), the Laboratory and pharmacy's Pharmacy; what the clinic changed since (Psychiatry
-  private, the chest X-ray and the psychiatry consult, the clinic's presets) is written after, as staff would.
+  private, the psychiatry consult, the clinic's presets) is written after, as staff would; the Laboratory offers only lab tests
+  (its chest X-ray removed 2026-10-07: an X-ray is an imaging department's).
   *Built 2026-10-06 (piece 9b):* `declare_table(…, reads => '{age}' | '{sex}')` (`unknown_read` otherwise; a refresh calling the identity door
   without it is refused `identity_undeclared`: when declared, by its source and that of the functions of its own schema it names,
   five calls deep; and when it runs, since `core.run_refresh` marks the refresh under way and `base.pack_identity` refuses a pack's

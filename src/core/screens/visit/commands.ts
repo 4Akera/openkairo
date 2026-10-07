@@ -26,8 +26,9 @@ export interface Command {
   parse: (rest: string, ctx: Ctx) => Result
   /** the command alone: an empty card to fill field by field, or the long note under the line */
   empty?: (ctx: Ctx) => Parsed[] | { drawer: { kind: string; text: string } }
-  /** an order command's word on each service it suggests (the tube a test is drawn into) */
+  /** an order command's word on each service it suggests (the tube a test is drawn into), and its colour beside it */
   hint?: (s: Ctx['services'][number]) => string | null
+  swatch?: (s: Ctx['services'][number]) => string | null
   /** a line under what the card holds (the tubes, fasting to tell the patient) */
   note?: (items: Parsed[], ctx: Ctx) => ReactNode
 }

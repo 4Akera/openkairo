@@ -8,7 +8,8 @@ import { aliasLine } from './score'
 /** errors stop the line; skipped are a preset's lines this patient's record cannot take — the rest of the preset still goes in */
 /** hint: a card that is not an error — a pack's command typed where its pack is not used says where it is (§5.1 rule 1) */
 export interface Expanded { items: Parsed[]; errors: string[]; skipped?: string[]; drawer?: { kind: string; text: string }; label?: string; hint?: string }
-export interface Suggestion { key: string; label: string; detail?: string; insert: string; title?: string; group?: string }
+/** swatch: a colour beside it (a test's tube); a list of them (orders) is drawn one per row, as it narrows while typing */
+export interface Suggestion { key: string; label: string; detail?: string; insert: string; title?: string; group?: string; swatch?: string }
 
 // note commands that became labels: a preset line saved as "/plan review" still reads as "plan: review"
 const WAS_NOTE: Record<string, string> = { hx: 'hx', ex: 'ex', exam: 'ex', plan: 'plan', proc: 'proc' }
@@ -74,7 +75,7 @@ const shortExample = (c: { name: string; example: string }) => { const parts = c
   return parts.find((x) => x !== `/${c.name}`) ?? parts[0] }
 
 /** what is being typed could be: a command or preset (after "/"), then a drug, a problem, an allergen, a service or a department */
-export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set<string>): { items: Suggestion[] } | null {
+export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set<string>): { items: Suggestion[]; list?: boolean } | null {
   const t = text.trimStart()
   if (t.startsWith('/') && !/\s/.test(t)) {                                 // "/": the commands only
     const w = t.slice(1).toLowerCase()
@@ -125,9 +126,10 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
     const depts = !from && !/[,:]/.test(rest) && p ? ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().startsWith(p)).slice(0, 3) : []
     const where = (s: Ctx['services'][number]) => from ? s.section_name ?? ctx.departments.find((d) => d.id === s.department_id)?.name ?? '' : ctx.departments.find((d) => d.id === s.department_id)?.name ?? ''
     const items = [...sets.map((x) => ({ key: `t${x.id}`, label: x.name, detail: `preset · ${x.items.filter((i) => pool.some((s) => s.id === i.service_id)).length} tests`, insert: `${t.slice(0, t.length - partial.length)}${x.name.toLowerCase()}, ` })),
-      ...hits.map((s) => ({ key: s.id, label: s.name, detail: [s.code, where(s), oc?.hint?.(s)].filter(Boolean).join(' · '), insert: `${t.slice(0, t.length - partial.length)}${s.code}, ` })),
+      ...hits.map((s) => ({ key: s.id, label: s.name, detail: [s.code, where(s), oc?.hint?.(s)].filter(Boolean).join(' · '), swatch: oc?.swatch?.(s) ?? undefined,
+        insert: `${t.slice(0, t.length - partial.length)}${s.code}, ` })),
       ...depts.map((d) => ({ key: `d${d.id}`, label: `${d.name}: …`, detail: 'a consult — type the question', insert: `${m[1]} ${d.name}: ` }))]
-    return items.length ? { items } : null
+    return items.length ? { items, list: true } : null
   }
   return null
 }
