@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RecentRow } from '../../db/types'
 import { useNavigate } from 'react-router-dom'
-import { ScanLine } from 'lucide-react'
+import { Plus, ScanLine } from 'lucide-react'
 import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue } from '../../hooks/reads'
 import { refresh } from '../../hooks/writes'
@@ -10,17 +10,21 @@ import { useQueryClient } from '@tanstack/react-query'
 import { write, type EntryIn } from '../../db/rpc'
 import { answerEntry, oneSet, stepEntry } from '../../db/entries'
 import type { RequestQueueRow } from '../../db/types'
-import { Button, Card, Chip, Empty, Input, Kbd, ListRow, ListSection, ScreenFrame, Spinner, Tag, cn, minutesSince, movedMouse, hm, shortDate, type RowMark, type ScreenView } from '../../ui'
+import { Button, Callout, Card, Chip, Empty, Input, Kbd, ListRow, ListSection, ScreenFrame, Spinner, Tag, cn, minutesSince, movedMouse, hm, shortDate, type RowMark, type ScreenView } from '../../ui'
 import type { ScreenProps } from '../registry'
 import { benchMarkRow } from '../marks'
 import { useRowMarks } from '../useMarks'
+import { WalkIn } from './WalkIn'
+import { benchOffers } from './WhatFor'
+import { isWalkIn } from './walkins'
 import { ageSex, groupByPatient, matches, nextSteps, phaseOf, splitByDay, stepName, stepWords, testsLine, todayYmd, type DayGroup, type Phase } from './shared'
 
 type Segment = Phase | 'done'
 
 /** The bench (base.bench): whose sample is next, and what is waiting on us. Scan or type, then one row per patient in three views,
  *  counted in the toolbar — to do (not started), in progress, done today; a pack the department uses may give its own words (the lab's
- *  "To collect") — today's work only; older open requests fold at the bottom. */
+ *  "To collect") — today's work only; older open requests fold at the bottom. + Walk-in (or the + key) opens the walk-in card above the
+ *  list (spec §5.3): a patient with no order from inside openCare, started here; a walk-in's row says so, and who asked. */
 export function Bench({ dept }: ScreenProps) {
   const departmentId = dept.id
   const q = useRequestQueue(departmentId); const navigate = useNavigate(); const { org, can } = useDepartment()
@@ -28,6 +32,7 @@ export function Bench({ dept }: ScreenProps) {
   const [find, setFind] = useState(''); const [section, setSection] = useState<string | null>(null); const [seg, setSeg] = useState<Segment>('todo')
   const [cursor, setCursor] = useState(0); const [showOld, setShowOld] = useState(false); const [, tick] = useState(0)
   const [kbd, setKbd] = useState(false)                  // the keys are in use (arrows, a scan, typing): no hover; the mouse never moves the cursor
+  const [walkIn, setWalkIn] = useState(false); const [said, setSaid] = useState<string | null>(null)
   const [arrows, setArrows] = useState(false)            // the arrows moved the cursor: show it as a bar (typed, only a ↵ beside the name)
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t) }, [])   // waits and the day move on their own
   const words = benchWordsFor(dept.packs); const marks = useRowMarks('bench', dept); const qc = useQueryClient(); const [quickBusy, setQuickBusy] = useState<string | null>(null)
@@ -49,6 +54,7 @@ export function Bench({ dept }: ScreenProps) {
   const n = lists ? visible.length : done.length
   const c = Math.min(cursor, Math.max(0, n - 1))
   const open = (pid: string) => navigate(`/bench/${pid}`)
+  const canWalkIn = can('write:order') && benchOffers(org, departmentId).length > 0   // a bench orders only for itself: a walk-in
   // the next step of each order's service (collected, prepared): one set per patient, each step answering (or changing the step of) its order
   const advance = async (rs: RequestQueueRow[], to: string, type: string) => { setStepping(true)
     try { await write(oneSet(rs.map((r) => stepEntry(r, departmentId, 'in-progress', undefined, to, type)))); refresh(qc) } catch (x) { alert(x instanceof Error ? x.message : String(x)) } finally { setStepping(false) } }
@@ -67,6 +73,7 @@ export function Bench({ dept }: ScreenProps) {
       const t = e.target as HTMLElement
       if (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === '/') { e.preventDefault(); box.current?.focus() }
+      else if (e.key === '+' && canWalkIn) { e.preventDefault(); setWalkIn(true); setSaid(null) }
       else if (e.key.length === 1 && e.key !== ' ') box.current?.focus()
       else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape' || (e.key === 'Enter' && t === document.body)) onKey(e)
     }
@@ -87,9 +94,11 @@ export function Bench({ dept }: ScreenProps) {
       setQuickBusy(g.patient.id)
       try { await write(oneSet(items)); refresh(qc) } catch (x) { alert(x instanceof Error ? x.message : String(x)) } finally { setQuickBusy(null) }
     }}>{quick[0].pf!.quick}{quick.length > 1 ? ` ${quick.length}` : ''}</Button>)
+    const walk = g.rows.find((r) => isWalkIn(r.order, org?.allDepartments ?? []))
     const where = <>{g.patient.here != null && <span className={g.patient.here ? 'font-medium text-accent' : 'text-faint'}>{g.patient.here ? 'here' : 'gone'}</span>}{old && <span className="tnum">{shortDate(g.oldest)}</span>}</>
     return <ListRow key={g.patient.id} number={g.patient.record_number} name={`${g.patient.given_name} ${g.patient.family_name}`} age={ageSex(g.patient)}
-      status={<>{g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{seg === 'doing' && stepWords(g.rows).map((w) => <Tag key={w} tone={w === 'reopened' ? 'warn' : 'neutral'}>{w}</Tag>)}<span className="truncate">{testsLine(g.rows)}</span></>}
+      status={<>{g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{walk && <Tag tone="info">walk-in</Tag>}{seg === 'doing' && stepWords(g.rows).map((w) => <Tag key={w} tone={w === 'reopened' ? 'warn' : 'neutral'}>{w}</Tag>)}<span className="truncate">{testsLine(g.rows)}</span>
+        {walk?.order.asked_by && <span className="truncate text-12 text-faint">· {walk.order.asked_by}</span>}</>}
       who={where} actions={steps.length ? <>{where}{steps}</> : undefined} marks={marks(benchMarkRow(g))} minutes={g.since ? minutesSince(g.since) : null} muted={old}
       selected={i === c && arrows} enter={i === c && !arrows && !!f} hover={!kbd} className={i === c ? 'bench-cursor' : undefined} onOpen={() => open(g.patient.id)} />
   }
@@ -101,7 +110,10 @@ export function Bench({ dept }: ScreenProps) {
       aria-label="Scan or type a record number or name — ↑↓ move · ↵ open · Esc clear" className="ps-9 pe-8" />
     <span className="absolute end-3 top-1/2 -translate-y-1/2 text-faint"><Kbd>/</Kbd></span></div>
   const chips = (sections.length > 1 || section) && <div className="flex flex-wrap gap-1 text-12">{sections.map((s) => <Chip key={s} shape="pill" on={section === s} onClick={() => { setSection(section === s ? null : s); setCursor(0) }}>{s}</Chip>)}</div>
-  return <ScreenFrame views={views} view={seg} onView={pick} filters={chips} search={scan}>
+  const walkButton = canWalkIn && <Button size="sm" variant="outline" aria-expanded={walkIn} onClick={() => { setWalkIn(!walkIn); setSaid(null) }}><Plus />Walk-in<Kbd className="ms-1 max-sm:hidden">+</Kbd></Button>
+  return <ScreenFrame views={views} view={seg} onView={pick} filters={chips} search={scan} action={walkButton}
+    notice={said && <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout>}>
+    {walkIn && <WalkIn dept={dept} onClose={() => { setWalkIn(false); box.current?.focus() }} onStarted={(x) => { setWalkIn(false); setSaid(x); setSeg('todo'); setCursor(0) }} />}
     {q.isLoading ? <Spinner label="Loading requests" /> : <Card><ul ref={list} onMouseMove={(e) => { if (kbd && movedMouse(e)) { setKbd(false); setArrows(false) } }}>
       {lists ? <>
         {lists.today.length ? lists.today.map((g, i) => row(g, i, false)) : f && lists.older.length ? null : none(seg === 'todo' ? `Nobody ${first.toLowerCase()} today.` : 'Nothing in progress today.')}

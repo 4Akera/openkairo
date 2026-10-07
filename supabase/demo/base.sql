@@ -290,3 +290,14 @@ plan: repeat the blood count tomorrow; ask the GP about her diabetes')),
   perform demo.w(nurse, jsonb_build_array(demo.e('vitals', ward, st, demo.ago(120), demo.vitals(132, 84, 88, 36.9, 98, 16))));
   perform demo.lab(o7, demo.ago(50), demo.cbc(true, 6.6, 8.4, 212));
 end $$;
+
+-- a walk-in at the lab (spec §5.3): Hany brings his cardiologist's paper request; the lab started it twenty minutes ago, from the bench
+do $$
+declare lab uuid := demo.base('lab'); tech uuid := demo.base('tech');
+  asked jsonb := '{"department_id":null,"priority":"routine","status":"active","asked_by":"Dr. Samir Fouad · Nasr City clinic"}';
+begin
+  perform set_config('demo.patient', pg_temp.pid('hany')::text, false);
+  perform demo.w(tech, jsonb_build_array(
+    demo.e('order', lab, null, demo.ago(20), asked || jsonb_build_object('service', demo.service('lipids'), 'department_id', lab)),
+    demo.e('order', lab, null, demo.ago(20), asked || jsonb_build_object('service', demo.service('hba1c'), 'department_id', lab))));
+end $$;

@@ -28,6 +28,7 @@ export interface OrderRow {
   item: string; patient_id: string; visit_id: string | null; requester_id: string; from_department_id: string; to_department_id: string | null; service_id: string | null
   service_code: string | null; service_name: string | null; priority: 'routine' | 'urgent' | 'asap' | 'stat'; status: string; step: string | null; step_key: string | null; step_item: string | null; step_entry: string | null
   answers: string[]; answered_at: string | null; final: boolean; about_item: string | null; ordered_at: string; last_at: string; day: string; latest_entry: string; version: number; source_entries: string[]
+  asked_by?: string | null   // a walk-in's outside doctor (spec §5.3)
 }
 export interface ReviewRow { item: string; patient_id: string; why: string; level: string | null; critical: boolean; for_user: string | null; for_department: string | null; order_item: string | null; visit_id: string | null; entry_id: string; at: string; source_entries: string[] }
 export interface ListRowData { item: string; patient_id: string; list: 'problems' | 'diagnoses' | 'medications' | 'allergies' | 'reviews'; status: string; code: string | null; entry_id: string; first_at: string; changed_at: string; visit_id: string | null; source_entries: string[] }

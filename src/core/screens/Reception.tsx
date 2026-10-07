@@ -10,6 +10,7 @@ import type { ScreenProps } from './registry'
 import { NewPatient } from '../shell/NewPatient'
 import { Clinics, LastSent, NeedsYou, Today } from './reception/Lists'
 import { PatientCard, type CardHandle } from './reception/PatientCard'
+import { benchOffers } from './bench/WhatFor'
 import { ageSex, fullName, readLastClinic, useClinicRows, useDoneToday, writeLastClinic } from './reception/words'
 
 /** Reception (base.desk, spec 05). The search sits in the frame's toolbar, with New patient. Left: find, then act on one patient card (already here → where, Move · Urgent · Left · Edit;
@@ -44,6 +45,9 @@ export function ReceptionScreen({ dept }: ScreenProps) {
   const desk = org?.departments.find((r) => r.id === departmentId)
   const served = (org?.departments ?? []).filter((x) => x.work === 'visits' && (desk?.checks_in_for ?? [null]).some((s) => s === null || s === x.id))
   const clinics = served.length ? served : (org?.departments ?? []).filter((x) => x.work === 'visits')
+  // the benches this desk checks in for take walk-ins from here (spec §5.3): the lab, an ECG room
+  const benches = can('write:order') ? (org?.departments ?? []).filter((x) => x.work === 'bench' && (desk?.checks_in_for ?? [null]).some((s) => s === null || s === x.id)
+    && benchOffers(org, x.id).length > 0) : []
   // the usual clinic: the last one this desk sent someone to, else the first it serves
   const lastId = sent.desk === departmentId ? sent.clinic : readLastClinic(departmentId)
   const usual = clinics.find((c) => c.id === lastId) ?? clinics[0] ?? null
@@ -111,7 +115,7 @@ export function ReceptionScreen({ dept }: ScreenProps) {
             {canSend && <> · <Kbd>↵</Kbd> send · <Kbd>⇧↵</Kbd> urgent</>} · <Kbd>Tab</Kbd> the card · <Kbd>Esc</Kbd> clear</p>}
         </Card>}
 
-        {picked && <PatientCard key={picked.id} handle={card} p={picked} clinics={clinics} usual={usual} rows={rows} canSend={canSend} canEdit={canCreate} orgId={orgId ?? ''}
+        {picked && <PatientCard key={picked.id} handle={card} p={picked} clinics={clinics} benches={benches} usual={usual} rows={rows} canSend={canSend} canEdit={canCreate} orgId={orgId ?? ''}
           onSaid={setSaid} onSent={remember} onDone={reset} onEscape={() => box.current?.focus()} />}
 
         {creating && <div onKeyDown={(e) => { if (e.key === 'Escape') { setCreating(false); box.current?.focus() } }}>

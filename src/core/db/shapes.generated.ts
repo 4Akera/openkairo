@@ -255,6 +255,7 @@ export interface OpenedAnyway {
 /** order v1 (base) */
 export interface Order {
   answers?: Record<string, unknown>
+  asked_by?: string
   department_id: string
   details?: Record<string, unknown>
   due?: Datetime

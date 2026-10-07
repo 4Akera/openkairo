@@ -258,7 +258,7 @@ $$;
 -- orders: the service is the target department's; the target works for the ordering department; a change is the requester's
 create function base.order_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_org uuid := (p_entry ->> 'organization_id')::uuid; d jsonb := p_entry -> 'data'; v_to uuid := (d ->> 'department_id')::uuid; v_from uuid := (p_entry ->> 'department_id')::uuid;
-        wf jsonb; t core.entries; o base.orders; f jsonb := base.same_kind(p_entry, p_set);
+        wf jsonb; t core.entries; o base.orders; f jsonb := base.same_kind(p_entry, p_set); v_fwork text; v_twork text;
 begin
   if jsonb_array_length(f) > 0 then return f; end if;
   if not exists (select 1 from core.departments x where x.organization_id = v_org and x.id = v_to and x.retired_at is null) then
@@ -270,9 +270,21 @@ begin
   if d -> 'service' ? 'id' and not exists (select 1 from core.settings_at(v_org, 'service') s where s.thing_id = (d -> 'service' ->> 'id')::uuid and s.owner_id = v_to) then
     return jsonb_build_array(base.find('wrong_department', 'refuse', 'the service belongs to another department'));
   end if;
-  wf := core.setting_at(v_org, 'department.works_for', v_to);
-  if wf is not null and not coalesce((wf ->> 'all')::boolean, false) and not (coalesce(wf -> 'departments', '[]') @> to_jsonb(array[v_from::text])) then
-    return jsonb_build_array(base.find('not_served'));
+  -- a walk-in (spec §5.3): a bench orders only for itself; a desk only for a bench it checks in for (department.checks_in_for)
+  select x.work into v_fwork from core.departments x where x.organization_id = v_org and x.id = v_from;
+  select x.work into v_twork from core.departments x where x.organization_id = v_org and x.id = v_to;
+  if v_fwork = 'bench' and v_to <> v_from then return jsonb_build_array(base.find('walk_in_elsewhere')); end if;
+  if v_fwork = 'desk' then
+    if v_twork <> 'bench' then return jsonb_build_array(base.find('walk_in_elsewhere')); end if;
+    wf := core.setting_at(v_org, 'department.checks_in_for', v_from);
+    if wf is not null and not coalesce((wf ->> 'all')::boolean, false) and not (coalesce(wf -> 'departments', '[]') @> to_jsonb(array[v_to::text])) then
+      return jsonb_build_array(base.find('not_served'));
+    end if;
+  elsif v_to <> v_from then
+    wf := core.setting_at(v_org, 'department.works_for', v_to);
+    if wf is not null and not coalesce((wf ->> 'all')::boolean, false) and not (coalesce(wf -> 'departments', '[]') @> to_jsonb(array[v_from::text])) then
+      return jsonb_build_array(base.find('not_served'));
+    end if;
   end if;
   if p_entry ->> 'relation' = 'changes' or p_entry ->> 'replaces' is not null then
     t := base.target(p_entry, p_set);
@@ -685,7 +697,7 @@ begin
     feeds => array['base.lists'], labels => '{"en":"List review"}');
   perform core.declare_type('order', 1, 'base', format('{"type":"object","additionalProperties":false,"required":["service","department_id","priority","status"],
       "properties":{"service":%1$s,"department_id":%2$s,"priority":{"enum":["routine","urgent","asap","stat"]},
-        "status":{"enum":["active","on-hold","revoked","completed"]},"question":{"type":"string"},"reason":{"type":"string"},
+        "status":{"enum":["active","on-hold","revoked","completed"]},"question":{"type":"string"},"reason":{"type":"string"},"asked_by":{"type":"string"},
         "reasons":{"type":"array","items":{"$ref":"#/$defs/reference"}},"answers":{"type":"object"},"due":{"$ref":"#/$defs/datetime"},"details":{"type":"object"}}}',
       service, uuidt)::jsonb,
     'base.order_line(jsonb)', array['ServiceRequest'], checks => array['base.order_check(jsonb,jsonb)']::regprocedure[],
@@ -896,9 +908,9 @@ select core.declare_role('00000000-0000-0000-0000-00000000c003', 'nurse', 'base'
   'write:assigned', 'write:moved', 'write:private'], '{"en":"Nurse"}', everyday => true);
 select core.declare_role('00000000-0000-0000-0000-00000000c004', 'reception', 'base', 'Reception', array[
   'read:patients', 'read:queue', 'manage:patients', 'write:checked_in', 'write:here', 'write:not_here', 'write:away', 'write:urgent', 'write:transferred',
-  'write:left', 'write:crossed_out'], '{"en":"Reception"}');
+  'write:left', 'write:crossed_out', 'write:order'], '{"en":"Reception"}');
 select core.declare_role('00000000-0000-0000-0000-00000000c005', 'lab_technician', 'base', 'Lab technician', array[
   'read:patients', 'read:bench', 'read:queue', 'write:step', 'write:result', 'write:note', 'write:crossed_out', 'write:checked_in', 'write:called', 'write:done',
-  'write:here', 'write:not_here', 'write:left'], '{"en":"Lab technician"}');
+  'write:here', 'write:not_here', 'write:left', 'write:order'], '{"en":"Lab technician"}');
 
 grant execute on function base.eg_national_id_check(text, jsonb) to postgres;

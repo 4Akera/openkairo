@@ -1,14 +1,17 @@
 import { useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, MapPin } from 'lucide-react'
+import { ChevronRight, MapPin, X } from 'lucide-react'
 import { savePatient } from '../../db/rpc'
 import { useDepartment } from '../../hooks/organization'
-import { useVisitActions } from '../../hooks/writes'
+import { useVisitActions, useWrite } from '../../hooks/writes'
+import { oneSet } from '../../db/entries'
 import { rememberPatient } from '../../hooks/recent'
 import type { Department, PatientHit } from '../../db/types'
 import { Button, Input, Kbd, Select, Tag, cn, errorText, minutesSince } from '../../ui'
 import { ageSex, duration, fullName, type ClinicRow } from './words'
 import { GlanceVisits } from '../chart/glance/ChartGlance'
+import { walkInOrders } from '../bench/walkins'
+import { WhatFor } from '../bench/WhatFor'
 
 /** a key for each clinic: its first free letter ("P" Psychiatry); M U L G E ↵ are the card's own */
 function clinicKeys(clinics: Department[]) {
@@ -21,14 +24,16 @@ const nth = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10
 /** what the search box asks of the card: ↵ there is the card's first action; Tab or ↵ with nothing to send lands on the card */
 export type CardHandle = { enter: (urgent: boolean) => void; focus: () => void }
 
-/** One patient, and what the desk can do for him now (spec 05): already here → where, and Move · Urgent · Left/Gone · Edit;
- *  away → back to his clinic; not here → send (↵ the usual clinic, a letter for another, ⇧↵ urgent). Keys work when the card has focus. */
-export function PatientCard({ handle, p, clinics, usual, rows, canSend, canEdit, orgId, onSaid, onSent, onDone, onEscape }: {
+/** One patient, and what the desk can do for them now (spec 05): already here → where, and Move · Urgent · Left/Gone · Edit;
+ *  away → back to their clinic; not here → send (↵ the usual clinic, a letter for another, ⇧↵ urgent). Keys work when the card has focus.
+ *  A bench this desk checks in for (the lab, an ECG room) takes a walk-in from here (spec §5.3): its name opens what for, in the card. */
+export function PatientCard({ handle, p, clinics, benches = [], usual, rows, canSend, canEdit, orgId, onSaid, onSent, onDone, onEscape }: {
   handle?: Ref<CardHandle>
-  p: PatientHit; clinics: Department[]; usual: Department | null; rows: ClinicRow[]; canSend: boolean; canEdit: boolean; orgId: string
+  p: PatientHit; clinics: Department[]; benches?: Department[]; usual: Department | null; rows: ClinicRow[]; canSend: boolean; canEdit: boolean; orgId: string
   onSaid: (s: string) => void; onSent: (clinicId: string) => void; onDone: () => void; onEscape: () => void
 }) {
-  const visits = useVisitActions(); const [moving, setMoving] = useState(false); const [editing, setEditing] = useState(false); const [past, setPast] = useState(false)
+  const visits = useVisitActions(); const { dept } = useDepartment(); const w = useWrite(); const [walkTo, setWalkTo] = useState<Department | null>(null)
+  const [moving, setMoving] = useState(false); const [editing, setEditing] = useState(false); const [past, setPast] = useState(false)
   const keys = clinicKeys(clinics)
   const open = p.open_visits.find((v) => clinics.some((c) => c.id === v.department_id))
   const row = open ? rows.find((r) => r.id === open.id) : undefined
@@ -72,7 +77,8 @@ export function PatientCard({ handle, p, clinics, usual, rows, canSend, canEdit,
     if ((e.target as HTMLElement).closest('input, select, textarea')) return
     if (e.key === 'Enter' && e.target !== e.currentTarget) return   // ↵ on one of the card's buttons is that button
     const k = e.key.toLowerCase()
-    if (e.key === 'Escape') { e.preventDefault(); if (moving) setMoving(false); else if (editing) setEditing(false); else onEscape(); return }
+    if (e.key === 'Escape') { e.preventDefault(); if (walkTo) setWalkTo(null); else if (moving) setMoving(false); else if (editing) setEditing(false); else onEscape(); return }
+    if (walkTo) return   // the walk-in's what for is open: its own keys only, never a letter that sends to a clinic
     if (e.key === 'Enter') { e.preventDefault(); if (away && clinic && canSend) void send(clinic); else if (target) void send(target, e.shiftKey); return }
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (moving) { const to = clinics.find((c) => keys.get(c.id) === k && c.id !== clinic?.id); if (to) { e.preventDefault(); void moveTo(to) } return }
@@ -114,8 +120,16 @@ export function PatientCard({ handle, p, clinics, usual, rows, canSend, canEdit,
         {row && canSend && <Button size="sm" variant="outline" disabled={busy} onClick={doUrgent}>{row.priority === 'routine' ? 'Urgent' : 'Not urgent'} <Kbd className="ms-1">U</Kbd></Button>}
         {waitingUnseen && canSend && <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={doLeft}>Left <Kbd className="ms-1">L</Kbd></Button>}
         {row?.status === 'pending' && open?.present && canSend && <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={doGone}>Gone <Kbd className="ms-1">G</Kbd></Button>}
+        {!p.died_on && benches.map((b) => <Button key={b.id} size="sm" variant="outline" aria-expanded={walkTo?.id === b.id} onClick={() => { setWalkTo(walkTo?.id === b.id ? null : b); w.reset() }}>{b.name}…</Button>)}
         {canEdit && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit details <Kbd className="ms-1">E</Kbd></Button>}
       </div>}
+    {walkTo && dept && <div className="grid gap-2 rounded-lg bg-sunken p-3">
+      <p className="flex items-center gap-2 text-12 text-muted"><span className="font-semibold uppercase tracking-[0.06em] text-faint">{walkTo.name} · what for</span>a walk-in
+        <button type="button" onClick={() => setWalkTo(null)} aria-label="Close" className="ms-auto inline-flex items-center gap-1 rounded-md px-1 text-faint hover:text-fg focus-ring"><Kbd>esc</Kbd><X className="size-3.5" /></button></p>
+      <WhatFor key={walkTo.id} bench={walkTo} busy={w.isPending} error={w.error} note={`Joins ${walkTo.name}'s To do.`}
+        onStart={(services, askedBy) => w.mutate(oneSet(walkInOrders({ patientId: p.id, from: dept.id, to: walkTo.id, services, askedBy })), {
+          onSuccess: () => { rememberPatient(p); onSaid(`${fullName(p)} → ${walkTo.name} · ${services.map((s) => s.name).join(', ')}`); onDone() } })} />
+    </div>}
     {moving && <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-sunken p-2"><span className="text-12 text-faint">Move to</span>
       {clinics.filter((c) => c.id !== clinic?.id).map((c) => <Button key={c.id} size="sm" variant="outline" disabled={busy} onClick={() => void moveTo(c)}>{c.name}{keys.get(c.id) && <Kbd className="ms-1">{keys.get(c.id)!.toUpperCase()}</Kbd>}</Button>)}
       <Button size="sm" variant="ghost" onClick={() => setMoving(false)}>Keep</Button></div>}

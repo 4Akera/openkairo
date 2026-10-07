@@ -65,6 +65,7 @@ create table base.orders (
   latest_entry  uuid not null,
   version       int not null,
   source_entries uuid[] not null,
+  asked_by      text,                      -- a walk-in's outside doctor, as the order says (spec §5.3)
   primary key (organization_id, item)
 );
 create index orders_to on base.orders (organization_id, to_department_id, status);
@@ -116,7 +117,7 @@ begin
       ol.data -> 'service' ->> 'name', coalesce(ol.data ->> 'priority', 'routine'), v_status, st.data ->> 'status', v_key, st.item, st.id, ans, v_answered, fin,
       case when o1.relation = 'about' then (select t.item from core.entries t where t.organization_id = p_org and t.id = o1.refers_to) end,
       -- ordered, answered, last moved and the day are clinical times, as presence's are (a dispense prepared an hour ago reads an hour old)
-      o1.occurred_at, greatest(ol.occurred_at, coalesce(st.occurred_at, ol.occurred_at)), (o1.occurred_at at time zone base.tz(p_org))::date, ol.id, ol.item_version, src);
+      o1.occurred_at, greatest(ol.occurred_at, coalesce(st.occurred_at, ol.occurred_at)), (o1.occurred_at at time zone base.tz(p_org))::date, ol.id, ol.item_version, src, ol.data ->> 'asked_by');
   end loop;
 end $$;
 

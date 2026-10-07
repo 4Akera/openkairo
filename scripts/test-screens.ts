@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { BOARD, baseLine, flipScreen, lineForPacks, lineHere, screenChoices, screensOf, tabRow, tabSearch, TAB_LIMIT, type Declared } from '../src/core/screens/line'
 import type { Department } from '../src/core/db/types'
+import { isWalkIn, startWords, walkInOrders, walkInServices } from '../src/core/screens/bench/walkins'
 
 const S = (key: string, work: string, action: string | null = null, replaces: string[] = []): Declared =>
   ({ key, layer: key.split('.')[0], work, action, replaces, labels: { en: key.split('.')[1] } })
@@ -102,5 +103,18 @@ test('one board per place: a ward\'s line keeps the bed board, and a line that l
   assert.deepEqual(flipScreen({ screens: [BOARD], opens: BOARD }, 'icu.fluids', list, ['icu']), { screens: [BOARD, 'icu.fluids'], opens: BOARD }, 'a pack list of other work sits beside it')
   assert.deepEqual(keys(screensOf(dept({ work: 'stays', screens: ['icu.fluids'], packs: ['icu'] }), list, all)), [BOARD, 'icu.fluids'])
   assert.deepEqual(keys(screensOf(dept({ work: 'stays', screens: [] }), list, all)), [BOARD])
+})
+test('a walk-in (spec §5.3): this bench\'s services by name; one order each, for the bench, no visit, who asked when said; its row says walk-in', () => {
+  const svc = (id: string, name: string, department_id: string | null) => ({ id, code: id, name, department_id, coding: null })
+  const all = [svc('ecg', 'ECG', 'ecgr'), svc('holter', 'Holter', 'ecgr'), svc('echo', 'Echo', 'ecgr'), svc('cbc', 'CBC', 'lab')]
+  assert.deepEqual(walkInServices(all, 'ecgr').map((s) => s.name), ['ECG', 'Echo', 'Holter'])
+  const es = walkInOrders({ patientId: 'p', from: 'ecgr', to: 'ecgr', services: walkInServices(all, 'ecgr').slice(0, 2), askedBy: '  Dr. Hany Saleh ' })
+  assert.deepEqual(es.map((e) => [e.type, e.department_id, e.visit_id, e.data.department_id, e.data.service.name, e.data.asked_by, e.data.status]),
+    [['order', 'ecgr', null, 'ecgr', 'ECG', 'Dr. Hany Saleh', 'active'], ['order', 'ecgr', null, 'ecgr', 'Echo', 'Dr. Hany Saleh', 'active']])
+  assert.equal(new Set(es.map((e) => e.id)).size, 2, 'an id each')
+  assert.ok(!('asked_by' in walkInOrders({ patientId: 'p', from: 'desk', to: 'ecgr', services: [all[0]], askedBy: ' ' })[0].data), 'nobody said: no asked_by')
+  const deps = [{ id: 'ecgr', work: 'bench' as const }, { id: 'desk', work: 'desk' as const }, { id: 'im', work: 'visits' as const }]
+  assert.deepEqual([['ecgr', 'ecgr'], ['desk', 'ecgr'], ['im', 'ecgr']].map(([f, t]) => isWalkIn({ from_department_id: f, to_department_id: t }, deps)), [true, true, false])
+  assert.deepEqual([[], ['ECG'], ['ECG', 'Echo', 'Holter']].map(startWords), ['Start', 'Start · ECG', 'Start · 3'])
 })
 console.log(`screens: ${n} groups passed`)
