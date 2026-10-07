@@ -83,7 +83,7 @@ test('receive: a number that finds nothing says why, from the orders it was give
   assert.match(notFound([R('b', null)], 'S-1007-0009', ['a']), /no longer waiting/)
 })
 // /lab: a GP clinic the Laboratory (which uses the pack) works for; Radiology's chest X-ray is not the lab's; Physiotherapy it does not serve
-const svc = (id: string, code: string, name: string, department_id: string, section_name = 'Chemistry') => ({ id, code, name, department_id, section_name })
+const svc = (id: string, code: string, name: string, department_id: string, section_name = 'Chemistry', steps = ['collected', 'received']) => ({ id, code, name, department_id, section_name, steps })
 const LAB = [svc('cbc', 'cbc', 'Complete blood count', 'lab', 'Haematology'), svc('creat', 'creat', 'Creatinine', 'lab'), svc('crp', 'crp', 'CRP', 'lab'), svc('lipids', 'lipids', 'Lipid profile', 'lab'),
   svc('fbs', 'fbs', 'Fasting glucose', 'lab'), svc('tni', 'troponin', 'Troponin I', 'lab'), svc('cxr', 'cxr', 'Chest X-ray', 'rad', 'Imaging')]
 const DEPTS = [{ id: 'gp', name: 'General Practice', packs: [] }, { id: 'lab', name: 'Laboratory', packs: ['lis'] }, { id: 'rad', name: 'Radiology', packs: [] }, { id: 'physio', name: 'Physiotherapy', packs: [] }]
@@ -117,7 +117,10 @@ test('where /lab is offered: where the Laboratory takes orders from; elsewhere i
   assert.equal(suggest('/', at(), [], new Set())!.items.find((x) => x.label === '/lab')?.group, 'Laboratory', 'the / list: under the pack\'s own name')
   assert.equal(suggest('/lab dm', at(), [], new Set())!.items[0].label, 'DM follow-up', 'a preset offered by its shortcut')
   assert.equal(suggest('/lab troponin ? ch', at(), [], new Set()), null, 'the question: free words')
-  const lab = at('gp', [...LAB, svc('lcx', 'lcxr', 'Chest X-ray (lab)', 'lab', 'Imaging')])
-  assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].detail, 'lcxr · Imaging', 'no specimen, no tube')
+  // the Laboratory's own X-ray (no sample collected, a report answers it) is /order's, never /lab's
+  const lab = at('gp', [...LAB, svc('lcx', 'lcxr', 'Chest X-ray (lab)', 'lab', 'Imaging', [])])
+  assert.equal(suggest('/lab lcx', lab, [], new Set()), null, 'not suggested'); assert.match(err('/lab lcxr', lab), /No lab test “lcxr”/, 'not ordered')
+  assert.deepEqual(ok('/order lcxr', lab).map((p) => p.params.service_id), ['lcx'], '/order still orders it')
+  assert.ok(!suggest('/lab ', lab, [], new Set())!.items.some((x) => x.label.startsWith('Chest')), 'nor among the first offered')
 })
 console.log(`lis: ${n} groups passed`)

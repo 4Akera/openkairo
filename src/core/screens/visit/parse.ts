@@ -9,7 +9,7 @@
 //   hx: … · ex: … · plan: … · proc: …    a note line under that heading; anything else is today's progress note
 
 export interface Ctx {
-  services: { id: string; code: string; name: string; department_id: string | null; section_name?: string | null }[]
+  services: { id: string; code: string; name: string; department_id: string | null; section_name?: string | null; steps?: string[] }[]
   templates: { id: string; name: string; items: { service_id: string }[]; shortcut?: string | null }[]
   departments: { id: string; name: string; packs?: string[] }[]     // packs: the ones each uses (a pack's order command orders from them)
   problems: { id: string; name: string }[]          // on the list and drafted this visit

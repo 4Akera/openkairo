@@ -628,7 +628,9 @@ it works ("/x is used in: …").
   the order's question), and `matchesOf` takes every best match at the first step that finds any, so more than one is asked (its
   choices in the card and under the suggestions; one chosen puts its code in the line; nothing is added until it is). A pack's order
   command may add a word to each test it suggests (`hint`) and a line under the card (`note`): the laboratory's `/lab`
-  (`packs/lis/order.tsx`) says each test's tube and, under the card, the tubes and the fasting to tell the patient.
+  (`packs/lis/order.tsx`) says each test's tube and, under the card, the tubes and the fasting to tell the patient. An order command
+  may also say which of its departments' services are its own (`takes`): `/lab`'s are those a sample is collected for (a collected
+  step), so a laboratory's X-ray or other report is `/order`'s, never `/lab`'s.
 - **Rule 2 · a pack's section in the chart.** It shows when this department uses the pack *and* the patient fits it, or when the
   patient already has that pack's data. Each pack declares its fit once, by age and sex (Pregnancy: women 10–55; Growth: under 19);
   a clinic cannot change it. Base sections always show. Every other section waits behind **More · n**, which opens in place as more

@@ -117,7 +117,7 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
     if (/^(urgent|stat)$/i.test(partial)) return null
     const p = partial.toLowerCase()
     const from = oc?.orders && oc.pack ? ordersFrom(oc.pack, ctx) : null
-    const pool = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!from || from.has(s.department_id ?? '')))
+    const pool = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!from || from.has(s.department_id ?? '')) && (!oc?.takes || oc.takes(s)))
     const hits = pool.filter((s) => !p || s.code.startsWith(p) || s.name.toLowerCase().includes(p)).slice(0, p ? 7 : 10)
     // a preset by its name or shortcut, for what it orders here
     const sets = p.length >= 2 ? ctx.templates.filter((x) => (x.shortcut?.startsWith(p) || x.name.toLowerCase().startsWith(p)) && x.items.some((i) => pool.some((s) => s.id === i.service_id))).slice(0, 2) : []
