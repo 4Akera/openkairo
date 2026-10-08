@@ -1,6 +1,8 @@
 // The demo's files (spec/openCare.md §5.1 rule 9): pure, no browser, no database. Every time is relative to the load (no fixed
 // date anywhere), the load order is the base, then each pack, then the shared journey, every demo and seed file is in it, the
-// sign-in page's logins come from the generated file only, and each pack's ids sit in its own namespace.
+// sign-in page's logins come from the generated file only, and each pack's ids sit in its own namespace. What joins two packs is the
+// clinic's own choice (its seed and day, clinic_packs.sql, after every pack's: chosen in the build 2026-10-08, awaiting the owner), the
+// only files that may name more than one pack's ids.
 // npm run test:demo (the database half, loading it twice, is supabase/tests/demo.sql)
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -18,6 +20,8 @@ const demoFiles = readdirSync(new URL('supabase/demo/', root)).filter((f) => f.e
 const journeyFiles = readdirSync(new URL('supabase/demo/journey/', root)).filter((f) => f.endsWith('.sql')).sort().map((f) => `supabase/demo/journey/${f}`)
 const layerOf = (f: string) => /\/journey\/\d+-(\w+)\.sql$/.exec(f)?.[1]
 const seedFiles = readdirSync(new URL('supabase/seeds/', root)).filter((f) => f.endsWith('.sql') && f !== 'codes.sql').map((f) => `supabase/seeds/${f}`)
+/** the clinic's own choices between its packs: a seed and a day, neither a pack's */
+const CLINIC = /\/clinic_packs\.sql$/
 
 // a fixed date or year, written as one: an ISO day, a year on its own as a value, a year in words, a date built from numbers
 const FIXED: [RegExp, string][] = [
@@ -67,10 +71,21 @@ test('one load order: the kit, the base (seed, day), each pack (seed, day), the 
 })
 test('a pack writes in its own namespace and only through the kit: ids are demo.id(<pack>, …), never another pack\'s', () => {
   const named = (f: string) => [...new Set([...read(f).matchAll(/demo\.id\('([^']+)'/g)].map((m) => m[1]))]
-  for (const f of order.filter((x) => /\/(seeds|demo)\/(?!demo_kit|dev|base|load)\w+\.sql$/.test(x) || (x.includes('/journey/') && layerOf(x) !== 'base'))) {
+  for (const f of order.filter((x) => !CLINIC.test(x) && (/\/(seeds|demo)\/(?!demo_kit|dev|base|load)\w+\.sql$/.test(x) || (x.includes('/journey/') && layerOf(x) !== 'base')))) {
     const pack = layerOf(f) ?? f.split('/').at(-1)!.replace('.sql', ''); const text = read(f)
     assert.deepEqual(named(f), [pack], `${f} names only its own ids`)
     assert.doesNotMatch(text, /\binsert\s+into\b|\bupdate\s+core\.|\bdelete\s+from\b/i, `${f} writes through the doors`)
+  }
+  // the clinic's choices between packs: after every pack's seed and day, before the journey; the packs' ids only, of packs loaded before
+  // it; written through the doors
+  const packsBefore = (f: string) => order.slice(0, order.indexOf(f)).filter((x) => /\/seeds\/(?!demo_kit|dev)\w+\.sql$/.test(x) && !CLINIC.test(x))
+    .map((x) => x.split('/').at(-1)!.replace('.sql', ''))
+  const clinic = order.filter((x) => CLINIC.test(x))
+  assert.deepEqual(clinic, ['supabase/seeds/clinic_packs.sql', 'supabase/demo/clinic_packs.sql'], 'the clinic\'s seed, then its day')
+  for (const f of clinic) {
+    assert.ok(order.indexOf(f) < order.indexOf(journeyFiles[0]), `${f} before the journey`)
+    assert.ok(named(f).length >= 1 && named(f).every((l) => packsBefore(f).includes(l)), `${f} names the ids of packs loaded before it: ${named(f)}`)
+    assert.doesNotMatch(read(f), /\binsert\s+into\b|\bupdate\s+core\.|\bdelete\s+from\b/i, `${f} writes through the doors`)
   }
   // the base's journey steps name the journey's patient and no pack's ids (a pack's step is in its own file)
   for (const f of journeyFiles.filter((x) => layerOf(x) === 'base')) assert.ok(named(f).every((l) => l === 'journey'), `${f} names no pack's ids: ${named(f)}`)
@@ -87,7 +102,8 @@ test('each seed and day says its layer first (demo.layer), so the kit refuses a 
     assert.match(kit, new RegExp(`function demo\\.${fn}\\([^$]*\\$\\$\\s*begin\\s*perform demo\\.mine\\(`), `demo.${fn} checks the namespace first`)
   }
   // a department is made from a starter setup (§5.2), never row by row
-  for (const f of seedFiles.filter((x) => !x.endsWith('demo_kit.sql'))) {
+  // (the clinic's choices between packs make no department: a tick, a setting and a holding, as its owner would in Settings)
+  for (const f of seedFiles.filter((x) => !x.endsWith('demo_kit.sql') && !CLINIC.test(x))) {
     assert.doesNotMatch(read(f), /demo\.(department|place|tick|screen)\(/, `${f} makes its departments from setups`)
     assert.match(read(f), /demo\.(setup|serve)\(/, `${f} runs a setup (its own department's, or a base department it serves)`)
   }
@@ -112,9 +128,9 @@ test('the sign-in page lists the generated logins, grouped by department, and ty
   assert.ok(names.every((x) => /^(Dr\. )?[A-Z][a-z]+ [A-Z][a-z]+/.test(x)), 'real-sounding names, never a job title')
 })
 test('a demo person per role the seeds grant, and each pack role on its pack\'s department', () => {
-  const roles = new Set(DEMO_GROUPS.flatMap((g) => g.people.map((p) => p.role)))
-  for (const r of ['Owner', 'Doctor', 'Nurse', 'Reception', 'Lab technician', 'Pharmacist', 'Store keeper']) assert.ok(roles.has(r), r)
+  const roles = new Set(DEMO_GROUPS.flatMap((g) => g.people.flatMap((p) => p.role.split(' · '))))
+  for (const r of ['Owner', 'Doctor', 'Nurse', 'Reception', 'Lab technician', 'Pharmacist', 'Store keeper', 'Cashier', 'Accountant']) assert.ok(roles.has(r), r)
   const pharmacy = DEMO_GROUPS.find((g) => g.department === 'Pharmacy')
-  assert.deepEqual(pharmacy?.people.map((p) => p.role).sort(), ['Pharmacist', 'Store keeper'])
+  assert.deepEqual(pharmacy?.people.map((p) => p.role).sort(), ['Cashier · Pharmacist', 'Store keeper'], 'the pharmacist takes payment at its counter too (the clinic\'s choice)')
 })
 console.log(`demo: ${n} groups passed`)

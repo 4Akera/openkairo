@@ -1,14 +1,15 @@
 // Billing → Prices (billing.prices, spec §5.4; owner, 2026-10-08, D27: billing's own page, apart from Settings → Services): each
-// department that uses billing, its visit fee (once a patient is seen there) and each of its services — a price, At the order (the
-// cashier types it on the payment card), or none (free, and it never waits). A price is the setting of the thing it prices, kept with
-// who changed it and when; a change is for later orders only. Written by whoever sets prices in that department.
+// department that uses billing, its Pay first (as on the department's card: its priced work waits for payment, a soft check), its visit
+// fee (once a patient is seen there) and each of its services — a price, At the order (the cashier types it on the payment card), or
+// none (free, and it never waits). A price is the setting of the thing it prices, kept with who changed it and when; a change is for
+// later orders only. Written by whoever sets prices in that department.
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { writeSetting } from '@core/db/rpc'
 import { mayIn } from '@core/db/views'
 import { useDepartment } from '@core/hooks/organization'
 import type { Department, Organization, Service, SettingRow } from '@core/db/types'
-import { Button, Card, Empty, Input, ScreenFrame, Segmented, cn, errorText } from '@core/ui'
+import { Button, Card, Empty, Input, ScreenFrame, Segmented, Switch, cn, errorText } from '@core/ui'
 import { cents, wire } from './money'
 import { LABEL } from './words'
 
@@ -21,8 +22,9 @@ export function Prices() {
   const [find, setFind] = useState('')
   const f = find.trim().toLowerCase()
   const services = (d: Department) => (org?.services ?? []).filter((s) => s.department_id === d.id).sort((a, b) => a.name.localeCompare(b.name))
-  // a department that sees patients has its visit fee; one with services, their prices (a desk with neither has nothing to price)
-  const depts = billed(org).filter((d) => d.work === 'visits' || services(d).length > 0)
+  // a department that sees patients has its visit fee; one with services, their prices; a bench its Pay first (a desk with none of
+  // these has nothing to price)
+  const depts = billed(org).filter((d) => d.work === 'visits' || d.work === 'bench' || services(d).length > 0)
   return <ScreenFrame search={<Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a service" aria-label="Find a service" className="w-full sm:w-64" />}>
     {!depts.length ? <Card><Empty>No department uses billing yet. Tick it on a department (Settings → Departments → Packs used here).</Empty></Card>
       : depts.map((d) => <DepartmentPrices key={d.id} org={org} dept={d} services={services(d).filter((s) => !f || s.name.toLowerCase().includes(f) || s.code.toLowerCase().includes(f))} />)}
@@ -36,7 +38,8 @@ function DepartmentPrices({ org, dept, services }: { org: Organization | undefin
   const fee = (org?.settings ?? []).find((s) => s.key === 'billing.visit_fee' && s.owner_id === dept.id) as (SettingRow & { data: { amount: string } }) | undefined
   return <Card className="overflow-x-auto">
     <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2.5"><span className="text-14 font-semibold text-fg">{dept.name}</span>
-      {!may && <span className="text-12 text-faint">read-only for your role</span>}</div>
+      {!may && <span className="text-12 text-faint">read-only for your role</span>}
+      <PayFirst org={org} dept={dept} may={may} /></div>
     {(dept.work === 'visits' || fee) && <FeeRow dept={dept} row={fee} may={may} />}
     {services.length ? <ul>{services.map((s) => <PriceRow key={s.id} service={s} row={prices.find((p) => p.data.service_id === s.id)} may={may} />)}</ul>
       : <p className="px-4 py-3 text-13 text-faint">{dept.work === 'visits' ? 'No services of its own.' : 'No services here.'}</p>}
@@ -51,6 +54,19 @@ function useSave() {
     try { await fn(); await qc.invalidateQueries({ queryKey: ['organization'] }); setSaved(true) } catch (x) { setError(x) } finally { setBusy(false) }
   }
   return { busy, error, saved, run }
+}
+
+/** Pay first in a department (the setting on its card): its priced work waits for payment, per order, until paid or gone ahead anyway */
+function PayFirst({ org, dept, may }: { org: Organization | undefined; dept: Department; may: boolean }) {
+  const on = !!((org?.settings ?? []).find((s) => s.key === 'billing.pay_first' && s.owner_id === dept.id)?.data as { on?: boolean } | undefined)?.on
+  const s = useSave()
+  return <span className="ms-auto flex items-center gap-2 text-13">
+    <Switch checked={on} disabled={!may || s.busy} label={`${dept.name}: Pay first`}
+      onChange={(v) => void s.run(() => writeSetting({ key: 'billing.pay_first', owner_id: dept.id, data: { on: v } }))} />
+    <span className={on ? 'text-fg' : 'text-muted'}>Pay first</span>
+    <span className="text-12 text-faint">{on ? 'its priced work waits for payment' : 'pay after, at the cashier'}</span>
+    {!!s.error && <span className={cn(LABEL, 'text-danger normal-case')}>{errorText(s.error)}</span>}
+  </span>
 }
 
 /** a department's visit fee: an amount, or none */

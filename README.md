@@ -11,7 +11,7 @@ Prerequisites: Docker (Colima on this machine), the Supabase CLI, Node 22+.
 ```bash
 colima start                    # once per boot
 supabase start                  # Postgres 17, Auth, Realtime, Storage, Studio
-npm run db:reset                # migrations → codes, the demo kit, the base's clinic and staff, each pack's seed (supabase/seeds/, in config.toml's order)
+npm run db:reset                # migrations → codes, the demo kit, the base's clinic and staff, each pack's seed, the clinic's choices between packs (supabase/seeds/, in config.toml's order)
 npm run db:test                 # every SQL suite (22), each in its own rolled-back transaction
 npm run db:demo                 # a working day, times relative to now: the base's, each pack's, the shared journey (run again to reload)
 npm run test:composer           # the composer's typed lines and drafts → entries (no browser, no database)
@@ -70,7 +70,7 @@ Settings changes need a second factor. The dev seed turns that off locally (`cor
 
 **The pharmacy pack** (`…000011_pharmacy.sql`, `src/packs/pharmacy`): a prescription reaches the pharmacy only when the doctor sends it; its bench (To give · Given today) gives with **Give all** or Given / Not given with a reason. Its `pharmacy.queue` table is filled by a listener after commit.
 
-**The billing pack** (`…000013_billing.sql`, `src/packs/billing`, spec §5.4): the Cashier (who owes, the payment card under the row, receipts, Give back…), Today (the day's totals, closing the drawer) and Billing → Prices. Charges come from entries and settings only and carry no amount; money is only ever added to, in billing's own tables, through its operations.
+**The billing pack** (`…000013_billing.sql`, `src/packs/billing`, spec §5.4): the Cashier (who owes, the payment card under the row, receipts, Give back…), Today (the day's totals, closing the drawer) and Billing → Prices. Charges come from entries and settings only and carry no amount; money is only ever added to, in billing's own tables, through its operations. On the rows of any department that uses billing it puts one button (Pay where the department takes payment, Send to cashier with the lines the row prices itself where it does not) and its soft check (Pay first: "Waiting for payment" per order, "…anyway" with a reason).
 
 ## Tests
 
@@ -81,8 +81,8 @@ Settings changes need a second factor. The dev seed turns that off locally (`cor
 ```
 spec/openCare.md      the design (spec/archive/: the earlier specs)
 supabase/migrations/  the database, in order
-supabase/seeds/       codes, the demo kit, the base's clinic and each pack's seed (local only)
-supabase/demo/        each layer's demo day and the shared journey's steps (journey/), in load.sql's order
+supabase/seeds/       codes, the demo kit, the base's clinic, each pack's seed and the clinic's choices between packs (local only)
+supabase/demo/        each layer's demo day, the clinic's day between packs, and the shared journey's steps (journey/), in load.sql's order
 supabase/tests/       SQL suites (lib/: assertions and the fixture)
 scripts/              db-test.sh, demo.sh, include.awk, gen-logins.ts, gen-shapes.ts, gen-codes.py, import-codes.sh, test-*.ts
 src/core/             the client: db, auth, hooks, shell, screens, renderers

@@ -149,6 +149,27 @@ select t.ok(exists (select 1 from base.orders o where o.organization_id = demo.b
 select t.ok((select state from base.presence where organization_id = demo.base('clinic') and patient_id = demo.id('journey', 'patient:mahmoud') and kind = 'stay') = 'discharged',
   'he went home; his bed is free');
 
+\echo '── billing''s demo and the clinic''s choices between its packs (§5.4): the Cashier and its person, Pay first at the Laboratory, the Pharmacy taking its own payment; one paid, one waiting, one sent from the Pharmacy'
+select t.ok(core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('billing', 'cashier')) ->> 'takes' = 'everyone'
+  and exists (select 1 from core.live_holdings(demo.base('clinic')) h where h.user_id = demo.id('billing', 'cashier person') and h.department_id = demo.id('billing', 'cashier')),
+  'the main Cashier takes everyone''s payments, Mona Saad at its desk');
+select t.ok((core.setting_at(demo.base('clinic'), 'billing.pay_first', demo.base('lab')) ->> 'on')::boolean, 'Pay first at the Laboratory');
+select t.ok(core.department_uses(demo.base('clinic'), demo.id('pharmacy', 'department'), 'billing')
+  and core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('pharmacy', 'department')) ->> 'takes' = 'own'
+  and exists (select 1 from core.live_holdings(demo.base('clinic')) h where h.user_id = demo.id('pharmacy', 'pharmacist') and h.department_id = demo.id('pharmacy', 'department')
+    and h.role_id = '00000000-0000-0000-0000-00000000ce01'), 'the Pharmacy bills and takes its own payment, the pharmacist at its counter');
+select t.ok((select count(*) from billing.payments p where p.patient_id = demo.id('billing', 'patient:hoda') and p.refund_of is null) = 1, 'Hoda paid at the Cashier');
+select t.ok((select count(*) from billing.sent s where s.patient_id = demo.id('pharmacy', 'patient:hamdy') and s.department_id = demo.id('pharmacy', 'department')
+  and s.order_item is not null and billing.sent_owed(s.organization_id, s.id)) = 1, 'one open bill: Hamdy''s box of Glucophage, sent to the cashier from the Pharmacy with its order');
+select demo.as(demo.base('tech'));
+select t.ok(w -> 'waiting' @> jsonb_build_array(demo.id('billing', 'order:magdy cbc'), demo.id('billing', 'order:magdy hba1c')) and (w -> 'pay_first')::boolean,
+  'Magdy''s blood count and HbA1c wait for payment at the Laboratory')
+  from public.pack_op(jsonb_build_object('op', 'billing.waiting', 'department_id', demo.base('lab'), 'args', jsonb_build_object('orders',
+    jsonb_build_array(demo.id('billing', 'order:magdy cbc'), demo.id('billing', 'order:magdy hba1c'), demo.id('billing', 'order:hoda lipids'))))) w;
+select t.ok(not (w -> 'waiting') ? demo.id('billing', 'order:hoda lipids')::text and w -> 'paid' ? demo.id('billing', 'order:hoda lipids')::text, 'Hoda''s lipid profile, paid, does not wait')
+  from public.pack_op(jsonb_build_object('op', 'billing.waiting', 'department_id', demo.base('lab'), 'args', jsonb_build_object('orders',
+    jsonb_build_array(demo.id('billing', 'order:hoda lipids'))))) w;
+
 \echo '── reloaded with two patients of the app in the beds the demo names (3 and 4): each demo stay takes a free bed'
 do $$
 declare p uuid; s uuid;

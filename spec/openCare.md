@@ -745,7 +745,9 @@ it works ("/x is used in: …").
   home, follow-up booked) whose steps the packs add in order. The demo passes the packs' fit tests (rule 2): no adult values on a
   baby. *Built 2026-10-06:* `npm run db:demo` (`scripts/demo.sh`) loads `supabase/demo/load.sql` in one transaction: the kit
   (`supabase/seeds/demo_kit.sql`), the base's seed (`seeds/dev.sql`: the clinic, departments made from the base's setups, what the clinic changed since,
-  presets, a person for each of its roles) and day (`demo/base.sql`), each pack's seed and day (`seeds/pharmacy.sql`, `demo/pharmacy.sql`), then the
+  presets, a person for each of its roles) and day (`demo/base.sql`), each pack's seed and day (`seeds/pharmacy.sql`, `demo/pharmacy.sql`), then
+  the clinic's own choices that join two packs, which no pack may make (`seeds/clinic_packs.sql`, `demo/clinic_packs.sql`; *chosen in the
+  build 2026-10-08, awaiting the owner*), then the
   shared journey (GP → ward → home with a follow-up booked), one file per layer's step in its order (`demo/journey/1-base.sql`,
   `2-pharmacy.sql`, `9-base.sql`; a pack's step names only its own ids and is skipped while the pack is off). A reset
   runs the seeds (`seeds/*.sql`). Everything is written through the doors as the user each step names (`demo.w` stops the load on a
@@ -1023,10 +1025,13 @@ says "held", read "waiting" (the soft check, below).
   - Money never reaches the record or the chart. The chart keeps what was ordered and given; billing keeps its own tables. Only words
     reach the chart (a waiting order's word), never an amount, a price, a number or an insurer's decision (hold-doctor). *Built 2026-10-08:* billing's own tables, reached only by its
     operations; a charge row holds no amount and sends no record entries, so the record read carries none (no entry holds a price, a
-    receipt or a reason: billing.sql). The waiting word waits for core change (c).
+    receipt or a reason: billing.sql). The waiting word is billing's soft check (core change (c)), a word and a tone only: *built
+    2026-10-08* (`packs/billing/rows.ts`, `rowWaits`; a word with a digit is dropped by the core besides).
   - A department that does not use billing (§5.1 rule 1) sees no money word: no price, no fee, no charge, no Pay or Send to cashier
     button and no waiting word, not even on an order it sent to a department that uses billing. *Built 2026-10-08 for billing's screens and operations:* drawn, and
-    answered (else `not_used_here`), only where the department uses billing; the rows' buttons and words come with core changes (a)–(d).
+    answered (else `not_used_here`), only where the department uses billing; *built 2026-10-08 on the rows:* billing's button and its
+    word are drawn only for the packs the list's department uses (core changes (a), (c)), and a department's own prices show only where a
+    pack it uses charges (billing declares `charges => true`, core change (d)).
   - A card folds out under its row, never a pop-up, a menu or anything over the record (the standing rule, 2026-09-24; bill-pay).
     *Built 2026-10-08* (the cashier's list: the payment card and the receipt under the row).
   - The original money data (payments, refunds, drawer closings, claim lines and their marks; and, from 2026-10-08, the prices the
@@ -1038,7 +1043,7 @@ says "held", read "waiting" (the soft check, below).
   - Billing is a pack like any other (§5): it names no other pack's types, tables, settings or ids, holds no privilege on core tables,
     learns what another department charges for its own work only from the lines that department's rows hand it (*A department's own
     priced lines*, below; owner, 2026-10-08), and brings its own demo (§5.1 rule 9). *Built 2026-10-08:* no billing file names another pack (test:billing scans them); its demo
-    below. Hearing what others give through a
+    (*Demo*, below). Hearing what others give through a
     chargeables door: replaced by the owner, 2026-10-08 (*Later*).
 - **What is charged** (owner, 2026-10-07): a department's **visit fee**, once the patient is seen there (bill-settings); each
   ordered **service** that has a price, charged to the department that performs it; and the **lines a department hands** for the work
@@ -1058,7 +1063,9 @@ says "held", read "waiting" (the soft check, below).
     service, a price or At the order, no more than 10,000,000).
   - The visit fee and **Pay first**, per department, in the pack's table *Each department* (Settings → Packs → Billing; bill-settings,
     owner, 2026-10-07), and on the department's own card like every per-department setting (§5.1 rule 7). *Built 2026-10-08 in part:* Pay first on the
-    department's card (`billing.pay_first`). *Chosen in the build, awaiting the owner:* the visit fee is kept as a service's price is, a row
+    department's card (`billing.pay_first`), and, from the wiring, a switch in each department's head on Billing → Prices. *Chosen in the
+    build, awaiting the owner:* Pay first is written by whoever sets prices there (`write:billing.prices`, the accountant's; the owner holds
+    every action), so both places work for the same person; Billing → Prices lists every bench that uses billing too. The visit fee is kept as a service's price is, a row
     of its department on Billing → Prices (`billing.visit_fee`), so neither the department's card (whose form draws one value a department)
     nor the pack's table *Each department* is built.
   - **A department's own work**: in its own pack's settings, never in billing's (owner, 2026-10-08). The pharmacy's medicines: a
@@ -1070,7 +1077,8 @@ says "held", read "waiting" (the soft check, below).
     never a pack's name, the prices show in the new-product card (Stock) and in **Prices**, a card above Dispensing's list from its
     toolbar for whoever holds `write:pharmacy.stock` (each product of the clinic's one list, box and strip, Save per row through the
     settings door). *Chosen in the build, awaiting the owner:* Prices sits on Dispensing's toolbar (so a pharmacy that keeps no stock
-    can price), and no currency word is shown, the currency being the charging pack's to say.
+    can price), and no currency word is shown, the currency being the charging pack's to say. *Shown 2026-10-08* wherever billing is used:
+    billing declares that it charges.
   - The reasons a charge may be waived (Staff, Charity, Follow-up within 7 days): the clinic's own list on the pack's page
     (bill-settings, owner, 2026-10-07); a discount takes its reason from that list only, never free text (owner, 2026-10-08, D35).
     *Built 2026-10-08* (`billing.reasons`; the pay operation refuses another, `unknown_reason`).
@@ -1095,8 +1103,8 @@ says "held", read "waiting" (the soft check, below).
   - Any department that prices its own work (the pharmacy first; later any other pack) hands its priced lines (a name, a quantity,
     an amount) on its own list rows, through the core's generic *lines due* row field (core change (b)). Billing does not know these
     prices before they are handed. *Server built 2026-10-08:* lines reach billing only as handed (to `billing.send`, or paid with
-    `billing.pay`). *Built 2026-10-08 (the core's field and the
-    pharmacy's lines; the button is billing's):* a row carries `lines: {name, quantity, amount, order?}[]` (`screens/rows.ts`
+    `billing.pay`). *Built 2026-10-08 (the core's field, the pharmacy's lines and billing's button on them; tested with a test-only
+    Physiotherapy that prices its own sessions, billing.sql and test:billing):* a row carries `lines: {name, quantity, amount, order?}[]` (`screens/rows.ts`
     `DueLine`, `dueLines` drops a line with no words, a quantity not above nothing or an amount below nothing, and rounds to the
     hundredth). The pharmacy hands, on each Dispensing row of work (To give, Prepared, Owed, and a waiting word's view), each medicine
     to give as written, or as checked in the open fold (another brand, part, not given), counted in its product's own units
@@ -1110,7 +1118,12 @@ says "held", read "waiting" (the soft check, below).
     counter, on billing's payment card folded out under the row. It reads **Send to cashier** where the department does not: billing
     saves the lines as an **open bill** in its own insert-only table, and the main cashier takes them with the rest of the visit.
     *Server built 2026-10-08:* `billing.send` (an open bill in `billing.sent`; a resend for an order replaces its lines not yet paid) and
-    a row's lines paid at its counter (`billing.pay`, `handed`); the button waits for core change (a). *Chosen in the build, awaiting the
+    a row's lines paid at its counter (`billing.pay`, `handed`). *Built 2026-10-08 on the rows* (`registerRowAction('billing')`,
+    `packs/billing/rows.ts` and `RowCard.tsx`): Pay folds out the payment card with the row's lines (handed) beside what the patient owes
+    this desk; Send to cashier lists the lines and their total and sends them, then "Sent to the cashier", and the row's button reads
+    *Sent to cashier* while nothing changed. *Chosen in the build, awaiting the owner:* a line already paid (its order paid) is not handed
+    again; to pay here, an order already sent is paid as its open bill, never handed twice; to send, an order's lines go again only when
+    they changed (the resend replaces what was not paid); a line with no order is always handed (billing cannot tell it was paid). *Chosen in the build, awaiting the
     owner:* lines are sent, and …anyway recorded, by whoever works the department's list (`read:bench`, the base's).
   - Billing never names, in its code, the department or pack the lines came from; it trusts the amounts as handed and records who
     took or sent them, and when. *Built 2026-10-08.*
@@ -1147,7 +1160,10 @@ says "held", read "waiting" (the soft check, below).
     built on the core `ListRow` (the pharmacy's Dispensing, the laboratory's Collect): **Pay** where the department takes payment
     here and the patient owes what this desk takes (its charges, or the lines the row hands); **Send to cashier** where the row hands
     lines and the department does not take payment; none otherwise, nor for a role that may not. Pay folds the cashier's own card out
-    under the row. *To build* with core change (a); the card it folds out (`PayCard`, taking a row's lines) is built.
+    under the row. *Built 2026-10-08* (billing's row action, *A department's own priced lines* above): Pay for whoever takes payment
+    there (`write:billing.payment`, and `read:billing.cashier` to learn who owes: `billing.owed` for the list's patients), Send to
+    cashier for whoever works the list (`read:bench`); seen in the browser on Dispensing (Pay at the Pharmacy's counter, Send to cashier)
+    and on the cashier's list.
   - **The receipt** (bill-receipt) is shown and kept: the clinic, the clinic's receipt number (R-00412), the date and time, the patient
     and record number, the lines, the total, the cash received and the change, who took it. Where work was waiting, its word goes;
     nothing else changes in the chart. *Built 2026-10-08* (shown and kept; no print button).
@@ -1164,8 +1180,13 @@ says "held", read "waiting" (the soft check, below).
   - Off by default: pay after, at the cashier at the end of the visit. Switched on, a department's priced work that is not paid
     waits: its order shows the word **"Waiting for payment"** on the performing department's row, through the core's soft check (core
     change (c)), and the word goes the moment the payment is taken; nobody clears it by hand, and marking the order urgent never
-    clears it. The writer never refuses work because of it, and nothing of it is kept in core. *Server built 2026-10-08:* `billing.waiting` (of the
-    orders a row names, those waiting and those paid; words only); the words on the rows wait for core change (c).
+    clears it. The writer never refuses work because of it, and nothing of it is kept in core. *Built 2026-10-08:* `billing.waiting` (of the
+    orders a row names, those waiting, paid and gone ahead, with Pay first and Takes payment here as they stand; words only, but for a
+    department's own open bills per order when its row action asks, `sent`) and billing's soft check (`registerSoftCheck('billing')`):
+    an order billing holds unpaid (a priced charge, or a line sent to the cashier) in a department with Pay first, and, *chosen in the
+    build, awaiting the owner,* under that department's own Pay first an order whose lines its row hands, priced and not paid (billing
+    knows them only as handed: Dispensing hands its rows' lines to the soft check too). Seen in the browser: the Laboratory's Collect,
+    Magdy's blood count paid at the Cashier (his HbA1c left for later) moved to To collect at once, the HbA1c still waiting.
   - **Per order** (owner, 2026-10-08, D6; "Build now no pics"): only the waiting order's buttons are greyed; the patient's other
     orders on the same row stay workable; a stop (couldn't collect) is never greyed; a row opens with one free order; a collection
     chair calls a patient with one free test; a patient with free and waiting tests is in *To collect* for the free ones and in
@@ -1183,16 +1204,22 @@ says "held", read "waiting" (the soft check, below).
     anyway…** (Dispensing), **Answer anyway…** (Request.tsx) and, *chosen in the build, awaiting the owner,* **Go ahead anyway…** on the
     base bench and its patient page, offered only to whoever may do that work; the card (`screens/RowCards.tsx`) asks one line of
     reason (required, at most 200 letters) and hands it to each pack holding the orders, its own orders only (`anyway`); once recorded,
-    those orders are free in this app. *Server built 2026-10-08:* `billing.anyway` (the order sent here, the reason, who and when).
+    those orders are free in this app. *Built 2026-10-08:* `billing.anyway` (the order sent here, the reason, who and when) through
+    billing's soft check, one an order; an order gone ahead never waits again (`billing.waiting` leaves it out, after a reload too), the
+    cashier's row marks the patient "done before payment" and no longer says the department is waiting for it. *Chosen in the build,
+    awaiting the owner:* going ahead with an order whose lines the row hands and that were not sent or paid sends them to the cashier
+    first as an open bill, so the patient still owes them and the cashier sees the work was done before payment.
   - **The doctor's chart shows only the word** (owner, 2026-10-08), where the ordering department uses billing (the rule above):
     never the reason, an amount or a price. *Awaiting the owner:* core change (c) as approved reaches the lists and the page that
     answers consults and reports, not the chart's order card; how the word reaches the chart is not decided. *Built 2026-10-08, chosen in the build, awaiting the owner:*
     the chart's order line (`chart/blocks/Orders.tsx`) asks the same soft check (list `chart`, the record's open orders) and shows the
     word only, never greyed nor with "…anyway", from the packs the chart's department uses; this draws hook (c) in one place more than
-    the owner approved and is his to keep or take away.
+    the owner approved and is his to keep or take away. Billing answers it (`billing.waiting` with `anywhere`: the orders wherever they
+    are performed, the words alone, for whoever may read the bench there, the Doctor) with what it holds unpaid; an order waiting only on
+    the lines a department's row hands, never sent, has no word on the chart (billing does not know it).
   - The word shows only where the performing department uses billing (D3) and has Pay first on, as its settings stand now: unticking
     billing or switching Pay first off takes the words away at once; the settings history keeps the change, as for every setting.
-    *Server built 2026-10-08* (read as it stands now).
+    *Built 2026-10-08* (read as it stands now, on every list's live read).
   - Replaced by the owner, 2026-10-08: the hard hold (the writer refusing the performing department's work on a held order, D4, D6),
     the hold decided in the same save as the order (D26), a hold lifted by a setting and recorded as such (D3), a setting change
     reaching billing through the listener queue for it (D11; that nothing of a pack runs inside a settings save still stands), the
@@ -1217,6 +1244,14 @@ says "held", read "waiting" (the soft check, below).
     the next sheet with its reason, like a refund; **Print the sheet** (A4). After an Erase it still prints, the line reading *erased
     patient* (owner, 2026-10-08, D28). *To build.*
   - Insurance on a department's own priced lines (medicines) needs the chargeables door (*Later*, owner, 2026-10-08).
+- **Demo** (§5.1 rule 9): *built 2026-10-08.* Billing's seed: the main Cashier from its setup with Mona Saad, its cashier; General
+  Practice and the Laboratory bill (the GP's visit fee, five lab prices, the lithium level At the order); Pay first at the Laboratory;
+  Wael Shawky, accountant, everywhere. Its day: Magdy owes his visit, a blood count and an HbA1c, both tests waiting for payment at the
+  Laboratory; Hoda paid at the Cashier in cash; Waleed's lithium level to price. *Chosen in the build, awaiting the owner:* what joins
+  two packs is the clinic's, never a pack's, so it has its own seed and day after every pack's (`seeds/clinic_packs.sql`, in the
+  reset's seed list; `demo/clinic_packs.sql`): the Pharmacy bills and takes its own payment, the pharmacist holding the Cashier's role
+  there; and the box of Glucophage given Hamdy ten minutes ago is an open bill sent from the Pharmacy to the cashier (with his visit,
+  195.00 on the cashier's list).
 - **Erase** (owner, 2026-10-08): Erase reaches the tables a pack declares (D17, core change (g)). Billing's money rows (payments,
   their lines, claim lines) keep their amounts and receipt numbers and lose the patient link and the approval number (D18); its other
   rows of the patient go (the insurer on file, the insurer's answers). *Built 2026-10-08* for payments (the patient emptied; their lines
@@ -1247,7 +1282,8 @@ says "held", read "waiting" (the soft check, below).
   word, insurer prices and approvals, and the charge then keeps the pack (D31). The base declaring which of its types are work on an
   order and which statuses are stops, for the core's hold check (D29), went with the hold: replaced by the owner, 2026-10-08.
 - **Open, awaiting the owner** (found in writing this section down): how the waiting word reaches the doctor's chart (*Pay first*,
-  above; built on the chart's order line with hook (c), awaiting his yes); and a service of a department that hands its own lines (the pharmacy's dispensing) could also be priced in Billing →
+  above; built on the chart's order line with hook (c), awaiting his yes); a line a row hands with no order cannot be told paid, so
+  it is handed again after it is paid (every line the pharmacy hands has its order); and a service of a department that hands its own lines (the pharmacy's dispensing) could also be priced in Billing →
   Prices and so be paid twice, and billing cannot tell such a service apart without naming its pack.
 
 #### Core and base changes the owner approved
@@ -1280,7 +1316,8 @@ for billing. Each is **to build**, in the core's own files, never a pack's (owne
   department uses with what they declare. *Built 2026-10-08:* `core.declare_pack(…, charges => true)`
   (`core.layers.charges`; declared again, it says so again); read `me` gives each department `declared`, each pack it uses with what
   it declares; the client asks `chargesHere(dept)` (`screens/rows.ts`), never naming a pack. The pharmacy and the laboratory declare
-  no charging. Not added to `core.pack_department` (a pack on the server has not needed it).
+  no charging; billing declares it does (`charges => true`), so the pharmacy's prices show wherever billing is used. Not added to
+  `core.pack_department` (a pack on the server has not needed it).
 - **(e) "Sends no record entries"** (F08): a per-table flag of `core.declare_table`; a table so declared never sends its rows'
   source entries, whoever asks; billing's charges table is declared so. *Built 2026-10-08* (`core.derived.entries`; `core.table_out`
   for the table, record and included reads: no entries and no source ids; its rows are still masked by them).
@@ -1866,4 +1903,14 @@ types, parked pack calls with per-call Retry, Postgres enums.
   bench patient page's waiting card greyed; Dispensing's lines and Prices; the word on the chart's order. Tests: `declares` (new, 15)
   and `stock` 40 (+6: prices, the strip refusals); 30 suites, 1236 checks; `test:board` 22 (+10), `test:pharmacy` 9 (+4), `test:lis`
   11 (+1), `test:registries` 9 (+1); every `test:*` script, typecheck, eslint and the build clean.
+- 2026-10-08: **billing wired to the rows** (§5.4; lane-doors merged): billing declares that it charges; its row action (Pay, Send to
+  cashier, Sent to cashier) and its soft check (Pay first per order, "…anyway" recorded) on every list of a department that uses it,
+  for lines from any department (a test-only Physiotherapy in the tests); `billing.waiting` leaves out what went ahead, answers the
+  chart (`anywhere`, words only) and, asked, a department's own open bills per order; the cashier's row no longer says a department
+  waits for work gone ahead; `billing.anyway` hints the clinic; Pay first on Billing → Prices (`write:billing.prices`); Dispensing hands
+  its rows' lines to the soft check. Demo: Pay first at the Laboratory; the clinic's own choices between packs (the Pharmacy bills and
+  takes its own payment; Hamdy's box sent to the cashier). Seen in the browser (`spec/shots/2026-10-08/`): Collect's Waiting for payment,
+  a test freed once paid at the Cashier, Pay at the Pharmacy's counter, Send to cashier, the cashier's list with the sent lines and
+  "done before payment". Tests: `billing` 183 (+22), `demo` 69 (+7); `test:billing` 14 groups (+4); `test:demo` holds the clinic's
+  choices to their own rule (after every pack, before the journey, only ids of packs loaded before them, through the doors).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

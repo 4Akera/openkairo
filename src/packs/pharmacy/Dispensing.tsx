@@ -78,7 +78,9 @@ export function Dispensing({ dept }: ScreenProps) {
     const v: Dispense = (checked ? values[r.order.item] : undefined) ?? { given: true, reason: '' }; const drug = v.drug || detailsOf(r).drug?.name
     const p = v.given && drug ? productFor(priced, drug, v.product_id ?? fromStock(r, v).product_id) : null
     return p ? linesFor(p, v.quantity === undefined ? fullAmount(detailsOf(r)).value : Number(v.quantity), r.order.item) : [] })
-  const packs = usePackRows('screen', useMemo(() => groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g))), [rows]), dept)
+  // the list's rows hand their lines as written too, so a soft check may hold an order on the lines it hands (Pay first on the pharmacy's
+  // own priced work, spec §5.4)
+  const packs = usePackRows('screen', groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g), linesOf(g.rows, false))), dept)
   const free = (r: RequestQueueRow) => packs.isFree(r.order.item)
   const of = (states: State[]) => groupByPatient(rows.filter((r) => free(r) && states.includes(stateOf(r)))).filter((g) => matches(g.patient, f))
   const held = byWord(rows, packs.waits, packs.ahead).map((w) => ({ id: `wait:${w.word}` as const, word: w.word, groups: groupByPatient(w.rows).filter((g) => matches(g.patient, f)) }))

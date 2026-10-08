@@ -30,7 +30,7 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'collect@demo.com', name: 'Mona Saber', role: 'Lab technician' },
   ] },
   { department: 'Pharmacy', departmentId: '647b8de4-8916-5c81-94b1-d0c1c4721d6f', people: [
-    { email: 'pharm@demo.com', name: 'Dr. Reem Hamdy', role: 'Pharmacist' },
+    { email: 'pharm@demo.com', name: 'Dr. Reem Hamdy', role: 'Cashier · Pharmacist' },
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
   ] },
   { department: 'Main store', departmentId: '1d64cf4d-60f9-5945-a245-e9764b6c294f', people: [

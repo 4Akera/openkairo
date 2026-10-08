@@ -1,5 +1,6 @@
 -- The billing pack's day (spec/openCare.md §5.1 rule 9, §5.4): its own three patients, each seen in General Practice this morning
--- with tests sent to the Laboratory. Magdy owes his visit, a blood count and an HbA1c (To pay); Hoda paid her visit and a lipid profile
+-- with tests sent to the Laboratory. Magdy owes his visit, a blood count and an HbA1c (To pay; the Laboratory has Pay first, so both his
+-- tests wait for payment on its Collect); Hoda paid her visit and a lipid profile
 -- at the Cashier, in cash (Paid today, her receipt); Waleed owes his visit and a lithium level priced At the order, which the cashier
 -- prices on the payment card. Times relative to the load; ids in the pack's namespace; a reload erases these patients first (their
 -- payments keep their amounts and receipt numbers and lose the patient, as an Erase leaves them, §5.4).
