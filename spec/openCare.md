@@ -1575,6 +1575,34 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   echo, ECG and spirometer files, a peak-flow diary; blood bank stock and barcodes, MRI T2* trends; AJCC stage tables, the tumour
   board's list; monitor feeds into the anaesthetic record, sterilisation and implant registries, theatre use reports, e-signed consent;
   home visits and the ministry's family planning returns.
+- *Built 2026-10-08 (lane L2, `clinics-mother-child`), Paediatrics* (`paediatrics`, migration 26, role block e3): the WHO tables as a
+  reference list (`paediatrics.who_growth`, L, M and S by age in months or length in cm; the demo loads birth to 2 years, marked
+  a demo sample) and the server's sums on them (`paediatrics.measure`: z-scores by the LMS method with the WHO's restricted way past ±3,
+  centiles); its table `paediatrics.growth` (one row per vitals item of a child under 19 with a weight, length or head: the z-scores and
+  centiles, what lies beyond the loaded table, the tables' version), fed by a listener on the base's vitals and declared as reading
+  age and sex, read with the record; its op `paediatrics.growth_now` (the same sums for values being typed, for the /v line);
+  `paediatrics.development` (on the base's observation: the list, the age, its version, each milestone yes or not yet, the plan
+  taken from the notice; everyday, so a family medicine doctor writes it where the department ticks the pack); its own codes for the
+  newborn checks (`paediatrics.newborn`: birth, heel prick, hearing, hips, eyes, jaundice — base observations and a procedure); the
+  Brighton PEWS (`paediatrics.pews`, 2005, alias /pews; 3 in amber, 4 and over red); settings `paediatrics.doses` (the clinic's dose
+  list: drug, route, mg/kg a day or a dose, doses a day, most a dose) and `paediatrics.milestones` (the CDC's 2022 list to start, by
+  months and area), both on the pack's page; Paediatrician (`paediatrics.paediatrician`, built on Doctor); setups `paediatrics.clinic`
+  (the queue, a well-child preset) and `paediatrics.ward` (the board, six beds). Client (`src/packs/paediatrics/`): the Growth section
+  (each latest value with its z-score and centile, the WHO curve for weight, length, head or weight-for-length with the child's
+  points, "Crossed two centile lines down since 4 months", every measurement), Development (each check by area) and Newborn checks
+  (from the facts page) sections; banner words (the age and weight, a z-score beyond ±2, "hearing: refer, not repeated"); `/dev` with
+  its card (the clinic's list for the age, yes or not yet, the notice past the list's age with its chips); the children's ward tile line
+  (the weight and its age, amber past 3 days, and Holliday–Segar's maintenance). Demo: Dr. Rehab Shaker (paeds@demo.com), Dr. Hassan
+  Kandil (kandil@demo.com), Doha Wagdy (children.nurse@demo.com, the base's Nurse); Malek, Jana, Kenzy in the clinic, five children on
+  the ward with two PEWS. Tests: `supabase/tests/paediatrics.sql`, `npm run test:paediatrics`. *Differences from the pictures, and
+  why:* the lines under the base's /v and /rx cards (the z-scores, the dose per kg) wait for the core's line under a card (C1, lane
+  L1); their words are built (`dose.ts`, the op) and wired when it lands; the demo sample stops at 2 years, so Jana (3 years 2 months)
+  shows her weight and length "beyond the table" rather than the picture's z −0.1; /dev's chips go into the check's plan, since a card
+  cannot add drafts of its own (the order is typed on the line; a core question); the hearing test is a procedure, the other newborn
+  checks observations; PEWS on the tile is ward nursing's word (the picture), so it shows there once the ward ticks ward nursing — the
+  starter setup ticks only paediatrics (a setup may tick only its own pack); the tile line reads the weights once per board from the
+  pack's table through a small store, because the board hands a line only its row (beds' approved "a pack reads its data once per
+  board" replaces it at integration).
 
 ---
 
