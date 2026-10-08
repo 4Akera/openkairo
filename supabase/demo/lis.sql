@@ -82,7 +82,7 @@ create or replace function pg_temp.bb_step(p_order uuid, p_after uuid, p_min int
 $$;
 
 do $$
-declare bb uuid := demo.id('lis', 'blood_bank'); tech uuid := demo.id('lis', 'blood_tech'); day int := 60 * 24; o uuid; s1 uuid; s2 uuid; s3 uuid; stay uuid; lab uuid;
+declare bb uuid := demo.id('lis', 'blood_bank'); tech uuid := demo.id('lis', 'blood_tech'); day int := 60 * 24; o uuid; s1 uuid; s2 uuid; s3 uuid; stay uuid; lab uuid; v uuid;
 begin
   -- Nabila: iron-deficiency anaemia, Hb 6.9 at General Practice: one unit of red cells asked this morning, the sample received
   perform demo.patient(demo.id('lis', 'patient:nabila'), array['Nabila'], 'Farag', 'female', demo.born(44, 70), '+201224417650');
@@ -95,7 +95,9 @@ begin
 
   -- Soad: melaena, admitted last night; two units asked at 07:15, crossmatched and issued; the second stopped for hives
   perform demo.patient(demo.id('lis', 'patient:soad'), array['Soad'], 'Mahrous', 'female', demo.born(66, 300), '+201006671284');
-  stay := demo.admit(demo.arrive('Black stools since yesterday, dizzy', 295), 6, 285, 'Upper GI bleeding: melaena, Hb 6.8');
+  v := demo.arrive('Black stools since yesterday, dizzy', 298);
+  perform demo.consult(v, 296, '[]'::jsonb, 290);
+  stay := demo.admit(v, 6, 285, 'Upper GI bleeding: melaena, Hb 6.8');
   perform demo.w(demo.base('doctor'), jsonb_build_array(demo.e('problem', demo.base('ward'), stay, demo.ago(284), demo.problem('K92.2', 'Melaena · upper GI bleeding'))));
   lab := gen_random_uuid();
   perform demo.w(demo.base('doctor'), jsonb_build_array(demo.lab_order('cbc', demo.base('ward'), null, demo.ago(282), lab)));
@@ -123,3 +125,5 @@ begin
       'reaction', '{"what":["hives, itch"],"severity":"mild","doctor":"do not restart · return the unit"}'::jsonb))),
     demo.e('vitals', demo.base('ward'), stay, demo.ago(41), demo.vitals(132, 78, 94, 36.9, 97, 18))));
 end $$;
+-- the pack's background work so far, drained in the load (core.drain takes 500 at a time): the cashier's lines after it count on it
+select core.drain() as drained;
