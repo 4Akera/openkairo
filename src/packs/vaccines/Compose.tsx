@@ -5,10 +5,12 @@ import { usePackEntries } from '@core/hooks/chart'
 import { useDepartment } from '@core/hooks/organization'
 import { compose } from '@core/hooks/composer'
 import type { CardEditorProps } from '@core/screens/visit/commands'
+import { packTypes } from '@core/screens/chart/sections'
+import { wordTypes } from '@core/screens/chart/words'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
 import { Chip, FormRow, Input, Segmented, cn, hm, shortDate, ymd } from '@core/ui'
 import { ROUTE_WORDS, SITE_CHOICES, doseLine, seriesOf, type DoseData } from './line'
-import { DOSE_TYPE, LIVE, addDays, ageWords, daysBetween, dosesOf, scheduleOf, statusOf, summaryOf } from './schedule'
+import { LIVE, addDays, ageWords, daysBetween, dosesOf, scheduleOf, statusOf, summaryOf } from './schedule'
 
 const small = 'h-7 text-13'
 /** the dose's card: every field the line may have said, editable */
@@ -39,8 +41,10 @@ export const cardLine = (params: Record<string, unknown>) => doseLine(params as 
 /** under the card: the child's schedule worked out, what to ask first, the optional ones not chosen, the next */
 export function VaxNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
   const { org } = useDepartment(); const patient = ctx.record?.patient
-  const entries = usePackEntries(patient?.id ?? null, [DOSE_TYPE])
+  // the chart's own read of the packs' entries (the same types, so the same read): the doses are already there
+  const entries = usePackEntries(patient?.id ?? null, [...new Set([...packTypes(), ...wordTypes()])])
   if (!patient) return null
+  if (entries.isLoading) return <p className="text-12 text-faint">Reading the child&apos;s doses…</p>
   const today = ymd(new Date().toISOString()); const sched = scheduleOf(org); const doses = dosesOf(entries.data)
   const states = statusOf(sched.rows, doses, patient.born_on, today)
   const s = summaryOf(states)
@@ -48,7 +52,10 @@ export function VaxNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
   const temp = ctx.record?.values.filter((x) => x.key === 'temperature').sort((a, b) => b.at.localeCompare(a.at))[0]
   const allergies = (ctx.record?.allergies ?? []).filter((a) => a.status === 'active')
   const live = doses.filter((x) => x.status === 'completed' && LIVE.has(x.vaccine) && daysBetween(x.given_at, today) < 28)
-  const optional = states.filter((x) => !x.row.national && (x.state === 'due' || x.state === 'overdue') && !chosen.some((c) => c?.vaccine === x.row.vaccine && c?.dose === x.row.dose))
+  // of each optional series its first dose not given, when due and not on the line already
+  const optional = [...new Set(states.filter((x) => !x.row.national).map((x) => x.row.vaccine))]
+    .map((v) => states.filter((x) => !x.row.national && x.row.vaccine === v && x.state !== 'given').sort((a, b) => a.row.dose - b.row.dose)[0])
+    .filter((x) => x && (x.state === 'due' || x.state === 'overdue') && !chosen.some((c) => c?.vaccine === x.row.vaccine && c?.dose === x.row.dose))
   // the next, as if the doses on the card were given today
   const after = summaryOf(statusOf(sched.rows, [...doses, ...items.flatMap((i) => { const v = (i.params as unknown as DoseData).vaccines
     return v && (i.params as unknown as DoseData).status !== 'not-done' ? [{ item: i.id ?? v.vaccine, vaccine: v.vaccine, dose: v.dose ?? null, status: 'completed' as const, given_at: v.given_on ?? today, source: v.source }] : [] })],

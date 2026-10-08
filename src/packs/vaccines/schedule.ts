@@ -17,11 +17,12 @@ export type State = 'given' | 'overdue' | 'due' | 'later' | 'too_late'
 export interface RowState { row: Row; state: State; given?: Dose; notGiven: Dose[]; dueOn: string; weeksLate: number }
 export interface Schedule { rows: Row[]; version: string | null; source: string | null; sample: boolean }
 
-type Org = Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'> | undefined
+/** the clinic's settings (a clinic-wide key is kept under the clinic's own id) */
+type Org = (Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'> & { organization?: { id: string } }) | undefined
 /** the schedule as the clinic has it now: the national rows, then its optional ones */
 export function scheduleOf(org: Org): Schedule {
-  const n = settingIn(org, 'vaccines.national' as never, null) as { rows?: Omit<Row, 'national'>[]; version?: string; source?: string; sample?: boolean }
-  const o = settingIn(org, 'vaccines.optional' as never, null) as { rows?: Omit<Row, 'national' | 'key'>[] }
+  const n = settingIn(org, 'vaccines.national' as never, org?.organization?.id ?? null) as { rows?: Omit<Row, 'national'>[]; version?: string; source?: string; sample?: boolean }
+  const o = settingIn(org, 'vaccines.optional' as never, org?.organization?.id ?? null) as { rows?: Omit<Row, 'national' | 'key'>[] }
   const national = (n.rows ?? []).map((r) => ({ ...r, national: true }))
   const optional = (o.rows ?? []).map((r) => ({ ...r, key: `${r.vaccine}${r.dose}`, national: false }))
   return { rows: [...national, ...optional], version: n.version ?? null, source: n.source ?? null, sample: !!n.sample }
@@ -85,16 +86,23 @@ export function summaryOf(states: RowState[]): Summary {
 /** the vaccines' names, joined: "OPV 5, MMR 1" */
 export const names = (xs: RowState[]) => xs.map((s) => s.row.name).join(', ')
 
-/** what a child is due today and which earlier doses the card may show: worked out from the birth date and the doses here */
+/** a row's age in months as its label says it ("Birth" 0, "4 mo" 4, "12–15 mo" 12; none for "in pregnancy") */
+export const nominalMonths = (age: string) => /birth/i.test(age) ? 0 : Number(age.match(/\d+/)?.[0] ?? NaN)
+/** what a child is due today and which earlier doses the card may show: today's are the national rows of the latest age the child has
+ *  reached that are due, and of each optional series its first dose not given; the earlier national rows due are the card's to copy */
 export function whatFor(s: Schedule, birth: string | null | undefined, doses: Dose[], today: string) {
   const states = statusOf(s.rows, doses, birth, today)
+  if (!birth) return { now: [] as RowState[], earlier: [] as RowState[], tooLate: [] as RowState[] }
+  const months = monthsAt(birth.slice(0, 10), today)
   const due = states.filter((x) => x.state === 'due' || x.state === 'overdue')
-  // a row due on a day before the latest one due now: the card may already show it
-  const latestDue = due.filter((x) => x.row.national).map((x) => x.row.earliest_days ?? 0).reduce((a, b) => Math.max(a, b), 0)
-  const earlier = due.filter((x) => x.row.national && (x.row.earliest_days ?? 0) < latestDue)
-  return { now: due.filter((x) => !earlier.includes(x)), earlier, tooLate: states.filter((x) => x.state === 'too_late' && !x.row.national) }
+  const nat = due.filter((x) => x.row.national)
+  const reached = nat.map((x) => nominalMonths(x.row.age)).filter((m) => !Number.isNaN(m) && m <= months)
+  const age = reached.length ? Math.max(...reached) : Math.max(-1, ...nat.map((x) => nominalMonths(x.row.age)).filter((m) => !Number.isNaN(m)))
+  const firstOf = (series: string) => states.filter((x) => !x.row.national && x.row.vaccine === series && x.state !== 'given').sort((a, b) => a.row.dose - b.row.dose)[0]
+  const optional = [...new Set(states.filter((x) => !x.row.national).map((x) => x.row.vaccine))].map(firstOf).filter((x): x is RowState => !!x)
+  return { now: [...nat.filter((x) => nominalMonths(x.row.age) === age), ...optional.filter((x) => x.state === 'due' || x.state === 'overdue')],
+    earlier: nat.filter((x) => nominalMonths(x.row.age) < age), tooLate: optional.filter((x) => x.state === 'too_late') }
 }
-
 /** the live vaccines: none in the four weeks before another live one */
 export const LIVE = new Set(['mmr', 'opv', 'bcg', 'var', 'rota', 'yf'])
 

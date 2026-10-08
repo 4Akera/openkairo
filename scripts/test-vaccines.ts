@@ -91,9 +91,12 @@ test('the words: the chip, the Summary line, the banner and the row mark', () =>
 test('the walk-in: what is due today as chips, the earlier doses the card may show', () => {
   const seif = addDays(today, -122)   // 4 months, never here
   const w = whatFor(sched, seif, [], today)
-  assert.deepEqual(w.now.map((x) => x.row.key), ['opv1', 'penta1'], 'the latest due row now')
+  assert.deepEqual(w.now.map((x) => x.row.key), ['opv1', 'penta1'], 'the latest age reached in this test schedule (no 4-month row): 2 months')
   assert.deepEqual(w.earlier.map((x) => x.row.key), ['hepb0', 'opv0', 'bcg'], 'the birth doses: from the card')
-  assert.deepEqual(w.tooLate.map((x) => x.row.key), ['rota1'])
+  assert.deepEqual(w.tooLate.map((x) => x.row.key), ['rota1'], 'rotavirus 1 past its age; its later dose not offered')
+  const f = whatFor(sched, birth, farida, today)
+  assert.deepEqual(f.now.map((x) => x.row.key), ['opv5', 'mmr1', 'pcv4'], 'Farida: the 12-month row, and the pneumococcal booster')
+  assert.deepEqual(f.earlier, [])
 })
 test('a dose’s line, as the record says it', () => {
   assert.equal(doseLine({ status: 'completed', drug: { text: 'OPV', codings: [] }, route: 'oral', vaccines: { vaccine: 'opv', dose: 1, source: 'card', given_on: '2025-11-09' } }),

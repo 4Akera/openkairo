@@ -28,7 +28,7 @@ select t.ok((select x.screens -> 'screens' from core.setups x where x.key = 'vac
   'the Vaccination room opens on its own list');
 select t.ok(core.department_uses('00000000-0000-0000-0000-0000000000a1', :'room', 'vaccines'), 'it ticks vaccines');
 select t.ok(jsonb_array_length((select k.shape -> 'properties' -> 'rows' -> 'default' from core.setting_keys k where k.key = 'vaccines.optional')) >= 8, 'the optional rows a clinic offers, the setting''s default');
-select t.ok((select s.replaces from core.screens s where s.key = 'vaccines.room') = '{base.queue}', 'it stands in for the queue');
+select t.ok((select s.replaces from core.screens s where s.key = 'vaccines.room') = '{}', 'a tab beside the queue elsewhere: it stands in for no base screen');
 
 \echo '── a dose: written by a nurse where the department ticks the pack (everyday), refused where it does not'
 select t.as(:'nurse');

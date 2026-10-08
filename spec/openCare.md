@@ -1602,14 +1602,16 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   MedicationAdministration; its table `vaccines.doses` for the room. The schedule: the national rows are the setting `vaccines.national`
   (the MOHP's, birth to 18 months, its version and source), written only by the import's action `import:vaccines.national` that no role
   holds, so it shows read-only — the demo loads a sample said to be one; the optional rows are the clinic's own `vaccines.optional`
-  (pneumococcal, rotavirus, varicella, hepatitis A, influenza, tetanus in pregnancy). Due is worked out from the birth date, the doses
+  (pneumococcal, rotavirus, varicella, hepatitis A, influenza, tetanus in pregnancy: the setting's declared default until the clinic
+  saves its own, since a starter setup carries only a department's settings). Due is worked out from the birth date, the doses
   and each row's earliest age and the interval after the last dose of its series; overdue four weeks after; too late past a latest age
   (rotavirus); tetanus in pregnancy only while the base's pregnancy stands. Client (`src/packs/vaccines/`): `/vax mmr 1, opv 5` (lot,
   exp, a site, `card <date>`, `not <why>`), the dose's card (given or not, here or from the card, lot, expiry, site chips, given by) and
   under it the child's schedule (due and overdue, temperature, allergies, a live vaccine in the last four weeks, the optional ones not
   chosen as chips, the next worked out); the Vaccines section (the national rows by age, given with its date and *card* or *here*, not
   given with why, overdue, due; the optional ones apart), its chip ("2 overdue"), Summary line and banner word ("2 vaccines overdue");
-  the room's own screen `vaccines.room` in place of the queue (Due today: Here and Not here yet; This week; Overdue · to call with the
+  the room's own screen `vaccines.room` (the Vaccination room's line alone; a tab beside the queue in a clinic using the pack, as drawn
+  for family medicine) (Due today: Here and Not here yet; This week; Overdue · to call with the
   phone and *Called*, a note on the record; Given today) and its walk-in (who, then what is due today as chips, the earlier doses on the
   MOHP card to copy, Start checks the child in and opens the visit with each dose drafted). The setup `vaccines.room`; the Vaccinator
   (`vaccines.vaccinator`, built on Nurse: also checks a walk-in in, registers a child, finishes the visit). Demo: the Vaccination room,
@@ -1619,7 +1621,7 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (bookings') are left out; the room's marks on other departments' queues ("9-month vaccines due") wait for a mark that reads a pack's
   data (a core door, asked below).
 - *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chronic_care`, migration 24, role block e1 unused; pictures #chronic-visit,
-  #chronic-list): the clinic's conditions, targets and checks as one setting `chronic_care.conditions` (the drawn table: diabetes,
+  #chronic-list): the clinic's conditions, targets and checks as one setting `chronic_care.conditions` (its declared default the drawn table: diabetes,
   hypertension, CKD, heart failure, asthma, COPD; a condition's codes are the register, ICD-10 by its start; a target a measure, a sign
   and a value — a pressure's two; a check its codes and every how many months, sooner while off target; the list's window, 18 months).
   Registers come from the problem list (active; resolved takes the patient off); the measures are the base's latest values by code; a
@@ -1645,7 +1647,7 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   #family-folder, #family-day, #family-checks): the household as the pack's own table (`family_medicine.households`: the file number by
   the unit, address, phone; `family_medicine.members`: who belongs and how, one file a patient, Erase reaching it), written through its
   ops — `of_patient` and `find` for whoever finds patients, `start`, `join`, `leave` for whoever registers them (manage:patients) — only
-  where the department ticks the pack. The checks due by age and sex as the setting `family_medicine.checks` (the drawn table; who is a
+  where the department ticks the pack. The checks due by age and sex as the setting `family_medicine.checks` (its declared default the drawn table; who is a
   sex, an age from and to, a BMI from an age; met by codes, never ticked); `family_medicine.files` (New patient asks for a file, on).
   Client: the Family section (the file, its address and phone, each member — a name opening their chart — with what they are due: the
   banner words of the packs this department uses, read through the core's banner-word registry from each member's record, so no pack
@@ -1656,8 +1658,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   file at an address; or not now). The setup `family_medicine.medicine` (Family medicine: its queue and Families). Demo: Dr. Hazem Ouda
   (family@demo.com); file 1182 — Ayman Abdelrahman, his wife Basma Hegazy (in consult; sugar and cervical screening due), his mother
   Zeinab Hamouda (diabetes, HbA1c late; waiting), Yassin (6, waiting) and Malak (14 months). The clinic's choices
-  (`seeds/clinic_packs.sql`): Family medicine ticks chronic care and the immunisation pack after its own, with the immunisation list as a
-  tab; the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/family_medicine.sql`, `npm run
+  (`seeds/clinic_packs.sql`): Family medicine ticks chronic care and the immunisation pack after its own (its line by default: the queue,
+  Families, the immunisation list); the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/family_medicine.sql`, `npm run
   test:family_medicine`. *Not as drawn, and why:* the key is `family_medicine` (the core's word "family" — a patient's family name, the
   chart's families of types — would read as naming the pack); Book (bookings') and the Gynaecology section (ObGyn's) are left out; the
   file number is not a banner word (it would need the pack's read on every chart); the queue's per-pack marks (Q50) wait for the core door

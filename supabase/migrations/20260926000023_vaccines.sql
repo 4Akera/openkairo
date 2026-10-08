@@ -91,8 +91,9 @@ select core.declare_type('vaccines.dose', 1, 'vaccines',
   'vaccines.dose_line(jsonb)', array['MedicationAdministration', 'Immunization'], base_type => 'given', feeds => array['vaccines.doses'],
   to_fhir => 'vaccines.dose_fhir(jsonb)', labels => '{"en":"Vaccine","ar":"تطعيم"}');
 
--- the room's own list, in place of the queue there (rule 4: a list of work that is not places); a tab beside the queue elsewhere
-select core.declare_screen('vaccines.room', 'vaccines', 'visits', '{"en":"Vaccines"}', 'write:vaccines.dose', array['base.queue']);
+-- the room's own list (rule 4: a list of work that is not places): the Vaccination room's line is this list alone (its setup); in a
+-- clinic using the pack it is a tab beside the queue, as drawn for family medicine, so it declares no base screen it stands in for
+select core.declare_screen('vaccines.room', 'vaccines', 'visits', '{"en":"Vaccines"}', 'write:vaccines.dose');
 
 -- the national schedule (Q26 a): the MOHP's rows, loaded read-only with their date and source and replaced by an import when the ministry
 -- changes them (the action that writes it, import:vaccines.national, is held by no role: the import writes it). The demo loads a sample,

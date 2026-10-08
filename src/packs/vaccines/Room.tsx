@@ -12,7 +12,7 @@ import { newId, useWrite } from '@core/hooks/writes'
 import { oneSet } from '@core/db/entries'
 import type { Identity, QueueRow } from '@core/db/types'
 import type { ScreenProps } from '@core/screens/registry'
-import { Button, Callout, Card, Empty, Input, Kbd, ListRow, ListSection, ScreenFrame, Spinner, Tag, errorText, minutesSince, shortDate, ymd, type ScreenView } from '@core/ui'
+import { Button, Callout, Card, Empty, Input, Kbd, ListRow, ListSection, ScreenFrame, Spinner, errorText, minutesSince, shortDate, ymd, type ScreenView } from '@core/ui'
 import { rowDose, useRoomDoses } from './data'
 import { addDays, ageWords, names, scheduleOf, statusOf, summaryOf, type Dose, type Schedule } from './schedule'
 import { VaxWalkIn } from './WalkIn'
@@ -59,9 +59,9 @@ export function VaccinesRoom({ dept }: ScreenProps) {
   const called = (c: Child, what: string) => w.mutate(oneSet([{ id: newId(), type: 'note', patient_id: c.id, department_id: dept.id, data: { kind: 'other', text: `Called ${phoneOf(c.identity) ?? ''} about overdue vaccines: ${what}`.replace(/\s+/g, ' ') } }]),
     { onSuccess: () => setSaid(`${nameOf(c.identity)}: the call is noted`) })
   const hereRow = (r: QueueRow) => { const c = children.get(r.patient.id); const p = c ? placeOf(sched, c, today) : null
-    const due = p?.dueNow.length ? names(p.dueNow) : 'nothing recorded here yet'
+    const due = p?.dueNow.length ? names(p.dueNow) : c ? 'nothing due by the schedule' : 'no dose recorded here'
     return <ListRow key={r.id} number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={`${ageWords(c?.identity?.birth_date, today) || r.patient.age} ${r.patient.sex[0]?.toUpperCase() ?? ''}`}
-      status={<>{r.is_first && !c && <Tag tone="info">walk-in</Tag>}<span className="truncate">{due}</span></>}
+      status={<span className="truncate">{due}</span>}
       marks={p?.sum.overdue.length ? [{ key: 'late', word: `overdue ${Math.max(...p.sum.overdue.map((s) => s.weeksLate))} wk`, tone: 'warn' }] : []}
       who={r.band === 'consult' ? r.assignee_name : null} minutes={minutesSince(r.present_at ?? r.arrived_at)} onOpen={() => navigate(`/visit/${r.id}`)} /> }
   const childRow = (x: typeof all[number], what: string, more?: { marks?: { key: string; word: string; tone?: 'warn' }[]; who?: string | null; actions?: React.ReactNode }) =>

@@ -10,7 +10,7 @@ import type { Identity, TableRead } from '@core/db/types'
 import { useDepartment } from '@core/hooks/organization'
 import type { ScreenProps } from '@core/screens/registry'
 import { Card, Chip, Empty, Input, ScreenFrame, Spinner, cn, errorText, shortDate, ymd, type ScreenView } from '@core/ui'
-import { MEASURES, careOf, conditionsOf, offWords, summaryOf, type CareSummary, type ConditionState, type Done, type OwnTarget, type ProblemIn, type Value } from './model'
+import { MEASURES, careOf, conditionsOf, offWords, summaryOf, targetWords, type CareSummary, type ConditionState, type Done, type OwnTarget, type ProblemIn, type Value } from './model'
 
 type View = 'off' | 'due' | 'all'
 interface Row { id: string; identity: Identity | null; state: ConditionState[]; sum: CareSummary; last: string | null }
@@ -73,8 +73,8 @@ export function ChronicList({ dept }: ScreenProps) {
         <tbody>{shown.map((r) => <tr key={r.id} onClick={() => navigate(`/patient/${r.id}`)} className="cursor-pointer border-b border-line last:border-0 hover:bg-hover">
           <td className="px-3 py-2"><span className="me-2 font-mono text-12 text-faint">{r.identity?.number}</span><span className="font-medium text-fg">{name(r.identity)}</span> <span className="text-12 text-faint">{age(r.identity)}</span></td>
           <td className="px-3 py-2 text-muted">{r.state.map((s) => s.condition.name.toLowerCase()).join(' · ')}</td>
-          <td className={cn('px-3 py-2', r.sum.offTarget.length && 'font-medium text-warn')}>{r.sum.offTarget.map((m) => offWords(m) + (m.target && 'own' in m.target && m.target.own ? ` own target` : '')).join(' · ') || '—'}</td>
-          <td className={cn('px-3 py-2', r.sum.due.length && 'text-warn')}>{r.sum.due.map((c) => c.check.name.toLowerCase() + (c.months != null && c.months > 12 ? ` (${Math.floor(c.months / 12)} years)` : '')).join(' · ') || '—'}</td>
+          <td className={cn('px-3 py-2', r.sum.offTarget.length && 'font-medium text-warn')}>{r.sum.offTarget.map((m) => offWords(m) + (m.target && 'own' in m.target && m.target.own ? ` · own target ${targetWords(m.target)}` : '')).join(' · ') || '—'}</td>
+          <td className={cn('px-3 py-2', r.sum.due.length && 'text-warn')}>{r.sum.due.map((c) => c.check.name.toLowerCase() + (c.months != null && c.months > 12 ? ` (${c.months} months)` : c.last ? '' : ' (never)')).join(' · ') || '—'}</td>
           <td className="px-3 py-2 text-muted">{r.last ? (ymd(r.last) === ymd(new Date().toISOString()) ? 'today' : shortDate(r.last)) : '—'}</td></tr>)}
           {!shown.length && <tr><td colSpan={5}><Empty>{rows.length ? 'Nobody here in this view.' : 'No patient seen here has a condition of the clinic’s list yet.'}</Empty></td></tr>}</tbody></table>
         <p className="border-t border-line px-3 py-2 text-12 text-faint">Patients seen in this clinic in the last {cs.window_months} months whose problem list has a condition of the clinic&apos;s list; a row opens the chart.</p></Card>}

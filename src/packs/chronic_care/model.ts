@@ -12,8 +12,9 @@ export interface Target { measure: string; op: Op; value: number; value2?: numbe
 export interface Check { key?: string; name: string; codes: string[]; every_months: number; off_target_months?: number }
 export interface Condition { key: string; name: string; codes: string[]; targets?: Target[]; checks?: Check[] }
 export interface Conditions { window_months: number; conditions: Condition[] }
-type Org = Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'> | undefined
-export const conditionsOf = (org: Org): Conditions => { const s = settingIn(org, 'chronic_care.conditions' as never, null) as Partial<Conditions>
+/** the clinic's settings (a clinic-wide key is kept under the clinic's own id) */
+type Org = (Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'> & { organization?: { id: string } }) | undefined
+export const conditionsOf = (org: Org): Conditions => { const s = settingIn(org, 'chronic_care.conditions' as never, org?.organization?.id ?? null) as Partial<Conditions>
   return { window_months: s.window_months ?? 18, conditions: s.conditions ?? [] } }
 
 /** the measures a target may name: their name, unit, the codes whose latest value it reads (a pressure's two) */
@@ -55,7 +56,8 @@ const meets = (t: Target, v: number, v2?: number | null) => { const ok = (a: num
 export function measureOf(key: string, c: Condition, values: Value[], own: OwnTarget[]): Measure {
   const m = MEASURES[key] ?? { name: key, codes: [] }
   const vs = latest(values, m.codes); const v2 = m.codes2 ? latest(values, m.codes2) : []
-  const mine = own.filter((t) => t.measure === key && t.condition === c.key).sort((a, b) => b.at.localeCompare(a.at))[0]
+  // the patient's own target for this measure wins (one written for this condition first, else for another of theirs)
+  const mine = own.filter((t) => t.measure === key).sort((a, b) => Number(b.condition === c.key) - Number(a.condition === c.key) || b.at.localeCompare(a.at))[0]
   const target = mine ? { ...mine, own: mine } : c.targets?.find((t) => t.measure === key) ?? null
   const value = vs[0]?.value ?? null; const second = v2.find((x) => x.at === vs[0]?.at)?.value ?? v2[0]?.value ?? null
   return { key, name: m.name, unit: m.unit, value, value2: m.codes2 ? second : undefined, at: vs[0]?.at ?? null, trend: vs.slice(0, 6).map((x) => x.value).reverse(),

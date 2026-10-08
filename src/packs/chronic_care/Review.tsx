@@ -67,6 +67,6 @@ export function ReviewNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
       <Tag tone={c.due ? 'warn' : 'neutral'}>{c.due ? 'due' : 'not due'}</Tag><span className="font-medium text-fg">{c.check.name}</span>
       <span className="text-12 text-muted">{c.last ? `last ${shortDate(c.last)}` : 'never'}{!c.due && c.dueOn ? ` · next ${shortDate(c.dueOn)}` : ` · every ${c.check.every_months} months`}</span>
       {c.due && <span className={cn('ms-auto text-12', drafted(c.check.codes) ? 'text-ok' : 'text-faint')}>{drafted(c.check.codes) ? 'ordered above · × leaves it out' : 'no service here does it: /order'}</span>}</li>)}</ul>
-    {atRisk && <p className="text-13 text-fg" dir="rtl" lang="ar"><span className="text-12 text-faint" dir="ltr">Tell {patient.sex === 'female' ? 'her' : 'him'}: </span>افحص رجليك كل يوم، وما تمشيش حافي في البيت</p>}
+    {atRisk && <p className="text-13 text-fg"><span className="text-12 text-faint">Tell {patient.sex === 'female' ? 'her' : 'him'}: </span><span dir="rtl" lang="ar">افحص رجليك كل يوم، وما تمشيش حافي في البيت</span></p>}
   </div>
 }
