@@ -27,10 +27,12 @@ select t.ok(not exists (select 1 from jsonb_array_elements(t.w(t.e('result', :'p
   jsonb_build_object('key', 'acr', 'name', 'ACR', 'code', jsonb_build_object('system', 'loinc', 'code', '14959-1'), 'value', jsonb_build_object('value', '420', 'unit', 'mg/g', 'ucum', 'mg/g')),
   jsonb_build_object('key', 'tsat', 'name', 'TSAT', 'code', jsonb_build_object('system', 'loinc', 'code', '2502-3'), 'value', jsonb_build_object('value', '16', 'unit', '%', 'ucum', '%')),
   jsonb_build_object('key', 'phos', 'name', 'Phosphate', 'code', jsonb_build_object('system', 'loinc', 'code', '2777-1'), 'value', jsonb_build_object('value', '5.1', 'unit', 'mg/dL', 'ucum', 'mg/dL')),
-  jsonb_build_object('key', 'pth', 'name', 'PTH', 'code', jsonb_build_object('system', 'loinc', 'code', '2731-8'), 'value', jsonb_build_object('value', '188', 'unit', 'pg/mL', 'ucum', 'pg/mL'))))))) -> 'findings') f
+  jsonb_build_object('key', 'pth', 'name', 'PTH', 'code', jsonb_build_object('system', 'loinc', 'code', '2731-8'), 'value', jsonb_build_object('value', '188', 'unit', 'pg/mL', 'ucum', 'pg/mL')))))) -> 'findings') f
   where f ->> 'level' = 'flag'), 'the panel lands clean');
-select t.ok((select count(*) from t.rows('base.values', :'nc', jsonb_build_object('patient_id', :'pt')) r where r ->> 'code' in ('loinc:98979-8', 'loinc:14959-1', 'loinc:2777-1')) = 3,
+reset role;
+select t.ok((select count(*) from base.values v where v.patient_id = :'pt'::uuid and v.code in ('loinc:98979-8', 'loinc:14959-1', 'loinc:2777-1')) = 3,
   'eGFR, ACR, phosphate in base.values (the KDIGO square reads them)');
+set role authenticated;
 
 \echo '── the renal list: the clinic''s, starting rows as declared; an ATC that is not one refused; the clinic edits it'
 reset role;

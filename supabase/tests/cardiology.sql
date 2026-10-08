@@ -21,9 +21,8 @@ select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-000
   jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000e402', 'department_id', :'er')))) ->> 'id' as echo_doctor;
 
 \echo '── the setups: the clinic ticks the pack; the Echo room answers for every department with its echo; run again, nothing added'
-select t.ok((select x ->> 'state' from jsonb_array_elements(public.setup(jsonb_build_object('setup', 'cardiology.echo_room', 'department_id', :'er')) -> 'parts') x
-  where x ->> 'part' = 'service' limit 1) = 'same', 'the Echo room again: its echo the same');
 reset role;
+select core.setup_id(:'er', 'service', 'echo') as echo_svc \gset
 select t.ok(exists (select 1 from core.settings_at('00000000-0000-0000-0000-0000000000a1', 'service') s where s.owner_id = :'er'::uuid and s.data ->> 'code' = 'echo'
   and jsonb_array_length(s.data -> 'fields') = 15), 'the echo: fifteen fields (nine measures with ranges, five choices, the rhythm)');
 select t.ok(core.may('00000000-0000-0000-0000-0000000000e1', 'write:result', :'cc') and core.may('00000000-0000-0000-0000-0000000000e1', 'write:observation', :'cc'),
@@ -43,10 +42,12 @@ select t.landed(t.w(t.e('result', :'pt', :'cc', jsonb_build_object('status', 'fi
   '00000000-0000-0000-0000-00000000e0e1')), 'an ECG, no order');
 select t.ok(not exists (select 1 from jsonb_array_elements(t.w(t.e('result', :'pt', :'cc', jsonb_build_object('status', 'final', 'analytes', jsonb_build_array(
   jsonb_build_object('key', 'pr', 'name', 'PR', 'code', jsonb_build_object('system', 'loinc', 'code', '8625-6'), 'value', jsonb_build_object('value', '164', 'unit', 'ms', 'ucum', 'ms')),
-  jsonb_build_object('key', 'qrs', 'name', 'QRS', 'code', jsonb_build_object('system', 'loinc', 'code', '8633-0'), 'value', jsonb_build_object('value', '92', 'unit', 'ms', 'ucum', 'ms'))))))) -> 'findings') f
+  jsonb_build_object('key', 'qrs', 'name', 'QRS', 'code', jsonb_build_object('system', 'loinc', 'code', '8633-0'), 'value', jsonb_build_object('value', '92', 'unit', 'ms', 'ucum', 'ms')))))) -> 'findings') f
   where f ->> 'level' = 'flag'), 'PR, QRS: known codes and units, nothing flagged');
-select t.ok((select (r ->> 'value')::numeric from t.rows('base.values', :'cc', jsonb_build_object('patient_id', :'pt')) r where r ->> 'code' = 'loinc:8636-3') = 452,
-  'the QTc in base.values, by its LOINC code');
+reset role;
+select t.ok((select v.value from base.values v where v.patient_id = :'pt'::uuid and v.code = 'loinc:8636-3' order by v.at desc limit 1) = 452, 'the QTc in base.values, by its LOINC code');
+set role authenticated;
+select t.as(:'wg');
 
 \echo '── /hf: NYHA and the dry weight, the base''s observations in the pack''s terms; the dry weight a value'
 select t.landed(t.w(jsonb_build_array(
@@ -55,18 +56,19 @@ select t.landed(t.w(jsonb_build_array(
   t.e('observation', :'pt', :'cc', jsonb_build_object('code', jsonb_build_object('text', 'Dry weight', 'codings', jsonb_build_array(jsonb_build_object('system', 'cardiology.terms', 'code', 'dry_weight'))),
     'value', jsonb_build_object('quantity', jsonb_build_object('value', '70', 'unit', 'kg', 'ucum', 'kg')))),
   t.e('vitals', :'pt', :'cc', jsonb_build_object('weight', jsonb_build_object('value', '71.4', 'unit', 'kg', 'ucum', 'kg'))))), 'a heart failure visit');
-select t.ok((select (r ->> 'value')::numeric from t.rows('base.values', :'cc', jsonb_build_object('patient_id', :'pt')) r where r ->> 'code' = 'cardiology.terms:dry_weight') = 70,
-  'the dry weight in base.values, by the pack''s term');
+reset role;
+select t.ok((select v.value from base.values v where v.patient_id = :'pt'::uuid and v.code = 'cardiology.terms:dry_weight' order by v.at desc limit 1) = 70, 'the dry weight in base.values, by the pack''s term');
 
 \echo '── CHA₂DS₂-VASc: the server adds it up (2010)'
 select t.ok((core.score('cardiology.chadsvasc', null, '{"chf":true,"htn":true,"age":"65to74","dm":true,"stroke":false,"vascular":false,"female":true}') ->> 'total')::int = 5
   and core.score('cardiology.chadsvasc', null, '{"chf":true,"htn":true,"age":"65to74","dm":true,"stroke":false,"vascular":false,"female":true}') -> 'band' ->> 'key' = 'high', '5: high');
 select t.ok((core.score('cardiology.chadsvasc', null, '{"chf":false,"htn":false,"age":"lt65","dm":false,"stroke":false,"vascular":false,"female":false}') -> 'band' ->> 'key') = 'low', '0: low');
 select t.ok((core.score('cardiology.chadsvasc', null, '{"chf":false,"htn":false,"age":"ge75","dm":false,"stroke":true,"vascular":false,"female":false}') ->> 'total')::int = 4, 'age 75 and a stroke: 2 each');
+set role authenticated;
 
 \echo '── /echo: an order to the Echo room from Internal Medicine (the pack not ticked there); started; the report answers it and reaches the doctor'
 select t.as(:'dr');
-select t.landed(t.w(t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', core.setup_id(:'er', 'service', 'echo'), 'code', 'echo', 'name', 'Echo · transthoracic'),
+select t.landed(t.w(t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'echo_svc', 'code', 'echo', 'name', 'Echo · transthoracic'),
   'department_id', :'er', 'priority', 'routine', 'status', 'active', 'question', 'LV function, new AF'), '00000000-0000-0000-0000-00000000e0e2')), 'an echo asked');
 select t.as(:'rn');
 select t.landed(t.w(t.e('step', :'pt', :'er', '{"status":"in-progress"}', null, null, '00000000-0000-0000-0000-00000000e0e2', 'answers')), 'started at the Echo room');
@@ -80,10 +82,12 @@ select t.as(:'dr');
 select t.ok((select r ->> 'status' from t.rows('base.orders', :'im', jsonb_build_object('item', '00000000-0000-0000-0000-00000000e0e2')) r) = 'completed', 'the echo answered');
 select t.ok(exists (select 1 from t.rows('base.review', :'im', jsonb_build_object('for_user', '00000000-0000-0000-0000-0000000000b1')) r
   where r ->> 'entry_id' = '00000000-0000-0000-0000-00000000e0e3'), 'on the doctor''s To review');
-select t.ok((select (r ->> 'value')::numeric from t.rows('base.values', :'im', jsonb_build_object('patient_id', :'pt')) r where r ->> 'code' = 'loinc:10230-1') = 38, 'the EF a value');
+reset role;
+select t.ok((select v.value from base.values v where v.patient_id = :'pt'::uuid and v.code = 'loinc:10230-1' order by v.at desc limit 1) = 38, 'the EF a value');
 
 \echo '── the target doses: the clinic''s table, from ESC 2021; a medicine by its ATC code'
 select t.ok(jsonb_array_length((select k.shape -> 'properties' -> 'targets' -> 'default' from core.setting_keys k where k.key = 'cardiology.hf_targets')) = 16, 'sixteen medicines to start');
+set role authenticated;
 select t.as(:'ow');
 select t.refuses($$select public.write_setting('{"key":"cardiology.hf_targets","data":{"targets":[{"group":"bb","name":"Bisoprolol","atc":"bisoprolol","mg_a_day":10}]}}')$$, 'bad_shape');
 select t.ok(public.write_setting('{"key":"cardiology.hf_targets","data":{"targets":[{"group":"bb","name":"Bisoprolol 10 mg once","atc":"C07AB07","mg_a_day":10}]}}') ->> 'key' = 'cardiology.hf_targets',

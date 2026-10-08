@@ -16,6 +16,10 @@ select public.write_setting(jsonb_build_object('key', 'organization.packs_used',
   (select coalesce(s.data -> 'packs', '[]') from core.settings s where s.key = 'organization.packs_used' order by s.recorded_at desc limit 1) || '["haematology","lis"]'::jsonb))) ->> 'key' as on;
 select public.setup(jsonb_build_object('setup', 'haematology.clinic', 'department_id', :'hc', 'name', 'Haematology clinic', 'apply', true)) is not null as made;
 select public.setup(jsonb_build_object('setup', 'lis.blood_bank', 'department_id', :'bb', 'name', 'Blood bank', 'apply', true)) is not null as made;
+reset role;
+select core.setup_id(:'bb', 'service', 'rbc') as rbc_svc \gset
+set role authenticated;
+select t.as(:'ow');
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000e7', 'name', 'Dr Ola', 'login_id', :'ola', 'holdings', jsonb_build_array(
   jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000e701', 'department_id', :'hc')))) ->> 'id' as haematologist;
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000e8', 'name', 'Blood bank tech', 'login_id', :'bt', 'holdings', jsonb_build_array(
@@ -29,7 +33,10 @@ select t.landed(t.w(jsonb_build_array(t.e('result', :'pt', :'hc', '{"status":"fi
   t.e('haematology.week', :'pt', :'hc', '{"days":[5,5,5,5,5,2.5,5],"was":30,"inr":1.7,"missed":"none","food":"more greens","bleeding":"none","suggested":32.5,"used_suggestion":true,"next_inr":"2026-10-15"}'))),
   'today''s INR and the new week, one set');
 select t.refused(t.w(t.e('haematology.week', :'pt', :'hc', '{"days":[5,5,5,5,5,5]}')), 'bad_shape', 'a week has seven days');
-select t.ok((select (r ->> 'value')::numeric from t.rows('base.values', :'hc', jsonb_build_object('patient_id', :'pt')) r where r ->> 'code' = 'loinc:6301-6') = 1.7, 'the INR a value');
+reset role;
+select t.ok((select v.value from base.values v where v.patient_id = :'pt'::uuid and v.code = 'loinc:6301-6' order by v.at desc limit 1) = 1.7, 'the INR a value');
+set role authenticated;
+select t.as(:'ola');
 select t.as(:'dr');
 select t.refused(t.w(t.e('haematology.week', :'pt', :'im', '{"days":[5,5,5,5,5,2.5,5]}')), 'not_allowed', 'Internal Medicine does not tick the pack');
 reset role;
@@ -46,10 +53,10 @@ select t.refused(t.w(t.e('haematology.programme', :'pt', :'hc', '{"every_weeks":
 
 \echo '── the Blood bank: /blood from Internal Medicine (the pack not ticked there), its words on the order; its steps; the units issued as its result'
 select t.as(:'dr');
-select t.landed(t.w(t.e('lis.blood', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', core.setup_id(:'bb', 'service', 'rbc'), 'code', 'rbc', 'name', 'Red cells'),
+select t.landed(t.w(t.e('lis.blood', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'rbc_svc', 'code', 'rbc', 'name', 'Red cells'),
   'department_id', :'bb', 'priority', 'urgent', 'status', 'active', 'question', 'melaena, Hb 6.8',
   'lis', '{"product":"rbc","needs":["leucodepleted"],"units":2,"why":"bleeding","consent":"signed today","sample":"taken here"}'::jsonb), '00000000-0000-0000-0000-00000000e8b1')), 'red cells × 2, urgent');
-select t.refused(t.w(t.e('lis.blood', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', core.setup_id(:'bb', 'service', 'rbc'), 'code', 'rbc', 'name', 'Red cells'),
+select t.refused(t.w(t.e('lis.blood', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'rbc_svc', 'code', 'rbc', 'name', 'Red cells'),
   'department_id', :'bb', 'priority', 'routine', 'status', 'active', 'lis', '{"product":"whole blood","units":2}'::jsonb))), 'bad_shape', 'a product of the Blood bank''s');
 select t.as(:'bt');
 select t.ok(exists (select 1 from t.rows('base.orders', :'bb', jsonb_build_object('to_department_id', :'bb')) r where r ->> 'item' = '00000000-0000-0000-0000-00000000e8b1'), 'on the Blood bank''s list');

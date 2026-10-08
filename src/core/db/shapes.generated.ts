@@ -251,7 +251,6 @@ export type LisTransfusion = {
   drug?: Concept
   expiry?: string
   lis?: {
-    checked_by: string[]
     checks?: string[]
     ended?: string
     group?: string
@@ -262,6 +261,7 @@ export type LisTransfusion = {
       told?: string
       what?: ('hives, itch' | 'fever, rigors' | 'breathless' | 'BP fell' | 'back pain, dark urine')[]
     }
+    second: string
     signs?: {
       at?: string
       dia?: number

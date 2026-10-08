@@ -47,4 +47,4 @@ select t.ok(not exists (select 1 from jsonb_array_elements(t.w(jsonb_build_array
   jsonb_build_object('key', 'ratio', 'name', 'FEV1/FVC before', 'code', jsonb_build_object('system', 'loinc', 'code', '19926-5'), 'value', jsonb_build_object('value', '0.57', 'unit', '', 'ucum', '{ratio}')),
   jsonb_build_object('key', 'fev1_z', 'name', 'FEV1 z', 'value', jsonb_build_object('value', '-2.9', 'unit', '', 'ucum', '{score}'))))),
   t.e('observation', :'pt', :'cc', jsonb_build_object('code', jsonb_build_object('text', 'Inhaler technique', 'codings', jsonb_build_array(jsonb_build_object('system', 'respiratory.terms', 'code', 'inhaler_technique'))),
-    'value', jsonb_build_object('text', 'correct · Breezhaler')))))) -> 'findings') f where f ->> 'level' = 'flag'), 'spirometry and the technique, clean');
+    'value', jsonb_build_object('text', 'correct · Breezhaler'))))) -> 'findings') f where f ->> 'level' = 'flag'), 'spirometry and the technique, clean');
