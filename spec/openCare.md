@@ -685,7 +685,9 @@ it works ("/x is used in: …").
   built from the kit (`@core/ui`) and the tokens only (`opencare/tokens-only`, §4.6 Design system), so it reads natively in both
   themes; a record block of its own type goes through `registerRenderer(type, { Block })`, drawn inside the chart's shell. A colour
   the tokens lack is asked for in core, never invented in the pack.
-- **No new packs until the owner says so.** The packs he asked for: pharmacy and laboratory (§5.3), and billing (§5.4, to build).
+- **No new packs until the owner says so.** The packs he asked for: pharmacy and laboratory (§5.3), billing (§5.4, to build), radiology (§5.5, 2026-10-08), and the departments of beds — ward, ER, ICU, CCU, the labour ward and dialysis, "all at once, they share
+  common things" (§5.6, 2026-10-08); after them ObGyn's clinic, paediatrics, surgery with theatre and anaesthesia, family medicine and
+  internal medicine with its branches (cardiology, haematology, nephrology, respiratory, oncology).
 
 ### 5.1 How a pack shows up (decided with the owner, one rule at a time, from 2026-10-04)
 - **Rule 1 · on per department.** Two switches: the clinic turns a pack on (`organization.packs_used`), then each department ticks
@@ -1509,6 +1511,85 @@ files, never a pack's (owner, 2026-10-08, D30).
   D20), the same-save hold decision (D26), the lift-by-setting record (D3), the override right (D21), the settings-change listener
   (D11), a hold's short name beside its word (D22: the soft check's word carries it), the order-card field (D1), and the
   chargeables door for now (D16; *Later*).
+
+### 5.5 Radiology (the owner's answers to the pictures, 2026-10-08; nothing built)
+The pictures `/pictures.html#rad-order` … `#rad-settings` (`src/pictures/radiology.tsx`) were drawn by Claude; the owner answered
+their questions on 2026-10-08 ("1 two tabs, 2-6 ok, 7 yours"). What the owner decided:
+- **Two tabs** (Q1): *Scan* for the radiographer (one list for every room, a filter by kind: X-ray, Ultrasound, CT, MRI; To scan ·
+  Scanned today · Couldn't scan) and *Report* for the radiologist (To report · Drafts · Signed today), as the laboratory's Collect and
+  Results. Each shows only to the roles that use it. Where the department uses bookings, its To book view and Diary join (§bookings).
+- **X-rays reported or not** (Q2): each exam says whether it is always reported or only if the doctor asks; with no report the films
+  go with the patient and the order comes back to the doctor for their own reading.
+- **The report in one step** (Q3): the radiologist writes and signs; a switch *Report in two steps* (a resident or typist writes, a
+  radiologist signs) is off by default.
+- **Safety facts shown, never a stop** (Q4): eGFR (with its age), metformin and allergies before contrast, and pregnancy for women
+  12–50 before an X-ray or a CT, on the doctor's card and again at the scan; pregnant asked at the door and kept in the record (the
+  base's `pregnancy`); eGFR under 30, the radiologist decides at the scan.
+- **Contrast and reactions in the record** (Q5): the contrast given is the base's `given`, a reaction the base's `allergy`.
+- **Later, not day one** (Q6): the link to the clinic's image viewer (PACS), the dose record, MRI safety screening, a chart section of
+  past studies, protocols.
+- **The walk-in** (Q7): the bench's two steps; *what for* is the `/xr` `/us` `/ct` `/mri` line and the exams asked for most, with
+  what to tell the patient (in Arabic).
+- As the laboratory's: a critical finding is only a notice ("Critical: tell Dr. X now", then Sign); the report reaches the doctor's
+  To review by the base's review loop and shows in the chart, the impression first. Booking a time is the bookings pack's; paying is
+  billing's row button.
+- *Proposed by Claude, awaiting the owner:* contrast with or without is two exams (two services, two prices), so no field is needed
+  for it; the report is the base's `result` with the findings (LOINC 18782-3) and the impression (19005-8) as text analytes, a
+  critical one marked AA so the base's loop raises it as critical; the list's row says "contrast" and the numbers show when the row
+  opens (a mark sees only the row, and an eGFR may be private). Three core changes, each needing the owner's yes: (a) an order may
+  carry a pack's own words (a pack type extending `order`: the side, portable, report asked); (b) a pack's order card is handed what
+  the chart already shows (latest values, current medicines, allergies); (c) an order finished with no answer to come (an X-ray not
+  reported) puts a row on the requester's To review for their own reading.
+
+### 5.6 The departments of beds: ward, ER, ICU, CCU, labour ward, dialysis (pictures 2026-10-08; nothing decided, nothing built)
+The owner asked for these six together on 2026-10-08 ("they share common things"). The pictures `/pictures.html#stay-map` …
+`#hd-schedule` (`src/pictures/stays.tsx`, `ward.tsx`, `er.tsx`, `icu.tsx`, `labour.tsx`, `dialysis.tsx`; shots in
+`spec/shots/2026-10-08/stays/`) were drawn by Claude. *Everything below is proposed by Claude, awaiting the owner*; each question is
+numbered as on its picture.
+- **The shape** (Q1): one shared pack, *Ward nursing* (`ward`), ticked by the ward, the ER, ICU, CCU and the labour ward: the drug
+  round and the treatment sheet, observations with NEWS2 and when the next are due (in the labour ward, obgyn's MEOWS in NEWS2's
+  place), fluid balance, handover, the discharge letter. Four small packs on top: `emergency` (triage, the board's waiting list, not
+  triaged first, then by level; where the patient goes, the base's Discharge in the ER with the moves of Q3; police case), `critical`
+  (one pack, two starter setups ICU and CCU: the hourly chart, infusions titrated, ventilator settings, SOFA, the daily goals; CCU's
+  rows: rhythm, chest pain, ST, heparin by aPTT, the pain-to-needle times and the angiography plan), `obgyn` (its labour ward part
+  now: the board's line, the partograph, the birth, the baby's record; MEOWS after birth; the clinic part with the next group) and
+  `dialysis` (the unit by shift and chair; who is due this shift as the pack's own rows under the board, read from the schedule; the
+  session; the standing schedule with one-off moves; monthly bloods), which does not tick the ward pack.
+- **Every board is the base's** (rule 4): delivery beds, cots, resus bays, cubicles and dialysis chairs are places. The packs speak on
+  the tile's one line and with at most two buttons a tile (Give and Obs; Triage and Where to; ICU chart and Goals; Partograph and
+  Birth; Readings and End). Where two packs offer buttons the department's pack order decides (two in all): the ER, ICU and CCU put
+  their own pack first (emergency, ward; critical, ward), so Give and Obs are not on their tiles (the stay and the Drug round tab have
+  the doses); on the labour ward (obgyn, ward) obgyn's show only while she is in labour, then Give and Obs. On ICU and CCU tiles the
+  ward pack says only a late dose; the hourly chart speaks there. Dialysis's Start is the base's Admit here into the scheduled chair
+  with the session begun in the same Done; End asks the weight after, then does the base's Discharge.
+- **Base entries wherever the base has the idea**: each dose is the base's `given` (a pack type extending it carries the dose time and
+  who checked); vitals, scores (NEWS2, SOFA, Apgar as declared tables; MEOWS as a declared table of triggers, a yellow one point and a
+  red two, the doctor called at two, shown as "MEOWS 2 yellow"), procedures for lines (the day counts itself), the medication list at
+  discharge. The packs' own types only for what the base lacks: triage, fluid in/out, ventilator settings, an infusion's rate, the
+  daily goals, a labour examination, the birth, a dialysis session and its machine readings. Tables of their own only where the data
+  is not entries: the dialysis schedule (Q13).
+- **Shown, never a stop**, as everywhere: the facts beside a dose, NEWS2's response, past the alert line, past the triage level's
+  time, a fall in blood pressure on dialysis — each a notice; the clinician decides.
+- **Questions for the owner**: (Q1) the shape above; (Q2) ER and dialysis patients as short stays in a place (no core change) or a
+  core change letting a visit sit in a place; and a small base change the dialysis picture needs either way: a pack's own rows under
+  the board (who is due this shift, not yet in a chair); (Q3) a base change: a stay passes to another department (ER → ward, ward ↔
+  ICU, the labour ward → a separate postnatal ward where a clinic has one; the pictures keep postnatal beds in the labour ward, where
+  it is the base's Move), drawn as the first stay ending and the next starting from it in one set; or one stay that changes department
+  (one admission time, each department's part read from its moves); or, as today, a discharge and a new admission; (Q4) a high-alert
+  dose given with no second checker lands flagged for the ward's review, or is refused; (Q5) NEWS2 written with every ward /v (drawn);
+  air/oxygen and ACVPU as two new base vitals keys (a base change) or only inside the score; (Q6) the triage scale: five levels with a
+  time to the doctor (drawn with the Australasian times, now/10/30/60/120 min; Manchester's are now/10/60/120/240), or ESI (levels by
+  danger and by the tests and treatments needed, no times); (Q7) the ICU's hourly column as one set signed once by the nurse (drawn),
+  or each value its own entry signed as typed and the chart only drawing them by hour; (Q8) SOFA each morning and the FAST HUGS BID
+  goals as one round card signed once (drawn), or SOFA as a score of its own and the goals a separate checklist, each signed apart;
+  (Q9) the WHO's modified partograph (drawn) or the Labour Care Guide (the picture says what each would say about the same woman);
+  (Q10) a core change: the baby's record made in the birth's own Done, or "New baby" through the desk's door first; (Q11) a base
+  change: `note` kind *handover* (drawn), or the ward pack's own handover type with no base change; (Q12) the discharge letter as a
+  new printout (drawn), or kept in the record with only the prescription printed; (Q13) the dialysis schedule as the pack's own table
+  (drawn) or the bookings pack; (Q14) CCU as the critical pack's second setup (drawn) rather than its own pack.
+- **Later, not day one**: ward stock (the pharmacy's "wards' stock comes with a ward pack"), the controlled drugs book, diets and the
+  kitchen, care plans, wound and pressure-area charts, fall and pressure-risk scores, APACHE II, the ICU census, monitor and
+  ventilator feeds, mass casualty, the ER's and dialysis's monthly returns.
 
 ---
 
