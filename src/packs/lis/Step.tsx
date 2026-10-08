@@ -9,7 +9,7 @@ import { Button, Callout, Chip, Input, Kbd, errorText } from '@core/ui'
 import { MOST_ASKED, testsIn, tubesFor } from './tubes'
 import { Cap } from './Cap'
 
-export function OrderStep({ bench, busy, error, onStart, note }: WhatForProps) {
+export function OrderStep({ bench, busy, error, onStart, note, extra, start: startLabel }: WhatForProps) {
   const { org } = useDepartment(); const tests = benchOffers(org, bench.id)
   const [line, setLine] = useState('/order '); const [ticked, setTicked] = useState<string[]>([]); const [asked, setAsked] = useState<string | null>(null)
   const typed = testsIn(line, tests)
@@ -25,12 +25,13 @@ export function OrderStep({ bench, busy, error, onStart, note }: WhatForProps) {
         return <Chip key={t.id} variant="check" on={on} onClick={() => typed.found.includes(t) ? undefined : setTicked((x) => on ? x.filter((y) => y !== t.id) : [...x, t.id])}>{t.name}</Chip> })}</div>
     {tubes.length > 0 && <p className="flex flex-wrap items-center gap-1.5 text-12 text-muted">{tubes.length} {tubes.length === 1 ? 'tube' : 'tubes'} ·
       {tubes.map(({ tube }) => <span key={tube.cap} className="inline-flex items-center gap-1"><Cap cap={tube.cap} />{tube.word.split(' · ')[0].toLowerCase()}</span>)}</p>}
+    {extra?.(chosen)}
     {asked === null ? <button type="button" onClick={() => setAsked('')} className="justify-self-start rounded-sm text-13 text-accent hover:underline focus-ring">+ Who asked (optional)</button>
       : <div className="flex flex-wrap items-center gap-2"><span className="text-13 text-muted">Asked by</span>
           <Input value={asked} onChange={(e) => setAsked(e.target.value)} placeholder="The outside doctor" className="w-full sm:w-72" /><span className="text-12 text-faint">optional</span></div>}
     {!!error && <Callout tone="danger" title="Not started">{errorText(error)}</Callout>}
     <div className="flex flex-wrap items-center gap-2"><Button onClick={start} disabled={!chosen.length} loading={busy}>
-      {chosen.length > 1 ? `Start · ${chosen.length} tests` : startWords(chosen.map((t) => t.name))}<Kbd className="ms-1 max-sm:hidden">⌘↵</Kbd></Button>
+      {startLabel?.(chosen) ?? (chosen.length > 1 ? `Start · ${chosen.length} tests` : startWords(chosen.map((t) => t.name)))}<Kbd className="ms-1 max-sm:hidden">⌘↵</Kbd></Button>
       {note && <span className="text-12 text-faint">{note}</span>}</div>
   </div>
 }

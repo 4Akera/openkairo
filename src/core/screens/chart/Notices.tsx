@@ -11,7 +11,9 @@ import { useChart } from './context'
 export function Notices() {
   const c = useChart(); const a = c.actions; const drafts = useDraftsFor(c.patientId).length
   return <>
-    {a.err && <Callout tone="danger" role="alert">{a.err}</Callout>}
+    {a.err && <Callout tone="danger" role="alert" actions={a.packFailed && <>
+      <Button size="sm" onClick={a.packFailed.retry} loading={a.busy}>Save it again</Button>
+      <Button size="sm" variant="ghost" onClick={a.packFailed.goOn}>Go on without it</Button></>}>{a.err}</Callout>}
     {a.warn && <Callout tone="warn" role="alert" title="Check before signing" actions={<>
       <Button size="sm" onClick={() => a.warn!.retry(a.warn!.findings.map((f) => f.code))} loading={a.busy}>Sign anyway</Button>
       <Button size="sm" variant="ghost" onClick={a.clearWarn}>Change it</Button></>}>

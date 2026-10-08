@@ -14,7 +14,7 @@ import { replyFormFor } from '../../../renderers'
 import { ItemFrame } from './Item'
 import { placeName, useBlockEnv, type BlockEnv, type GroupProps } from './env'
 import { packRowOf } from '../../rows'
-import { useOrderWaits } from '../../useRows'
+import { useOrderWaits, useOrderWords } from '../../useRows'
 
 const STOPPED = new Set(['revoked', 'rejected', 'cancelled', 'failed'])
 const PRIORITY = { urgent: ['danger', 'Urgent'], stat: ['danger', 'Stat'], asap: ['warn', 'As soon as possible'] } as const
@@ -49,20 +49,28 @@ function useWaitOf(env: BlockEnv, patient: string) {
   const rows = useMemo(() => orders ? [packRowOf(`chart ${patient}`, { patient_id: patient, visit_id: null, orders: orders.filter((o) => OPEN.has(o.status)) })] : [], [orders, patient])
   return useOrderWaits('chart', rows)
 }
+/** the packs' words on the record's open orders ("booked · Tue 13 Oct 10:30", core change (l)), once a chart */
+function useWordsOf(env: BlockEnv, patient: string) {
+  const orders = env.sample ? null : env.tables?.['base.orders']?.rows
+  const rows = useMemo(() => orders ? [packRowOf(`chart ${patient}`, { patient_id: patient, visit_id: null, orders: orders.filter((o) => OPEN.has(o.status)) })] : [], [orders, patient])
+  return useOrderWords('chart', rows)
+}
 
 function OrderLine({ item }: { item: ChartItem }) {
   const env = useBlockEnv(); const d = item.entry.data as EntryData['order'] | undefined
-  const waitOf = useWaitOf(env, item.entry.patient_id)
+  const waitOf = useWaitOf(env, item.entry.patient_id); const wordsOf = useWordsOf(env, item.entry.patient_id)
   if (!d?.service) return <p className="text-13 text-muted">{item.entry.line}</p>
   const row = item.order?.row; const svc = env.org?.services.find((s) => s.id === (row?.service_id ?? d.service.id))
   const wait = row && OPEN.has(row.status) ? waitOf(row.item) : null
+  const words = row && OPEN.has(row.status) ? wordsOf(row.item) : []
   const to = placeName(env, row?.to_department_id ?? d.department_id); const status = row?.status ?? d.status
   const why = [...(item.order?.steps ?? [])].reverse().find((s) => s.data?.reason)?.data?.reason as string | undefined
   return <div className="grid gap-1">
     <p className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-14 font-medium text-fg">{d.service.name}</span>{to && <span className="text-13 text-muted">to {to}</span>}</p>
     {(d.question || d.reason) && <p className="text-13 text-muted">“{d.question ?? d.reason}”</p>}
     <Steps dense={env.compact} steps={stepsOf(item, svc)} />
-    {wait && <p className="text-13"><Tag tone={wait.tone ?? 'warn'}>{wait.word}</Tag></p>}
+    {(wait || words.length > 0) && <p className="flex flex-wrap gap-1 text-13">{wait && <Tag tone={wait.tone ?? 'warn'}>{wait.word}</Tag>}
+      {words.map((w) => <Tag key={w.key} tone={w.tone ?? 'neutral'}>{w.word}</Tag>)}</p>}
     {status === 'on-hold' && <p className="text-13 text-warn">{ORDER_STATUS['on-hold']}{why ? `: ${why}` : ''}</p>}
     {STOPPED.has(status) && why && <p className="text-13 text-muted">Why: {why}</p>}
     {(item.order?.answers ?? []).map((a) => <Answer key={a.id} entry={a} env={env} />)}
