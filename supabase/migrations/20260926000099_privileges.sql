@@ -13,6 +13,7 @@ revoke all on all routines in schema radiology from public, anon, authenticated;
 revoke all on all routines in schema oncology from public, anon, authenticated;
 revoke all on all routines in schema surgery from public, anon, authenticated;
 revoke all on all routines in schema theatre from public, anon, authenticated;
+revoke all on all routines in schema anaesthesia from public, anon, authenticated;
 revoke all on all routines in schema public from public, anon, authenticated;
 alter default privileges for role base_role revoke execute on functions from public;
 alter default privileges for role pack_pharmacy revoke execute on functions from public;
@@ -22,6 +23,7 @@ alter default privileges for role pack_radiology revoke execute on functions fro
 alter default privileges for role pack_oncology revoke execute on functions from public;
 alter default privileges for role pack_surgery revoke execute on functions from public;
 alter default privileges for role pack_theatre revoke execute on functions from public;
+alter default privileges for role pack_anaesthesia revoke execute on functions from public;
 
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
   public.save(text, jsonb), public.remove(text, uuid), public.save_patient(jsonb), public.merge_patients(jsonb), public.write_setting(jsonb),

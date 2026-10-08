@@ -43,4 +43,26 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'xray@demo.com', name: 'Ahmed Saber', role: 'Radiographer' },
     { email: 'radiology@demo.com', name: 'Dr. Mai Farouk', role: 'Radiologist' },
   ] },
+  { department: 'Oncology clinic', departmentId: '75f640e8-9291-5ed1-b1dc-97ba43f5db0b', people: [
+    { email: 'oncology@demo.com', name: 'Dr. Hesham Abdallah', role: 'Oncologist' },
+  ] },
+  { department: 'Chemotherapy day unit', departmentId: 'e074f43d-dfc7-5d23-9274-d3f0c01e921d', people: [
+    { email: 'chemo@demo.com', name: 'Asmaa Farid', role: 'Chemotherapy nurse' },
+    { email: 'oncology@demo.com', name: 'Dr. Hesham Abdallah', role: 'Oncologist' },
+  ] },
+  { department: 'Surgery clinic', departmentId: '0f766d3a-8116-5d01-8688-43c892a35a56', people: [
+    { email: 'surgery@demo.com', name: 'Dr. Hesham Abdelaal', role: 'Surgeon' },
+  ] },
+  { department: 'Pre-op clinic', departmentId: 'ef2aaf18-1883-50cc-8a26-684dd69969ac', people: [
+    { email: 'anaesthesia@demo.com', name: 'Dr. Sherine Rashad', role: 'Anaesthetist' },
+  ] },
+  { department: 'Theatre', departmentId: '2b82ecb9-80cb-514e-bea5-cf0eff126483', people: [
+    { email: 'anaesthesia@demo.com', name: 'Dr. Sherine Rashad', role: 'Anaesthetist' },
+    { email: 'surgery@demo.com', name: 'Dr. Hesham Abdelaal', role: 'Surgeon' },
+    { email: 'theatre@demo.com', name: 'Iman Zidan', role: 'Theatre nurse' },
+  ] },
+  { department: 'Recovery', departmentId: '4ea48f66-4a43-586d-961e-283f43f47824', people: [
+    { email: 'anaesthesia@demo.com', name: 'Dr. Sherine Rashad', role: 'Anaesthetist' },
+    { email: 'recovery@demo.com', name: 'Rehab Seif', role: 'Recovery nurse' },
+  ] },
 ]

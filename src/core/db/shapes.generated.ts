@@ -107,6 +107,99 @@ export interface Allergy {
   type?: 'allergy' | 'intolerance'
   verification: 'unconfirmed' | 'confirmed' | 'refuted'
 }
+/** anaesthesia.column v1 (anaesthesia) */
+export interface AnaesthesiaColumn {
+  anaesthesia?: {
+    agent?: string
+    agent_pct?: number
+    etco2?: number
+    events?: number[]
+    fio2?: number
+  }
+  bmi?: Quantity
+  bp?: {
+    dia: Quantity
+    sys: Quantity
+  }
+  glucose?: Quantity
+  head?: Quantity
+  height?: Quantity
+  hr?: Quantity
+  method?: string
+  note?: string
+  pain?: Quantity
+  rr?: Quantity
+  site?: string
+  spo2?: Quantity
+  temp?: Quantity
+  weight?: Quantity
+}
+/** anaesthesia.preop v1 (anaesthesia) */
+export interface AnaesthesiaPreop {
+  airway?: {
+    mallampati?: 'I' | 'II' | 'III' | 'IV'
+    mouth_cm?: number
+    neck_cm?: number
+    neck_moves?: boolean
+    tm_cm?: number
+  }
+  asa: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI'
+  consent?: string[]
+  emergency?: boolean
+  history?: {
+    before?: string
+    bleeding?: string
+    diabetes?: string
+    heart?: string
+    lungs?: string
+    sleep?: string
+    teeth?: string
+  }
+  note?: string
+  op?: string
+  operation?: string
+  plan?: 'general_lma' | 'general_tube' | 'spinal' | 'local_sedation'
+  plan_note?: string
+  stop?: {
+    days?: number
+    medicine: string
+    rule?: string
+    what: string
+  }[]
+  verdict: 'fit' | 'not_yet'
+  verdict_note?: string
+}
+/** anaesthesia.record v1 (anaesthesia) */
+export interface AnaesthesiaRecord {
+  agent?: string
+  airway?: string
+  anaesthetist?: string
+  asa?: string
+  blood_loss?: number
+  breathing?: string
+  events?: {
+    at: string
+    text: string
+  }[]
+  fluids?: {
+    ml: number
+    what: string
+  }[]
+  note?: string
+  op?: string
+  operation?: string
+  technique?: string
+  times: {
+    end?: string
+    in?: string
+    knife?: string
+    out?: string
+    start?: string
+  }
+  urine?: string
+  warming?: string
+  weight?: number
+}
 /** assigned v1 (base) */
 export interface Assigned {
   user_id?: string | null
@@ -245,6 +338,95 @@ export interface Observation {
     quantity?: Quantity
     text?: string
   }
+}
+/** oncology.cancer v1 (oncology) */
+export interface OncologyCancer {
+  abatement?: PartialDate
+  body_site?: Concept
+  category?: 'problem-list-item' | 'encounter-diagnosis'
+  clinical_status: 'active' | 'recurrence' | 'relapse' | 'inactive' | 'remission' | 'resolved'
+  concept: Concept
+  laterality?: 'left' | 'right' | 'both'
+  note?: string
+  oncology?: {
+    grade?: '1' | '2' | '3' | '4' | 'X'
+    intent?: 'curative' | 'palliative'
+    markers?: {
+      name: string
+      value: string
+    }[]
+    morphology?: Concept
+    plan?: {
+      status: 'done' | 'now' | 'todo'
+      step: 'operation' | 'chemotherapy' | 'radiotherapy' | 'endocrine' | 'targeted' | 'immunotherapy'
+      text?: string
+    }[]
+    regimen?: string
+    side?: 'left' | 'right' | 'both'
+    site?: string
+    stage?: string
+    tnm?: {
+      edition?: string
+      m?: string
+      n?: string
+      t?: string
+    }
+  }
+  onset?: PartialDate
+  severity?: 'mild' | 'moderate' | 'severe'
+  verification: 'unconfirmed' | 'provisional' | 'differential' | 'confirmed' | 'refuted'
+}
+/** oncology.cycle v1 (oncology) */
+export interface OncologyCycle {
+  answers?: Record<string, unknown>
+  asked_by?: string
+  department_id: string
+  details?: Record<string, unknown>
+  due?: Datetime
+  oncology?: {
+    added?: string[]
+    bsa?: number
+    checks?: {
+      ok?: boolean
+      text: string
+    }[]
+    cycle: number
+    day: number
+    decision: 'give' | 'delay' | 'reduce'
+    delay_days?: number
+    doses?: {
+      basis?: 'm2' | 'auc' | 'kg' | 'flat'
+      dose: number
+      drug: string
+      how?: string
+      per?: number
+      unit: string
+      worked?: number
+    }[]
+    height?: number
+    name?: string
+    of?: number
+    percent?: number
+    premeds?: string[]
+    regimen: string
+    toxicity?: {
+      grade: number
+      term: string
+    }[]
+    weight?: number
+  }
+  priority: 'routine' | 'urgent' | 'asap' | 'stat'
+  question?: string
+  reason?: string
+  reasons?: Reference[]
+  service: {
+    answer?: string
+    code?: string
+    coding?: Coding
+    id?: string
+    name: string
+  }
+  status: 'active' | 'on-hold' | 'revoked' | 'completed'
 }
 /** opened_anyway v1 (base) */
 export interface OpenedAnyway {
@@ -414,6 +596,104 @@ export interface Step {
   status: 'received' | 'accepted' | 'rejected' | 'in-progress' | 'on-hold' | 'completed' | 'cancelled' | 'failed'
   step?: string
 }
+/** surgery.opnote v1 (surgery) */
+export type SurgeryOpnote = {
+  attachments?: Attachment[]
+  heading?: string
+  kind?: string
+  language?: string
+  surgery?: {
+    anaesthetist?: string
+    assistant?: string
+    blood_loss?: number
+    closure?: string
+    complications?: string[]
+    drain?: string
+    findings?: string
+    implants?: string
+    op?: string
+    operation: string
+    specimen?: string
+    steps?: string
+    surgeon?: string
+    technique?: string
+    times?: {
+      from?: string
+      to?: string
+    }
+    why?: string
+  }
+  text?: string
+} & ({ text: string } | { attachments: Attachment[] })
+/** theatre.check v1 (theatre) */
+export interface TheatreCheck {
+  by?: string[]
+  counts?: {
+    added?: number
+    after?: number
+    before?: number
+    what: string
+  }[]
+  implants?: {
+    left_in?: number
+    lot?: string
+    used?: number
+    what: string
+  }[]
+  items: {
+    done: boolean
+    key: string
+    not?: string
+    text: string
+    who?: string
+  }[]
+  note?: string
+  op: string
+  part: 'sign_in' | 'time_out' | 'sign_out'
+  specimen?: string
+}
+/** theatre.op v1 (theatre) */
+export interface TheatreOp {
+  answers?: Record<string, unknown>
+  asked_by?: string
+  department_id: string
+  details?: Record<string, unknown>
+  due?: Datetime
+  priority: 'routine' | 'urgent' | 'asap' | 'stat'
+  question?: string
+  reason?: string
+  reasons?: Reference[]
+  service: {
+    answer?: string
+    code?: string
+    coding?: Coding
+    id?: string
+    name: string
+  }
+  status: 'active' | 'on-hold' | 'revoked' | 'completed'
+  theatre?: {
+    risks?: string[]
+    side?: 'left' | 'right' | 'both' | 'none'
+    stay?: 'day' | 'admitted'
+    surgeon?: string
+    technique?: 'general' | 'spinal' | 'local' | 'anaesthetist'
+    usual_min?: number
+  }
+}
+/** theatre.step v1 (theatre) */
+export interface TheatreStep {
+  note?: string
+  reason?: string
+  specimen?: string
+  status: 'received' | 'accepted' | 'rejected' | 'in-progress' | 'on-hold' | 'completed' | 'cancelled' | 'failed'
+  step?: string
+  theatre?: {
+    op: string
+    position?: number
+    room?: string
+    starts?: Datetime
+  }
+}
 /** transferred v1 (base) */
 export interface Transferred {
   reason?: string
@@ -445,6 +725,16 @@ export interface Vitals {
 }
 
 // ── settings (core.setting_keys) ──
+/** setting anaesthesia.stop_list (anaesthesia; owner organization) */
+export interface AnaesthesiaStopListSetting {
+  rules: {
+    days?: number
+    match: string
+    rule?: string
+    warn?: boolean
+    what: string
+  }[]
+}
 /** setting billing.desk (billing; owner department) */
 export interface BillingDeskSetting {
   float?: string
@@ -524,6 +814,36 @@ export interface LisLargeSetting {
     urine_stool: number
   }
   turnaround: boolean
+}
+/** setting oncology.regimens (oncology; owner organization) */
+export interface OncologyRegimensSetting {
+  plans?: {
+    name: string
+    regimens: string[]
+    site?: string
+  }[]
+  regimens: {
+    checks?: {
+      max?: number
+      min?: number
+      test: 'anc' | 'plt' | 'hb' | 'creat' | 'egfr' | 'bili' | 'alt' | 'ef'
+    }[]
+    cycles?: number
+    drugs?: {
+      atc?: string
+      basis: 'm2' | 'auc' | 'kg' | 'flat'
+      drug: string
+      how?: string
+      per: number
+      round?: number
+      watch?: boolean
+    }[]
+    every_days?: number
+    key: string
+    name: string
+    premeds?: string[]
+    site?: string
+  }[]
 }
 /** setting organization.packs_used (core; owner organization) */
 export interface OrganizationPacksUsedSetting {
@@ -639,12 +959,50 @@ export interface ServiceSetting {
   section?: string
   steps?: string[]
 }
+/** setting surgery.templates (surgery; owner organization) */
+export interface SurgeryTemplatesSetting {
+  templates: {
+    closure?: string
+    findings?: string
+    operation: string
+    postop?: string
+    steps?: string
+    surgeon?: string
+    why?: string
+  }[]
+}
+/** setting theatre.operations (theatre; owner department) */
+export interface TheatreOperationsSetting {
+  operations: {
+    code: string
+    risks?: string[]
+    side?: boolean
+    usual_min?: number
+  }[]
+}
+/** setting theatre.rooms (theatre; owner department) */
+export interface TheatreRoomsSetting {
+  rooms: {
+    name: string
+    specialty?: string
+  }[]
+  sessions?: {
+    from: string
+    room: string
+    surgeon?: string
+    to: string
+    weekday: 'sat' | 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri'
+  }[]
+}
 
 /** each entry type's data, by its key */
 export interface EntryData {
   'admitted': Admitted
   'alert': Alert
   'allergy': Allergy
+  'anaesthesia.column': AnaesthesiaColumn
+  'anaesthesia.preop': AnaesthesiaPreop
+  'anaesthesia.record': AnaesthesiaRecord
   'assigned': Assigned
   'away': Away
   'back_to_waiting': BackToWaiting
@@ -665,6 +1023,8 @@ export interface EntryData {
   'not_private': NotPrivate
   'note': Note
   'observation': Observation
+  'oncology.cancer': OncologyCancer
+  'oncology.cycle': OncologyCycle
   'opened_anyway': OpenedAnyway
   'order': Order
   'pharmacy.dispense': PharmacyDispense
@@ -679,12 +1039,17 @@ export interface EntryData {
   'score': Score
   'seen': Seen
   'step': Step
+  'surgery.opnote': SurgeryOpnote
+  'theatre.check': TheatreCheck
+  'theatre.op': TheatreOp
+  'theatre.step': TheatreStep
   'transferred': Transferred
   'urgent': Urgent
   'vitals': Vitals
 }
 /** each setting's data, by its key */
 export interface SettingData {
+  'anaesthesia.stop_list': AnaesthesiaStopListSetting
   'billing.desk': BillingDeskSetting
   'billing.pay_first': BillingPayFirstSetting
   'billing.price': BillingPriceSetting
@@ -700,6 +1065,7 @@ export interface SettingData {
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
   'lis.large': LisLargeSetting
+  'oncology.regimens': OncologyRegimensSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
@@ -715,4 +1081,7 @@ export interface SettingData {
   'radiology.options': RadiologyOptionsSetting
   'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
+  'surgery.templates': SurgeryTemplatesSetting
+  'theatre.operations': TheatreOperationsSetting
+  'theatre.rooms': TheatreRoomsSetting
 }

@@ -1642,6 +1642,25 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   Abdelhady in consult (the decision to operate typed live: `/op lichtenstein right`), Kamal Fouda (a haemorrhoidectomy on To schedule);
   the templates and two post-op presets. Tests: `supabase/tests/surgery.sql`, `npm run test:surgery`. *Differences:* the consent form's
   print waits for printing.
+- *Built 2026-10-08 (lane `clinics-theatre`), anaesthesia* (`anaesthesia`, migration 36, role block eb): the pre-op `anaesthesia.preop`
+  (history, airway, ASA I–VI and E, plan, Fit or Not yet, the medicines to stop, the risks told); RCRI (Lee 1999), STOP-BANG (Chung
+  2008) and Aldrete (1995) declared through `core.declare_score` (aliases `rcri`, `stopbang`, `aldrete`); the anaesthetic record as one
+  set signed at the end (Q45 drawn): each 5-minute column `anaesthesia.column` (the base's vitals plus EtCO₂, the agent and FiO₂), each
+  dose the base's given at its time, and `anaesthesia.record` about the operation (technique, ASA, the anaesthetist, the five times,
+  numbered events, airway, breathing, agent, warming, fluids, blood loss, weight), whose times the operating list and the operation note
+  read. Recovery's table `anaesthesia.recovery` (each Aldrete and pain, by a listener on the base's score and vitals). The clinic setting
+  `anaesthesia.stop_list` (matches by name or ATC; what to do; days before), shown never a stop. Anaesthetist (`anaesthesia.anaesthetist`,
+  built on Doctor) and Recovery nurse (`anaesthesia.recovery_nurse`, built on Nurse, with the base's admit and discharge). Setups
+  `anaesthesia.preop_clinic` and `anaesthesia.recovery` (five bays, cubicles on the base's board); the screen `anaesthesia.record` (the
+  Theatre's tab for whoever gives anaesthesia). Client: the Anaesthesia section; `/preop` and its card (the scores typed on the lines
+  before, read from the drafts; his medicines against the list, each line editable; the Arabic sheet shown); the record's grid (a blank
+  keeps the last setting, a drug typed on a column takes its time, the dose per kg shown, drafts kept on this machine, Sign the record);
+  Recovery's tile line ("in 30 min · Aldrete 8 → 10 · pain 2 · ready for the ward") and its two buttons (Aldrete: her chart with the /score
+  card; Record: her record). Demo: the Pre-op clinic and Recovery, Dr. Sherine Rashad (anaesthesia@demo.com) and Rehab Seif
+  (recovery@demo.com); Hamed Sakr (pre-op today, Hb 9.8), Marwa Shalaby (Bay 2, Aldrete 6), Yara Abdelsalam (7, Bay 3, Aldrete 7 → 9).
+  Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
+  ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet waits for printing;
+  recovery's ward nursing tick waits for the beds lane.
 
 ---
 

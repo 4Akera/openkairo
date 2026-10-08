@@ -21,6 +21,8 @@
 -- include: supabase/demo/theatre.sql
 -- include: supabase/seeds/surgery.sql
 -- include: supabase/demo/surgery.sql
+-- include: supabase/seeds/anaesthesia.sql
+-- include: supabase/demo/anaesthesia.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql
