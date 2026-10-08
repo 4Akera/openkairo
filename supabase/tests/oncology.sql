@@ -50,10 +50,10 @@ select t.as(:'on');
 select t.landed(t.w(pg_temp.cycle('00000000-0000-0000-0000-00000000c301')), 'AC 3, give');
 select t.refused(t.w(pg_temp.cycle(null, 'maybe')), 'bad_shape', 'Give, Delay or Reduce');
 select t.ok((select r ->> 'regimen' = 'ac' and (r ->> 'cycle')::int = 3 and r ->> 'decision' = 'give' and (r ->> 'due')::date = current_date
-  from t.rows('oncology.cycles', :'unit', jsonb_build_object('item', '00000000-0000-0000-0000-00000000c301')) r), 'kept for the day unit: AC 3, due today');
-select t.as(:'nu');
-select t.ok(exists (select 1 from t.rows('base.orders', :'unit', jsonb_build_object('to_department_id', :'unit')) r where r ->> 'item' = '00000000-0000-0000-0000-00000000c301' and r ->> 'status' = 'active'),
+  from t.rows('oncology.cycles', :'onc', jsonb_build_object('item', '00000000-0000-0000-0000-00000000c301')) r), 'kept for the day unit: AC 3, due today');
+select t.ok(exists (select 1 from t.rows('base.orders', :'onc', jsonb_build_object('to_department_id', :'unit')) r where r ->> 'item' = '00000000-0000-0000-0000-00000000c301' and r ->> 'status' = 'active'),
   'on the unit''s orders, open');
+select t.as(:'nu');
 select t.ok(exists (select 1 from t.rows('oncology.cycles', :'unit', jsonb_build_object('to_department_id', :'unit', 'due', current_date)) r), 'the unit''s nurse reads today''s cycles');
 
 \echo '── the chair: the nurse starts the day (the base''s Admit here) and ends it; the cycle answered by the unit''s note'
@@ -61,7 +61,9 @@ select t.landed(t.w(t.e('admitted', :'pt', :'unit', jsonb_build_object('departme
   '00000000-0000-0000-0000-00000000c311', '00000000-0000-0000-0000-00000000c311')), 'into Chair 1');
 select t.landed(t.w(t.e('note', :'pt', :'unit', '{"kind":"nursing","text":"AC 3 given: doxorubicin 107 mg, cyclophosphamide 1 070 mg; no reaction."}', null, null,
   (select t.latest('00000000-0000-0000-0000-00000000c301')), 'answers')), 'given: the note answers the cycle');
-select t.ok((select r ->> 'status' from t.rows('base.orders', :'unit', jsonb_build_object('item', '00000000-0000-0000-0000-00000000c301')) r) = 'completed', 'the cycle done');
+select t.as(:'on');
+select t.ok((select r ->> 'status' from t.rows('base.orders', :'onc', jsonb_build_object('item', '00000000-0000-0000-0000-00000000c301')) r) = 'completed', 'the cycle done');
+select t.as(:'nu');
 select t.landed(t.w(t.move('discharged', '00000000-0000-0000-0000-00000000c311', :'unit', '{"disposition":"home"}')), 'home: the chair frees');
 
 \echo '── its FHIR adds the stage beside the base''s Condition and the cycle''s words beside the ServiceRequest'
@@ -82,7 +84,9 @@ select t.ok(core.may('00000000-0000-0000-0000-0000000000e2', 'write:admitted', :
 set role authenticated;
 select t.as(:'on');
 select public.write_setting('{"key":"oncology.regimens","data":{"regimens":[{"key":"ac","name":"AC","every_days":21,"cycles":4,"drugs":[{"drug":"Doxorubicin","per":60,"basis":"m2","round":1}],"checks":[{"test":"anc","min":1.5}]}],"plans":[]}}') ->> 'key' as regimens;
+reset role;
 select t.ok((select s.data -> 'regimens' -> 0 ->> 'key' from core.settings s where s.key = 'oncology.regimens' order by s.recorded_at desc limit 1) = 'ac', 'the oncologist''s regimens saved');
+set role authenticated;
 
 \echo '── off for the clinic: no new cycle'
 select t.as(:'ow');
