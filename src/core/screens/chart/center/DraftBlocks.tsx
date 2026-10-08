@@ -11,6 +11,8 @@ import type { Draft } from '../../../db/entries'
 import type { Allergy } from '../../../db/types'
 import { Tag } from '../../../ui'
 import { drugWarnings } from '../../visit/catalog'
+import { cardLineDefs, cardLinesOf } from '../../visit/lines'
+import { DraftLine } from '../../visit/CardLines'
 import { SetCard } from '../blocks'
 import { BlockContext, useBlockEnv } from '../blocks/env'
 import { useChart } from '../context'
@@ -39,7 +41,13 @@ export function DraftBlocks() {
     if (d.function === 'note' && String(d.params.text ?? '').length > 120) { useComposer.getState().openLongNote({ kind: String(d.params.kind ?? 'progress'), text: String(d.params.text ?? ''), draftId: d.id }); return }
     compose({ seed: { label: 'Edit', items: [{ function: d.function, params: d.params, line: d.line ?? '', kind: d.kind ?? 'note', tag: d.tag }], draftId: d.id } })
   }
-  const draftEnv = useMemo(() => ({ ...env, onEdit: edit, onRemove: (d: Draft) => useDrafts.getState().remove(c.patientId, d.id) }), [env, c.patientId])
+  // the packs' short words after a draft's line, as under its card (core change C1)
+  const draftEnv = useMemo(() => {
+    const packs = org?.departments.find((x) => x.id === c.departmentId)?.packs ?? []
+    const record = { patient: c.r.patient, values: c.r.values, medications: c.r.medications, allergies: c.r.allergies, allergy_review: c.r.allergy_review }
+    const draftLine = (d: Draft) => <DraftLine lines={cardLinesOf(cardLineDefs(), d.function, d.params, { departmentId: c.departmentId, packs, org, now: new Date(), record })} />
+    return { ...env, onEdit: edit, onRemove: (d: Draft) => useDrafts.getState().remove(c.patientId, d.id), draftLine }
+  }, [env, c.patientId, c.departmentId, c.r, org])
   if (!set) return null
   const signs = c.role.consult ? SIGNS.done : c.role.admitted ? SIGNS.stay : SIGNS.other
   return <BlockContext.Provider value={draftEnv}>

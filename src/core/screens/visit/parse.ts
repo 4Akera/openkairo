@@ -25,12 +25,14 @@ export interface Ctx {
   facts?: StandingFacts                               // the pregnancy, breastfeeding and alerts standing now: /preg, /bf, /alert change or end them
   scores?: ScoreTable[]                               // the score tables (read 'me'): /score and each score's alias (/gcs)
   record?: Pick<RecordView, 'patient' | 'values' | 'medications' | 'allergies' | 'allergy_review'>   // what the chart shows, read-only: a pack's order card may show it (spec §5.5, (b))
+  org?: Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'>   // the clinic's settings, for a pack's line under a base card (lines.ts, §5.7 C1)
+  servedBy?: string[]                                 // the departments that work for this one (not itself): a pack's command offered by works for (§5.7 C3)
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
 import { allowed, commandNamed, notHere, registerCommand } from './commands'
 import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, factLine, pregnancy, type StandingFacts } from './facts'
 import { aliasLine, emptyScore, parseScore, scoreLine, type ScoreParams } from './score'
-import type { RecordView, ScoreTable } from '../../db/types'
+import type { Organization, RecordView, ScoreTable } from '../../db/types'
 import { PLAIN_SEND, type SendWords } from './send'
 
 /** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
@@ -41,6 +43,8 @@ const VITALS: Record<string, [string, string]> = {
   p: ['pulse', 'P'], hr: ['pulse', 'P'], pulse: ['pulse', 'P'], t: ['temperature', 'T'], temp: ['temperature', 'T'],
   w: ['weight', 'Wt'], wt: ['weight', 'Wt'], weight: ['weight', 'Wt'], h: ['height', 'Ht'], ht: ['height', 'Ht'], height: ['height', 'Ht'],
   spo2: ['spo2', 'SpO₂'], sat: ['spo2', 'SpO₂'], sats: ['spo2', 'SpO₂'], o2: ['spo2', 'SpO₂'], rr: ['respiratory_rate', 'RR'],
+  // a child's length (lying; the base's height, method lying) and head (the base's head): core change C2 (§5.7, Q22)
+  len: ['length', 'Length'], length: ['length', 'Length'], hc: ['head', 'Head'], head: ['head', 'Head'], ofc: ['head', 'Head'],
 }
 const FREQ: Record<string, string> = {
   od: 'OD', qd: 'OD', daily: 'OD', bd: 'BD', bid: 'BD', tds: 'TDS', tid: 'TDS', qds: 'QDS', qid: 'QDS', q4h: 'q4h', q6h: 'q6h', q8h: 'q8h', q12h: 'q12h',
@@ -114,7 +118,8 @@ function vitals(words: string[]): Result {
     params[VITALS[key][0]] = n; parts.push(`${VITALS[key][1]} ${n}`)
   }
   if (!parts.length) return null
-  return { ok: [{ function: 'vitals', params, line: parts.join(' · '), kind: 'vitals' }] }
+  if (params.height !== undefined && params.length !== undefined) return { error: 'Length (lying) or height (standing), not both' }
+  return { ok: [{ function: 'vitals', params, line: parts.map((x) => x.startsWith('Length ') ? `${x} (lying)` : x).join(' · '), kind: 'vitals' }] }
 }
 
 const DUR_UNIT = /^(d|days?|w|wk|wks|weeks?|m|mo|months?)$/
@@ -257,8 +262,8 @@ export function parse(input: string, ctx: Ctx): Result {
 export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & Pick<Partial<Ctx>, 'send'>): string {
   const q = p.params as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
   switch (p.function) {
-    case 'vitals': return ([['systolic', 'BP'], ['pulse', 'P'], ['temperature', 'T'], ['weight', 'Wt'], ['height', 'Ht'], ['spo2', 'SpO₂'], ['respiratory_rate', 'RR']] as const)
-      .flatMap(([k, l]) => k === 'systolic' ? (q.systolic != null ? [`BP ${q.systolic}/${q.diastolic ?? '?'}`] : []) : q[k] != null ? [`${l} ${q[k]}`] : []).join(' · ')
+    case 'vitals': return ([['systolic', 'BP'], ['pulse', 'P'], ['temperature', 'T'], ['weight', 'Wt'], ['height', 'Ht'], ['length', 'Length'], ['head', 'Head'], ['spo2', 'SpO₂'], ['respiratory_rate', 'RR']] as const)
+      .flatMap(([k, l]) => k === 'systolic' ? (q.systolic != null ? [`BP ${q.systolic}/${q.diastolic ?? '?'}`] : []) : q[k] != null ? [`${l} ${q[k]}${k === 'length' ? ' (lying)' : ''}`] : []).join(' · ')
     case 'medication': return q.action === 'stop' ? `Stop ${q.drug?.name}${q.stop_reason_text ? ` — ${q.stop_reason_text}` : ''}`
       : [q.action === 'change' ? 'Change:' : q.action === 'repeat' ? 'Repeat' : null, q.drug?.name, q.dose_number != null ? `${q.dose_number} ${q.dose_unit ?? ''}`.trim() : null,
          q.route && q.route !== 'oral' ? q.route : null, q.frequency, q.prn ? `${q.frequency !== 'PRN' ? 'PRN ' : ''}${q.prn_reason_text ? `for ${q.prn_reason_text}` : ''}`.trim() || null : null, q.duration_days ? `× ${q.duration_days}d` : null,
@@ -280,7 +285,7 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & 
 }
 
 // ── core's six commands, one per building block; a pack registers its own the same way ──
-registerCommand({ name: 'v', group: 'record', title: 'Vitals', aliases: ['vitals', 'bp'], label: 'Vitals', example: '/v 148/92 84 37 86', action: 'write:vitals', writes: ['vitals'],
+registerCommand({ name: 'v', group: 'record', title: 'Vitals', aliases: ['vitals', 'bp'], label: 'Vitals — a child’s length and head too (len, hc)', example: '/v 148/92 84 37 86 · /v wt 7.5 len 72.4 hc 45.4', action: 'write:vitals', writes: ['vitals'],
   parse: (rest) => rest ? vitals(rest.split(/\s+/)) : null, empty: () => [{ function: 'vitals', kind: 'vitals', params: {}, line: '' }] })
 registerCommand({ name: 'rx', group: 'orders', title: 'Prescription', aliases: ['med'], label: 'Prescription', example: '/rx metformin 500 bd 30d for dm', action: 'write:medication', writes: ['medication'],
   parse: (rest, ctx) => prescription(rest, ctx),

@@ -1575,6 +1575,25 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   echo, ECG and spirometer files, a peak-flow diary; blood bank stock and barcodes, MRI T2* trends; AJCC stage tables, the tumour
   board's list; monitor feeds into the anaesthetic record, sterilisation and implant registries, theatre use reports, e-signed consent;
   home visits and the ministry's family planning returns.
+- *Built 2026-10-08 (lane `clinics-shared`), the core and base changes the drawn choices need* (tag `clinics-core-ready`):
+  **C1** `registerCardLine(pack, 'medication' | 'vitals', title, line)` (`visit/lines.ts`, `CardLines.tsx`): a pack the department uses
+  adds its rows under the base's /rx and /v cards (its name over them; words plain or each with a state tone) and its short words after
+  the draft's line (the drafts' block hands `BlockEnv.draftLine`); the line reads the card's fields, what the chart shows (`Ctx.record`),
+  the clinic's settings (`Ctx.org`) and the moment; only the packs the department uses speak, in its pack order, one line a pack and card,
+  a pack whose line fails says nothing; nothing is stored and nothing waits for it. **C2** `/v` reads `len`/`length` and `hc`/`head`/`ofc`:
+  a length is written as the base's `height` with `method` *lying*, the head as `head`; a length and a height in one line are refused; the
+  card for a child under two is Wt, Length, Head, Temp, Pulse, RR, SpO₂, and anyone else's the adult card with length or head when said
+  (`visit/vitals.ts`). **C3** a pack command declared `worksFor` is offered where the department ticks the pack or a department using it
+  works for this one (`Ctx.servedBy`), and typed elsewhere says where it is offered; migration 22 (`core.declare_served(type)`): a pack
+  type extending a base type (not order) declared *served* is written with the base type's action (`write:given` for a transfusion
+  record), and the pack's own check asks `core.pack_serves(org, department, pack)` (granted to it by the declaration) to refuse
+  `not_served` elsewhere. **C4** `registerNewPatientStep(pack, {show, Part, missing, after})` (`shell/newPatientSteps.ts`): asked in
+  New patient (the desk's and ⌘K's) where the pack is on and its own setting says so; Register waits for what it is missing; once
+  registered the pack does its own with the new patient, and a step that fails says so with Continue. **C5** `registerBoardRows(pack,
+  {title, view, useRows, start, buttons})` (`ward/rows.ts`, `PackRows.tsx`): a pack's rows of today's work not yet in a place, under the
+  board (a patient with a stay here left out), counted as a view of the board's toolbar; Start is the base's admission into a free place
+  chosen inline, with the pack's own entries in the same set; at most two buttons of the pack's own, never a base word. Tests:
+  `npm run test:clinics-core`, `supabase/tests/clinics_core.sql`. The privileges migration is now `20260926000099_privileges.sql`.
 - *Built 2026-10-08 (lane `clinics-medicine`), cardiology* (`cardiology`, migration 28, role block e4): no record type. `/ecg` writes the
   base's result with no order (LOINC 11524-6; rate 8867-4, PR 8625-6, QRS 8633-0, QTc 8636-3, axis 8632-2 as analytes with their ranges, a
   woman's QTc to 460; rhythm and ST-T as text; a conclusion written from them unless typed); its card (rhythm and ST-T chips, the five
