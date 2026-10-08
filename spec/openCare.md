@@ -621,7 +621,7 @@ it works ("/x is used in: …").
   built from the kit (`@core/ui`) and the tokens only (`opencare/tokens-only`, §4.6 Design system), so it reads natively in both
   themes; a record block of its own type goes through `registerRenderer(type, { Block })`, drawn inside the chart's shell. A colour
   the tokens lack is asked for in core, never invented in the pack.
-- **No new packs until the owner says so.** The packs he asked for: pharmacy and laboratory (§5.3), and billing (§5.4, to build).
+- **No new packs until the owner says so.** The packs he asked for: pharmacy and laboratory (§5.3), billing (§5.4, to build), and radiology (§5.5, 2026-10-08).
 
 ### 5.1 How a pack shows up (decided with the owner, one rule at a time, from 2026-10-04)
 - **Rule 1 · on per department.** Two switches: the clinic turns a pack on (`organization.packs_used`), then each department ticks
@@ -1374,6 +1374,35 @@ for billing. Each is **to build**, in the core's own files, never a pack's (owne
   D20), the same-save hold decision (D26), the lift-by-setting record (D3), the override right (D21), the settings-change listener
   (D11), a hold's short name beside its word (D22: the soft check's word carries it), the order-card field (D1), and the
   chargeables door for now (D16; *Later*).
+
+### 5.5 Radiology (the owner's answers to the pictures, 2026-10-08; nothing built)
+The pictures `/pictures.html#rad-order` … `#rad-settings` (`src/pictures/radiology.tsx`) were drawn by Claude; the owner answered
+their questions on 2026-10-08 ("1 two tabs, 2-6 ok, 7 yours"). What the owner decided:
+- **Two tabs** (Q1): *Scan* for the radiographer (one list for every room, a filter by kind: X-ray, Ultrasound, CT, MRI; To scan ·
+  Scanned today · Couldn't scan) and *Report* for the radiologist (To report · Drafts · Signed today), as the laboratory's Collect and
+  Results. Each shows only to the roles that use it. Where the department uses bookings, its To book view and Diary join (§bookings).
+- **X-rays reported or not** (Q2): each exam says whether it is always reported or only if the doctor asks; with no report the films
+  go with the patient and the order comes back to the doctor for their own reading.
+- **The report in one step** (Q3): the radiologist writes and signs; a switch *Report in two steps* (a resident or typist writes, a
+  radiologist signs) is off by default.
+- **Safety facts shown, never a stop** (Q4): eGFR (with its age), metformin and allergies before contrast, and pregnancy for women
+  12–50 before an X-ray or a CT, on the doctor's card and again at the scan; pregnant asked at the door and kept in the record (the
+  base's `pregnancy`); eGFR under 30, the radiologist decides at the scan.
+- **Contrast and reactions in the record** (Q5): the contrast given is the base's `given`, a reaction the base's `allergy`.
+- **Later, not day one** (Q6): the link to the clinic's image viewer (PACS), the dose record, MRI safety screening, a chart section of
+  past studies, protocols.
+- **The walk-in** (Q7): the bench's two steps; *what for* is the `/xr` `/us` `/ct` `/mri` line and the exams asked for most, with
+  what to tell the patient (in Arabic).
+- As the laboratory's: a critical finding is only a notice ("Critical: tell Dr. X now", then Sign); the report reaches the doctor's
+  To review by the base's review loop and shows in the chart, the impression first. Booking a time is the bookings pack's; paying is
+  billing's row button.
+- *Proposed by Claude, awaiting the owner:* contrast with or without is two exams (two services, two prices), so no field is needed
+  for it; the report is the base's `result` with the findings (LOINC 18782-3) and the impression (19005-8) as text analytes, a
+  critical one marked AA so the base's loop raises it as critical; the list's row says "contrast" and the numbers show when the row
+  opens (a mark sees only the row, and an eGFR may be private). Three core changes, each needing the owner's yes: (a) an order may
+  carry a pack's own words (a pack type extending `order`: the side, portable, report asked); (b) a pack's order card is handed what
+  the chart already shows (latest values, current medicines, allergies); (c) an order finished with no answer to come (an X-ray not
+  reported) puts a row on the requester's To review for their own reading.
 
 ---
 

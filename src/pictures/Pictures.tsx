@@ -7,6 +7,7 @@ import { BenchWalkIn } from './bench'
 import { RxCount, RxReceive, RxSettings, RxStock } from './stock'
 import { LabAnalysers, LabChairs, LabReceive, LabSettings } from './biglab'
 import { OrderAsk, OrderList, OrderScan, OrderSet, OrderTyping, OrderWhere } from './order'
+import { RadBack, RadContrast, RadCritical, RadList, RadOrder, RadReport, RadScan, RadSettings, RadWalkIn } from './radiology'
 import { StoreArrived, StoreSend, StoreSetup, StoreStock } from './store'
 
 const LIST: { id: string; title: string; note: string; Page: ComponentType }[] = [
@@ -35,6 +36,15 @@ const LIST: { id: string; title: string; note: string; Page: ComponentType }[] =
   { id: 'store-send', title: 'Main store · sending to a pharmacy', note: 'One step: to a pharmacy, lines with the first batch to expire and what the pharmacy has; sent is there.', Page: StoreSend },
   { id: 'store-arrived', title: 'Pharmacy · what came from the store', note: 'In its movements beside a supplier\'s delivery and what was given; nothing to confirm.', Page: StoreArrived },
   { id: 'store-setup', title: 'Main store · its setup and the products', note: 'A setup of its own (pharmacy pack, Keep stock, no dispensing); the products one list for the clinic, a minimum per place.', Page: StoreSetup },
+  { id: 'rad-order', title: 'Radiology · the doctor orders a CT', note: '/ct with +c, urgent and the question; the facts before contrast shown, never a stop; pregnant optional here.', Page: RadOrder },
+  { id: 'rad-walkin', title: 'Radiology · a walk-in', note: 'The bench\'s two steps; what for is /xr /us /ct /mri plus the exams asked for most, and what to tell the patient.', Page: RadWalkIn },
+  { id: 'rad-list', title: 'Radiology · the Scan list', note: 'One list for every room, by kind; ward beds, walk-ins, the marks to act on, booked times.', Page: RadList },
+  { id: 'rad-scan', title: 'Radiology · scanning', note: 'Who (two identifiers), which side (big), pregnant asked at the door, the views; Scanned in one key.', Page: RadScan },
+  { id: 'rad-contrast', title: 'Radiology · scanning with contrast', note: 'eGFR, metformin, allergies from the record; under 30 the radiologist decides; the contrast given and any reaction go into the record.', Page: RadContrast },
+  { id: 'rad-report', title: 'Radiology · the report', note: 'To report beside the report: the last study of the same part, a template, findings and impression, Sign.', Page: RadReport },
+  { id: 'rad-critical', title: 'Radiology · a critical finding', note: 'Only a notice, as the lab\'s: tell the doctor now, then Sign.', Page: RadCritical },
+  { id: 'rad-back', title: 'Radiology · what comes back to the doctor', note: 'To review: critical first; the report in the chart, impression first; a film-only X-ray asks for the doctor\'s reading.', Page: RadBack },
+  { id: 'rad-settings', title: 'Radiology · settings', note: 'The exams (side, contrast, what to tell the patient, film only) and three switches.', Page: RadSettings },
   { id: 'doctor', title: "Doctor · what comes back", note: 'To review: the pharmacy\'s questions beside the results; Answer opens the chart, where the question is a card.', Page: DoctorSide },
 ]
 
@@ -43,7 +53,7 @@ export function Pictures() {
   useEffect(() => { const f = () => setId(location.hash.slice(1)); addEventListener('hashchange', f); return () => removeEventListener('hashchange', f) }, [])
   const i = LIST.findIndex((p) => p.id === id)
   if (i < 0) return <div className="mx-auto grid max-w-2xl gap-3 p-6 text-14">
-    <p className="text-18 font-semibold text-fg">Pictures · pharmacy and laboratory</p>
+    <p className="text-18 font-semibold text-fg">Pictures · pharmacy, laboratory and radiology</p>
     <p className="text-muted">Made-up patients, the real kit. Nothing here is built yet.</p>
     <ol className="grid gap-1.5">{LIST.map((p, n) => <li key={p.id}><a className="text-accent hover:underline" href={`#${p.id}`}>{n + 1}. {p.title}</a> <span className="text-muted">— {p.note}</span></li>)}</ol>
   </div>
