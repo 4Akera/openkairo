@@ -49,12 +49,12 @@ select t.refused(t.w(t.e('oncology.cancer', :'pt', :'im', '{"concept":{"text":"x
 select t.as(:'on');
 select t.landed(t.w(pg_temp.cycle('00000000-0000-0000-0000-00000000c301')), 'AC 3, give');
 select t.refused(t.w(pg_temp.cycle(null, 'maybe')), 'bad_shape', 'Give, Delay or Reduce');
-select t.ok((select r ->> 'regimen' = 'ac' and (r ->> 'cycle')::int = 3 and r ->> 'decision' = 'give' and (r ->> 'due')::date = current_date
+select t.ok((select r ->> 'regimen' = 'ac' and (r ->> 'cycle')::int = 3 and r ->> 'decision' = 'give' and (r ->> 'due')::date = (now() at time zone 'Africa/Cairo')::date
   from t.rows('oncology.cycles', :'onc', jsonb_build_object('item', '00000000-0000-0000-0000-00000000c301')) r), 'kept for the day unit: AC 3, due today');
 select t.ok(exists (select 1 from t.rows('base.orders', :'onc', jsonb_build_object('to_department_id', :'unit')) r where r ->> 'item' = '00000000-0000-0000-0000-00000000c301' and r ->> 'status' = 'active'),
   'on the unit''s orders, open');
 select t.as(:'nu');
-select t.ok(exists (select 1 from t.rows('oncology.cycles', :'unit', jsonb_build_object('to_department_id', :'unit', 'due', current_date)) r), 'the unit''s nurse reads today''s cycles');
+select t.ok(exists (select 1 from t.rows('oncology.cycles', :'unit', jsonb_build_object('to_department_id', :'unit', 'due', (now() at time zone 'Africa/Cairo')::date)) r), 'the unit''s nurse reads today''s cycles');
 
 \echo '── the chair: the nurse starts the day (the base''s Admit here) and ends it; the cycle answered by the unit''s note'
 select t.landed(t.w(t.e('admitted', :'pt', :'unit', jsonb_build_object('department_id', :'unit', 'admit_source', 'outp', 'place_id', :'chair1'),

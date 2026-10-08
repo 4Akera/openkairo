@@ -20,7 +20,7 @@ export type StepKey = typeof STEPS[number]
 export const STEP_WORD: Record<StepKey, string> = { scheduled: 'waiting', sent_for: 'sent for', arrived: 'arrived', anaesthetic: 'under anaesthetic', operating: 'operating', recovery: 'recovery', back: 'back to the ward' }
 export const STEP_TONE: Partial<Record<StepKey, 'ok' | 'info' | 'accent' | 'warn'>> = { sent_for: 'accent', arrived: 'accent', anaesthetic: 'info', operating: 'info', recovery: 'ok', back: 'ok' }
 export type Part = 'sign_in' | 'time_out' | 'sign_out'
-export const PARTS: [Part, string, string][] = [['sign_in', 'Sign in', 'before induction'], ['time_out', 'Time out', 'before the cut'], ['sign_out', 'Sign out', 'before she leaves']]
+export const PARTS: [Part, string, string][] = [['sign_in', 'Sign in', 'before induction'], ['time_out', 'Time out', 'before the cut'], ['sign_out', 'Sign out', 'before the patient leaves']]
 /** what the list's button does next on a case, from where it stands and the parts signed: Send for, Arrived, Sign in, Time out, Sign out, Out, Back */
 export function nextOf(step: StepKey | null, parts: Set<Part>): { word: string; step?: StepKey; part?: Part } | null {
   if (!step) return { word: 'Schedule' }

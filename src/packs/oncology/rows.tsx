@@ -28,7 +28,9 @@ function useCycleRows(dept: Department): { rows: BoardRow[]; isLoading?: boolean
     const weekly = regs.find((r) => r.key === c.regimen)?.every_days === 7
     const name = `${(c.name ?? c.regimen).replace(/ weekly$/i, '')} ${weekly ? 'W' : 'C'}${c.cycle}${weekly ? '' : ` D${c.day}`}`
     return { key: c.item, patientId: c.patient_id, number: p?.record_number ?? null, name: p ? `${p.given_name} ${p.family_name}` : 'Patient', sexAge: p ? `${p.age} ${p.sex[0]?.toUpperCase() ?? ''}` : '',
-      words: [name, ...(c.percent != null && c.percent < 100 ? [{ text: `${c.percent} % dose`, tone: 'info' as const }] : [])], since: c.ordered_at, reason: name }
+      words: [name, ...(c.percent != null && c.percent < 100 ? [{ text: `${c.percent} % dose`, tone: 'info' as const }] : [])],
+      // its minutes count from when it was signed today; one signed on an earlier day counts none
+      since: clinicDay(org?.organization.time_zone || undefined, new Date(c.ordered_at)) === day ? c.ordered_at : null, reason: name }
   })
   return { rows }
 }

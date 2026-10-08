@@ -62,11 +62,13 @@ begin
   insert into oncology.cycles
   select p_org, l.item, core.survivor(p_org, l.patient_id), (l.data ->> 'department_id')::uuid, l.department_id, w ->> 'regimen', w ->> 'name',
          (w ->> 'cycle')::int, (w ->> 'of')::int, (w ->> 'day')::int, w ->> 'decision', (w ->> 'percent')::int,
-         coalesce((l.data ->> 'due')::timestamptz, l.occurred_at, l.recorded_at)::date, l.data ->> 'status', f.occurred_at,
+         (coalesce((l.data ->> 'due')::timestamptz, l.occurred_at, l.recorded_at) at time zone tz.zone)::date, l.data ->> 'status', f.occurred_at,
          (select coalesce(array_agg(e.id order by e.recorded_at), '{}') from core.pack_entries(p_org, array[l.item]) e where e.item = l.item)
     from (select distinct on (x.item) x.* from core.pack_entries(p_org, p_items) x
            where x.item = any (p_items) and x.type = 'oncology.cycle' order by x.item, x.item_version desc) l
     cross join lateral (select l.data -> 'oncology' as w) ww
+    -- the day it is given is the clinic's day, in its own time zone
+    cross join lateral (select coalesce(core.setting_at(p_org, 'organization.time_zone', p_org) ->> 'zone', 'Africa/Cairo') as zone) tz
     cross join lateral (select coalesce(min(y.occurred_at), min(y.recorded_at)) occurred_at from core.pack_entries(p_org, array[l.item]) y where y.item = l.item and y.item_version = 1) f
    where l.data ->> 'status' is not null;
 end $$;

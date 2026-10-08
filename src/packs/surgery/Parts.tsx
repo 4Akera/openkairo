@@ -2,7 +2,7 @@
 // line (the surgeon's template, every line editable; the times, the anaesthetic and blood loss from the anaesthetic record and the
 // specimen and implants from Sign out, read by their shape from what refers to the operation) and the Surgery section (today, planned,
 // before; what was sent and left in).
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { read } from '@core/db/rpc'
 import { useDepartment } from '@core/hooks/organization'
@@ -28,11 +28,10 @@ export function OpNoteCard({ q, set }: CardEditorProps) {
   const n = (q.surgery ?? {}) as OpNote
   const put = (patch: Partial<OpNote>) => { const next = { ...n, ...patch }; set({ surgery: next, text: noteText(next) }) }
   const about = useAbout(dept?.id, n.op)
-  const filled = useRef(false)
-  // once: the surgeon's own template, the record's times and anaesthetic, Sign out's specimen and implants, where the note has none
+  // once for each draft (a new line is a new draft, with no surgeon yet): the surgeon's own template, the record's times and anaesthetic,
+  // Sign out's specimen and implants, where the note has none
   useEffect(() => {
-    if (filled.current || !about.data || !org) return
-    filled.current = true
+    if (n.surgeon !== undefined || !about.data || !org) return
     const rec = latestWith(about.data, (d) => typeof d.times === 'object' && d.times !== null) as { times?: { knife?: string; end?: string }; technique?: string; anaesthetist?: string; blood_loss?: number } | undefined
     const out = latestWith(about.data, (d) => d.part === 'sign_out') as { specimen?: string; implants?: { what: string; lot?: string; left_in?: number }[] } | undefined
     const code = org.services.find((s) => s.name.replace(/\s*\(.*\)$/, '') === n.operation)?.code
@@ -42,7 +41,7 @@ export function OpNoteCard({ q, set }: CardEditorProps) {
       ...(rec?.technique && !n.technique ? { technique: rec.technique } : {}), ...(rec?.blood_loss != null && !n.blood_loss ? { blood_loss: rec.blood_loss } : {}),
       ...(out?.specimen && !n.specimen ? { specimen: `${out.specimen} → Histopathology` } : {}),
       ...(out?.implants?.length && !n.implants ? { implants: out.implants.map((i) => `${i.what}${i.left_in != null ? ` · ${i.left_in} left in` : ''}${i.lot ? ` · lot ${i.lot}` : ''}`).join('; ') } : {}) })
-  }, [about.data, org]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [about.data, org, n.surgeon === undefined]) // eslint-disable-line react-hooks/exhaustive-deps
   const t = n.times; const mins = minutesBetween(t?.from, t?.to)
   const small = 'h-7 text-13'
   return <div className="grid gap-2 text-13">

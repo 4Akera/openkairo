@@ -28,6 +28,8 @@ export const RISKS: Record<Plan, string[]> = {
   local_sedation: ['it may not numb enough: more local or a general', 'drowsy for some hours'],
 }
 export const ASA = ['I', 'II', 'III', 'IV', 'V', 'VI'] as const
+/** the history the pre-op asks, in its order */
+export const HISTORY: [string, string][] = [['heart', 'Heart'], ['lungs', 'Lungs'], ['sleep', 'Sleep'], ['diabetes', 'Diabetes'], ['bleeding', 'Bleeding'], ['teeth', 'Teeth, reflux'], ['before', 'Before']]
 /** the clinic's Arabic sheet for the patient: what to take and stop, and fasting (the printed copy waits for printing) */
 export function arabicSheet(lines: StopLine[]): string {
   const stop = lines.filter((l) => /stop/i.test(l.what)).map((l) => `أوقف ${l.medicine.split(' ')[0]} قبل العملية ${l.days ? `بـ ${l.days} أيام` : ''}`.trim())

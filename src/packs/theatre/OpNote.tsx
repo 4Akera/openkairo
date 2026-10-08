@@ -1,7 +1,7 @@
 // Under /op's card (spec/openCare.md §5.7, Q41; the picture #surg-clinic): the operation with its usual time, the side big, the chips
-// that rewrite the line (side, priority, surgeon, the anaesthetic wanted, day case or admitted), what his record says before an
+// that rewrite the line (side, priority, surgeon, the anaesthetic wanted, day case or admitted), what the record says before an
 // operation (blood thinners, SGLT2 inhibitors, metformin, BMI: shown for the pre-op clinic to weigh, never a stop) and the risks to tell
-// (the Theatre's list for this operation). The signed consent form is a scan in his Documents; printing the form waits for printing.
+// (the Theatre's list for this operation). The signed consent form is a scan in the patient's Documents; printing the form waits for printing.
 import { compose } from '@core/hooks/composer'
 import { useDepartment } from '@core/hooks/organization'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
@@ -59,13 +59,13 @@ export function OpNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
     <Say k="Stay">{([['day', 'Day case'], ['admitted', 'Admitted']] as const).map(([k, l]) => <Chip key={k} on={said.stay === k} onClick={() => go({ stay: k })}>{l}</Chip>)}
       {said.stay === 'day' && <span className="text-12 text-faint">home the same evening if well</span>}</Say>
     <span className="grid gap-1.5 rounded-lg border border-line bg-surface p-2.5"><span className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Before the operation</span>
-      <Say k="From his record">{flags.length ? flags.map((f) => <Tag key={f.word} tone={f.tone === 'warn' ? 'warn' : 'neutral'}>{f.word}</Tag>) : <span className="text-muted">no blood thinner, no SGLT2 inhibitor</span>}
+      <Say k="From the record">{flags.length ? flags.map((f) => <Tag key={f.word} tone={f.tone === 'warn' ? 'warn' : 'neutral'}>{f.word}</Tag>) : <span className="text-muted">no blood thinner, no SGLT2 inhibitor</span>}
         <span className="text-12 text-faint">for the pre-op clinic to weigh; shown, never a stop</span></Say>
       <Say k="Tests"><span className="text-muted">the clinic's preset: <span className="font-mono">#preop</span> on the next line</span></Say></span>
     {(op?.risks?.length ?? 0) > 0 && <span className="grid gap-1.5 rounded-lg border border-line bg-surface p-2.5">
       <span className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Consent · the risks told (this operation's list)</span>
       <span className="flex flex-wrap gap-1.5">{op!.risks!.map((r) => <Chip key={r} on variant="check" onClick={() => undefined}>{r}</Chip>)}</span>
       <span className="flex flex-wrap items-center gap-2"><span dir="rtl" lang="ar" className="text-13 text-fg">إقرار بالموافقة على العملية: {svc.name}</span><Tag tone="warn" className="ms-auto">signed paper not scanned yet</Tag></span>
-      <span className="text-12 text-faint">He signs the form; it is scanned into his Documents, and from then the theatre list says “consent”. The anaesthetic's risks are the pre-op clinic's.</span></span>}
+      <span className="text-12 text-faint">The patient signs the form; it is scanned into their Documents, and from then the theatre list says “consent”. The anaesthetic's risks are the pre-op clinic's.</span></span>}
   </span>
 }

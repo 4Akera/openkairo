@@ -239,7 +239,7 @@ select core.declare_setup('theatre.department', 'theatre', 'bench', '{"en":"Thea
   services => (select jsonb_agg(jsonb_build_object('code', x.code, 'name', x.name, 'section', x.kind, 'answer', 'theatre.step',
       'steps', '["scheduled","sent_for","arrived","anaesthetic","operating","recovery","back"]'::jsonb) order by x.n)
     from (values
-      (1, 'lapchole', 'Laparoscopic cholecystectomy', 'General surgery'), (2, 'ihr_mesh', 'Inguinal hernia repair, open mesh', 'General surgery'),
+      (1, 'lapchole', 'Laparoscopic cholecystectomy', 'General surgery'), (2, 'ihr_mesh', 'Inguinal hernia repair, open mesh (Lichtenstein)', 'General surgery'),
       (3, 'uhr_mesh', 'Umbilical hernia repair, mesh', 'General surgery'), (4, 'haemorrhoid', 'Haemorrhoidectomy', 'General surgery'),
       (5, 'lapappx', 'Laparoscopic appendicectomy', 'General surgery'), (6, 'breastlump', 'Excision of breast lump', 'General surgery'),
       (7, 'thyroidectomy', 'Total thyroidectomy', 'General surgery'),

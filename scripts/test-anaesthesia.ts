@@ -15,7 +15,7 @@ const RULES: StopRule[] = [{ match: 'aspirin, B01AC06', what: 'continue, also on
   { match: 'empagliflozin, A10BK', what: 'stop 3 days before', days: 3, warn: true }, { match: 'valsartan, C09', what: 'no dose on the morning', days: 0 }]
 const med = (drug_name: string, drug_code: string | null, dose_number: number | null = null, frequency: string | null = 'OD') => ({ drug_name, drug_code, dose_number, dose_unit: 'mg', frequency, status: 'active' })
 
-test('his medicines against the clinic\'s list: by name or ATC; one not on the list asks the anaesthetist', () => {
+test('the patient\'s medicines against the clinic\'s list: by name or ATC; one not on the list asks the anaesthetist', () => {
   const l = stopLines([med('Aspirin', 'atc:B01AC06', 75), med('Metformin', 'atc:A10BA02', 1000, 'BD'), med('Jardiance', 'atc:A10BK03', 10), med('Losartan', 'atc:C09CA01', 50), med('Omeprazole', null, 20)], RULES)
   assert.deepEqual(l.map((x) => x.what), ['continue, also on the day', 'no dose on the morning of the operation', 'stop 3 days before', 'no dose on the morning', 'ask the anaesthetist'])
   assert.equal(l[1].medicine, 'Metformin 1000 mg twice'); assert.ok(l[2].warn)

@@ -1634,12 +1634,14 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   the pack; Theatre nurse (`theatre.nurse`, built on Nurse, with the bench, orders and steps). The setup `theatre.department` (13
   operations by specialty, three rooms, their sessions; works for all). Client: `/op` (offered where the Theatre works for the
   department; by code, the name's words or every word typed the start of one: "lap chole"; its card under the line: the side big,
-  chips for side, priority, surgeon, the anaesthetic wanted and the stay that rewrite the line, his record's blood thinners, SGLT2
+  chips for side, priority, surgeon, the anaesthetic wanted and the stay that rewrite the line, the record's blood thinners, SGLT2
   inhibitors, metformin and BMI shown for the pre-op clinic, the risks told); the theatre list in place of the bench (rooms as chips,
   the day with ← →, emergencies on top until put in a room now, each room's cases in order with the side, surgeon and anaesthetist, ASA,
   where it stands, the parts signed and the next key; To schedule by priority then weeks waiting with Pre-op and Consent read from the
   record, and the sessions with room for the usual time); the checklist on a case (Sign in → anaesthetic, Time out → operating; Sign out
-  sends the specimen as an order to the Laboratory's histopathology in the same set; a count that does not add up is a notice). What the
+  sends the specimen as an order to the Laboratory's histopathology in the same set; a count that does not add up is a notice); in the
+  record a checklist part reads in words (each item said or not and who said it, the counts, implants, specimen), not the ids it is
+  about. What the
   list shows of the pre-op, the anaesthetic record and the consent is read by shape from what refers to the operation, never by another
   pack's name (rule: no pack names another). Demo: the Theatre, Iman Zidan (theatre@demo.com); Ghada Sharaf (operating, Sign out to say),
   Amr Nassar (under a spinal), Aya Shehata (To schedule, urgent), Ziad Hafez (an emergency); the clinic's choices (`seeds/clinic_packs.sql`):
@@ -1673,10 +1675,11 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   built on Doctor) and Recovery nurse (`anaesthesia.recovery_nurse`, built on Nurse, with the base's admit and discharge). Setups
   `anaesthesia.preop_clinic` and `anaesthesia.recovery` (five bays, cubicles on the base's board); the screen `anaesthesia.record` (the
   Theatre's tab for whoever gives anaesthesia). Client: the Anaesthesia section; `/preop` and its card (the scores typed on the lines
-  before, read from the drafts; his medicines against the list, each line editable; the Arabic sheet shown); the record's grid (a blank
+  before, read from the drafts; the patient's medicines against the list, each line editable; the Arabic sheet shown); the pre-op and
+  the anaesthetic record read in words in the record; the record's grid (a blank
   keeps the last setting, a drug typed on a column takes its time, the dose per kg shown, drafts kept on this machine, Sign the record);
-  Recovery's tile line ("in 30 min · Aldrete 8 → 10 · pain 2 · ready for the ward") and its two buttons (Aldrete: her chart with the /score
-  card; Record: her record). Demo: the Pre-op clinic and Recovery, Dr. Sherine Rashad (anaesthesia@demo.com) and Rehab Seif
+  Recovery's tile line ("in 30 min · Aldrete 8 → 10 · pain 2 · ready for the ward") and its two buttons (Aldrete: the patient's chart with the
+  /score card; Record: the anaesthetic record). Demo: the Pre-op clinic and Recovery, Dr. Sherine Rashad (anaesthesia@demo.com) and Rehab Seif
   (recovery@demo.com); Hamed Sakr (pre-op today, Hb 9.8), Marwa Shalaby (Bay 2, Aldrete 6), Yara Abdelsalam (7, Bay 3, Aldrete 7 → 9).
   Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
   ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet waits for printing;

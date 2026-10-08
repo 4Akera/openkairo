@@ -12,6 +12,6 @@ export function parsePreop(_rest: string, ctx: Ctx): Result {
 export const preopLine = (p: Record<string, unknown>) => {
   const plan = PLANS.find(([k]) => k === p.plan)?.[1]
   return ['Pre-op assessment', `ASA ${p.asa}${p.emergency ? ' E' : ''}`, (p.airway as { mallampati?: string } | undefined)?.mallampati && `Mallampati ${(p.airway as { mallampati: string }).mallampati}`,
-    p.verdict === 'fit' ? 'fit' : 'not yet', plan && `${plan.toLowerCase()} planned`, Array.isArray(p.stop) && p.stop.length ? 'his medicines before the operation' : ''].filter(Boolean).join(' · ')
+    p.verdict === 'fit' ? 'fit' : 'not yet', plan && `${plan.toLowerCase()} planned`, Array.isArray(p.stop) && p.stop.length ? 'medicines before the operation' : ''].filter(Boolean).join(' · ')
 }
 
