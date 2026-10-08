@@ -54,7 +54,7 @@ test('the Transfusions section: the units (the base\'s given of a blood product)
   const units = unitsOf([e('given', { drug: { text: 'Red cells · O Rh+' }, lot: '26-1', dose: { value: '290' }, note: 'no reaction' }, '2026-09-17T09:00:00Z', 'a'),
     e('given', { drug: { text: 'Red cells · O Rh+' }, lot: '26-2', dose: { value: '290' } }, '2026-09-17T11:00:00Z', 'b'),
     e('given', { drug: { text: 'Influenza vaccine' } }, '2026-09-20T09:00:00Z', 'c'), e('given', { drug: { text: 'Red cells' }, lot: '26-3', dose: { value: '60' }, note: 'stopped: hives' }, '2026-10-08T11:00:00Z', 'd')])
-  assert.deepEqual(units.map((u) => u.unit), ['26-3', '26-2', '26-1'], 'blood only, the newest first'); assert.equal(units[0].stopped, true)
+  assert.deepEqual(units.map((u) => u.unit), ['26-3', '26-2', '26-1'], 'blood only, the newest first'); assert.equal(units[0].stopped, true); assert.equal(units[2].stopped, false, '"no reaction" is not a stop')
   const s = sessionsOf(units, [v('hb', 'loinc:718-7', 9.3, '2026-09-17T07:00:00Z'), v('weight', 'loinc:29463-7', 48, '2026-09-17T08:00:00Z')])
   assert.deepEqual(s.map((x) => [x.day, x.units.length, x.hb, x.ml, x.perKg]), [['2026-10-08', 1, 9.3, 60, 1], ['2026-09-17', 2, 9.3, 580, 12]])
   assert.equal(chelationOf([med('V03AC03', 'Deferasirox', 1260)], [v('weight', null, 48, '2026-10-08')])?.perKg, 26)

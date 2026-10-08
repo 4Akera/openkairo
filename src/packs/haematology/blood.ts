@@ -21,7 +21,7 @@ export const isUnit = (e: ServerEntry) => e.type !== 'crossed_out' && typeof (e.
 export interface Unit { id: string; at: string; product: string; unit: string | null; ml: number | null; note: string | null; stopped: boolean }
 export const unitsOf = (own: ServerEntry[]): Unit[] => own.filter(isUnit).sort(newest).map((e) => ({ id: e.id, at: e.occurred_at, product: String((e.data!.drug as { text: string }).text),
   unit: typeof e.data?.lot === 'string' ? e.data.lot : null, ml: (e.data?.dose as { value?: string } | undefined)?.value ? Number((e.data!.dose as { value: string }).value) : null,
-  note: typeof e.data?.note === 'string' ? e.data.note : null, stopped: /stopped|reaction/i.test(String(e.data?.note ?? '')) }))
+  note: typeof e.data?.note === 'string' ? e.data.note : null, stopped: /\bstopped\b/i.test(String(e.data?.note ?? '')) }))
 export interface Session { day: string; units: Unit[]; hb: number | null; ml: number; perKg: number | null }
 /** the transfusions by day, the newest first: how many units, the Hb before (the last on or before that day), mL/kg at the weight then */
 export function sessionsOf(units: Unit[], values: ValueRow[]): Session[] {

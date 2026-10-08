@@ -5,6 +5,8 @@ import { useEffect, type ReactNode } from 'react'
 import type { CardEditorProps } from '@core/screens/visit/commands'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
 import { usePackEntries } from '@core/hooks/chart'
+import { packTypes } from '@core/screens/chart/sections'
+import { wordTypes } from '@core/screens/chart/words'
 import { useDepartment } from '@core/hooks/organization'
 import { settingIn } from '@core/screens/settings/form/model'
 import { Chip, Input, NumberInput, Tag, cn } from '@core/ui'
@@ -19,8 +21,8 @@ function Pick({ k, of, on, set, hint }: { k: string; of: string[]; on: string | 
 }
 export const tableOf = (org: Pick<Organization, 'settings' | 'settingKeys' | 'datatypes' | 'organization'> | undefined): Row[] =>
   (settingIn(org, 'haematology.inr', org?.organization.id).table ?? []) as Row[]
-/** her INR clinic entries, read as the chart reads them */
-const useMine = (patientId: string | undefined) => usePackEntries(patientId ?? null, ['haematology.plan', 'haematology.week']).data ?? []
+/** her INR clinic entries: the chart's own read of the packs' types (the same query, so it comes from what the chart already holds) */
+const useMine = (patientId: string | undefined) => usePackEntries(patientId ?? null, [...new Set([...packTypes(), ...wordTypes()])]).data ?? []
 
 /** today's INR: its target band set once her plan is read */
 export function InrCard({ q, set, ctx }: CardEditorProps) {
