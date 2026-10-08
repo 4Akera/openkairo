@@ -11,8 +11,8 @@ import type { Department, OrderRow, Organization, PackDeclared } from '../db/typ
 import { isPackKey, stateTone, type MarkRow, type StateTone } from './marks'
 
 /** where a row is drawn: the desk, the clinic queue (and its requests), the base bench, the bench's patient page, the page that answers
- *  one request (Request.tsx), the doctor's chart (the word only), and a pack's own list built on the core ListRow */
-export type RowList = 'desk' | 'queue' | 'bench' | 'patient' | 'request' | 'chart' | 'screen'
+ *  one request (Request.tsx), and a pack's own list built on the core ListRow */
+export type RowList = 'desk' | 'queue' | 'bench' | 'patient' | 'request' | 'screen'
 
 /** (b) one line a department prices itself: what it is, how many, what it comes to (plain numbers), and the order it belongs to where it
  *  has one (so a soft check can wait per order) */
@@ -147,6 +147,9 @@ export function waitWords(items: readonly string[], waits: ReadonlyMap<string, O
   for (const i of items) { if (isFree(i, waits, ahead)) continue; const w = waits.get(i)!; if (!out.some((x) => x.word === w.word)) out.push({ word: w.word, ...(w.tone ? { tone: w.tone } : {}) }) }
   return out
 }
+/** a stop on an order — not done, not given, declined (a step's or an answer's status: cancelled, rejected, failed) — is never greyed:
+ *  what a form would write on a waiting order counts only when it is one */
+export const isStop = (body: unknown) => ['cancelled', 'rejected', 'failed'].includes(String((body as { data?: { status?: unknown } } | null)?.data?.status ?? ''))
 /** the "…anyway" reason: one line, required, at most 200 letters */
 export const REASON_MAX = 200
 export const reasonOf = (s: string) => s.replace(/\s+/g, ' ').trim()

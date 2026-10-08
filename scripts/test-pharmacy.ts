@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { amountToGive, ar, arabicDirections } from '../src/packs/pharmacy/directions'
 import { bareName, sameMedicine } from '../src/packs/pharmacy/substitutes'
 import { batchFor, boxesToMinimum, inBoxes, lowAt, pickProduct, productsFor, stateOf, type Elsewhere, type Product } from '../src/packs/pharmacy/shelf'
-import { countIn, inStrips, linesFor, priceOf, priceWords, productFor, productsOf, withPrices, type PricedProduct } from '../src/packs/pharmacy/pricing'
+import { countIn, inStrips, linesFor, orderLines, priceOf, priceWords, productFor, productsOf, withPrices, type PricedProduct } from '../src/packs/pharmacy/pricing'
 import { dueLines, dueTotal } from '../src/core/screens/rows'
 import type { Organization } from '../src/core/db/types'
 
@@ -86,6 +86,22 @@ test('prices: the lines handed — a name, a quantity, an amount (plain numbers)
   assert.equal(priceWords(linesFor(PP({}), 21)), '1 box + 1 strip · 220'); assert.equal(priceWords(linesFor(PP({ pack_size: 30, strip_size: 10, price_strip: 50 }), 20)), '2 strips · 100')
   assert.equal(priceWords([]), '')
   assert.ok(lines.every((l) => !/EGP|£|\$/.test(JSON.stringify(l))), 'no currency word')
+})
+test('prices: an order\'s lines so far — each dispense given, counted apart, then what is to give now; the same line once (spec §5.4)', () => {
+  const aug = PP({}); const mega = PP({ id: 'meg', brand: 'Megamox 1 g', price_box: 110, strip_size: undefined, price_strip: undefined }); const list = [aug, mega]
+  assert.deepEqual(orderLines(list, [], { drug: 'Augmentin 1 g', units: 28 }, 'o1'), [{ name: 'Augmentin 1 g · box', quantity: 2, amount: 290, order: 'o1' }], 'nothing given yet: as written')
+  assert.deepEqual(orderLines(list, [{ drug: 'Augmentin 1 g', quantity: '14', unit: 'tablets' }], { drug: 'Augmentin 1 g', units: 14 }, 'o1'),
+    [{ name: 'Augmentin 1 g · box', quantity: 2, amount: 290, order: 'o1' }], 'owed: the box given and the box to give, one line')
+  assert.deepEqual(orderLines(list, [{ drug: 'Augmentin 1 g', quantity: '21' }], { drug: 'Augmentin 1 g', units: 7 }, 'o1'),
+    [{ name: 'Augmentin 1 g · box', quantity: 1, amount: 145, order: 'o1' }, { name: 'Augmentin 1 g · strip', quantity: 2, amount: 150, order: 'o1' }],
+    'each dispense counted apart: 21 given (a box and a strip), then 7 (a strip) — what was handed over, not 28 counted again')
+  assert.deepEqual(orderLines(list, [{ drug: 'Augmentin 1 g', quantity: '14' }], { drug: 'Megamox 1 g', units: 14 }, 'o1').map((l) => `${l.name} ${l.amount}`),
+    ['Augmentin 1 g · box 145', 'Megamox 1 g · box 110'], 'the rest given as another brand: its own line')
+  assert.deepEqual(orderLines(list, [{ drug: 'Augmentin 1 g', quantity: '14' }, { drug: 'Augmentin 1 g', quantity: '14' }], null, 'o1'),
+    [{ name: 'Augmentin 1 g · box', quantity: 2, amount: 290, order: 'o1' }], 'given today: everything given, nothing more to give')
+  assert.deepEqual(orderLines(list, [{ drug: 'Augmentin 1 g', quantity: '14', product: 'meg' }], null, 'o1').map((l) => l.name), ['Megamox 1 g · box'], 'the product given from stock')
+  assert.deepEqual(orderLines(list, [{ drug: 'Unknown tonic', quantity: '1' }], null, 'o1'), [], 'not on the list: free')
+  assert.deepEqual(orderLines(list, [], null, 'o1'), [], 'nothing given, nothing to give: no line')
 })
 test('prices: the product a medicine is — chosen, its brand, else the only one with its active ingredient; the clinic\'s list from its settings', () => {
   const org = { settings: [{ key: 'pharmacy.product', thing_id: 'g', owner_id: null, recorded_at: '', data: { brand: 'Glucophage 500', generic: 'Metformin', atc: 'A10BA02', form: 'tablet', pack_size: 30, price_box: 45 } },

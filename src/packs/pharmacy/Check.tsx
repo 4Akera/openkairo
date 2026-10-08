@@ -18,7 +18,7 @@ import { inBoxes, pickProduct, productsFor } from './shelf'
 import { keepStock } from './settings'
 import { useStock } from './Stock'
 import { chargesHere } from '@core/screens/rows'
-import { linesFor, priceWords, productFor, productsOf } from './pricing'
+import { linesFor, priceWords, productFor, productsOf, type Given } from './pricing'
 
 export interface Dispense { given: boolean; reason: string; drug?: string; quantity?: string; anyway?: string; to?: string
   product_id?: string; batch?: string }   // with stock kept: the product and the batch it is given from (first to expire)
@@ -27,7 +27,7 @@ export interface Warning { code: string; detail?: string; confirmed?: boolean }
 export interface Asked { text: string; at: string; answer?: string; action?: string; answered_by?: string; answered_at?: string }
 /** what a request to the pharmacy carries (answers.ts QUEUE_DETAILS, from the pack's own table) */
 export interface Details { drug?: { name?: string }; dose?: string; frequency?: string; duration_days?: number; quantity?: string; instructions?: string
-  warnings?: Warning[]; owed?: string; status?: string; question?: Asked }
+  warnings?: Warning[]; owed?: string; status?: string; question?: Asked; given?: Given[] }   // given: what was given so far, each dispense apart
 export const detailsOf = (r: Pick<RequestQueueRow, 'details'>) => (r.details ?? {}) as Details
 const WHY_NOT = ['Out of stock', 'Patient declined', 'Buys outside']
 const WARNING: Record<string, (d?: string) => string> = { allergy_clash: (d) => `Allergy${d ? `: ${d}` : ''}`, allergy_caution: (d) => `Allergy, related${d ? `: ${d}` : ''}`,

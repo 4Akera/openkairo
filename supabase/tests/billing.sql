@@ -89,7 +89,7 @@ select t.refuses(format($q$select public.write_setting(jsonb_build_object('key',
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', %L, 'data', jsonb_build_object('service_id', %L)))$q$, :'lab', :'cbc'), 'price_or_order');
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', %L, 'data', jsonb_build_object('service_id', %L, 'price', '9.999')))$q$, :'lab', :'cbc'), 'bad_shape');
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', %L, 'data', jsonb_build_object('service_id', %L, 'price', '10000000.01')))$q$, :'lab', :'cbc'), 'too_much');
-select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', %L, 'data', jsonb_build_object('service_id', %L, 'price', '5')))$q$, :'lab', :'disp'), 'unknown_service');
+select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', %L, 'data', jsonb_build_object('service_id', %L, 'price', '5')))$q$, :'lab', :'disp'), 'not_its_service');
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'billing.visit_fee', 'owner_id', %L, 'data', '{"amount":"200"}'::jsonb))$q$, :'im'), 'already_priced');
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', %L, 'data', jsonb_build_object('service_id', %L, 'price', '300')))$q$, :'psy', :'psyc'), 'not_allowed');
 select t.as(:'cr');
@@ -242,8 +242,8 @@ create function pg_temp.waiting(p_orders text[]) returns jsonb language sql as $
   select pg_temp.op('billing.waiting', '00000000-0000-0000-0000-0000000000d2', jsonb_build_object('orders', to_jsonb(p_orders)))
 $$;
 grant execute on function pg_temp.waiting(text[]) to public;
-select t.ok(w -> 'waiting' = '["00000000-0000-0000-0000-00000000e10b"]' and w -> 'paid' @> '["00000000-0000-0000-0000-00000000e105","00000000-0000-0000-0000-00000000e10a"]'
-  and jsonb_array_length(w -> 'paid') = 2 and not w::text ~ '"(amount|price|total)"', 'at the Lab: Ahmed''s later CBC waits for payment; the two paid do not; words only, no amount')
+select t.ok(w -> 'waiting' = '["00000000-0000-0000-0000-00000000e10b"]' and not w ? 'own' and not w::text ~ '"(amount|price|total|paid)"',
+  'at the Lab: Ahmed''s later CBC waits for payment; the two paid do not; words only, no amount')
   from pg_temp.waiting(array['00000000-0000-0000-0000-00000000e105', '00000000-0000-0000-0000-00000000e10b', '00000000-0000-0000-0000-00000000e10a', '00000000-0000-0000-0000-00000000e107']) w;
 select t.as(:'cr');
 select t.ok(l -> 'waiting' = jsonb_build_array(:'lab') and not (l -> 'before_payment')::boolean, 'the cashier''s card: the Lab is waiting (the later CBC, unpaid)')
@@ -365,8 +365,9 @@ select t.as(:'pm');
 select t.refuses($$select pg_temp.pay('00000000-0000-0000-0000-0000000000f1', '{"handed":[{"name":"Nexium 40","quantity":1,"amount":"75","order_item":"00000000-0000-0000-0000-00000000e10b"}]}', '00000000-0000-0000-0000-0000000000d3')$$, 'not_found');
 select t.ok((r ->> 'total')::numeric = 75 and r ->> 'method' = 'card', 'Pay at the Pharmacy''s counter: the Nexium its row hands, by card')
   from pg_temp.pay(:'pt', '{"method":"card","handed":[{"name":"Nexium 40","quantity":1,"amount":"75","order_item":"00000000-0000-0000-0000-00000000e123"}]}', :'ph') r;
-select t.ok(w -> 'paid' = '["00000000-0000-0000-0000-00000000e123"]', 'its order is paid, for the soft check')
-  from pg_temp.op('billing.waiting', :'ph', '{"orders":["00000000-0000-0000-0000-00000000e123"]}') w;
+select t.ok(w -> 'own' -> '00000000-0000-0000-0000-00000000e123' ->> 'paid' = '75.00' and w -> 'own' -> '00000000-0000-0000-0000-00000000e123' ->> 'sent' = '0'
+  and w -> 'own' -> '00000000-0000-0000-0000-00000000e123' -> 'lines' -> 0 ->> 'name' = 'Nexium 40', 'its order''s own lines, paid, for its row and the soft check')
+  from pg_temp.op('billing.waiting', :'ph', '{"orders":["00000000-0000-0000-0000-00000000e123"],"lines":true}') w;
 reset role;
 select t.ok((select string_agg(kind || ':' || name || ':' || quantity || ':' || amount, ',') from billing.payment_lines l join billing.payments p on p.id = l.payment_id
   where p.department_id = :'ph') = 'handed:Nexium 40:1.00:75.00', 'kept as handed: a name, a quantity, an amount; who took it is the payment''s');
@@ -376,7 +377,7 @@ select t.as(:'cr');
 select t.ok((d -> 'drawer' ->> 'float')::numeric = 500 and (d -> 'drawer' ->> 'cash')::numeric = 222.50 and (d -> 'drawer' ->> 'expected')::numeric = 722.50,
   'Mona''s drawer: float 500 + cash 222.50 (taken, given back and taken again) = 722.50 expected') from pg_temp.op('billing.day', :'cash') d;
 select t.refuses(format($q$select pg_temp.op('billing.close', %L, '{"counted":"700"}')$q$, :'cash'), 'reason_missing');
-select t.refuses(format($q$select pg_temp.op('billing.close', %L, '{"counted":"seven"}')$q$, :'cash'), 'bad_count');
+select t.refuses(format($q$select pg_temp.op('billing.close', %L, '{"counted":"seven"}')$q$, :'cash'), 'drawer_count');
 select t.ok((r ->> 'difference')::numeric = -22.50, 'closed: 700 counted, 22.50 short, with its reason')
   from pg_temp.op('billing.close', :'cash', '{"counted":"700","reason":"change given twice"}') r;
 select t.ok((d -> 'drawer' ->> 'cash')::numeric = 0 and (d -> 'drawer' ->> 'expected')::numeric = 500 and (d -> 'closings' -> 0 ->> 'reason') = 'change given twice',
@@ -390,7 +391,9 @@ select t.ok((d ->> 'taken')::numeric = 817.50 and (d ->> 'receipts')::int = 3 an
 select t.ok(jsonb_array_length(d -> 'cashiers') = 1 and d -> 'cashiers' -> 0 ->> 'by' = 'Cashier Mona' and (d -> 'cashiers' -> 0 ->> 'receipts')::int = 3,
   'a row a cashier') from pg_temp.op('billing.day', :'cash') d;
 select t.ok((select jsonb_object_agg(x ->> 'department_id', (x ->> 'amount')::numeric) from jsonb_array_elements(d -> 'departments') x)
-  = jsonb_build_object(:'im', 0.00, :'lab', 95.00, :'ph', 222.50), 'a row a department whose work was paid') from pg_temp.op('billing.day', :'cash') d;
+  = jsonb_build_object(:'im', 0.00, :'lab', 85.00, :'ph', 222.50),
+  'a row a department whose work was paid, each payment''s discount shared among its lines: the Lab''s CBC 85.00 (95 less 10 waived), R-00001 and its refund cancel out')
+  from pg_temp.op('billing.day', :'cash') d;
 select t.refuses(format($q$select pg_temp.op('billing.day', %L, '{"all":true}')$q$, :'cash'), 'not_allowed');
 select t.as(:'acc');
 select t.ok((d ->> 'taken')::numeric = 987.50 and d -> 'drawer' = 'null', 'the accountant: the clinic''s day, every desk (the Lab''s 95, the Pharmacy''s 75); no drawer of her own')
@@ -513,7 +516,7 @@ create function pg_temp.physio(p_orders text[], p_more jsonb default '{}') retur
   select pg_temp.op('billing.waiting', '00000000-0000-0000-0000-0000000000d9', jsonb_build_object('orders', to_jsonb(p_orders)) || p_more)
 $$;
 grant execute on function pg_temp.physio(text[], jsonb) to public;
-select t.ok(w -> 'waiting' = '[]' and (w -> 'pay_first')::boolean and w ->> 'desk' = 'none' and w -> 'paid' = '[]' and not w ? 'sent',
+select t.ok(w -> 'waiting' = '[]' and (w -> 'pay_first')::boolean and w ->> 'desk' = 'none' and not w ? 'own',
   'nothing sent yet: billing holds none of them, and says Pay first is on here, so the screen holds what its rows price themselves')
   from pg_temp.physio(array['00000000-0000-0000-0000-00000000e300', '00000000-0000-0000-0000-00000000e301']) w;
 select t.refuses($$select pg_temp.pay('00000000-0000-0000-0000-0000000000f2', '{"handed":[{"name":"Session","quantity":1,"amount":"250"}]}', '00000000-0000-0000-0000-0000000000d9')$$, 'not_allowed');
@@ -523,16 +526,17 @@ select t.ok((r ->> 'lines')::int = 3, 'Send to cashier: two sessions and a band,
     jsonb_build_object('name', 'Session · 45 min', 'quantity', 1, 'amount', '250', 'order_item', '00000000-0000-0000-0000-00000000e301'),
     jsonb_build_object('name', 'Elastic band', 'quantity', 2, 'amount', '60')))) r;
 select t.ok(w -> 'waiting' @> '["00000000-0000-0000-0000-00000000e300","00000000-0000-0000-0000-00000000e301"]' and jsonb_array_length(w -> 'waiting') = 2
-  and (w -> 'sent' ->> '00000000-0000-0000-0000-00000000e300')::numeric = 250 and not w -> 'sent' ? '00000000-0000-0000-0000-00000000e302',
-  'sent and not paid under Pay first: both sessions wait (the third, never sent, is the screen''s to hold); what each order''s open bill comes to, for its own row')
-  from pg_temp.physio(array['00000000-0000-0000-0000-00000000e300', '00000000-0000-0000-0000-00000000e301', '00000000-0000-0000-0000-00000000e302'], '{"sent":true}') w;
-select t.ok(not w::text ~ '"(amount|price|total|sent)"', 'not asked, the read is words only') from pg_temp.physio(array['00000000-0000-0000-0000-00000000e300']) w;
+  and (w -> 'own' -> '00000000-0000-0000-0000-00000000e300' ->> 'sent')::numeric = 250 and (w -> 'own' -> '00000000-0000-0000-0000-00000000e300' ->> 'paid')::numeric = 0
+  and not w -> 'own' ? '00000000-0000-0000-0000-00000000e302',
+  'sent and not paid under Pay first: both sessions wait (the third, never sent, is the screen''s to hold); what each order''s open bill holds, for its own row')
+  from pg_temp.physio(array['00000000-0000-0000-0000-00000000e300', '00000000-0000-0000-0000-00000000e301', '00000000-0000-0000-0000-00000000e302'], '{"lines":true}') w;
+select t.ok(not w::text ~ '"(amount|price|total|sent|own)"', 'not asked, the read is words only') from pg_temp.physio(array['00000000-0000-0000-0000-00000000e300']) w;
 select t.as(:'dr');
-select t.ok(w -> 'waiting' @> '["00000000-0000-0000-0000-00000000e300"]' and not w ? 'paid' and not w ? 'desk' and not w::text ~ '"(amount|price|total|sent)"',
-  'the doctor''s chart in Internal Medicine (it bills): the order waits, in words only, wherever it is performed')
+select t.ok(w -> 'waiting' = '[]' and not w::text ~ '"(amount|price|total|sent|own)"',
+  'asked from Internal Medicine, an order performed in Physiotherapy is not that department''s: no word (the chart draws no soft check, awaiting the owner)')
   from pg_temp.op('billing.waiting', :'im', '{"orders":["00000000-0000-0000-0000-00000000e300"],"anywhere":true}') w;
 select t.as(:'sal');
-select t.refuses($$select pg_temp.op('billing.waiting', '00000000-0000-0000-0000-0000000000d5', '{"orders":["00000000-0000-0000-0000-00000000e300"],"anywhere":true}')$$, 'not_used_here');
+select t.refuses($$select pg_temp.op('billing.waiting', '00000000-0000-0000-0000-0000000000d5', '{"orders":["00000000-0000-0000-0000-00000000e300"]}')$$, 'not_used_here');
 select t.as(:'ther');
 select t.ok((r -> 'patient_ids' ->> 0)::uuid = :'p2', 'Go ahead anyway… with the second session: "will pay after", kept by billing')
   from pg_temp.op('billing.anyway', :'phy', '{"order_item":"00000000-0000-0000-0000-00000000e301","reason":"will pay after"}') r;
@@ -547,9 +551,9 @@ select t.ok((o -> 'rows' -> 0 -> 'sent') = jsonb_build_array(:'phy') and (o -> '
 select t.ok((r ->> 'total')::numeric = 560, 'Soad pays them by card at the main cashier')
   from pg_temp.pay(:'p2', jsonb_build_object('method', 'card', 'sent', (select jsonb_agg(x -> 'id') from jsonb_array_elements(pg_temp.lines(:'p2') -> 'sent') x))) r;
 select t.as(:'ther');
-select t.ok(w -> 'waiting' = '[]' and w -> 'paid' @> '["00000000-0000-0000-0000-00000000e300","00000000-0000-0000-0000-00000000e301"]' and w -> 'sent' = '{}',
-  'paid: nothing waits, nothing is left sent; the word goes the moment the payment is taken')
-  from pg_temp.physio(array['00000000-0000-0000-0000-00000000e300', '00000000-0000-0000-0000-00000000e301'], '{"sent":true}') w;
+select t.ok(w -> 'waiting' = '[]' and (select bool_and((x.value ->> 'paid')::numeric = 250 and (x.value ->> 'sent')::numeric = 0) from jsonb_each(w -> 'own') x)
+  and (select count(*) from jsonb_each(w -> 'own')) = 2, 'paid: nothing waits, nothing is left sent; the word goes the moment the payment is taken')
+  from pg_temp.physio(array['00000000-0000-0000-0000-00000000e300', '00000000-0000-0000-0000-00000000e301'], '{"lines":true}') w;
 select t.as(:'ow');
 select public.write_setting(jsonb_build_object('key', 'billing.desk', 'owner_id', :'phy', 'data', '{"takes":"own"}'::jsonb)) ->> 'key' as physio_takes_own;
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000bd', 'holdings', jsonb_build_array(
@@ -558,13 +562,237 @@ select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-000
 select t.as(:'ther');
 select t.ok((r ->> 'total')::numeric = 250 and r ->> 'method' = 'card', 'now it takes its own: Pay at its counter, the third session as its row hands it')
   from pg_temp.pay(:'p2', '{"method":"card","handed":[{"name":"Session · 45 min","quantity":1,"amount":"250","order_item":"00000000-0000-0000-0000-00000000e302"}]}', :'phy') r;
-select t.ok(w -> 'paid' = '["00000000-0000-0000-0000-00000000e302"]' and w ->> 'desk' = 'own', 'its order is paid, for the soft check')
-  from pg_temp.physio(array['00000000-0000-0000-0000-00000000e302']) w;
+select t.ok((w -> 'own' -> '00000000-0000-0000-0000-00000000e302' ->> 'paid')::numeric = 250 and w ->> 'desk' = 'own', 'its order is paid, for the soft check')
+  from pg_temp.physio(array['00000000-0000-0000-0000-00000000e302'], '{"lines":true}') w;
 reset role;
 select t.ok((select string_agg(l.kind || ':' || l.name || ':' || l.amount, ',' order by p.at, l.n) from billing.payment_lines l join billing.payments p on p.id = l.payment_id
   where l.department_id = :'phy') = 'sent:Session · 45 min:250.00,sent:Session · 45 min:250.00,sent:Elastic band:60.00,handed:Session · 45 min:250.00',
   'kept as they were handed, each line Physiotherapy''s; billing names no department, it reads where the lines came from');
 set role authenticated;
+
+\echo '── a medicine given in part (old audit F38): a row hands what the order comes to so far; billing takes only the rest, checking what the row knew, so nothing goes twice'
+\set p3 '00000000-0000-0000-0000-0000000000f3'
+\set p4 '00000000-0000-0000-0000-0000000000f4'
+select t.as(:'rec');
+select t.ok(public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', :'p3', 'given', jsonb_build_array('Magdy'), 'family', 'Saleh',
+  'gender', 'male', 'birth_date', '1975-01-20'))) -> 'patient' ->> 'id' = :'p3'
+  and public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', :'p4', 'given', jsonb_build_array('Hoda'), 'family', 'Fathy',
+  'gender', 'female', 'birth_date', '1990-07-02'))) -> 'patient' ->> 'id' = :'p4', 'Magdy and Hoda registered');
+select t.as(:'dr');
+create function pg_temp.rx(p_med uuid, p_order uuid, p_drug text) returns jsonb language sql as $$
+  select jsonb_build_array(
+    t.e('medication', '00000000-0000-0000-0000-0000000000f3', '00000000-0000-0000-0000-0000000000d1', jsonb_build_object('basis', 'prescribed', 'drug', jsonb_build_object('text', p_drug),
+      'status', 'active'), p_med),
+    t.e('order', '00000000-0000-0000-0000-0000000000f3', '00000000-0000-0000-0000-0000000000d1', jsonb_build_object('service', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000c3',
+      'code', 'dispense', 'name', 'Dispensing'), 'department_id', '00000000-0000-0000-0000-0000000000d3', 'priority', 'routine', 'status', 'active'), p_order, null, p_med, 'about'))
+$$;
+grant execute on function pg_temp.rx(uuid, uuid, text) to public;
+select t.landed(t.w(pg_temp.rx('00000000-0000-0000-0000-00000000e400', '00000000-0000-0000-0000-00000000e401', 'Augmentin 1 g')
+  || pg_temp.rx('00000000-0000-0000-0000-00000000e402', '00000000-0000-0000-0000-00000000e403', 'Glucophage 500')
+  || pg_temp.rx('00000000-0000-0000-0000-00000000e404', '00000000-0000-0000-0000-00000000e405', 'Nexium 40')
+  || pg_temp.rx('00000000-0000-0000-0000-00000000e406', '00000000-0000-0000-0000-00000000e407', 'Concor 5')), 'four prescriptions for Magdy, sent to the Pharmacy');
+reset role;
+select core.drain() as drained;
+set role authenticated;
+select t.as(:'pm');
+select t.ok((r ->> 'total')::numeric = 145, 'fourteen of twenty-eight tablets given: the box its row hands, paid at the Pharmacy''s counter')
+  from pg_temp.pay(:'p3', '{"handed":[{"name":"Augmentin 1 g · box","quantity":1,"amount":"145","order_item":"00000000-0000-0000-0000-00000000e401"}]}', :'ph') r;
+select t.refuses($$select pg_temp.pay('00000000-0000-0000-0000-0000000000f3', '{"handed":[{"name":"Augmentin 1 g · box","quantity":1,"amount":"145","order_item":"00000000-0000-0000-0000-00000000e401"}]}',
+  '00000000-0000-0000-0000-0000000000d3')$$, 'total_changed');
+select t.ok((r ->> 'total')::numeric = 135, 'the rest, a week later: its row hands both boxes, the card only the second (with what it knew was paid, 145), 10 off for Staff')
+  from pg_temp.pay(:'p3', '{"handed":[{"name":"Augmentin 1 g · box","quantity":1,"amount":"145","order_item":"00000000-0000-0000-0000-00000000e401"}],
+    "basis":{"00000000-0000-0000-0000-00000000e401":"145.00"},"discount":{"amount":"10","reason":"Staff"}}', :'ph') r;
+select t.ok((w -> 'own' -> '00000000-0000-0000-0000-00000000e401' ->> 'paid')::numeric = 290 and jsonb_array_length(w -> 'own' -> '00000000-0000-0000-0000-00000000e401' -> 'lines') = 2,
+  'billing holds both boxes of the order (a second counter that knew nothing paid was refused): 290 for twenty-eight tablets')
+  from pg_temp.op('billing.waiting', :'ph', '{"orders":["00000000-0000-0000-0000-00000000e401"],"lines":true}') w;
+select t.ok((d ->> 'taken')::numeric = (select sum((x ->> 'amount')::numeric) from jsonb_array_elements(d -> 'departments') x) and (d ->> 'taken')::numeric = 355,
+  'the Pharmacy''s day adds up: whose work was paid (its discount taken off) comes to what was taken, 355.00') from pg_temp.op('billing.day', :'ph') d;
+select t.as(:'ow');
+select public.write_setting(jsonb_build_object('key', 'billing.desk', 'owner_id', :'ph', 'data', '{"takes":"none"}'::jsonb)) ->> 'key' as pharmacy_sends;
+select t.as(:'pm');
+select t.ok((r ->> 'lines')::int = 1, 'Glucophage: one box of two given, sent to the cashier')
+  from pg_temp.op('billing.send', :'ph', '{"patient_id":"00000000-0000-0000-0000-0000000000f3","lines":[{"name":"Glucophage 500 · box","quantity":1,"amount":"45","order_item":"00000000-0000-0000-0000-00000000e403"}]}') r;
+select t.as(:'cr');
+select t.ok((r ->> 'total')::numeric = 45, 'the main cashier takes it')
+  from pg_temp.pay(:'p3', jsonb_build_object('sent', (select jsonb_agg(x -> 'id') from jsonb_array_elements(pg_temp.lines(:'p3') -> 'sent') x))) r;
+select t.as(:'pm');
+select t.refuses($$select pg_temp.op('billing.send', '00000000-0000-0000-0000-0000000000d3', '{"patient_id":"00000000-0000-0000-0000-0000000000f3","lines":[{"name":"Glucophage 500 · box","quantity":2,"amount":"90","order_item":"00000000-0000-0000-0000-00000000e403"}]}')$$,
+  'total_changed');
+select t.ok((r ->> 'lines')::int = 1, 'the rest given: sent in addition, with what was paid of it (45), never the whole order again')
+  from pg_temp.op('billing.send', :'ph', '{"patient_id":"00000000-0000-0000-0000-0000000000f3","lines":[{"name":"Glucophage 500 · box","quantity":1,"amount":"45","order_item":"00000000-0000-0000-0000-00000000e403"}],
+    "basis":{"00000000-0000-0000-0000-00000000e403":"45.00"}}') r;
+select t.as(:'cr');
+select t.ok((select sum((x ->> 'amount')::numeric) from jsonb_array_elements(l -> 'sent') x) = 45, 'the cashier: the rest owed, 45; the part stays paid') from pg_temp.lines(:'p3') l;
+select pg_temp.lines(:'p3') -> 'sent' -> 0 ->> 'id' as rest_line \gset
+select t.as(:'pm');
+select t.ok((r ->> 'lines')::int = 2, 'the pharmacist changes the rest (a box and a strip): its open bill is replaced, the part paid stays')
+  from pg_temp.op('billing.send', :'ph', '{"patient_id":"00000000-0000-0000-0000-0000000000f3","lines":[{"name":"Glucophage 500 · box","quantity":1,"amount":"45","order_item":"00000000-0000-0000-0000-00000000e403"},
+    {"name":"Glucophage 500 · strip","quantity":1,"amount":"15","order_item":"00000000-0000-0000-0000-00000000e403"}],"basis":{"00000000-0000-0000-0000-00000000e403":"45.00"}}') r;
+select t.as(:'cr');
+select t.refuses(format($q$select pg_temp.pay(%L, '{"sent":["%s"]}')$q$, :'p3', :'rest_line'), 'total_changed');
+select t.ok((r ->> 'total')::numeric = 60, 'a card opened since takes the bill as it stands: the patient owes the order once')
+  from pg_temp.pay(:'p3', jsonb_build_object('sent', (select jsonb_agg(x -> 'id') from jsonb_array_elements(pg_temp.lines(:'p3') -> 'sent') x))) r;
+
+\echo '── an open bill whose order is stopped is void (old audit F11 for sent lines): nothing owed for it; paid, it is listed to give back'
+select t.as(:'pm');
+select t.ok((r ->> 'lines')::int = 1, 'Nexium sent to the cashier before Give (75)')
+  from pg_temp.op('billing.send', :'ph', '{"patient_id":"00000000-0000-0000-0000-0000000000f3","lines":[{"name":"Nexium 40 · box","quantity":1,"amount":"75","order_item":"00000000-0000-0000-0000-00000000e405"}]}') r;
+select t.landed(t.w(t.e('pharmacy.dispense', :'p3', :'ph', '{"status":"cancelled","reason":"Out of stock"}', null, null, t.latest('00000000-0000-0000-0000-00000000e405'), 'answers')),
+  'then not given: out of stock');
+reset role;
+select core.drain() as drained;
+set role authenticated;
+select t.as(:'cr');
+select t.ok(not exists (select 1 from jsonb_array_elements(l -> 'sent') x where x ->> 'order_item' = '00000000-0000-0000-0000-00000000e405'),
+  'the open bill sent before the stop is void: Magdy owes nothing for a medicine not given') from pg_temp.lines(:'p3') l;
+select t.as(:'pm');
+select t.ok((r ->> 'lines')::int = 1, 'a line the Pharmacy sends after the stop (what was given before it) stands')
+  from pg_temp.op('billing.send', :'ph', '{"patient_id":"00000000-0000-0000-0000-0000000000f3","lines":[{"name":"Nexium 40 · strip","quantity":1,"amount":"20","order_item":"00000000-0000-0000-0000-00000000e405"}]}') r;
+select t.as(:'cr');
+select t.ok(exists (select 1 from jsonb_array_elements(l -> 'sent') x where x ->> 'order_item' = '00000000-0000-0000-0000-00000000e405' and (x ->> 'amount')::numeric = 20), 'owed: 20')
+  from pg_temp.lines(:'p3') l;
+select t.ok((r ->> 'total')::numeric = 20, 'paid') from pg_temp.pay(:'p3', jsonb_build_object('sent', (select jsonb_agg(x -> 'id') from jsonb_array_elements(pg_temp.lines(:'p3') -> 'sent') x))) r;
+select t.as(:'pm');
+select t.ok((r ->> 'lines')::int = 1, 'Concor sent (60)')
+  from pg_temp.op('billing.send', :'ph', '{"patient_id":"00000000-0000-0000-0000-0000000000f3","lines":[{"name":"Concor 5 · box","quantity":1,"amount":"60","order_item":"00000000-0000-0000-0000-00000000e407"}]}') r;
+select t.as(:'cr');
+select t.ok((r ->> 'total')::numeric = 60, 'and paid at the main cashier') from pg_temp.pay(:'p3', jsonb_build_object('sent', (select jsonb_agg(x -> 'id') from jsonb_array_elements(pg_temp.lines(:'p3') -> 'sent') x))) r;
+select t.as(:'dr');
+select t.landed(t.w(t.e('order', :'p3', :'im', jsonb_build_object('service', jsonb_build_object('id', :'disp', 'code', 'dispense', 'name', 'Dispensing'), 'department_id', :'ph',
+  'priority', 'routine', 'status', 'revoked'), null, null, t.latest('00000000-0000-0000-0000-00000000e407'), 'changes')), 'the doctor stops the Concor');
+reset role;
+select core.drain() as drained;
+set role authenticated;
+select t.as(:'cr');
+select t.ok(jsonb_array_length(l -> 'sent') = 0 and exists (select 1 from jsonb_array_elements(l -> 'back') b where b ->> 'kind' = 'sent'
+  and b ->> 'item' = '00000000-0000-0000-0000-00000000e407' and b ->> 'receipt' like 'R-%'), 'paid, then stopped: the card says to give it back from its receipt') from pg_temp.lines(:'p3') l;
+select t.ok(jsonb_array_length(o -> 'rows') = 1 and (o -> 'rows' -> 0 ->> 'back')::int = 1 and (o -> 'rows' -> 0 ->> 'total')::numeric = 0,
+  'and Magdy is listed for it though he owes nothing: the cashier is told') from pg_temp.op('billing.owed', :'cash', jsonb_build_object('patients', jsonb_build_array(:'p3'))) o;
+
+\echo '── Pay first before billing has heard an order (old audit F22): it waits from the moment it is written; At the order waits until priced and taken; a paid test not done is listed to give back'
+select t.as(:'ow');
+select public.write_setting(jsonb_build_object('key', 'billing.pay_first', 'owner_id', :'lab', 'data', '{"on":true}'::jsonb)) ->> 'key' as pay_first_again;
+select t.as(:'dr');
+select t.landed(t.w(jsonb_build_array(pg_temp.cbc('00000000-0000-0000-0000-00000000e410', :'p4'),
+  t.e('order', :'p4', :'im', jsonb_build_object('service', jsonb_build_object('id', :'cxr', 'code', 'cxr', 'name', 'Chest X-ray'), 'department_id', :'lab', 'priority', 'routine',
+    'status', 'active'), '00000000-0000-0000-0000-00000000e411'))), 'a CBC (95) and a chest X-ray (At the order) for Hoda');
+select t.as(:'tech');
+reset role;
+select t.ok(not exists (select 1 from billing.charges where item in ('00000000-0000-0000-0000-00000000e410', '00000000-0000-0000-0000-00000000e411')), 'billing has not heard them yet');
+set role authenticated;
+select t.ok(w -> 'waiting' @> '["00000000-0000-0000-0000-00000000e410","00000000-0000-0000-0000-00000000e411"]' and jsonb_array_length(w -> 'waiting') = 2
+  and w -> 'patient_ids' = jsonb_build_array(:'p4'), 'yet both wait already, as their charges will be: no window in which a test is free to collect')
+  from pg_temp.waiting(array['00000000-0000-0000-0000-00000000e410', '00000000-0000-0000-0000-00000000e411']) w;
+reset role;
+select core.drain() as drained;
+set role authenticated;
+select t.ok(jsonb_array_length(w -> 'waiting') = 2, 'heard: still both') from pg_temp.waiting(array['00000000-0000-0000-0000-00000000e410', '00000000-0000-0000-0000-00000000e411']) w;
+select t.as(:'cr');
+select t.ok((r ->> 'total')::numeric = 95, 'the cashier takes the CBC alone') from pg_temp.pay(:'p4', format('{"charges":[{"item":"00000000-0000-0000-0000-00000000e410","department_id":"%s"}]}', :'lab')::jsonb) r;
+select t.as(:'tech');
+select t.ok(w -> 'waiting' = '["00000000-0000-0000-0000-00000000e411"]', 'the chest X-ray still waits: priced at the order, nobody priced and took it')
+  from pg_temp.waiting(array['00000000-0000-0000-0000-00000000e410', '00000000-0000-0000-0000-00000000e411']) w;
+select t.as(:'cr');
+select t.ok((r ->> 'total')::numeric = 250, 'the cashier types its price, 250, and takes it')
+  from pg_temp.pay(:'p4', format('{"charges":[{"item":"00000000-0000-0000-0000-00000000e411","department_id":"%s","price":"250"}]}', :'lab')::jsonb) r;
+select t.as(:'tech');
+select t.ok(w -> 'waiting' = '[]', 'priced and paid: free') from pg_temp.waiting(array['00000000-0000-0000-0000-00000000e410', '00000000-0000-0000-0000-00000000e411']) w;
+select t.landed(t.w(t.e('step', :'p4', :'lab', '{"status":"cancelled","reason":"Refused"}', null, null, '00000000-0000-0000-0000-00000000e410', 'answers')), 'Hoda''s CBC: couldn''t collect, refused');
+reset role;
+select core.drain() as drained;
+set role authenticated;
+select t.as(:'cr');
+select t.ok((o -> 'rows' -> 0 ->> 'back')::int = 1 and (o -> 'rows' -> 0 ->> 'total')::numeric = 0 and exists (select 1 from jsonb_array_elements(pg_temp.lines(:'p4') -> 'back') b
+  where b ->> 'item' = '00000000-0000-0000-0000-00000000e410'), 'paid before collection, then not collected: Hoda is listed, her card says to give the 95 back')
+  from pg_temp.op('billing.owed', :'cash', jsonb_build_object('patients', jsonb_build_array(:'p4'))) o;
+select pg_temp.lines(:'p4') -> 'back' -> 0 ->> 'payment_id' as cbc_paid \gset
+select t.ok((r ->> 'total')::numeric = -95, 'given back from its receipt') from pg_temp.op('billing.refund', :'cash', jsonb_build_object('payment_id', :'cbc_paid', 'reason', 'not collected')) r;
+select t.ok(jsonb_array_length(o -> 'rows') = 0, 'and Hoda leaves the list') from pg_temp.op('billing.owed', :'cash', jsonb_build_object('patients', jsonb_build_array(:'p4'))) o;
+
+\echo '── …anyway is for whoever may do the work: a store keeper may not; the pharmacist may; a doctor answers anyway a consult his clinic prices'
+select t.as(:'ow');
+select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000be', 'name', 'Store keeper', 'login_id', '11111111-0000-0000-0000-0000000000be',
+  'holdings', jsonb_build_array(jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000ca02', 'department_id', :'ph')))) ->> 'id' as store_keeper;
+select t.as('11111111-0000-0000-0000-0000000000be');
+select t.refuses($$select pg_temp.op('billing.anyway', '00000000-0000-0000-0000-0000000000d3', '{"order_item":"00000000-0000-0000-0000-00000000e403","reason":"will pay after"}')$$, 'not_allowed');
+select t.as(:'pm');
+select t.ok((r -> 'patient_ids' ->> 0)::uuid = :'p3', 'the pharmacist, who gives it, may')
+  from pg_temp.op('billing.anyway', :'ph', '{"order_item":"00000000-0000-0000-0000-00000000e403","reason":"will pay after"}') r;
+select t.as(:'ow');
+select public.write_setting(jsonb_build_object('key', 'service', 'owner_id', :'im', 'thing_id', '00000000-0000-0000-0000-0000000000c6',
+  'data', '{"code":"imc","name":"Medical consult","answer":"note"}'::jsonb)) ->> 'key' as consult;
+select t.as(:'acc');
+select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', :'im', 'data', '{"service_id":"00000000-0000-0000-0000-0000000000c6","price":"300"}'::jsonb)) ->> 'key' as consult_priced;
+select public.write_setting(jsonb_build_object('key', 'billing.pay_first', 'owner_id', :'im', 'data', '{"on":true}'::jsonb)) ->> 'key' as im_pay_first;
+select t.as(:'sal');
+select t.landed(t.w(t.e('order', :'p2', :'psy', jsonb_build_object('service', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000c6', 'code', 'imc', 'name', 'Medical consult'),
+  'department_id', :'im', 'priority', 'routine', 'status', 'active'), '00000000-0000-0000-0000-00000000e420')), 'Psychiatry asks Internal Medicine for a consult on Soad');
+reset role;
+select core.drain() as drained;
+set role authenticated;
+select t.as(:'dr');
+select t.ok(w -> 'waiting' = '["00000000-0000-0000-0000-00000000e420"]', 'the consult waits for payment at Internal Medicine')
+  from pg_temp.op('billing.waiting', :'im', '{"orders":["00000000-0000-0000-0000-00000000e420"]}') w;
+select t.ok((r -> 'patient_ids' ->> 0)::uuid = :'p2', 'Answer anyway…: Dr Ali, a doctor of Internal Medicine (he may write its answer), records why')
+  from pg_temp.op('billing.anyway', :'im', '{"order_item":"00000000-0000-0000-0000-00000000e420","reason":"urgent: chest pain"}') r;
+select t.ok(w -> 'waiting' = '[]' and w -> 'ahead' = '["00000000-0000-0000-0000-00000000e420"]', 'gone ahead')
+  from pg_temp.op('billing.waiting', :'im', '{"orders":["00000000-0000-0000-0000-00000000e420"]}') w;
+select t.as(:'acc');
+select public.write_setting(jsonb_build_object('key', 'billing.pay_first', 'owner_id', :'im', 'data', '{"on":false}'::jsonb)) ->> 'key' as im_pay_after;
+
+\echo '── open, awaiting the owner (old audit F31): a price on the Pharmacy''s own Dispensing charges each prescription as a service, besides the lines its rows hand'
+select public.write_setting(jsonb_build_object('key', 'billing.price', 'owner_id', :'ph', 'data', jsonb_build_object('service_id', :'disp', 'price', '20'))) ->> 'key' as dispensing_priced;
+select t.as(:'dr');
+select t.landed(t.w(pg_temp.rx('00000000-0000-0000-0000-00000000e430', '00000000-0000-0000-0000-00000000e431', 'Panadol Extra')), 'another prescription for Magdy');
+reset role;
+select core.drain() as drained;
+select t.ok(exists (select 1 from billing.charges where item = '00000000-0000-0000-0000-00000000e431' and kind = 'service' and open and department_id = :'ph'),
+  'known: the prescription is a 20.00 service charge too (billing cannot tell such a service apart without naming the pack)');
+set role authenticated;
+select t.as(:'cr');
+select t.ok((r ->> 'total')::numeric = 20, 'the Dispensing charge paid at the main cashier')
+  from pg_temp.pay(:'p3', format('{"charges":[{"item":"00000000-0000-0000-0000-00000000e431","department_id":"%s"}]}', :'ph')::jsonb) r;
+select t.as(:'pm');
+select t.ok(not (w -> 'own') ? '00000000-0000-0000-0000-00000000e431', 'a service charge paid never stands for the medicines the row hands: billing holds none of them, so they are still handed')
+  from pg_temp.op('billing.waiting', :'ph', '{"orders":["00000000-0000-0000-0000-00000000e431"],"lines":true}') w;
+
+\echo '── who owes, paged when patients share a moment: each once, none skipped (the order the cursor reads)'
+select t.as(:'rec');
+select t.ok(count(*) = 3, 'three more patients') from (select public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', x, 'given', jsonb_build_array('Same'),
+  'family', 'Moment ' || n, 'gender', 'female', 'birth_date', '1980-01-01'))) from (values ('00000000-0000-0000-0000-0000000000f5', 1), ('00000000-0000-0000-0000-0000000000f6', 2),
+  ('00000000-0000-0000-0000-0000000000f7', 3)) v(x, n)) y;
+reset role;
+insert into billing.sent (organization_id, bill_id, patient_id, department_id, name, quantity, amount, author_id, at)
+select '00000000-0000-0000-0000-0000000000a1', gen_random_uuid(), x::uuid, :'ph', 'Panadol Extra', 1, 10, '00000000-0000-0000-0000-0000000000b6', now() - interval '1 hour'
+  from unnest(array['00000000-0000-0000-0000-0000000000f5', '00000000-0000-0000-0000-0000000000f6', '00000000-0000-0000-0000-0000000000f7']) x;
+set role authenticated;
+select t.as(:'cr');
+\set same '["00000000-0000-0000-0000-0000000000f5","00000000-0000-0000-0000-0000000000f6","00000000-0000-0000-0000-0000000000f7"]'
+select t.ok((select count(distinct x) from unnest(array[o1 -> 'rows' -> 0 ->> 'patient_id', o2 -> 'rows' -> 0 ->> 'patient_id', o3 -> 'rows' -> 0 ->> 'patient_id']) x) = 3
+  and (o2 -> 'more')::boolean and not (o3 -> 'more')::boolean, 'three patients owing from the same moment, a page each: each once, none skipped')
+  from pg_temp.op('billing.owed', :'cash', jsonb_build_object('limit', 1, 'patients', :'same'::jsonb)) o1,
+  lateral pg_temp.op('billing.owed', :'cash', jsonb_build_object('limit', 1, 'patients', :'same'::jsonb, 'after',
+    jsonb_build_object('at', o1 -> 'rows' -> 0 -> 'last_at', 'patient_id', o1 -> 'rows' -> 0 -> 'patient_id'))) o2,
+  lateral pg_temp.op('billing.owed', :'cash', jsonb_build_object('limit', 1, 'patients', :'same'::jsonb, 'after',
+    jsonb_build_object('at', o2 -> 'rows' -> 0 -> 'last_at', 'patient_id', o2 -> 'rows' -> 0 -> 'patient_id'))) o3;
+
+\echo '── a day''s totals stay as they were: a discount is waived on its own day; the refund''s day carries its reversal'
+reset role;
+insert into billing.payments (organization_id, id, receipt, department_id, patient_id, method, total, discount, discount_reason, author_id, at, day)
+values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000f0f1', 'R-00098', :'cash', :'p2', 'cash', 90, 10, 'Staff', '00000000-0000-0000-0000-0000000000ba',
+        now() - interval '1 day', ((now() - interval '1 day') at time zone 'Africa/Cairo')::date);
+insert into billing.payment_lines (organization_id, payment_id, n, kind, department_id, name, quantity, amount)
+values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000f0f1', 1, 'handed', :'ph', 'Panadol Extra', 1, 100);
+set role authenticated;
+select t.as(:'cr');
+select ((now() - interval '1 day') at time zone 'Africa/Cairo')::date as yesterday \gset
+select (d ->> 'waived') as waived_before from pg_temp.op('billing.day', :'cash') d \gset
+select t.ok((d ->> 'waived')::numeric = 10 and (d ->> 'taken')::numeric = 130, 'yesterday: 10 waived for Staff') from pg_temp.op('billing.day', :'cash', jsonb_build_object('day', :'yesterday')) d;
+select t.ok((r ->> 'total')::numeric = -90, 'yesterday''s receipt given back today')
+  from pg_temp.op('billing.refund', :'cash', '{"payment_id":"00000000-0000-0000-0000-00000000f0f1","reason":"returned"}') r;
+select t.ok((d ->> 'waived')::numeric = 10 and (d ->> 'taken')::numeric = 130, 'yesterday is as it was: still 10 waived, as its taken is still taken')
+  from pg_temp.op('billing.day', :'cash', jsonb_build_object('day', :'yesterday')) d;
+select t.ok((d ->> 'waived')::numeric = :'waived_before'::numeric - 10, 'today carries the reversal: 10 less waived') from pg_temp.op('billing.day', :'cash') d;
 
 \echo '── unticked: what the Lab charged stays (as it stood); what is ordered after is not charged; rebuild = live. Off for the clinic: no operation'
 select t.as(:'ow');

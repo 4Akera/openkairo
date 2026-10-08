@@ -1,6 +1,7 @@
 // The Cashier (billing.cashier, spec §5.4, the bill-list picture): views To pay · Paid today · Nothing to pay; search by name or record
 // number (or a receipt's number). One row a patient who owes: who, what for ("Visit · CBC, HbA1c · Dispensary"), where someone already waits
-// ("Laboratory is waiting", in warn), work done before payment, and the amount — the sum of the lines, so nobody adds anything up. The
+// ("Laboratory is waiting", in warn), work done before payment, money to give back (paid for work not done), and the amount — the sum
+// of the lines, so nobody adds anything up. The
 // patient folds out into the payment card under the row; taken, the receipt is shown and kept. Paid today lists the desk's receipts, each
 // folding out its receipt (and Give back…). Everyone who owes is reached: the server groups and pages them (Show more).
 import { useState } from 'react'
@@ -74,6 +75,6 @@ export function Cashier({ dept }: ScreenProps) {
         return <ListRow key={`${r.patient_id}:${r.department_id}`} number={p?.record_number ?? ''} name={fullName(p)} age={ageSex(p)} minutes={null}
           status={<span className="truncate text-muted">Nothing owed · {nameOfDept(r.department_id)}</span>} /> })
         : <li><Empty>No one seen today is free of charges yet.</Empty></li>}</ul></Card>}
-    <p className="text-12 text-faint">A patient appears once something priced was ordered or seen, or a department sent its lines here. The amount is the sum of the lines.</p>
+    <p className="text-12 text-faint">A patient appears once something priced was ordered or seen, or a department sent its lines here, and while money paid for work not done is to be given back. The amount is the sum of the lines.</p>
   </ScreenFrame>
 }

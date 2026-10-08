@@ -1,9 +1,7 @@
 // A set's orders as one requisition (chart-plan.md §1.3, design-system.md §4.5): per order the service, where it went, the priority,
 // the question in quotes, its progress along the service's own steps (Sent → Collected → Received → Resulted, the reached ones
 // filled), held, cancelled or failed with why, and each answer as one line under it (a result's values in short, flagged, or a
-// reply's first line); an answer opens its entry. An open order a pack holds waiting shows that pack's word (spec §5.4, a soft check:
-// "Waiting for payment"), only where this department uses the pack: the word only, never an amount, a price or a reason.
-import { useMemo } from 'react'
+// reply's first line); an answer opens its entry.
 import type { EntryData } from '../../../db/shapes.generated'
 import type { ServerEntry, Service } from '../../../db/types'
 import { dataOf, interp } from '../../../db/views'
@@ -13,8 +11,6 @@ import { FINAL_STEP, ORDER_STATUS, stepWord } from '../model/labels'
 import { replyFormFor } from '../../../renderers'
 import { ItemFrame } from './Item'
 import { placeName, useBlockEnv, type BlockEnv, type GroupProps } from './env'
-import { packRowOf } from '../../rows'
-import { useOrderWaits } from '../../useRows'
 
 const STOPPED = new Set(['revoked', 'rejected', 'cancelled', 'failed'])
 const PRIORITY = { urgent: ['danger', 'Urgent'], stat: ['danger', 'Stat'], asap: ['warn', 'As soon as possible'] } as const
@@ -42,27 +38,16 @@ function stepsOf(item: ChartItem, svc: Service | undefined): Step[] {
   return STOPPED.has(status) ? [...steps.filter((s) => s.state !== 'todo'), { key: 'stopped', label: ORDER_STATUS[status] ?? status, at: row?.last_at ?? null, state: 'failed' }] : steps
 }
 
-const OPEN = new Set(['active', 'in-progress', 'on-hold'])
-/** the record's open orders as the packs' soft checks read them, once a chart (the same rows on every order line: one read) */
-function useWaitOf(env: BlockEnv, patient: string) {
-  const orders = env.sample ? null : env.tables?.['base.orders']?.rows
-  const rows = useMemo(() => orders ? [packRowOf(`chart ${patient}`, { patient_id: patient, visit_id: null, orders: orders.filter((o) => OPEN.has(o.status)) })] : [], [orders, patient])
-  return useOrderWaits('chart', rows)
-}
-
 function OrderLine({ item }: { item: ChartItem }) {
   const env = useBlockEnv(); const d = item.entry.data as EntryData['order'] | undefined
-  const waitOf = useWaitOf(env, item.entry.patient_id)
   if (!d?.service) return <p className="text-13 text-muted">{item.entry.line}</p>
   const row = item.order?.row; const svc = env.org?.services.find((s) => s.id === (row?.service_id ?? d.service.id))
-  const wait = row && OPEN.has(row.status) ? waitOf(row.item) : null
   const to = placeName(env, row?.to_department_id ?? d.department_id); const status = row?.status ?? d.status
   const why = [...(item.order?.steps ?? [])].reverse().find((s) => s.data?.reason)?.data?.reason as string | undefined
   return <div className="grid gap-1">
     <p className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-14 font-medium text-fg">{d.service.name}</span>{to && <span className="text-13 text-muted">to {to}</span>}</p>
     {(d.question || d.reason) && <p className="text-13 text-muted">“{d.question ?? d.reason}”</p>}
     <Steps dense={env.compact} steps={stepsOf(item, svc)} />
-    {wait && <p className="text-13"><Tag tone={wait.tone ?? 'warn'}>{wait.word}</Tag></p>}
     {status === 'on-hold' && <p className="text-13 text-warn">{ORDER_STATUS['on-hold']}{why ? `: ${why}` : ''}</p>}
     {STOPPED.has(status) && why && <p className="text-13 text-muted">Why: {why}</p>}
     {(item.order?.answers ?? []).map((a) => <Answer key={a.id} entry={a} env={env} />)}

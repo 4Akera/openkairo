@@ -77,6 +77,32 @@ select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed
   '00000000-0000-0000-0000-00000000ab04', null, '00000000-0000-0000-0000-00000000ab02', 'answers')), 'the rest, a week later');
 select t.ok(r ->> 'status' = 'dispensed', 'the queue: dispensed') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
 select t.ok(r ->> 'status' = 'completed', 'the order is done') from t.rows('base.orders', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
+select t.ok(r -> 'given' = '[{"drug":"Lipitor 20","quantity":"30","unit":"tablets"},{"drug":"Atorvastatin 20 mg","quantity":"30","unit":"tablets"}]'::jsonb,
+  'what was given so far, each dispense apart: the part and the rest (what its row prices, §5.4)') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab02')) r;
+-- as the screen writes it: the rest changes the part's own step (its next version); a part then not given keeps the part
+select t.as(:'dr');
+select t.landed(t.w(jsonb_build_array(
+  t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug":{"text":"Gliclazide"},"status":"active"}', '00000000-0000-0000-0000-00000000ab05'),
+  t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'disp', 'code', 'dispense', 'name', 'Dispensing'), 'department_id', :'ph', 'priority', 'routine', 'status', 'active'),
+    '00000000-0000-0000-0000-00000000ab06', null, '00000000-0000-0000-0000-00000000ab05', 'about'),
+  t.e('medication', :'pt', :'im', '{"basis":"prescribed","drug":{"text":"Pantoprazole"},"status":"active"}', '00000000-0000-0000-0000-00000000ab07'),
+  t.e('order', :'pt', :'im', jsonb_build_object('service', jsonb_build_object('id', :'disp', 'code', 'dispense', 'name', 'Dispensing'), 'department_id', :'ph', 'priority', 'routine', 'status', 'active'),
+    '00000000-0000-0000-0000-00000000ab08', null, '00000000-0000-0000-0000-00000000ab07', 'about'))), 'gliclazide and pantoprazole sent');
+reset role;
+select t.ok(core.drain() >= 1, 'drained');
+set role authenticated;
+select t.as(:'pm');
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","pharmacy":{"items":[{"drug":{"text":"Diamicron 60"},"quantity":{"value":"30","unit":"tablets"}}],"owed":{"value":"30","unit":"tablets"}}}',
+  '00000000-0000-0000-0000-00000000ab09', null, t.latest('00000000-0000-0000-0000-00000000ab06'), 'answers')), 'gliclazide: thirty now, thirty owed');
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"completed","pharmacy":{"items":[{"drug":{"text":"Diamicron 60"},"quantity":{"value":"30","unit":"tablets"}}]}}',
+  null, null, t.latest('00000000-0000-0000-0000-00000000ab09'), 'changes')), 'the rest, as the next version of the same dispense');
+select t.ok(r ->> 'status' = 'dispensed' and jsonb_array_length(r -> 'given') = 2 and (select sum((g ->> 'quantity')::int) from jsonb_array_elements(r -> 'given') g) = 60,
+  'given so far: both parts, sixty tablets') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab06')) r;
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"in-progress","pharmacy":{"items":[{"drug":{"text":"Controloc 40"},"quantity":{"value":"14","unit":"tablets"}}],"owed":{"value":"14","unit":"tablets"}}}',
+  '00000000-0000-0000-0000-00000000ab0a', null, t.latest('00000000-0000-0000-0000-00000000ab08'), 'answers')), 'pantoprazole: fourteen now, fourteen owed');
+select t.landed(t.w(t.e('pharmacy.dispense', :'pt', :'ph', '{"status":"cancelled","reason":"Patient declined"}', null, null, t.latest('00000000-0000-0000-0000-00000000ab0a'), 'changes')),
+  'the rest not given');
+select t.ok(r -> 'given' = '[{"drug":"Controloc 40","quantity":"14","unit":"tablets"}]'::jsonb, 'the part given stays given') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('item', '00000000-0000-0000-0000-00000000ab08')) r;
 select t.as(:'dr');
 select t.ok(e ->> 'line' = 'Given in part · Lipitor 20 × 30 · owes 30 tablets', 'the part''s line in the record: ' || (e ->> 'line'))
   from jsonb_array_elements(public.read(jsonb_build_object('shape', 'item', 'item', '00000000-0000-0000-0000-00000000ab03', 'department_id', :'im')) -> 'entries') e
@@ -169,6 +195,6 @@ select t.ok(not exists (select 1 from pharmacy.queue) and exists (select 1 from 
 select core.drain() as drained;
 set role authenticated;
 select t.as(:'pm');
-select t.ok(count(*) = 4, 'on again: its table caught up for the organization in the background') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
+select t.ok(count(*) = 6, 'on again: its table caught up for the organization in the background') from t.rows('pharmacy.queue', :'ph', jsonb_build_object('department_id', :'ph')) r;
 reset role;
 select t.ok(core.rebuild_check('00000000-0000-0000-0000-0000000000a1') = '[]'::jsonb, 'rebuild = live, the pack''s table included');

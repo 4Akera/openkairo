@@ -1,6 +1,7 @@
 // Today (billing.today, spec §5.4, the bill-today picture): Taken today (and the receipts), Cash (in the drawer, with the float), Card,
-// Waived (the discounts and their reasons), Given back; a row a cashier and a row a department whose work was paid; this desk's, or the
-// whole clinic's for whoever reads every desk's accounts. Close the drawer: the float plus the cash taken since the last closing is what
+// Waived (the discounts and their reasons), Given back; a row a cashier and a row a department whose work was paid (each payment's total,
+// its discount taken off, shared among its lines, so the rows add up to what was taken less what was given back); this desk's, or the
+// whole clinic's for whoever reads every desk's accounts. A day's numbers stay as they were: a refund on a later day is that day's. Close the drawer: the float plus the cash taken since the last closing is what
 // is expected, counted against what is there; a difference needs its reason; the closing is a new row, never edited.
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -10,7 +11,7 @@ import { nameOf } from '@core/db/views'
 import type { ScreenProps } from '@core/screens/registry'
 import { Button, Callout, Card, Input, Kbd, ScreenFrame, Segmented, Spinner, Tag, cn, errorText, hm } from '@core/ui'
 import { KEY, useBillingDone, useBillingLive } from './hooks'
-import { cents, drawerWords, egp, signed } from './money'
+import { cents, drawerWords, egp, signed, wire } from './money'
 import { LABEL } from './words'
 
 type N = number | string
@@ -65,7 +66,8 @@ function CloseDrawer({ departmentId, drawer, who }: { departmentId: string; draw
   const close = async () => {
     if (!ready || busy) return
     setBusy(true); setError(null)
-    try { await packOp('billing.close', departmentId, { counted: counted.trim(), ...(reason.trim() ? { reason: reason.trim() } : {}) }); setSaid(`Closed: ${w?.word}`); setOpen(false); setCounted(''); setReason(''); await done() }
+    // what was counted as the card read it (1,250 is 1250.00), never the letters typed
+    try { await packOp('billing.close', departmentId, { counted: wire(c!), ...(reason.trim() ? { reason: reason.trim() } : {}) }); setSaid(`Closed: ${w?.word}`); setOpen(false); setCounted(''); setReason(''); await done() }
     catch (x) { setError(x) } finally { setBusy(false) }
   }
   return <Card className={cn('grid gap-3 p-4', open && 'ring-1 ring-accent-line')}>

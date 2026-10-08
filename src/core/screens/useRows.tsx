@@ -1,5 +1,7 @@
 // The packs on a list's rows, drawn (rows.ts holds the rules): each row's pack buttons (a), the lines it hands (b) and its waiting orders
-// (c). A pack's data is read once a list, through its own load, live (the clinic's hints and every 15 s); a failing pack says nothing.
+// (c). A pack's data is read once a list, through its own load, again on the clinic's hints, when the list's patients or orders change,
+// and when a card closes having changed something — never on a timer, so a list left open reads (and logs) nothing on its own; a
+// failing pack says nothing.
 // One card is open under a row at a time in a list: a pack's own (Pay) or the core's "…anyway" card, whose reason the packs holding the
 // orders record. Whoever goes ahead anyway may then do the work: those orders are free on every screen of this app from then on.
 import { useMemo, useState, type ReactNode } from 'react'
@@ -32,18 +34,17 @@ export interface PackRows {
   below: (row: PackRow) => ReactNode
 }
 
-/** what the packs the list's department uses read for its rows, and the orders waiting (live: the clinic's hints too; checks: the soft
- *  checks only, for a page that only shows their words) */
-function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | undefined, { live = true, checksOnly = false } = {}) {
+/** what the packs the list's department uses read for its rows, and the orders waiting (live: the clinic's hints) */
+function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | undefined) {
   const { org, dept: here } = useDepartment(); const d = dept ?? here
   const ctx = useMemo<RowCtx | null>(() => d ? { list, dept: { id: d.id, name: d.name, packs: d.packs, declared: d.declared ?? {} }, org, can: (a) => mayIn(org, a, d.id) } : null, [list, d, org])
-  const actions = useMemo(() => checksOnly ? [] : rowActionDefs().filter((x) => d?.packs.includes(x.pack)), [d, checksOnly])
+  const actions = useMemo(() => rowActionDefs().filter((x) => d?.packs.includes(x.pack)), [d])
   const checks = useMemo(() => softCheckDefs().filter((x) => d?.packs.includes(x.pack)), [d])
   const key = rowsKey(rows)
-  useLive(live && org && (actions.length || checks.length) ? `organization:${org.organization.id}` : null, [['pack-rows']])
+  useLive(org && (actions.length || checks.length) ? `organization:${org.organization.id}` : null, [['pack-rows']])
   const loads = [...actions.map((a) => ['action', a] as const), ...checks.map((c) => ['check', c] as const)].filter(([, x]) => x.load)
   const results = useQueries({ queries: loads.map(([kind, x]) => ({ queryKey: ['pack-rows', kind, x.pack, list, d?.id ?? null, key],
-    queryFn: () => x.load!(rows, ctx!), enabled: !!ctx && rows.length > 0, placeholderData: keepPreviousData, refetchInterval: 15_000, retry: false })) })
+    queryFn: () => x.load!(rows, ctx!), enabled: !!ctx && rows.length > 0, placeholderData: keepPreviousData, retry: false })) })
   const dataOf = (kind: 'action' | 'check'): PackData => Object.fromEntries(loads.flatMap(([k, x], i) => {
     const r = results[i]; return k === kind && !r.isError && r.data !== undefined ? [[x.pack, r.data]] : [] }))
   const actionData = dataOf('action'); const checkData = dataOf('check')
@@ -56,12 +57,6 @@ function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | unde
   }, [ctx, checks, key, dataKey])
   const ahead = useAhead((s) => s.items)
   return { ctx, actions, checks, actionData, waits, ahead }
-}
-
-/** the words of the orders waiting, for a page that shows them and nothing else (the doctor's chart): by order */
-export function useOrderWaits(list: RowList, rows: PackRow[]) {
-  const { waits, ahead } = usePackData(list, rows, null, { live: false, checksOnly: true })
-  return (item: string) => isFree(item, waits, ahead) ? null : waits.get(item) ?? null
 }
 
 /** the packs on a list: rows as the list draws them (all of them, before any split by view); dept: the list's department (default: the

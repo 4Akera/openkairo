@@ -158,6 +158,9 @@ select t.ok(core.department_uses(demo.base('clinic'), demo.id('pharmacy', 'depar
   and core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('pharmacy', 'department')) ->> 'takes' = 'own'
   and exists (select 1 from core.live_holdings(demo.base('clinic')) h where h.user_id = demo.id('pharmacy', 'pharmacist') and h.department_id = demo.id('pharmacy', 'department')
     and h.role_id = '00000000-0000-0000-0000-00000000ce01'), 'the Pharmacy bills and takes its own payment, the pharmacist at its counter');
+select t.ok(core.setting_at(demo.base('clinic'), 'department.screens', demo.id('pharmacy', 'department'))
+  = '{"opens": "pharmacy.dispensing", "screens": ["pharmacy.dispensing", "pharmacy.stock", "billing.today"]}'::jsonb,
+  'the Pharmacy''s line: Dispensing (it opens there), Stock, and billing''s Today, where the pharmacist closes their own drawer');
 select t.ok((select count(*) from billing.payments p where p.patient_id = demo.id('billing', 'patient:hoda') and p.refund_of is null) = 1, 'Hoda paid at the Cashier');
 select t.ok((select count(*) from billing.sent s where s.patient_id = demo.id('pharmacy', 'patient:hamdy') and s.department_id = demo.id('pharmacy', 'department')
   and s.order_item is not null and billing.sent_owed(s.organization_id, s.id)) = 1, 'one open bill: Hamdy''s box of Glucophage, sent to the cashier from the Pharmacy with its order');
@@ -166,7 +169,7 @@ select t.ok(w -> 'waiting' @> jsonb_build_array(demo.id('billing', 'order:magdy 
   'Magdy''s blood count and HbA1c wait for payment at the Laboratory')
   from public.pack_op(jsonb_build_object('op', 'billing.waiting', 'department_id', demo.base('lab'), 'args', jsonb_build_object('orders',
     jsonb_build_array(demo.id('billing', 'order:magdy cbc'), demo.id('billing', 'order:magdy hba1c'), demo.id('billing', 'order:hoda lipids'))))) w;
-select t.ok(not (w -> 'waiting') ? demo.id('billing', 'order:hoda lipids')::text and w -> 'paid' ? demo.id('billing', 'order:hoda lipids')::text, 'Hoda''s lipid profile, paid, does not wait')
+select t.ok(not (w -> 'waiting') ? demo.id('billing', 'order:hoda lipids')::text and w -> 'patient_ids' = jsonb_build_array(demo.id('billing', 'patient:hoda')), 'Hoda''s lipid profile, paid, does not wait')
   from public.pack_op(jsonb_build_object('op', 'billing.waiting', 'department_id', demo.base('lab'), 'args', jsonb_build_object('orders',
     jsonb_build_array(demo.id('billing', 'order:hoda lipids'))))) w;
 

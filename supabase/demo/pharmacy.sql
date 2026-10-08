@@ -41,7 +41,7 @@ begin
   perform demo.w(demo.id('pharmacy', 'pharmacist'), jsonb_build_array(demo.e('question', demo.id('pharmacy', 'department'), null, demo.ago(5),
     '{"text":"Allergy: Penicillins (a rash last spring). Change Augmentin 1 g twice a day?"}', null, o5, 'about')));
 
-  -- given in part ten minutes ago (one box of thirty now, thirty owed); a second prescription still to give
+  -- given in part ten minutes ago (one box of Glucophage, thirty tablets, now; thirty owed); a second prescription still to give
   perform demo.patient(demo.id('pharmacy', 'patient:hamdy'), array['Hamdy', 'Lotfi'], 'Shalaby', 'male', demo.born(51, 180), '+201225560913');
   v := demo.arrive('new diabetes, sugar 240 at work', 70);
   perform demo.consult(v, 55, jsonb_build_array(
@@ -50,7 +50,8 @@ begin
     || pg_temp.rx(v, 48, demo.med('Metformin', 'A10BA02', 500, 'mg', 'BD', '{"duration_days":30,"instructions":"with meals"}'), o2)
     || pg_temp.rx(v, 47, demo.med('Atorvastatin', 'C10AA05', 20, 'mg', 'OD', '{"duration_days":30}'), o3), 45);
   perform pg_temp.dispense(o2, 10, jsonb_build_object('status', 'in-progress', 'pharmacy', jsonb_build_object('items', jsonb_build_array(jsonb_build_object(
-    'drug', demo.concept('atc', 'A10BA02', 'Metformin 500 mg'), 'quantity', demo.q(30, 'tablets', '{tbl}'))), 'owed', demo.q(30, 'tablets', '{tbl}'), 'received_by', 'the patient')));
+    'drug', demo.concept('atc', 'A10BA02', 'Glucophage 500'), 'instead_of', 'Metformin', 'quantity', demo.q(30, 'tablets', '{tbl}'))), 'owed', demo.q(30, 'tablets', '{tbl}'),
+    'received_by', 'the patient')));
 
   -- given this morning
   perform demo.patient(demo.id('pharmacy', 'patient:mona'), array['Mona', 'Gaber'], 'Abdelhamid', 'female', demo.born(35, 302), '+201014478826');

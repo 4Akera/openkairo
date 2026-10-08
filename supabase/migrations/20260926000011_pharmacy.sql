@@ -159,13 +159,14 @@ create table pharmacy.queue (
   warnings      jsonb not null default '[]',   -- what the prescriber was warned of (allergy, duplicate) and whether they signed anyway
   owed          text,                      -- given in part: what is still owed (spec §5.3)
   question      jsonb,                     -- the pharmacy asked the doctor (spec §5.3): text, at; when answered, answer, action, answered_by, answered_at
+  given         jsonb not null default '[]',   -- what was given so far, each dispense apart (drug, quantity, unit, product): what its row prices (§5.4)
   primary key (organization_id, item)
 );
 
 -- recompute the rows of the orders these items are, answer or are about (the medication an order dispenses)
 create function pharmacy.queue_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
 declare es core.entries[]; k uuid; keys uuid[]; o1 core.entries; ol core.entries; m core.entries; d core.entries; v_answer text; v_status text; src uuid[];
-        v_warn jsonb; qn core.entries; rv core.entries; v_q jsonb;
+        v_warn jsonb; qn core.entries; rv core.entries; v_q jsonb; v_given jsonb; v_chain jsonb; v_part boolean; gi uuid; gv core.entries; v_gave uuid[];
 begin
   select coalesce(array_agg(e), '{}') into es from core.pack_entries(p_org, p_items) e;
   -- the order items: those given, those answered by the given ones, those about a given medication
@@ -217,15 +218,34 @@ begin
     select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('code', f ->> 'code', 'detail', f ->> 'detail', 'confirmed', (f ->> 'confirmed')::boolean))), '[]')
       into v_warn from jsonb_array_elements(coalesce(m.findings, '[]')) f
      where f ->> 'code' in ('allergy_clash', 'allergy_caution', 'duplicate_medication', 'duplicate_class');
-    src := (select array_agg(distinct x.id) from core.pack_entries(p_org, array[k] || coalesce(m.item, k) || coalesce(d.item, k)) x
-             where x.item in (k, coalesce(m.item, k), coalesce(d.item, k)));
+    -- what was given so far (spec §5.4, a department's own priced lines): each dispense answering it apart; within one, the rest given after
+    -- a part adds to that part, any other version takes its place (a part then not given keeps the part); a dispense crossed out gave nothing
+    v_given := '[]'; v_gave := '{}';
+    for gi in select a.item from core.pack_entries(p_org, array[k]) a
+               where a.refers_to in (select t.id from core.pack_entries(p_org, array[k]) t where t.item = k) and a.relation = 'answers' and a.type = any (core.kinds('step'))
+               group by a.item order by min(a.recorded_at), a.item loop
+      v_chain := '[]'; v_part := false;
+      for gv in select x.* from core.pack_entries(p_org, array[gi]) x where x.item = gi order by x.item_version loop
+        if gv.type = 'crossed_out' then v_chain := '[]'; v_part := false;
+        elsif gv.type = 'pharmacy.dispense' and gv.data ->> 'status' in ('completed', 'in-progress') and jsonb_array_length(coalesce(gv.data -> 'pharmacy' -> 'items', '[]')) > 0 then
+          v_chain := case when v_part then v_chain else '[]'::jsonb end || (select jsonb_agg(jsonb_strip_nulls(jsonb_build_object('drug', i -> 'drug' ->> 'text',
+              'quantity', i -> 'quantity' ->> 'value', 'unit', i -> 'quantity' ->> 'unit', 'product', i ->> 'product'))) from jsonb_array_elements(gv.data -> 'pharmacy' -> 'items') i);
+          v_part := gv.data -> 'pharmacy' ? 'owed';
+        elsif gv.data ->> 'status' in ('cancelled', 'rejected', 'failed') then
+          if not v_part then v_chain := '[]'; end if; v_part := false;
+        end if;
+      end loop;
+      v_given := v_given || v_chain; v_gave := v_gave || gi;
+    end loop;
+    src := (select array_agg(distinct x.id) from core.pack_entries(p_org, array[k] || coalesce(m.item, k) || coalesce(d.item, k) || v_gave) x
+             where x.item = any (array[k, coalesce(m.item, k), coalesce(d.item, k)] || v_gave));
     insert into pharmacy.queue values (p_org, k, core.survivor(p_org, o1.patient_id), (ol.data ->> 'department_id')::uuid, m.item, m.data -> 'drug' ->> 'text',
       coalesce(m.data -> 'dosage' -> 'dose' ->> 'value' || ' ' || coalesce(m.data -> 'dosage' -> 'dose' ->> 'unit', ''), null), m.data -> 'dosage' -> 'timing' ->> 'code',
       (m.data ->> 'duration_days')::int, m.data -> 'quantity' ->> 'value', v_status,
       -- clinical times, as base.orders' are
       case when d.id is not null then (select min(x.occurred_at) from core.pack_entries(p_org, array[d.item]) x where x.item = d.item) end,
       case when v_status = 'dispensed' then d.occurred_at end, o1.occurred_at, coalesce(src, '{}'), m.data ->> 'instructions', v_warn,
-      case when v_status = 'owed' then concat_ws(' ', d.data -> 'pharmacy' -> 'owed' ->> 'value', d.data -> 'pharmacy' -> 'owed' ->> 'unit') end, v_q);
+      case when v_status = 'owed' then concat_ws(' ', d.data -> 'pharmacy' -> 'owed' ->> 'value', d.data -> 'pharmacy' -> 'owed' ->> 'unit') end, v_q, v_given);
   end loop;
 end $$;
 

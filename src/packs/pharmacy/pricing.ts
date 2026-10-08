@@ -4,7 +4,9 @@
 // an entry. What is given is counted in the product's own units — whole boxes, then strips for the rest where it is sold in strips, else
 // one box more — and is one box where it cannot be counted in them (a syrup, a cream, an amount not known). Its lines (a name, a
 // quantity, an amount: plain numbers, no currency word; the order they belong to) are handed on the Dispensing row (core change (b)) for
-// a row action to read. Pure (npm run test:pharmacy).
+// a row action to read: what the order comes to so far — each dispense already given, counted apart (a part, then the rest), and what is
+// to give now — so whatever charges hands on only what it does not hold yet, and a rest given later is charged too. Pure (npm run
+// test:pharmacy).
 import type { Organization } from '@core/db/types'
 import type { SettingData } from '@core/db/shapes.generated'
 import { dueTotal, type DueLine } from '@core/screens/rows'
@@ -71,4 +73,17 @@ export function withPrices(p: PricedProduct, box: string, strip: string, size: s
   const rest: Record<string, unknown> = { ...p }; for (const k of ['id', 'price_box', 'price_strip', 'strip_size']) delete rest[k]
   return { ...(rest as unknown as SettingData['pharmacy.product']), ...(pb !== undefined ? { price_box: pb } : {}), ...(n !== undefined ? { strip_size: n } : {}),
     ...(ps !== undefined ? { price_strip: ps } : {}) }
+}
+/** a medicine as given so far, one dispense's item (the pack's own table: pharmacy.queue's given) */
+export interface Given { drug?: string; quantity?: string; unit?: string; product?: string }
+/** an order's lines so far: each dispense given (counted apart, in its product's units), then what is to give now (none: nothing more);
+ *  a line of the same name once, its quantities and amounts added; a medicine with no price, or not on the list, hands none */
+export function orderLines(products: PricedProduct[], given: readonly Given[], now: { drug: string; units: number | null | undefined; product?: string } | null,
+  order: string): DueLine[] {
+  const parts = [...given.flatMap((g) => { const p = g.drug ? productFor(products, g.drug, g.product) : null; return p ? linesFor(p, Number(g.quantity), order) : [] }),
+    ...(now ? (() => { const p = productFor(products, now.drug, now.product); return p ? linesFor(p, now.units, order) : [] })() : [])]
+  const out: DueLine[] = []
+  for (const l of parts) { const x = out.find((y) => y.name === l.name)
+    if (x) { x.quantity = round2(x.quantity + l.quantity); x.amount = round2(x.amount + l.amount) } else out.push({ ...l }) }
+  return out
 }
