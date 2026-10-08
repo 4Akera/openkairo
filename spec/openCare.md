@@ -1629,7 +1629,19 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   column fills once the pre-op refers to the operation (a composer draft cannot refer: the same core question as the cancer's change),
   its ASA from the anaesthetic record meanwhile; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
   anaesthesia out of the theatre pack).
-
+- *Built 2026-10-08 (lane `clinics-theatre`), surgery* (`surgery`, migration 34, role block e9): the operation note `surgery.opnote` (the
+  base's note plus `surgery` {the operation, surgeon, assistant, anaesthetist and technique, the times, why, findings, steps, closure,
+  blood loss, drain, complications, specimen, implants}); the operation itself the base's procedure. The surgeons' templates are the
+  clinic setting `surgery.templates` (by surgeon and operation code; the post-op preset each offers); post-op orders are the base's
+  presets (`#postop`: the /rx lines and the plan, signed with the note, Q46 drawn). Surgeon (`surgery.surgeon`, built on Doctor,
+  `write:surgery.opnote`). The setup `surgery.clinic`. Client: the Surgery section (today's operation with its times, anaesthetic,
+  specimen and implants; planned operations and where each stands; earlier procedures), its banner word ("for op · inguinal hernia",
+  "op today · lap chole"), `/opnote` (the procedure and the note, from the surgeon's own template; the card fills the times, anaesthetist
+  and blood loss from the anaesthetic record and the specimen and implants from Sign out, read by shape). Operations are told from other
+  orders by their service's steps (it moves through "operating"). Demo: the Surgery clinic, Dr. Hesham Abdelaal (surgery@demo.com); Reda
+  Abdelhady in consult (the decision to operate typed live: `/op lichtenstein right`), Kamal Fouda (a haemorrhoidectomy on To schedule);
+  the templates and two post-op presets. Tests: `supabase/tests/surgery.sql`, `npm run test:surgery`. *Differences:* the consent form's
+  print waits for printing.
 
 ---
 

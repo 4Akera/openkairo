@@ -26,6 +26,7 @@
     "test:billing": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing.ts",
     "test:radiology": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-radiology.ts",
     "test:oncology": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-oncology.ts",
+    "test:surgery": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-surgery.ts",
     "test:theatre": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-theatre.ts",
     "gen:types": "supabase gen types typescript --local --schema public > src/core/db/types.generated.ts",
     "gen:shapes": "npx --yes tsx scripts/gen-shapes.ts",

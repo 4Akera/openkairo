@@ -11,6 +11,7 @@ revoke all on all routines in schema lis from public, anon, authenticated;
 revoke all on all routines in schema billing from public, anon, authenticated;
 revoke all on all routines in schema radiology from public, anon, authenticated;
 revoke all on all routines in schema oncology from public, anon, authenticated;
+revoke all on all routines in schema surgery from public, anon, authenticated;
 revoke all on all routines in schema theatre from public, anon, authenticated;
 revoke all on all routines in schema public from public, anon, authenticated;
 alter default privileges for role base_role revoke execute on functions from public;
@@ -19,6 +20,7 @@ alter default privileges for role pack_lis revoke execute on functions from publ
 alter default privileges for role pack_billing revoke execute on functions from public;
 alter default privileges for role pack_radiology revoke execute on functions from public;
 alter default privileges for role pack_oncology revoke execute on functions from public;
+alter default privileges for role pack_surgery revoke execute on functions from public;
 alter default privileges for role pack_theatre revoke execute on functions from public;
 
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
