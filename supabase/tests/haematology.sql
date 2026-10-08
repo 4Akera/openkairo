@@ -62,3 +62,14 @@ select t.landed(t.w(t.e('result', :'pt', :'bb', '{"status":"final","conclusion":
   (select t.latest('00000000-0000-0000-0000-00000000e8b1')), 'answers')), 'issued: the units by number');
 select t.as(:'dr');
 select t.ok((select r ->> 'status' from t.rows('base.orders', :'im', jsonb_build_object('item', '00000000-0000-0000-0000-00000000e8b1')) r) = 'completed', 'the order answered, on the doctor''s list');
+
+\echo '── /transfuse on the ward (which ticks no laboratory pack): the bedside record written with the base''s write:given where the Blood bank works for it (C3)'
+select t.as('11111111-0000-0000-0000-0000000000b3');
+select t.landed(t.w(t.e('lis.transfusion', :'pt', '00000000-0000-0000-0000-0000000000d6', jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells · A Rh+'),
+  'lot', '26-118452', 'route', 'iv', 'dose', jsonb_build_object('value', '60', 'unit', 'mL', 'ucum', 'mL'), 'note', 'about 60 mL · stopped: hives, itch, mild',
+  'lis', jsonb_build_object('unit', '26-118452', 'product', 'rbc', 'second', 'Marwa Gaber', 'checks', '["Name and birth date: wristband = label"]'::jsonb,
+    'signs', '[{"when":"before","temp":36.8,"sys":128,"dia":76,"pulse":88}]'::jsonb, 'reaction', '{"what":["hives, itch"],"severity":"mild"}'::jsonb)))), 'a unit at the bedside, stopped');
+select t.refused(t.w(t.e('lis.transfusion', :'pt', '00000000-0000-0000-0000-0000000000d6', jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells'),
+  'lis', jsonb_build_object('unit', '26-118452')))), 'bad_shape', 'a second checker is named');
+reset role;
+select t.ok(core.write_action('lis.transfusion') = 'write:given', 'written with the base''s given action (served)');

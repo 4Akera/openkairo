@@ -6,8 +6,9 @@ import { settingIn } from '@core/screens/settings/form/model'
 import { EGFR } from './kidney'
 
 export interface RenalRule { medicine: string; atc: string; under: number; says: string }
-export const rulesOf = (org: Pick<Organization, 'settings' | 'settingKeys' | 'datatypes' | 'organization'> | undefined): RenalRule[] =>
-  (settingIn(org, 'nephrology.renal_list', org?.organization.id).rules ?? []) as RenalRule[]
+/** the clinic's list as it stands (a setting of the clinic: its one row, whichever the clinic's id; the declared starter rows until saved) */
+export const rulesOf = (org: Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'> & Partial<Pick<Organization, 'organization'>> | undefined): RenalRule[] =>
+  (settingIn(org, 'nephrology.renal_list', org?.organization?.id ?? org?.settings.find((s) => s.key === 'nephrology.renal_list')?.thing_id).rules ?? []) as RenalRule[]
 /** the latest eGFR the record holds (the laboratory's) */
 export const latestEgfr = (values: Pick<ValueRow, 'code' | 'value' | 'at'>[]) => values.filter((v) => EGFR.includes(v.code ?? '')).sort((a, b) => b.at.localeCompare(a.at))[0] ?? null
 /** what the list says of a medicine at this eGFR: the rule with the lowest threshold the eGFR is under (stop under 30 before halve under

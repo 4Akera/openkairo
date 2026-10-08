@@ -12,6 +12,6 @@ export function renalLine(params: Params, ctx: RxLineCtx) {
   const name = params.drug?.name?.trim(); if (!name) return null
   const egfr = latestEgfr(ctx.record?.values ?? []); if (!egfr) return null
   const atc = params.drug?.code?.startsWith('atc:') ? params.drug.code.slice(4) : null
-  const r = renalSays({ name, atc }, egfr.value, rulesOf(ctx.org as Organization | undefined)); if (!r) return null
+  const r = renalSays({ name, atc }, egfr.value, rulesOf(ctx.org)); if (!r) return null
   return { rows: [[{ text: renalWords(r, egfr, day(egfr.at)), tone: 'warn' as const }]], short: [{ text: `renal: ${r.says} under ${r.under}`, tone: 'warn' as const }] }
 }

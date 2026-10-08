@@ -4,7 +4,7 @@
 -- as the base's result: the group, the antibody screen, the crossmatch and each unit's number); /blood is the pack's order word, its own
 -- order type (the product, what the red cells need, the units, why, the consent, the sample: core change (a), written with write:order
 -- wherever the doctor orders from); /transfuse is the bedside record, its own type extending the base's given (each unit: the two who
--- checked, the checks, the start and the end, the signs before, at 15 minutes and at the end, a reaction), offered wherever the Blood bank
+-- checked (the writer and the second, by name), the checks, the start and the end, the signs before, at 15 minutes and at the end, a reaction), offered wherever the Blood bank
 -- works for the department (core change C3).
 
 set client_min_messages = warning;
@@ -23,6 +23,14 @@ create function lis.transfusion_line(e jsonb) returns text language sql stable s
     case when e -> 'data' -> 'lis' -> 'reaction' is not null then ' · stopped: ' || coalesce((select string_agg(x, ', ') from jsonb_array_elements_text(e -> 'data' -> 'lis' -> 'reaction' -> 'what') x), 'a reaction')
       || coalesce(', ' || (e -> 'data' -> 'lis' -> 'reaction' ->> 'severity'), '') else '' end
 $$;
+-- the bedside record is written where the pack serves the department (core change C3): it uses the pack, or the Blood bank works for it
+create function lis.transfusion_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not core.pack_serves((p_entry ->> 'organization_id')::uuid, (p_entry ->> 'department_id')::uuid, 'lis') then
+    return jsonb_build_array(jsonb_build_object('code', 'not_served', 'level', 'refuse', 'detail', 'no Blood bank works for this department'));
+  end if;
+  return '[]';
+end $$;
 reset role;
 
 -- /blood's order: the base's order with the Blood bank's words (core change (a)): the product, what it needs, the units, why, the consent, the sample
@@ -34,17 +42,19 @@ select core.declare_type('lis.blood', 1, 'lis',
   'lis.blood_line(jsonb)', array['ServiceRequest'], base_type => 'order', labels => '{"en":"Blood order","ar":"طلب دم"}');
 -- the bedside record: each unit the base's given (the unit number its lot, the volume its dose), with the two who checked, the checks, the
 -- start and end, the signs and a reaction (which the base's note also says, so every chart reads it)
-select core.declare_action('write:lis.transfusion', 'lis', 'department', '{"en":"Record blood at the bedside"}', everyday => true);
 select core.declare_type('lis.transfusion', 1, 'lis',
   jsonb_set((select t.shape from core.types t where t.key = 'given' order by t.version desc limit 1), '{properties,lis}',
-    '{"type":"object","additionalProperties":false,"required":["unit","checked_by"],"properties":{"unit":{"type":"string","minLength":3},"product":{"enum":["rbc","plt","ffp","cryo"]},
-      "group":{"type":"string"},"checked_by":{"type":"array","minItems":2,"maxItems":2,"items":{"type":"string","minLength":2}},
+    '{"type":"object","additionalProperties":false,"required":["unit","second"],"properties":{"unit":{"type":"string","minLength":3},"product":{"enum":["rbc","plt","ffp","cryo"]},
+      "group":{"type":"string"},"second":{"type":"string","minLength":2},
       "checks":{"type":"array","items":{"type":"string"}},"started":{"type":"string"},"ended":{"type":"string"},
       "signs":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["when"],"properties":{"when":{"enum":["before","15 min","end","reaction"]},
         "at":{"type":"string"},"temp":{"type":"number"},"sys":{"type":"integer"},"dia":{"type":"integer"},"pulse":{"type":"integer"},"rr":{"type":"integer"},"spo2":{"type":"integer"}}}},
       "reaction":{"type":"object","additionalProperties":false,"properties":{"what":{"type":"array","items":{"enum":["hives, itch","fever, rigors","breathless","BP fell","back pain, dark urine"]}},
         "severity":{"enum":["mild","moderate","severe"]},"doctor":{"enum":["restart slowly when settled","do not restart · return the unit"]},"told":{"type":"string"}}}}}'),
-  'lis.transfusion_line(jsonb)', array['MedicationAdministration'], base_type => 'given', labels => '{"en":"Blood at the bedside","ar":"نقل الدم"}');
+  'lis.transfusion_line(jsonb)', array['MedicationAdministration'], base_type => 'given', checks => array['lis.transfusion_check(jsonb,jsonb)']::regprocedure[],
+  labels => '{"en":"Blood at the bedside","ar":"نقل الدم"}');
+-- written with the base's write:given wherever the Blood bank works for the department, the ward ticking no laboratory (C3)
+select core.declare_served('lis.transfusion');
 
 -- the Blood bank's starter setup (§5.2): a bench using the laboratory pack, working for every department; each product answered by the base's
 -- result once crossmatched and issued (the group, the screen, the crossmatch, the units' numbers), after its steps

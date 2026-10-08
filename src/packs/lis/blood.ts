@@ -50,7 +50,7 @@ export const CHECKS = ['Name and birth date: wristband = label', 'Record number 
 export const REACTIONS = ['hives, itch', 'fever, rigors', 'breathless', 'BP fell', 'back pain, dark urine'] as const
 export const WHEN = ['before', '15 min', 'end', 'reaction'] as const
 export interface Signs { when: typeof WHEN[number]; at?: string; temp?: number; sys?: number; dia?: number; pulse?: number; rr?: number; spo2?: number }
-export interface Bedside { unit: string; product?: Product; group?: string; checked_by: string[]; checks: string[]; started?: string; ended?: string; signs: Signs[]
+export interface Bedside { unit: string; product?: Product; group?: string; second: string; checks: string[]; started?: string; ended?: string; signs: Signs[]
   reaction?: { what: string[]; severity?: string; doctor?: string; told?: string } }
 const hhmm = (d: Date) => d.toTimeString().slice(0, 5)
 /** the base's given with the bedside record beside it: the unit its lot, the volume its dose, what happened in its note */
@@ -63,13 +63,17 @@ export function transfusionData(b: Bedside, ml: number | null): Record<string, u
   return { status: 'completed', drug: { text: `${what}${b.group ? ` · ${b.group}` : ''}` }, lot: b.unit, route: 'iv', ...(ml != null ? { dose: { value: String(ml), unit: 'mL', ucum: 'mL' } } : {}),
     ...(note ? { note } : {}), lis }
 }
-/** /transfuse 26-118452 [rbc] [290] — one unit at the bedside: the card holds the checks, the signs and a reaction */
-export function parseTransfuse(rest: string, me: string, now = new Date()): Result {
-  const w = rest.trim().split(/\s+/).filter(Boolean); if (!w.length) return null
-  const unit = w[0]; if (!/^[0-9A-Za-z][0-9A-Za-z-]{2,}$/.test(unit)) return { error: 'Type the unit number on the bag: /transfuse 26-118452' }
+/** /transfuse 26-118452 [rbc] [290] [with Marwa Gaber] [checked] — one unit at the bedside: the writer checks it with a second person
+ *  ("with" their name), "checked" says the six checks were said aloud; the card, where it draws, holds the checks, the signs and a reaction */
+export function parseTransfuse(rest: string, now = new Date()): Result {
+  const at = rest.search(/\bwith\b/i); const head = (at >= 0 ? rest.slice(0, at) : rest).trim().split(/\s+/).filter(Boolean)
+  const tail = at >= 0 ? rest.slice(at + 4).trim() : ''; const checked = /\bchecked\b/i.test(rest)
+  const second = tail.replace(/\bchecked\b/ig, '').trim()
+  if (!head.length) return null
+  const unit = head[0]; if (!/^[0-9A-Za-z][0-9A-Za-z-]{2,}$/.test(unit)) return { error: 'Type the unit number on the bag: /transfuse 26-118452 with Marwa Gaber checked' }
   let product: Product = 'rbc'; let ml: number | null = null
-  for (const x of w.slice(1)) { if (PRODUCT_WORD[x.toLowerCase()]) product = PRODUCT_WORD[x.toLowerCase()]; else if (/^\d+$/.test(x)) ml = Number(x); else return { error: `Not a bedside word: “${x}”` } }
-  const b: Bedside = { unit, product, checked_by: [me, ''], checks: [], started: hhmm(now), signs: [] }
+  for (const x of head.slice(1)) { if (PRODUCT_WORD[x.toLowerCase()]) product = PRODUCT_WORD[x.toLowerCase()]; else if (/^\d+$/.test(x)) ml = Number(x); else if (!/^checked$/i.test(x)) return { error: `Not a bedside word: “${x}”` } }
+  const b: Bedside = { unit, product, second, checks: checked ? [...CHECKS] : [], started: hhmm(now), signs: [] }
   return { ok: [transfusionDraft(b, ml ?? ML[product])] }
 }
 export const transfusionDraft = (b: Bedside, ml: number | null): Parsed => ({ function: 'lis.transfusion', kind: 'given', params: transfusionData(b, ml), line: transfusionLine(b, ml) })
@@ -77,11 +81,11 @@ export const transfusionLine = (b: Bedside, ml: number | null) => `${b.product ?
   + (b.reaction?.what.length ? ` · stopped: ${b.reaction.what.join(', ')}${b.reaction.severity ? `, ${b.reaction.severity}` : ''}` : '')
 /** the card's fields from the draft's data */
 export const bedsideOf = (q: Record<string, unknown>): { b: Bedside; ml: number | null } => ({ b: { unit: '', ...(q.lis as Partial<Bedside> | undefined),
-    checked_by: (q.lis as Partial<Bedside> | undefined)?.checked_by ?? ['', ''], checks: (q.lis as Partial<Bedside> | undefined)?.checks ?? [], signs: (q.lis as Partial<Bedside> | undefined)?.signs ?? [] },
+    second: (q.lis as Partial<Bedside> | undefined)?.second ?? '', checks: (q.lis as Partial<Bedside> | undefined)?.checks ?? [], signs: (q.lis as Partial<Bedside> | undefined)?.signs ?? [] },
   ml: (q.dose as { value?: string } | undefined)?.value ? Number((q.dose as { value: string }).value) : null })
-/** what is missing before it may be added: both checkers, every check, the start */
+/** what is missing before it may be added: the second checker, every check */
 export function bedsideMissing(b: Bedside): string | null {
-  if (b.checked_by.filter((x) => x.trim().length >= 2).length < 2) return 'Two people check the unit at the bedside: name the second'
+  if (b.second.trim().length < 2) return 'Two people check the unit at the bedside: name the second (with Marwa Gaber)'
   if (b.checks.length < CHECKS.length) return `Tick every check (${b.checks.length} of ${CHECKS.length})`
   return null
 }

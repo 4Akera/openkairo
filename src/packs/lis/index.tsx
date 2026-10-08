@@ -12,8 +12,9 @@ import { Receive } from './Receive'
 import { Results } from './Results'
 import { largeOf } from './large'
 import './order'
-import { registerCard, registerCommand } from '@core/screens/visit/commands'
-import { parseBlood, parseTransfuse, transfusionLine, bedsideOf } from './blood'
+import { registerCard } from '@core/screens/visit/commands'
+import { transfusionLine, bedsideOf } from './blood'
+import { registerBloodWords } from './bloodWords'
 import { BedsideCard, BloodNote } from './BloodCards'
 
 registerScreen('lis.collect', Collect)
@@ -22,12 +23,6 @@ registerScreen('lis.results', Results)
 registerWalkInStep('lis', OrderStep)
 registerWords({ no_such_chair: 'This laboratory has no such chair: pick yours again', unknown_ticket: 'That ticket is not today\'s',
   called_elsewhere: 'Another chair called this patient a moment ago' })
-// the Blood bank (spec §5.7, Q35, Q36): /blood, its order word, wherever a department using the pack works for this one; /transfuse, the
-// bedside record of one unit, offered the same way (core change C3: the ward gives blood without ticking the pack)
-registerCommand({ name: 'blood', pack: 'lis', orders: true, section: 'Blood bank', groupTitle: 'Blood bank', title: 'Blood', label: 'Blood — from the Blood bank',
-  example: '/blood rbc 2 leuco kell ? thalassaemia programme · /blood plt 1 urgent', action: 'write:order', writes: ['order'],
-  parse: (rest, ctx) => rest ? parseBlood(rest, ctx) : null, note: (items, ctx) => <BloodNote items={items} ctx={ctx} /> })
-registerCommand({ name: 'transfuse', pack: 'lis', orders: true, groupTitle: 'Blood bank', title: 'Transfuse', label: 'Blood at the bedside — one unit, two who check, the signs',
-  example: '/transfuse 26-118452', action: 'write:lis.transfusion', writes: ['lis.transfusion'], parse: (rest) => parseTransfuse(rest, '') })
+registerBloodWords((items, ctx) => <BloodNote items={items} ctx={ctx} />)
 registerCard({ function: 'lis.transfusion', pack: 'lis', Editor: BedsideCard, line: (q) => { const { b, ml } = bedsideOf(q); return transfusionLine(b, ml) } })
 export const key = 'lis'

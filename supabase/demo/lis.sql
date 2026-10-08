@@ -66,7 +66,7 @@ end $$;
 -- The Blood bank's day (spec/openCare.md §5.1 rule 9, §5.7, Q35, Q36), the laboratory pack's: Nabila Farag (44, iron deficiency, Hb 6.9 at
 -- General Practice) has one unit of red cells asked this morning, its sample received; Soad Mahrous (66, melaena, Hb 6.8 last night) on the
 -- Medical Ward: two units asked urgently, grouped A Rh positive and crossmatched, issued as 26-118437 and 26-118452; the first given with no
--- reaction; the second started and stopped for hives, mild, not restarted (each unit the base's given, the unit its lot). Times relative to
+-- reaction; the second started and stopped for hives, mild, not restarted (each unit the bedside record, /transfuse's type extending the base's given: the unit its lot). Times relative to
 -- the load; a reload erases these patients first.
 
 create or replace function pg_temp.bb_svc(p_code text, p_name text) returns jsonb language sql stable as $$
@@ -112,9 +112,14 @@ begin
       jsonb_build_object('key', 'crossmatch', 'name', 'Crossmatch', 'text', 'compatible'), jsonb_build_object('key', 'units', 'name', 'Units issued', 'text', '26-118437 · 26-118452'))),
     null, (select x.id from core.entries x where x.item = o order by x.item_version desc limit 1), 'answers')));
   -- at the bedside: unit 1 given with no reaction, unit 2 stopped at 11:51 for hives (the base's given, the unit its lot)
-  perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('given', demo.base('ward'), stay, demo.ago(200), jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells · A Rh+'),
-    'lot', '26-118437', 'route', 'iv', 'dose', demo.q(290, 'mL', 'mL'), 'note', 'checked by two at the bedside · no reaction'))));
-  perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('given', demo.base('ward'), stay, demo.ago(60), jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells · A Rh+'),
-    'lot', '26-118452', 'route', 'iv', 'dose', demo.q(60, 'mL', 'mL'), 'note', 'about 60 mL · stopped: hives, itch, mild · do not restart · return the unit')),
+  perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('lis.transfusion', demo.base('ward'), stay, demo.ago(200), jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells · A Rh+'),
+    'lot', '26-118437', 'route', 'iv', 'dose', demo.q(290, 'mL', 'mL'), 'note', 'checked by two at the bedside · no reaction',
+    'lis', jsonb_build_object('unit', '26-118437', 'product', 'rbc', 'group', 'A Rh+', 'second', 'Marwa Gaber', 'checks', '["Name and birth date: wristband = label","Record number = the label","Unit number on the bag = the label","The unit''s group fits the patient''s","In date · the bag whole, no clots","Started within 30 minutes of issue"]'::jsonb,
+      'signs', '[{"when":"before","temp":36.7,"sys":122,"dia":74,"pulse":96,"rr":16,"spo2":97},{"when":"15 min","temp":36.8,"sys":124,"dia":74,"pulse":92,"rr":16,"spo2":97},{"when":"end","temp":36.8,"sys":126,"dia":76,"pulse":88,"rr":16,"spo2":97}]'::jsonb)))));
+  perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('lis.transfusion', demo.base('ward'), stay, demo.ago(60), jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells · A Rh+'),
+    'lot', '26-118452', 'route', 'iv', 'dose', demo.q(60, 'mL', 'mL'), 'note', 'about 60 mL · stopped: hives, itch, mild · do not restart · return the unit',
+    'lis', jsonb_build_object('unit', '26-118452', 'product', 'rbc', 'group', 'A Rh+', 'second', 'Marwa Gaber', 'checks', '["Name and birth date: wristband = label","Record number = the label","Unit number on the bag = the label","The unit''s group fits the patient''s","In date · the bag whole, no clots","Started within 30 minutes of issue"]'::jsonb,
+      'signs', '[{"when":"before","temp":36.8,"sys":128,"dia":76,"pulse":88,"rr":16,"spo2":97},{"when":"15 min","temp":36.9,"sys":130,"dia":78,"pulse":90,"rr":16,"spo2":97},{"when":"reaction","temp":36.9,"sys":132,"dia":78,"pulse":94,"rr":18,"spo2":97}]'::jsonb,
+      'reaction', '{"what":["hives, itch"],"severity":"mild","doctor":"do not restart · return the unit"}'::jsonb))),
     demo.e('vitals', demo.base('ward'), stay, demo.ago(41), demo.vitals(132, 78, 94, 36.9, 97, 18))));
 end $$;

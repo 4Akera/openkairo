@@ -1,7 +1,7 @@
 // The Blood bank's cards (spec/openCare.md §5.7; the pictures #haem-blood, #haem-bedside): under /blood, what the chart already shows
 // (Hb and platelets, the weight for mL/kg, allergies; core change (b)) and the sample to take — shown, never a stop; the bedside card of one
 // unit: the two who checked and the six checks, the signs before, at 15 minutes and at the end, and Stop with the reaction.
-import { useEffect, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useDepartment } from '@core/hooks/organization'
 import type { CardEditorProps } from '@core/screens/visit/commands'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
@@ -33,7 +33,6 @@ export function BloodNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
 export function BedsideCard({ q, set, ctx }: CardEditorProps) {
   const { b, ml } = bedsideOf(q); const { org } = useDepartment()
   const put = (patch: Partial<Bedside>, v = ml) => set(transfusionData({ ...b, ...patch }, v))
-  useEffect(() => { if (!b.checked_by[0] && org?.me.name) put({ checked_by: [org.me.name, b.checked_by[1] ?? ''] }) }, [org?.me.name])   // eslint-disable-line react-hooks/exhaustive-deps
   const sign = (when: Signs['when']) => b.signs.find((s) => s.when === when) ?? { when }
   const setSign = (s: Signs) => put({ signs: [...b.signs.filter((x) => x.when !== s.when), s].sort((a, c) => WHEN.indexOf(a.when) - WHEN.indexOf(c.when)) })
   const stopped = !!b.reaction?.what.length; const missing = bedsideMissing(b); const now = () => new Date().toTimeString().slice(0, 5)
@@ -43,8 +42,8 @@ export function BedsideCard({ q, set, ctx }: CardEditorProps) {
       <label className="flex items-center gap-1"><K>Group on the bag</K><Input dense value={b.group ?? ''} onChange={(e) => put({ group: e.target.value })} className="w-28" /></label>
       {stopped && <Tag tone="danger" className="ms-auto">stopped {b.ended ?? ''}</Tag>}</p>
     <div className="grid gap-1.5 rounded-lg bg-surface p-2.5 ring-1 ring-line">
-      <p className="flex flex-wrap items-center gap-2"><K>Checked by</K><span className="text-fg">{b.checked_by[0]}</span>and
-        <Input dense placeholder="the second person" value={b.checked_by[1] ?? ''} onChange={(e) => put({ checked_by: [b.checked_by[0], e.target.value] })} className="w-48" /></p>
+      <p className="flex flex-wrap items-center gap-2"><K>Checked by</K><span className="text-fg">{org?.me.name ?? 'you'}</span>and
+        <Input dense placeholder="the second person" value={b.second} onChange={(e) => put({ second: e.target.value })} className="w-48" /></p>
       <ul className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">{CHECKS.map((c) => <li key={c}><Chip variant="check" on={b.checks.includes(c)}
         onClick={() => put({ checks: b.checks.includes(c) ? b.checks.filter((x) => x !== c) : [...b.checks, c] })}>{c}</Chip></li>)}</ul></div>
     <table className="w-full text-13 tnum"><thead><tr className="text-11 uppercase tracking-[0.06em] text-faint">{['Signs', 'Temp', 'BP', 'Pulse', 'Breaths', 'SpO₂'].map((h) => <th key={h} className="py-1 pe-2 text-start font-medium">{h}</th>)}</tr></thead>

@@ -3,7 +3,9 @@
 // list (its setting) speaking on one line under the base's /rx card as the medicine is typed, a notice, never a stop.
 import { registerSection, ANYONE, type SectionInput } from '@core/screens/chart/sections'
 import { registerBannerWords, type BannerWord } from '@core/screens/chart/words'
+import { registerCardLine } from '@core/screens/visit/lines'
 import { Kidneys } from './Kidneys'
+import { renalLine } from './rxline'
 import { A, G, egfrSeries, fallOf, riskOf, squaresOf, squareWord } from './kidney'
 
 const stage = (x: Pick<SectionInput, 'rec' | 'identity'>) => {
@@ -22,4 +24,6 @@ registerBannerWords({ key: 'nephrology.words', types: [], words: (x) => {
   const f = fallOf(now, before); if (f != null && f >= 5) out.push({ word: `eGFR ${now.egfr.value} ↓`, rank: 2, tone: 'warn' })
   return out
 } })
+// the renal list's line under the base's /rx card and its draft (core change C1): a notice, never a stop
+registerCardLine('nephrology', 'medication', 'Nephrology · the renal list', (params, ctx) => renalLine(params, ctx))
 export const key = 'nephrology'
