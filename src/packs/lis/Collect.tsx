@@ -116,9 +116,9 @@ export function Collect({ dept }: ScreenProps) {
         <span className="truncate">{back?.step_data?.reason ? `${back.step_data.reason} · ` : ''}{testsLine(g.rows)}</span></>}
       who={g.rows[0]?.from_department_name ?? undefined} minutes={g.since ? minutesSince(g.since) : null} onOpen={() => toggle(g.patient.id)}
       marks={packs.marks(pr)} extra={packs.buttons(pr)} below={packs.below(pr)}
-      actions={heldView && can('write:step') ? <span className="flex gap-1.5">
-        <Button size="sm" variant="outline" disabled title={word}>Collect</Button>{packs.anyway(pr, hold.map((r) => r.order.item), 'Collect')}
-        <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : "Couldn't…"}</Button></span>
+      actions={heldView && (can('write:step') || can('read:bench')) ? <span className="flex gap-1.5">
+        {can('write:step') && <Button size="sm" variant="outline" disabled title={word}>Collect</Button>}{can('read:bench') && packs.anyway(pr, hold.map((r) => r.order.item), 'Collect')}
+        {can('write:step') && <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : "Couldn't…"}</Button>}</span>
       : view === 'todo' && can('write:step') ? <span className="flex gap-1.5">
         {chair && t && t.chair !== chair && <Button size="sm" variant="ghost" loading={busy === `call ${t.number}`} onClick={() => void call(t, g, elsewhere)}><Megaphone />{elsewhere ? 'Call here' : 'Call'}</Button>}
         <Button size="sm" variant={isOpen ? 'ghost' : 'outline'} aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : 'Collect'}</Button></span> : undefined} />,

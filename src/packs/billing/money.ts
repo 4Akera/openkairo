@@ -46,7 +46,7 @@ type Names = (id: string | null | undefined) => string | null
 export function cardLines(l: Pick<Lines, 'charges' | 'sent'>, nameOf: Names, timeOf: (iso: string) => string, handed: Handed[] = [], here?: string): CardLine[] {
   const out: CardLine[] = l.charges.map((c) => ({ key: `c:${c.item}:${c.department_id}`, kind: 'charge', department_id: c.department_id, at: c.at,
     words: c.kind === 'visit' ? `Visit · ${nameOf(c.department_id) ?? 'the clinic'}` : c.name ?? 'A service',
-    source: `${nameOf(c.department_id) ?? ''} · ${c.kind === 'visit' ? 'seen' : 'ordered'} ${timeOf(c.at)}`.replace(/^ · /, ''),
+    source: `${nameOf(c.department_id) ?? ''} · ${c.kind === 'visit' ? 'checked in' : 'ordered'} ${timeOf(c.at)}`.replace(/^ · /, ''),
     price: c.at_order ? null : cents(c.amount), open: !!c.at_order, charge: { item: c.item, department_id: c.department_id } }))
   const byDept = new Map<string, SentLine[]>()
   for (const s of l.sent) byDept.set(s.department_id, [...(byDept.get(s.department_id) ?? []), s])

@@ -1,7 +1,9 @@
 // A set's medicines as one prescription (chart-plan.md §1.3, design-system.md §4.5): the ℞ mark; per drug its name and strength,
 // the sig in plain words (1 tablet by mouth, twice a day, 30 days · 30 tablets), what it is for, a change as "500 mg BD → 1 g BD"
 // (the version before), a stop with its reason; where it was sent on, from the order about it in the same set, in the words of the pack
-// that answers it (visit/send.ts: Sent, given at 12:40, not given). A reported medicine says so and carries no ℞.
+// that answers it (visit/send.ts: Sent, given at 12:40, not given), and, while its order is open and a pack holds it waiting, that
+// pack's word in its tone (spec §5.4: "Waiting for payment" for a department's own lines; owner, 2026-10-08: the word only). A reported
+// medicine says so and carries no ℞.
 import type { EntryData } from '../../../db/shapes.generated'
 import { stepOf } from '../../../db/views'
 import { Tag, hm } from '../../../ui'
@@ -63,6 +65,6 @@ function SentOn({ med: m, order }: { med: ChartItem; order: ChartItem | undefine
   if (last || row?.status === 'completed') return <Tag tone="ok">{w.done} {hm(last?.occurred_at ?? row?.answered_at ?? row!.last_at)}</Tag>
   if (!row) return <Tag tone="info">{order.draft ? w.draft : w.sent}</Tag>
   if (['revoked', 'rejected', 'cancelled', 'failed'].includes(row.status)) return <Tag tone="warn">{w.stopped}</Tag>
-  const step = stepOf(row)
-  return <Tag tone="info">{step === 'sent' ? w.sent : w.at(stepWord(step).toLowerCase())}</Tag>
+  const step = stepOf(row); const wait = env.waitOf?.(row.item, row.status) ?? null
+  return <><Tag tone="info">{step === 'sent' ? w.sent : w.at(stepWord(step).toLowerCase())}</Tag>{wait && <Tag tone={wait.tone ?? 'warn'}>{wait.word}</Tag>}</>
 }

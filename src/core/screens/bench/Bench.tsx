@@ -104,9 +104,8 @@ export function Bench({ dept }: ScreenProps) {
     // an order a pack holds waiting: its buttons greyed, its word on the row, and Go ahead anyway… with a reason (spec §5.4)
     const heldSteps = nextSteps(waiting, org, can)
     steps.push(...heldSteps.map((s) => <Button key={`held ${s.type} ${s.key}`} size="sm" variant="outline" disabled title={packs.waits.get(s.rows[0].order.item)?.word}>{stepName(s.key)} {s.rows.length}</Button>))
-    // whoever may do the work may go ahead anyway; there is no right of its own
-    const mayWork = heldSteps.length > 0 || waiting.some((r) => can(replyFormFor(r.reply_type)?.action ?? 'write:result'))
-    const ahead = mayWork && packs.anyway(pr, waiting.map((r) => r.order.item), 'Go ahead')
+    // anyone working this bench may go ahead anyway (read:bench here; owner, 2026-10-08); there is no right of its own
+    const ahead = can('read:bench') && packs.anyway(pr, waiting.map((r) => r.order.item), 'Go ahead')
     if (ahead) steps.push(<span key="anyway">{ahead}</span>)
     // a pack's one-click release (its quick word, "Give all"): every request its form can answer as it stands, in one atomic set
     const quick = seg !== 'done' ? ready.map((r) => ({ r, pf: replyFormFor(r.reply_type) })).filter(({ r, pf }) => pf?.quick && can(pf.action) && pf.toWrite(r, undefined)) : []

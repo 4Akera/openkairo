@@ -6,6 +6,7 @@ import type { Draft } from '../../../db/entries'
 import type { Organization, ServerEntry, ServerRecord } from '../../../db/types'
 import { nameOf, userName } from '../../../db/views'
 import { hm, shortDate, ymd } from '../../../ui/time'
+import type { OrderWait } from '../../rows'
 import type { ChartItem } from '../model/items'
 
 export interface BlockEnv {
@@ -20,6 +21,7 @@ export interface BlockEnv {
   onEdit?: (d: Draft) => void                // a draft block's edit and remove
   onRemove?: (d: Draft) => void
   onSample?: (what: string) => void          // the gallery: what an action would have done
+  waitOf?: (item: string, status: string | null | undefined) => OrderWait | null   // an open order a pack holds waiting: its word and tone (spec §5.4, (c) on the chart)
 }
 export const BlockContext = createContext<BlockEnv>({})
 /** a group block's body (a prescription, a requisition, the problems, the allergies): it draws each item through ItemFrame */

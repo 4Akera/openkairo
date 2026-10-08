@@ -5,10 +5,10 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { blankCard, cardLines, cardSum, cents, drawerWords, egp, owedMarks, owedWords, payArgs, receiptLines, signed, wire, type Card, type Lines, type Payment } from '../src/packs/billing/money'
 import { REFUSALS } from '../src/packs/billing/words'
-import { WORD, anywayDue, asHanded, asSent, centsOf, dueOf, handedDue, noData, ordersOf, restOf, rowButton, rowData, rowWaits, type RowData } from '../src/packs/billing/rows'
+import { WORD, anywayDue, asHanded, asSent, centsOf, chartData, dueOf, handedDue, noData, ordersOf, restOf, rowButton, rowData, rowWaits, type RowData } from '../src/packs/billing/rows'
 import { REFUSALS as PHARMACY_WORDS } from '../src/packs/pharmacy/answers'
 import type { OrderRow } from '../src/core/db/types'
-import type { PackRow } from '../src/core/screens/rows'
+import { chartRowOf, chartWait, waitsOf, type PackRow, type RowCtx } from '../src/core/screens/rows'
 import { registerWords, words } from '../src/core/db/words'
 
 let n = 0
@@ -37,7 +37,7 @@ test('money in piastres: typed or sent, at most two decimals, never below nothin
 test('the card\'s lines: each charge with where and when it came from; a sending department\'s lines as one; an open price empty', () => {
   const c = cardLines(lines, nameOf, hm)
   assert.deepEqual(c.map((l) => l.words), ['Visit · Internal Medicine', 'CBC', 'Chest X-ray', 'Pharmacy · Augmentin 1 g, Panadol Extra × 2'])
-  assert.deepEqual(c.map((l) => l.source), ['Internal Medicine · seen 10:12', 'Laboratory · ordered 10:24', 'Laboratory · ordered 10:25', 'Pharmacy · sent 10:30'])
+  assert.deepEqual(c.map((l) => l.source), ['Internal Medicine · checked in 10:12', 'Laboratory · ordered 10:24', 'Laboratory · ordered 10:25', 'Pharmacy · sent 10:30'])
   assert.deepEqual(c.map((l) => l.price), [15000, 8000, null, 12650]); assert.deepEqual(c.map((l) => l.open), [false, false, true, false])
   assert.deepEqual(c[3].sent, ['s1', 's2'])
   const h = cardLines({ charges: [], sent: [] }, nameOf, hm, [{ name: 'Nexium 40', quantity: 1, amount: '75', order_item: 'rx2' }], 'ph')
@@ -203,6 +203,26 @@ test('Pay first, per order: what billing holds unpaid, and under the department\
   assert.deepEqual(anywayDue(physio(sessions), ['s2'], noData()), { lines: [sessions[1]], basis: { s2: '0.00' } }, 'going ahead: the lines of those orders go to the cashier first')
   assert.deepEqual(anywayDue(physio(sessions), ['s2'], own('none', { s2: [{ name: 'Session · 45 min', quantity: 1, amount: 250, paid: false }] })).lines, [],
     'already on an open bill as they stand: nothing goes twice')
+})
+test('the doctor\'s chart (owner, 2026-10-08): billing\'s word on an open order it holds unpaid, wherever performed; the word alone, nothing the chart prices', () => {
+  const d = chartData([{ waiting: ['lab1'] }, { waiting: ['s2'] }])
+  assert.deepEqual([...d.waiting].sort(), ['lab1', 's2']); assert.equal(d.payFirst, false); assert.equal(d.desk, 'none'); assert.equal(d.own.size, 0); assert.equal(d.owes.size, 0)
+  const row = { ...physio(undefined, ['s1', 's2', 'lab1']), key: 'chart pt' }
+  assert.deepEqual(rowWaits(row, d), [{ order: 's2', word: WORD, tone: 'warn' }, { order: 'lab1', word: WORD, tone: 'warn' }], 'what billing holds unpaid; s1 is not held')
+  assert.deepEqual(rowWaits(row, chartData(null)), [], 'not allowed to read (no read:record): nothing')
+  // through the core's rules, as the chart draws it: only where the reader's department uses billing; the word and its tone
+  const check = [{ pack: 'billing', waiting: (r: PackRow, _c: RowCtx, data: unknown) => rowWaits(r, (data as RowData | undefined) ?? noData()), anyway: () => {} }]
+  const rows = chartRowOf('pt', [{ ...order('s2'), status: 'active' }, { ...order('lab1'), status: 'completed' }] as OrderRow[])
+  const ctx = (packs: string[]): RowCtx => ({ list: 'chart', dept: { id: 'im', name: 'Internal Medicine', packs, declared: {} }, can: () => true })
+  const w = waitsOf(check, rows[0], ctx(['billing']), { billing: d })
+  assert.deepEqual(chartWait('s2', 'active', w, new Set()), { word: 'Waiting for payment', tone: 'warn', packs: ['billing'] })
+  assert.equal(w.has('lab1'), false, 'answered: not on the chart\'s row, so no word')
+  assert.equal(waitsOf(check, rows[0], ctx(['pharmacy']), { billing: d }).size, 0, 'a department that does not use billing sees no money word')
+  const index = read('src/packs/billing/index.tsx')
+  assert.match(index, /ctx\.list === 'chart' \? chartOf\(rows, ctx\)/, 'the chart reads billing.chart, never a list\'s read')
+  assert.match(index, /if \(!ctx\.can\('read:record'\)\) return chartData\(null\)/, 'for whoever reads the record there')
+  assert.match(index, /packOp<ChartWaiting>\('billing\.chart', ctx\.dept\.id, \{ patient_id: r\.patient_id, orders \}\)/)
+  assert.doesNotMatch(index, /anywhere/, 'no list read widened for it')
 })
 const sql = read('supabase/migrations/20260926000013_billing.sql')
 const code = (t: string) => t.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')

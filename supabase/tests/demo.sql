@@ -172,6 +172,14 @@ select t.ok(w -> 'waiting' @> jsonb_build_array(demo.id('billing', 'order:magdy 
 select t.ok(not (w -> 'waiting') ? demo.id('billing', 'order:hoda lipids')::text and w -> 'patient_ids' = jsonb_build_array(demo.id('billing', 'patient:hoda')), 'Hoda''s lipid profile, paid, does not wait')
   from public.pack_op(jsonb_build_object('op', 'billing.waiting', 'department_id', demo.base('lab'), 'args', jsonb_build_object('orders',
     jsonb_build_array(demo.id('billing', 'order:hoda lipids'))))) w;
+select demo.as(demo.base('doctor'));
+select t.ok(w -> 'waiting' @> jsonb_build_array(demo.id('billing', 'order:magdy cbc'), demo.id('billing', 'order:magdy hba1c')) and jsonb_array_length(w -> 'waiting') = 2,
+  'on Magdy''s chart in General Practice, the word on both tests'' lines (owner, 2026-10-08)')
+  from public.pack_op(jsonb_build_object('op', 'billing.chart', 'department_id', demo.base('gp'), 'args', jsonb_build_object('patient_id', demo.id('billing', 'patient:magdy'),
+    'orders', jsonb_build_array(demo.id('billing', 'order:magdy cbc'), demo.id('billing', 'order:magdy hba1c'))))) w;
+select t.ok(c.open and c.at = (select min(e.occurred_at) from core.entries e where e.organization_id = c.organization_id and e.item = c.item),
+  'Heba, waiting at General Practice and not yet called, owes its visit fee already: charged at check-in (owner, 2026-10-08)')
+  from billing.charges c where c.organization_id = demo.base('clinic') and c.patient_id = demo.id('base', 'patient:heba') and c.kind = 'visit' and c.department_id = demo.base('gp');
 
 \echo '── reloaded with two patients of the app in the beds the demo names (3 and 4): each demo stay takes a free bed'
 do $$

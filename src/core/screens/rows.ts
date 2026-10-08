@@ -2,7 +2,8 @@
 // 2026-10-08): (a) a row action — one button of its own on the row, its card folded out inline under the row; (b) the lines due — the
 // lines a screen prices itself and hands on its rows (a name, a quantity, an amount: plain numbers, no currency word) for row actions to
 // read; (c) a soft check — single orders on a row marked waiting with a word and a tone, whose buttons the core greys while the row's
-// other orders stay workable, and an inline "…anyway" card with a required reason the pack records. And (d)'s question, asked without
+// other orders stay workable, and an inline "…anyway" card with a required reason the pack records; on the doctor's chart, the same
+// word and tone alone on an open order's line (the owner extended (c) there on 2026-10-08). And (d)'s question, asked without
 // naming a pack: does a pack this department uses declare that it charges. Only the packs the department uses speak, in its pack order,
 // one each; a pack that fails, or whose data failed, says nothing. Never a server refusal, never a hold kept in core. Pure: a node test
 // imports it (npm run test:board); the screens draw it through useRows.tsx.
@@ -11,8 +12,9 @@ import type { Department, OrderRow, Organization, PackDeclared } from '../db/typ
 import { isPackKey, stateTone, type MarkRow, type StateTone } from './marks'
 
 /** where a row is drawn: the desk, the clinic queue (and its requests), the base bench, the bench's patient page, the page that answers
- *  one request (Request.tsx), and a pack's own list built on the core ListRow */
-export type RowList = 'desk' | 'queue' | 'bench' | 'patient' | 'request' | 'screen'
+ *  one request (Request.tsx), a pack's own list built on the core ListRow, and the doctor's chart (its order lines: a soft check's word
+ *  and tone only, never a button, a card or "…anyway"; owner, 2026-10-08) */
+export type RowList = 'desk' | 'queue' | 'bench' | 'patient' | 'request' | 'screen' | 'chart'
 
 /** (b) one line a department prices itself: what it is, how many, what it comes to (plain numbers), and the order it belongs to where it
  *  has one (so a soft check can wait per order) */
@@ -125,6 +127,18 @@ export function waitsOf(defs: readonly SoftCheckDef[], row: PackRow, ctx: RowCtx
     }
   }
   return out
+}
+/** an order still open (sent, started, held): the only ones a word may stand on, on the chart */
+export const OPEN_ORDER = new Set(['active', 'in-progress', 'on-hold'])
+/** the doctor's chart as the soft checks read it (owner, 2026-10-08): one row, the record's open orders; none open (or none read), no
+ *  row, so nothing is asked */
+export function chartRowOf(patient: string, orders: readonly OrderRow[] | null | undefined): PackRow[] {
+  const open = (orders ?? []).filter((o) => OPEN_ORDER.has(o.status))
+  return open.length ? [packRowOf(`chart ${patient}`, { patient_id: patient, visit_id: null, orders: open })] : []
+}
+/** the word an order shows on the chart: only an open order on the row, and only while a pack holds it and nobody went ahead */
+export function chartWait(item: string, status: string | null | undefined, waits: ReadonlyMap<string, OrderWait>, ahead: ReadonlySet<string>): OrderWait | null {
+  return status && OPEN_ORDER.has(status) && !isFree(item, waits, ahead) ? waits.get(item) ?? null : null
 }
 type Ordered = { order: Pick<OrderRow, 'item'> }
 /** free to work: no pack holds it, or someone went ahead anyway */

@@ -4,7 +4,9 @@
 // failing pack says nothing.
 // One card is open under a row at a time in a list: a pack's own (Pay) or the core's "…anyway" card, whose reason the packs holding the
 // orders record. Whoever goes ahead anyway may then do the work: those orders are free on every screen of this app from then on.
-import { useMemo, useState, type ReactNode } from 'react'
+// The doctor's chart reads the soft checks alone (owner, 2026-10-08): the words of the record's open orders, once a chart, live like a
+// list, never a pack's button, card or "…anyway".
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQueries, useQueryClient } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { mayIn } from '../db/views'
@@ -12,7 +14,7 @@ import { useDepartment } from '../hooks/organization'
 import { useLive } from '../hooks/live'
 import { Button, type RowMark } from '../ui'
 import { AnywayCard, Quiet } from './RowCards'
-import { goAhead, isFree, rowActionDefs, rowButtonsOf, rowsKey, softCheckDefs, waitsOf, waitWords,
+import { chartWait, goAhead, isFree, rowActionDefs, rowButtonsOf, rowsKey, softCheckDefs, waitsOf, waitWords,
   type OrderWait, type PackData, type PackRow, type RowCtx, type RowDept, type RowList } from './rows'
 
 /** the orders someone went ahead with anyway, in this app: free from then on, on the list and the patient's page alike */
@@ -34,11 +36,12 @@ export interface PackRows {
   below: (row: PackRow) => ReactNode
 }
 
-/** what the packs the list's department uses read for its rows, and the orders waiting (live: the clinic's hints) */
+/** what the packs the list's department uses read for its rows, and the orders waiting (live: the clinic's hints); the chart reads the
+ *  soft checks only (no row action is asked, so none loads) */
 function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | undefined) {
   const { org, dept: here } = useDepartment(); const d = dept ?? here
   const ctx = useMemo<RowCtx | null>(() => d ? { list, dept: { id: d.id, name: d.name, packs: d.packs, declared: d.declared ?? {} }, org, can: (a) => mayIn(org, a, d.id) } : null, [list, d, org])
-  const actions = useMemo(() => rowActionDefs().filter((x) => d?.packs.includes(x.pack)), [d])
+  const actions = useMemo(() => list === 'chart' ? [] : rowActionDefs().filter((x) => d?.packs.includes(x.pack)), [d, list])
   const checks = useMemo(() => softCheckDefs().filter((x) => d?.packs.includes(x.pack)), [d])
   const key = rowsKey(rows)
   useLive(org && (actions.length || checks.length) ? `organization:${org.organization.id}` : null, [['pack-rows']])
@@ -57,6 +60,13 @@ function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | unde
   }, [ctx, checks, key, dataKey])
   const ahead = useAhead((s) => s.items)
   return { ctx, actions, checks, actionData, waits, ahead }
+}
+
+/** (c) on the doctor's chart (owner, 2026-10-08): the word a pack gives each of the record's open orders, by order — its word and tone
+ *  only; none where no pack the reader's department uses holds it, or someone went ahead. rows: chartRowOf (the record's open orders) */
+export function useOrderWaits(rows: PackRow[]): (item: string, status: string | null | undefined) => OrderWait | null {
+  const { waits, ahead } = usePackData('chart', rows, null)
+  return useCallback((item: string, status: string | null | undefined) => chartWait(item, status, waits, ahead), [waits, ahead])
 }
 
 /** the packs on a list: rows as the list draws them (all of them, before any split by view); dept: the list's department (default: the

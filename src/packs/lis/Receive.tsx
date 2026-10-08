@@ -95,9 +95,9 @@ export function Receive({ dept }: ScreenProps) {
             <span className="truncate">{[...new Set(g.rows.map((r) => r.section_name ?? 'Other'))].join(', ')}</span></>}</>}
       minutes={g.rows[0]?.order.last_at ? minutesSince(g.rows[0].order.last_at) : null}
       actions={view === 'in' && may ? <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => setRejecting(isOpen ? null : g.patient.id)}>Reject a tube</Button>
-        : view === 'wait' && may ? <span className="flex gap-1.5"><Button size="sm" variant="ghost" disabled={busy || !ok.length} title={ok.length ? 'For a tube with no number, or one that will not scan' : waitWord(hold)}
-          aria-label={`Receive ${g.patient.given_name} ${g.patient.family_name}'s tubes by hand`} onClick={() => void take(ok, n || 'No number')}>Receive</Button>
-          {hold.length > 0 && packs.anyway(pr, hold.map((r) => r.order.item), 'Receive')}</span> : undefined} />,
+        : view === 'wait' && (may || can('read:bench')) ? <span className="flex gap-1.5">{may && <Button size="sm" variant="ghost" disabled={busy || !ok.length} title={ok.length ? 'For a tube with no number, or one that will not scan' : waitWord(hold)}
+          aria-label={`Receive ${g.patient.given_name} ${g.patient.family_name}'s tubes by hand`} onClick={() => void take(ok, n || 'No number')}>Receive</Button>}
+          {hold.length > 0 && can('read:bench') && packs.anyway(pr, hold.map((r) => r.order.item), 'Receive')}</span> : undefined} />,
       isOpen && <li key={`${g.patient.id} reject`} className="grid gap-2 border-t border-line bg-sunken p-4">
         {tubes.map(({ tube, tests }) => <div key={tube.cap} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
           <Cap cap={tube.cap} big /><span className="w-36 text-13 font-medium text-fg">{tube.word}</span><span className="text-13 text-muted">{tests.map((t) => t.name).join(' · ')}</span>

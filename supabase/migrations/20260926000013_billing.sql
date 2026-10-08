@@ -1,10 +1,11 @@
 -- 13 · the billing pack (spec/openCare.md §5.4). Money never reaches the record: the chart keeps what was ordered and given; billing
 -- keeps its own tables and reaches them only through its operations (public.pack_op), each gated by its action in a department that
 -- uses the pack and, to take money, by the department's Takes payment here (its own charges, or everyone's: the main cashier).
---   · charges (derived, from entries and settings only, §3.8): a department's visit fee once the patient is seen there, and each ordered
---     service that has a price, charged to the department that performs it, as both stood when ordered or seen; void when the order is
---     revoked, crossed out or closed undone. A charge row carries no amount (the record read sends every derived row of the family): its
---     price is read as of its moment (priced_at), from billing's settings, by billing's operations only. It sends no record entries (F08).
+--   · charges (derived, from entries and settings only, §3.8): a department's visit fee at check-in there (owner, 2026-10-08), and each
+--     ordered service that has a price, charged to the department that performs it, as both stood when checked in or ordered; void when
+--     the check-in is undone or crossed out, or the order revoked, crossed out or closed undone. A charge row carries no amount (the
+--     record read sends every derived row of the family): its price is read as of its moment (priced_at), from billing's settings, by
+--     billing's operations only. It sends no record entries (F08).
 --   · its own original data, only ever added to (a mistake is a new row with its reason; Erase the one exception, core.declare_store):
 --     the lines a department sends to the cashier (an open bill), payments and their lines (cash with received and change, or card; a
 --     refund is a payment of its own naming the one it undoes), the reasons for going ahead before payment, and each drawer closed.
@@ -23,15 +24,15 @@ set role pack_billing;
 create table billing.charges (
   organization_id uuid not null,
   item          uuid not null,             -- the order item (a service), or the visit item (a visit fee)
-  department_id uuid not null,             -- the department that charges: performs the service, or where the patient was seen
+  department_id uuid not null,             -- the department that charges: performs the service, or where the patient was checked in
   patient_id    uuid not null,
   visit_id      uuid,
   kind          text not null check (kind in ('service', 'visit')),
   service_id    uuid,
   name          text,                      -- the service as the order named it; a visit fee has none (the department's name is its word)
   from_department_id uuid,                 -- the department that ordered it
-  at            timestamptz not null,      -- ordered, or seen (clinical time)
-  priced_at     timestamptz not null,      -- the moment its price is read as of: when the order or the seeing was written
+  at            timestamptz not null,      -- ordered, or checked in (clinical time)
+  priced_at     timestamptz not null,      -- the moment its price is read as of: when the order or the check-in was written
   open          boolean not null,          -- false: void
   source_entries uuid[] not null,
   primary key (organization_id, item, department_id)
@@ -248,11 +249,6 @@ create function billing.priced_order(p_org uuid, p_order uuid) returns boolean l
                     from core.pack_entries(p_org, array[p_order]) lv where lv.item = p_order and lv.type = any (core.kinds('order')) order by lv.item_version desc limit 1) d
    where d.svc is not null and d.dep is not null), false)
 $$;
--- the kinds a clinician writes in a visit that count as seeing the patient there once called, as the base's presence counts it
-create function billing.clinical(p_type text) returns boolean language sql stable security definer set search_path = '' as $$
-  select core.base_of(p_type) in ('note', 'vitals', 'observation', 'problem', 'allergy', 'medication', 'given', 'list_review', 'order', 'procedure',
-    'score', 'alert', 'pregnancy', 'breastfeeding', 'died')
-$$;
 -- one lock a thing, always in the same order: the charges and lines a payment names (two desks taking one line: the second finds it paid)
 create function billing.lock(p_keys text[]) returns void language plpgsql volatile security definer set search_path = '' as $$
 declare k text;
@@ -276,7 +272,7 @@ $$;
 -- ── the charges' refresh: from entries and settings only (as they stood), never billing's own tables ──
 create function billing.charges_refresh(p_org uuid, p_items uuid[]) returns void language plpgsql volatile security definer set search_path = '' as $$
 declare es core.entries[]; v_orders uuid[]; v_visits uuid[]; k uuid; o1 core.entries; ol core.entries; lv core.entries; f core.entries; e core.entries;
-        v_svc uuid; v_dept uuid; v_status text; v_here uuid; v_called boolean; v_seen jsonb; v_gone boolean; d record; v_src uuid[];
+        v_svc uuid; v_dept uuid; v_status text; v_came jsonb; v_gone boolean; d record; v_src uuid[];
 begin
   select coalesce(array_agg(x), '{}') into es from core.pack_entries(p_org, p_items) x;
   -- the orders these items are, or answer (a step, a result, a dispense)
@@ -309,31 +305,23 @@ begin
       v_src);
   end loop;
 
-  -- a visit fee: once the patient is seen in a department (a seen or done move there, or what a clinician writes there after the call), as
-  -- the fee stood then, where the department used billing then; one a department the visit was seen in (Send to… moves it); void when
-  -- the visit is crossed out
+  -- a visit fee: at check-in, in the department checked in to, as the fee stood then, where that department used billing then (owner,
+  -- 2026-10-08: at check-in, not once seen); where Send to… brings the visit to another department, at its arrival there, the same way
+  -- (chosen in the build, awaiting the owner); one a department a visit; void when the check-in is undone (the desk's Undo crosses the
+  -- visit out) or the visit is crossed out (owner, 2026-10-08)
   foreach k in array v_visits loop
     f := null;
     select x.* into f from core.pack_entries(p_org, array[k]) x where x.item = k and x.item_version = 1;
     continue when f.id is null or not (f.type = any (core.kinds('checked_in')));
     v_gone := (select x.type = 'crossed_out' from core.pack_entries(p_org, array[k]) x where x.item = k order by x.item_version desc limit 1);
-    v_here := coalesce(f.data ->> 'department_id', f.department_id::text)::uuid; v_called := false; v_seen := '{}';
-    -- moves before what was written in the same Done: a consult's call, then its notes
-    for e in select x.* from core.pack_visit(p_org, k) x order by x.recorded_at, (x.item <> k), x.item_version, x.id loop
-      if e.item = k then
-        case core.base_of(e.type)
-          when 'called' then v_called := true;
-          when 'seen', 'done' then
-            if not v_seen ? v_here::text then v_seen := v_seen || jsonb_build_object(v_here, jsonb_build_object('at', e.occurred_at, 'rec', e.recorded_at)); end if;
-          when 'transferred' then v_here := (e.data ->> 'to_department_id')::uuid; v_called := false;
-          else null;
-        end case;
-      elsif v_called and e.department_id = v_here and billing.clinical(e.type) and not v_seen ? v_here::text then
-        v_seen := v_seen || jsonb_build_object(v_here, jsonb_build_object('at', e.occurred_at, 'rec', e.recorded_at));
+    v_came := jsonb_build_object(coalesce(f.data ->> 'department_id', f.department_id::text), jsonb_build_object('at', f.occurred_at, 'rec', f.recorded_at));
+    for e in select x.* from core.pack_entries(p_org, array[k]) x where x.item = k and core.base_of(x.type) = 'transferred' order by x.recorded_at, x.item_version, x.id loop
+      if e.data ->> 'to_department_id' is not null and not v_came ? (e.data ->> 'to_department_id') then
+        v_came := v_came || jsonb_build_object(e.data ->> 'to_department_id', jsonb_build_object('at', e.occurred_at, 'rec', e.recorded_at));
       end if;
     end loop;
     select coalesce(array_agg(x.id order by x.recorded_at, x.id), '{}') into v_src from core.pack_entries(p_org, array[k]) x where x.item = k;
-    for d in select y.key::uuid dep, (y.value ->> 'at')::timestamptz at, (y.value ->> 'rec')::timestamptz rec from jsonb_each(v_seen) y loop
+    for d in select y.key::uuid dep, (y.value ->> 'at')::timestamptz at, (y.value ->> 'rec')::timestamptz rec from jsonb_each(v_came) y loop
       continue when not billing.used(p_org, d.dep, d.rec) or billing.price(p_org, 'visit', null, d.dep, d.rec) is null;
       insert into billing.charges values (p_org, k, d.dep, core.survivor(p_org, f.patient_id), k, 'visit', null, null, null, d.at, d.rec, not coalesce(v_gone, false), v_src);
     end loop;
@@ -722,31 +710,35 @@ begin
 end $$;
 
 -- the soft check's read (§5.4 Pay first), for the orders a list's rows show: of those performed here, the ones waiting for payment — Pay
--- first on here now, an unpaid charge or sent line for the order, or an order priced (or At the order) the charges have not heard yet,
+-- first on where the work is done, as it stands now; an unpaid charge, a line sent to the cashier still owed, or an open order priced
+-- (or At the order) that the charges have not heard yet (the listener's few seconds after commit, or a listener parked: never a gap);
 -- and nobody went ahead anyway (…anyway frees an order for good) — and those gone ahead; with Pay first and Takes payment here as they
 -- stand, so a row can also wait on the lines it hands itself (a department's own priced work, which billing learns only when handed).
 -- Words only: no amount, except, asked for (lines), what billing holds of this department's own lines per order, which it handed itself
--- — paid, and owed on its open bill, with the lines — so its row hands only the rest and sends again only what changed
+-- — paid, and owed on its open bill, with the lines — so its row hands only the rest and sends again only what changed. With no
+-- department (billing.chart alone asks so: the door always names one), the orders waiting wherever they are performed, and nothing else
 create function billing.waiting(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_orders uuid[] := array(select x::uuid from jsonb_array_elements_text(coalesce(p_args -> 'orders', '[]')) x); v_wait uuid[]; v_ahead uuid[]; v_pts uuid[];
         v_new uuid[] := '{}'; v_own jsonb; v_held uuid[];
 begin
   if cardinality(v_orders) > 500 then perform core.refuse('too_many', 'orders'); end if;
-  v_ahead := array(select distinct a.order_item from billing.anyway a where a.organization_id = p_org and a.order_item = any (v_orders) and a.department_id = p_department);
-  -- an open order sent here the charges have not heard yet: waiting already where it will be charged (the listener's few seconds, or
-  -- a listener parked: never a gap)
-  if billing.pay_first(p_org, p_department) and cardinality(v_orders) > 0 then
+  v_ahead := array(select distinct a.order_item from billing.anyway a where a.organization_id = p_org and a.order_item = any (v_orders)
+                     and (p_department is null or a.department_id = p_department));
+  -- an open order sent here (or anywhere, with none named) the charges have not heard yet: waiting already where it will be charged
+  if cardinality(v_orders) > 0 and (p_department is null or billing.pay_first(p_org, p_department)) then
     v_new := array(select (r ->> 'item')::uuid from core.pack_rows(p_org, 'base.orders', jsonb_build_object('where', jsonb_build_object('item', to_jsonb(v_orders),
-                     'to_department_id', p_department, 'status', '["active","in-progress","on-hold"]'::jsonb))) r
-                    where not exists (select 1 from billing.charges c where c.organization_id = p_org and c.item = (r ->> 'item')::uuid and c.department_id = p_department)
+                     'status', '["active","in-progress","on-hold"]'::jsonb) || case when p_department is null then '{}'::jsonb else jsonb_build_object('to_department_id', p_department) end)) r
+                    where r ->> 'to_department_id' is not null and billing.pay_first(p_org, (r ->> 'to_department_id')::uuid)
+                      and not exists (select 1 from billing.charges c where c.organization_id = p_org and c.item = (r ->> 'item')::uuid and c.department_id = (r ->> 'to_department_id')::uuid)
                       and billing.priced_order(p_org, (r ->> 'item')::uuid));
   end if;
-  v_wait := array(select distinct c.item from billing.charges c where c.organization_id = p_org and c.item = any (v_orders) and c.department_id = p_department and c.open
-                    and billing.pay_first(p_org, c.department_id) and billing.paid_charge(p_org, c.item, c.department_id) is null
-                  union select distinct s.order_item from billing.sent s where s.organization_id = p_org and s.order_item = any (v_orders) and s.department_id = p_department
-                    and billing.pay_first(p_org, s.department_id) and billing.sent_owed(p_org, s.id)
+  v_wait := array(select distinct c.item from billing.charges c where c.organization_id = p_org and c.item = any (v_orders) and (p_department is null or c.department_id = p_department)
+                    and c.open and billing.pay_first(p_org, c.department_id) and billing.paid_charge(p_org, c.item, c.department_id) is null
+                  union select distinct s.order_item from billing.sent s where s.organization_id = p_org and s.order_item = any (v_orders)
+                    and (p_department is null or s.department_id = p_department) and billing.pay_first(p_org, s.department_id) and billing.sent_owed(p_org, s.id)
                   union select unnest(v_new)
                   except select unnest(v_ahead));
+  if p_department is null then return jsonb_build_object('waiting', to_jsonb(v_wait)); end if;
   -- this department's own lines, per order: those on a payment that stands, and those still owed on its open bill
   if coalesce((p_args ->> 'lines')::boolean, false) then
     select coalesce(jsonb_object_agg(q.o, jsonb_build_object('paid', q.paid, 'sent', q.sent, 'lines', q.lines)), '{}') into v_own from (
@@ -773,19 +765,33 @@ begin
     || case when v_own is null then '{}'::jsonb else jsonb_build_object('own', v_own) end;
 end $$;
 
--- …anyway (§5.4): the work on an order performed here goes ahead before payment, with a one-line reason; who and when are kept. Whoever
--- may do the work may (there is no right of its own): write a step on it, or its answer (the service's: a result, a reply, a pack's own
--- answer), in this department, as the writer names every type's right ('write:' and the type); the order must be sent here
+-- the doctor's chart (owner, 2026-10-08: the soft check's word on the chart's order line): of one record's orders, those waiting for
+-- payment wherever they are performed (billing.waiting with no department: Pay first as it stands where the work is done) — the orders
+-- alone: no amount, no price, no reason, nothing of what was paid or sent — only where the reader's department uses billing (a department
+-- that does not use billing sees no money word), for whoever reads the record there (its gate, chosen in the build, awaiting the owner).
+-- Orders not of this patient are not answered
+create function billing.chart(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare v_pt uuid := core.survivor(p_org, (p_args ->> 'patient_id')::uuid); v_orders uuid[] := '{}';
+begin
+  if v_pt is null then perform core.refuse('not_found', 'patient'); end if;
+  if jsonb_array_length(coalesce(p_args -> 'orders', '[]')) > 500 then perform core.refuse('too_many', 'orders'); end if;
+  if jsonb_array_length(coalesce(p_args -> 'orders', '[]')) > 0 then
+    v_orders := array(select (r ->> 'item')::uuid from core.pack_rows(p_org, 'base.orders', jsonb_build_object('patient', v_pt, 'where', jsonb_build_object('item',
+                        (select jsonb_agg(x::uuid) from jsonb_array_elements_text(p_args -> 'orders') x)))) r);
+  end if;
+  return jsonb_build_object('waiting', coalesce(billing.waiting(p_org, null, p_user, jsonb_build_object('orders', to_jsonb(v_orders))) -> 'waiting', '[]'),
+    'patient_ids', jsonb_build_array(v_pt));
+end $$;
+
+-- …anyway (§5.4): the work on an order performed here goes ahead before payment, with a one-line reason; who and when are kept. Anyone
+-- working this department's bench may (owner, 2026-10-08: the operation's gate, read:bench there; there is no right of its own); the
+-- order must be sent here
 create function billing.anyway_of(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare v_order uuid := (p_args ->> 'order_item')::uuid; v_reason text := trim(p_args ->> 'reason'); ord record; v_id uuid := gen_random_uuid(); v_answer text;
+declare v_order uuid := (p_args ->> 'order_item')::uuid; v_reason text := trim(p_args ->> 'reason'); ord record; v_id uuid := gen_random_uuid();
 begin
   if coalesce(v_reason, '') = '' or length(v_reason) > 300 then perform core.refuse('reason_missing'); end if;
   select y.* into ord from core.pack_entries(p_org, array[v_order]) y where y.item = v_order and y.type = any (core.kinds('order')) order by y.item_version desc limit 1;
   if ord.id is null or (ord.data ->> 'department_id')::uuid is distinct from p_department then perform core.refuse('not_found', 'order'); end if;
-  v_answer := coalesce(ord.data -> 'service' ->> 'answer', (select x.data ->> 'answer' from core.settings_at(p_org, 'service') x where x.thing_id = (ord.data -> 'service' ->> 'id')::uuid limit 1), 'result');
-  if not exists (select 1 from unnest(core.kinds('step') || v_answer) k where core.may(p_user, 'write:' || k, p_department)) then
-    perform core.refuse('not_allowed', 'the work');
-  end if;
   insert into billing.anyway (organization_id, id, patient_id, order_item, department_id, reason, author_id)
   values (p_org, v_id, core.survivor(p_org, ord.patient_id), v_order, p_department, v_reason, p_user);
   perform core.hint('organization:' || p_org);
@@ -806,10 +812,10 @@ select core.declare_action('write:billing.refund', 'billing', 'department', '{"e
 select core.declare_action('write:billing.prices', 'billing', 'department', '{"en":"Set prices, visit fees and Pay first"}');
 select core.declare_action('read:billing.accounts', 'billing', 'department', '{"en":"See every desk''s totals"}');
 
--- the charges: from the base's visits, orders and their steps, after commit; sending no record entries (F08)
+-- the charges: from the base's check-ins and Send to… moves, orders and their steps (and what crosses them out), after commit; sending
+-- no record entries (F08)
 select core.declare_table('billing.charges', 'billing', 'billing.charges_refresh(uuid,uuid[])', 'read:billing.cashier', entries => false);
-select core.declare_listener('billing', array['checked_in', 'called', 'seen', 'done', 'transferred', 'crossed_out', 'order', 'step', 'note', 'vitals', 'observation',
-  'problem', 'allergy', 'medication', 'given', 'list_review', 'procedure', 'score', 'alert', 'pregnancy', 'breastfeeding', 'died'], 'billing.charges_refresh(uuid,uuid[])');
+select core.declare_listener('billing', array['checked_in', 'transferred', 'crossed_out', 'order', 'step'], 'billing.charges_refresh(uuid,uuid[])');
 -- Erase reaches its own tables (D17): money keeps its amounts and receipt numbers and loses the patient (D18); an open bill and the
 -- reasons for going ahead go with the patient (a paid line lives on as the payment's line)
 select core.declare_store('billing.payments', 'billing', array['patient_id']);
@@ -824,16 +830,19 @@ select core.declare_op('billing.day', 'billing', 'billing.totals(uuid,uuid,uuid,
 select core.declare_op('billing.pay', 'billing', 'billing.pay(uuid,uuid,uuid,jsonb)', 'write:billing.payment', patients => true);
 select core.declare_op('billing.refund', 'billing', 'billing.refund(uuid,uuid,uuid,jsonb)', 'write:billing.refund', patients => true);
 select core.declare_op('billing.close', 'billing', 'billing.close_drawer(uuid,uuid,uuid,jsonb)', 'write:billing.payment');
--- a department's own lines and the soft check: whoever works its list (read:bench, the base's), where it uses billing (chosen in the
--- build, awaiting the owner)
+-- a department's own lines, the soft check and going ahead anyway: anyone working its bench (read:bench, the base's), where it uses
+-- billing (owner, 2026-10-08)
 select core.declare_op('billing.send', 'billing', 'billing.send(uuid,uuid,uuid,jsonb)', 'read:bench', patients => true);
 select core.declare_op('billing.waiting', 'billing', 'billing.waiting(uuid,uuid,uuid,jsonb)', 'read:bench', patients => true);
 select core.declare_op('billing.anyway', 'billing', 'billing.anyway_of(uuid,uuid,uuid,jsonb)', 'read:bench', patients => true);
+-- the waiting word on the doctor's chart (owner, 2026-10-08), where the reader's department uses billing: for whoever reads the record
+-- there (chosen in the build, awaiting the owner)
+select core.declare_op('billing.chart', 'billing', 'billing.chart(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
 
 -- its settings (§5.1 rule 7). Prices: billing's own (Billing → Prices, D27), each a service's (its department's) or a department's visit
--- fee, written by whoever sets prices there; Pay first on the department's card and on Billing → Prices, by whoever sets prices there
--- (chosen in the build, awaiting the owner); Takes payment here on the department's card; the reasons a charge may be waived on the
--- pack's page
+-- fee, written by whoever sets prices there; Pay first on the department's card and on Billing → Prices, switched by whoever sets
+-- prices there (write:billing.prices: owner, 2026-10-08); Takes payment here on the department's card; the reasons a charge may be
+-- waived on the pack's page
 select core.declare_setting('billing.price', 'billing', 'department',
   '{"type":"object","additionalProperties":false,"required":["service_id"],"properties":{"service_id":{"type":"string","format":"uuid"},
     "price":{"type":"string","pattern":"^[0-9]{1,8}(\\.[0-9]{1,2})?$"},"at_order":{"type":"boolean"}}}',

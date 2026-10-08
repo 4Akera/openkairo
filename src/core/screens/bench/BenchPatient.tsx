@@ -126,7 +126,6 @@ export function BenchPatient() {
       <div className="grid min-w-0 content-start gap-4">
       {bySection.map((sec) => <section key={sec}><Heading className="mb-1.5">{sec}</Heading><div className="grid gap-3">
         {g.rows.filter((r) => (r.section_name ?? 'Other') === sec).map((r) => { const x = e(r.id); const fields = fieldsOf(r); const held = !free(r); const or = orderRow(r)
-          const mayWork = can(formOf(r)?.action ?? 'write:result') || nextSteps([r], org, can).length > 0
           return <Card key={r.id} className={cn('p-4', (x.notDone || held) && 'bg-sunken')}>
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
             <span className="text-16 font-semibold">{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}</span>
@@ -134,7 +133,7 @@ export function BenchPatient() {
             {r.request?.priority !== 'routine' && <Badge tone="danger">{r.request?.priority}</Badge>}
             <span className="text-12 text-faint">{r.requester_name} · {r.from_department_name} · {hm(r.occurred_at)}</span>
             {held && <Tag tone={packs.waits.get(r.order.item)?.tone ?? 'warn'}>{packs.waits.get(r.order.item)?.word}</Tag>}
-            {held && mayWork && packs.anyway(or, [r.order.item], 'Go ahead')}
+            {held && can('read:bench') && packs.anyway(or, [r.order.item], 'Go ahead')}
             {!formOf(r) && <label className="ms-auto flex items-center gap-1.5 text-12 text-muted"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>}
           </div>
           {r.question_text && <p className="mb-2 rounded-md bg-warn-soft px-2.5 py-1.5 text-14 text-warn">“{r.question_text}”</p>}

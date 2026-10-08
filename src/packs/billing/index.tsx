@@ -1,8 +1,9 @@
 // The billing pack's client (spec/openCare.md §5.4): its three screens — the Cashier (who owes, the payment card folded out under the
 // row, receipts), Today (the day's totals, closing the drawer) and Prices (Billing → Prices) — and the words for its refusals; and, on
 // the rows of every list of a department that uses billing (core changes (a)–(c)), its one button (Pay, or Send to cashier with the
-// lines the row hands) and its soft check (Pay first: "Waiting for payment" on an order not paid, "…anyway" recorded with its reason).
-// Money never reaches the chart: these read billing's own tables through its operations, and only where a department uses billing.
+// lines the row hands) and its soft check (Pay first: "Waiting for payment" on an order not paid, "…anyway" recorded with its reason),
+// whose word alone reaches the doctor's chart on a waiting order's line (owner, 2026-10-08). Money never reaches the chart: these read
+// billing's own tables through its operations, and only where a department uses billing.
 import { registerScreen } from '@core/screens/registry'
 import { registerRowAction, registerSoftCheck, type PackRow, type RowCtx } from '@core/screens/rows'
 import { registerWords } from '@core/db/words'
@@ -14,7 +15,7 @@ import { Prices } from './Prices'
 import { RowCard } from './RowCard'
 import { REFUSALS } from './words'
 import type { Desk, Owed } from './money'
-import { anywayDue, asSent, noData, ordersOf, rowButton, rowData, rowWaits, type RowData, type Waiting } from './rows'
+import { anywayDue, asSent, chartData, noData, ordersOf, rowButton, rowData, rowWaits, type ChartWaiting, type RowData, type Waiting } from './rows'
 
 registerScreen('billing.cashier', Cashier)
 registerScreen('billing.today', Today)
@@ -30,6 +31,13 @@ async function waitingOf(rows: PackRow[], ctx: RowCtx): Promise<Waiting | null> 
   const parts = await Promise.all(ordersOf(rows).map((orders) => packOp<Waiting>('billing.waiting', ctx.dept.id, { orders, lines: true })))
   return parts.reduce<Waiting>((a, w) => ({ ...w, waiting: [...a.waiting, ...w.waiting], ahead: [...(a.ahead ?? []), ...(w.ahead ?? [])], own: { ...a.own, ...w.own } }),
     { waiting: [], ahead: [], own: {} })
+}
+/** the doctor's chart (owner, 2026-10-08): which of the record's open orders wait for payment, wherever they are performed — the words
+ *  only — for whoever reads the record here (the read's gate); none to ask, nothing */
+async function chartOf(rows: PackRow[], ctx: RowCtx): Promise<RowData> {
+  if (!ctx.can('read:record')) return chartData(null)
+  return chartData(await Promise.all(rows.flatMap((r) => ordersOf([r]).map((orders) =>
+    packOp<ChartWaiting>('billing.chart', ctx.dept.id, { patient_id: r.patient_id, orders })))))
 }
 /** who on the list owes this desk, for whoever takes payment here (200 patients a read) */
 async function owedOf(rows: PackRow[], ctx: RowCtx, desk: Desk) {
@@ -52,9 +60,10 @@ registerRowAction('billing', {
 
 // (c) Pay first, a soft check: an order not paid in a department with Pay first waits ("Waiting for payment"), per order; going ahead
 // anyway is recorded by billing with its reason, who and when, and the lines the row hands for those orders, not paid nor on an open
-// bill as they stand, go to the cashier first (read again at that moment, so nothing goes twice)
+// bill as they stand, go to the cashier first (read again at that moment, so nothing goes twice). On the doctor's chart, the word alone
+// on an open order's line (owner, 2026-10-08), read through billing.chart
 registerSoftCheck('billing', {
-  load: async (rows, ctx): Promise<RowData> => rowData(deskOf(ctx), await waitingOf(rows, ctx), null),
+  load: async (rows, ctx): Promise<RowData> => ctx.list === 'chart' ? chartOf(rows, ctx) : rowData(deskOf(ctx), await waitingOf(rows, ctx), null),
   waiting: (row, _ctx, data) => rowWaits(row, (data as RowData | undefined) ?? noData()),
   anyway: async ({ row, orders, reason, ctx }) => {
     if ((row.lines ?? []).some((l) => !!l.order && orders.includes(l.order))) {

@@ -1,7 +1,8 @@
 // A set's orders as one requisition (chart-plan.md §1.3, design-system.md §4.5): per order the service, where it went, the priority,
 // the question in quotes, its progress along the service's own steps (Sent → Collected → Received → Resulted, the reached ones
 // filled), held, cancelled or failed with why, and each answer as one line under it (a result's values in short, flagged, or a
-// reply's first line); an answer opens its entry.
+// reply's first line); an answer opens its entry. An open order a pack holds waiting shows that pack's word in its tone (spec §5.4, the
+// soft check on the chart: "Waiting for payment"; owner, 2026-10-08): the word only, never an amount, a price, a reason or a button.
 import type { EntryData } from '../../../db/shapes.generated'
 import type { ServerEntry, Service } from '../../../db/types'
 import { dataOf, interp } from '../../../db/views'
@@ -44,10 +45,12 @@ function OrderLine({ item }: { item: ChartItem }) {
   const row = item.order?.row; const svc = env.org?.services.find((s) => s.id === (row?.service_id ?? d.service.id))
   const to = placeName(env, row?.to_department_id ?? d.department_id); const status = row?.status ?? d.status
   const why = [...(item.order?.steps ?? [])].reverse().find((s) => s.data?.reason)?.data?.reason as string | undefined
+  const wait = row ? env.waitOf?.(row.item, row.status) ?? null : null
   return <div className="grid gap-1">
     <p className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-14 font-medium text-fg">{d.service.name}</span>{to && <span className="text-13 text-muted">to {to}</span>}</p>
     {(d.question || d.reason) && <p className="text-13 text-muted">“{d.question ?? d.reason}”</p>}
     <Steps dense={env.compact} steps={stepsOf(item, svc)} />
+    {wait && <p className="text-13"><Tag tone={wait.tone ?? 'warn'}>{wait.word}</Tag></p>}
     {status === 'on-hold' && <p className="text-13 text-warn">{ORDER_STATUS['on-hold']}{why ? `: ${why}` : ''}</p>}
     {STOPPED.has(status) && why && <p className="text-13 text-muted">Why: {why}</p>}
     {(item.order?.answers ?? []).map((a) => <Answer key={a.id} entry={a} env={env} />)}
