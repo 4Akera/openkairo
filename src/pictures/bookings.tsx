@@ -31,7 +31,7 @@ function Session({ day, what, how, left, children, open }: { day: string; what: 
 /** the note a booking may carry (new or re-visit, or anything the desk must know); billing does not read it */
 const Note = ({ value }: { value: string }) =>
   <div className="flex flex-wrap items-center gap-2"><StickyNote className="size-4 text-faint" /><Input readOnly value={value} className="w-full sm:w-80" />
-    <Chip>new</Chip><Chip on>re-visit</Chip><span className="text-12 text-faint">a note, optional</span></div>
+    <Chip onClick={noop}>new</Chip><Chip onClick={noop} on>re-visit</Chip><span className="text-12 text-faint">a note, optional</span></div>
 
 /** 1 · the desk books: the patient's card (not here today), Book folds out under it */
 export function BookDesk() {
@@ -46,9 +46,9 @@ export function BookDesk() {
         </div>
         <div className="grid gap-3 rounded-lg border border-line bg-sunken p-3">
           <div className="flex flex-wrap items-center gap-2"><Label>Book · where</Label>
-            <Chip on>Diabetes clinic</Chip><Chip>General Practice</Chip><Chip>Cardiology</Chip><Chip>Radiology</Chip><Chip>more…</Chip></div>
+            <Chip onClick={noop} on>Diabetes clinic</Chip><Chip onClick={noop}>General Practice</Chip><Chip onClick={noop}>Cardiology</Chip><Chip onClick={noop}>Radiology</Chip><Chip onClick={noop}>more…</Chip></div>
           <div className="flex flex-wrap items-center gap-2"><Label>With</Label>
-            <Chip on>Dr. Salma Adel</Chip><Chip>Dr. Khaled Mostafa</Chip><Chip>anyone in the session</Chip>
+            <Chip onClick={noop} on>Dr. Salma Adel</Chip><Chip onClick={noop}>Dr. Khaled Mostafa</Chip><Chip onClick={noop}>anyone in the session</Chip>
             <span className="text-12 text-faint">last seen by Dr. Salma, so she is first</span></div>
           <Session day="Sun 11 Oct" what="Diabetes clinic · Dr. Salma Adel · Room 2" how="by number, 9:00–13:00" left="11 of 20 left" open>
             <Place at="No. 10" sub="next free" on /><span className="self-center text-12 text-faint">a number session gives the next number; seen in number order</span>
@@ -85,7 +85,7 @@ export function BookConsult() {
       <p className="flex flex-wrap items-center gap-2 text-13"><CalendarPlus className="size-4 text-accent" /><b className="font-semibold text-fg">Next visit in 3 months</b>
         <span className="text-muted">Diabetes clinic · with you, Dr. Salma</span><span className="ms-auto text-12 text-faint">nearest free to Sun 10 Jan</span></p>
       <div className="flex flex-wrap gap-2"><Place at="Sun 10 Jan" sub="No. 6" on /><Place at="Tue 12 Jan" sub="17:30" /><Place at="Sun 17 Jan" sub="No. 2" /><Place at="Tue 19 Jan" sub="18:00" /></div>
-      <div className="flex flex-wrap items-center gap-1.5"><Chip>a week earlier</Chip><Chip>a week later</Chip><Chip>any doctor</Chip><Chip>another clinic…</Chip></div>
+      <div className="flex flex-wrap items-center gap-1.5"><Chip onClick={noop}>a week earlier</Chip><Chip onClick={noop}>a week later</Chip><Chip onClick={noop}>any doctor</Chip><Chip onClick={noop}>another clinic…</Chip></div>
       <Note value="re-visit" />
       <p className="flex flex-wrap items-center gap-1.5 px-1 text-12 text-muted"><Kbd>tab</Kbd>takes Sun 10 Jan · <Kbd>←</Kbd><Kbd>→</Kbd>other places · Done saves it with the visit</p>
     </div>
@@ -149,7 +149,7 @@ export function BookCalls() {
             <span className="flex items-center gap-1 font-mono tnum text-fg"><Phone className="size-3.5 text-faint" />{phone}</span>
             <span className="min-w-0 flex-1 truncate text-muted">{what}</span>
             {said ? <Tag tone={said === 'confirmed' ? 'ok' : 'warn'}>{said}</Tag>
-              : <span className="flex flex-wrap gap-1.5"><Chip>confirmed</Chip><Chip>will cancel</Chip><Chip>no answer</Chip><Chip>wrong number</Chip></span>}
+              : <span className="flex flex-wrap gap-1.5"><Chip onClick={noop}>confirmed</Chip><Chip onClick={noop}>will cancel</Chip><Chip onClick={noop}>no answer</Chip><Chip onClick={noop}>wrong number</Chip></span>}
           </div>
           {tell && i === 1 && <p className="ps-[3.25rem] text-12 text-muted">Tell the patient: <Arabic className="text-13">صائم ٦ ساعات، وأحضر تحليل الكرياتينين</Arabic></p>}
         </li>)}
@@ -211,7 +211,7 @@ export function BookDiary() {
     { at: '18:30', word: 'free' }, { at: '18:45', who: 'Yasser Amin', word: 'booked' },
   ]
   return <App dept="Diabetes clinic" user="Hanan Omar · nurse" tabs={['Queue', 'Diary']} tab="Diary">
-    <ScreenFrame filters={<span className="flex gap-1.5"><Chip on>Day</Chip><Chip>Week</Chip><span className="mx-1 h-6 w-px bg-line" /><Chip on>Everyone</Chip><Chip>Dr. Salma</Chip><Chip>Dr. Khaled</Chip></span>}
+    <ScreenFrame filters={<span className="flex gap-1.5"><Chip onClick={noop} on>Day</Chip><Chip onClick={noop}>Week</Chip><span className="mx-1 h-6 w-px bg-line" /><Chip onClick={noop} on>Everyone</Chip><Chip onClick={noop}>Dr. Salma</Chip><Chip onClick={noop}>Dr. Khaled</Chip></span>}
       date={<span className="flex items-center gap-2 text-14"><Button size="sm" variant="ghost">←</Button><b className="font-semibold text-fg">Thu 8 Oct · today</b><Button size="sm" variant="ghost">→</Button></span>}
       action={<Button size="sm"><CalendarPlus />Book<Kbd className="ms-1">B</Kbd></Button>}>
       <div className="grid gap-3 md:grid-cols-2">
@@ -268,7 +268,7 @@ export function BookWalkIn() {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['X-ray', 'chest, limbs', false], ['Ultrasound', 'abdomen, pelvis', true], ['CT', 'with or without contrast', false], ['MRI', '', false]] as const).map(([x, t, on]) =>
             <button key={x} type="button" className={on ? 'grid h-16 place-content-center rounded-lg bg-accent-soft text-center ring-2 ring-accent' : 'grid h-16 place-content-center rounded-lg bg-surface text-center ring-1 ring-line'}>
               <span className="text-15 font-semibold text-fg">{x}</span>{t && <span className="text-11 text-muted">{t}</span>}</button>)}</div>
-          <div className="flex flex-wrap gap-1.5"><Chip on>Ultrasound abdomen</Chip><Chip>Ultrasound pelvis</Chip><Chip>Ultrasound thyroid</Chip></div>
+          <div className="flex flex-wrap gap-1.5"><Chip onClick={noop} on>Ultrasound abdomen</Chip><Chip onClick={noop}>Ultrasound pelvis</Chip><Chip onClick={noop}>Ultrasound thyroid</Chip></div>
           <div className="grid gap-2 border-t border-line pt-3"><Label>Then · when</Label>
             <div className="flex flex-wrap gap-2"><Place at="Now" sub="3 ahead" /><span className="self-center text-12 text-faint">or</span>
               <Place at="Sun · No. 4" sub="from 9:00" on /><Place at="Sun · No. 5" sub="from 9:00" /><Place at="Mon · No. 1" sub="from 9:00" /><button type="button" className="text-13 text-accent">more…</button></div>

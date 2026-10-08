@@ -167,8 +167,8 @@ begin
     -- where the pack's actions do not count (off, or not used in this department), its entry is corrected by an author of the item who
     -- still holds a role there, written in the target's own department (checked with the target below)
     v_idle := coalesce((r.replaces is not null or r.relation = 'changes') and t.layer <> 'base' and not core.department_uses(v_org, r.department_id, t.layer)
-              and not core.may(me.id, 'write:' || t.key, r.department_id), false);
-    if not v_idle and not core.may(me.id, 'write:' || t.key, r.department_id) then return core.refused(v_set_id, 'not_allowed', r.id, 'write:' || t.key); end if;
+              and not core.may(me.id, core.write_action(t.key), r.department_id), false);
+    if not v_idle and not core.may(me.id, core.write_action(t.key), r.department_id) then return core.refused(v_set_id, 'not_allowed', r.id, core.write_action(t.key)); end if;
     -- one family per set, unless the type declares it may sit beside another patient
     if i = 1 then v_family := r.patient_id;
     elsif r.patient_id <> v_family and not t.other_patient then return core.refused(v_set_id, 'two_patients', r.id);
@@ -195,7 +195,7 @@ begin
       end if;
       if v_idle and not (tgt.type = t.key and tgt.department_id = r.department_id and exists (select 1 from core.entries x where x.organization_id = v_org and x.item = tgt.item and x.author_id = me.id)
                          and exists (select 1 from core.live_holdings(v_org) h where h.user_id = me.id and (h.department_id is null or h.department_id = r.department_id))) then
-        return core.refused(v_set_id, 'not_allowed', r.id, 'write:' || t.key);
+        return core.refused(v_set_id, 'not_allowed', r.id, core.write_action(t.key));
       end if;
       select x.* into tgt_type from core.types x where x.key = tgt.type and x.version = tgt.type_version;
       if r.replaces is not null or r.relation = 'changes' then

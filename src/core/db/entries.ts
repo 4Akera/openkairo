@@ -12,6 +12,12 @@ export const newId = () => uuid()
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 export interface Draft { id: string; function: string; params: Record<string, unknown>; line?: string; kind?: string; tag?: string }
 export interface Where { patientId: string; departmentId: string; visitId?: string | null; record?: RecordView | null; org?: Organization | null }
+/** an order carrying a pack's own words (spec §5.5, core change (a)): the pack's type extending the base's order, and its words, kept
+ *  under data.<pack> (an X-ray's side). Whoever may order writes it (write:order), from wherever they order */
+export interface PackOrder { type: string; words: Record<string, unknown> }
+/** an order's type and data with a pack's words added, or the base's order as it is */
+export const asPackOrder = (data: EntryData['order'], as?: PackOrder | null): { type: string; data: EntryData['order'] } =>
+  as ? { type: as.type, data: { ...data, [as.type.split('.')[0]]: as.words } as EntryData['order'] } : { type: 'order', data }
 
 // ── units ──
 const UNIT_UCUM: Record<string, string> = { mg: 'mg', g: 'g', mcg: 'ug', ug: 'ug', µg: 'ug', ml: 'mL', l: 'L', units: '[iU]', unit: '[iU]', u: '[iU]', iu: '[iU]', tab: '{tbl}', tabs: '{tbl}', tablet: '{tbl}',
@@ -114,7 +120,7 @@ export function draftEntries(d: Draft, w: Where): EntryIn[] {
     }
     case 'order': {
       const svc = q.service_id ? w.org?.services.find((s) => s.id === q.service_id) : undefined
-      if (svc?.department_id) return [{ ...base, id: d.id, type: 'order', data: clean<EntryData['order']>({ service: clean({ id: svc.id, code: svc.code, name: svc.name, coding: svc.coding ?? undefined }), department_id: svc.department_id, priority: q.priority ?? 'routine', status: 'active', question: q.question_text || undefined }) }]
+      if (svc?.department_id) return [{ ...base, id: d.id, ...asPackOrder(clean<EntryData['order']>({ service: clean({ id: svc.id, code: svc.code, name: svc.name, coding: svc.coding ?? undefined }), department_id: svc.department_id, priority: q.priority ?? 'routine', status: 'active', question: q.question_text || undefined }), q.as as PackOrder | undefined) } as EntryIn]
       // a consult: the department's own consult service if it has one (a note answers it), else a named consult
       const consult = w.org?.services.find((s) => s.department_id === q.to_department_id && s.reply_type === 'note')
       return [{ ...base, id: d.id, type: 'order', data: clean<EntryData['order']>({ service: consult ? { id: consult.id, code: consult.code, name: consult.name } : { name: 'Consult', answer: 'note' },

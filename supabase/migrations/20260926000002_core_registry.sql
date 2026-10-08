@@ -953,6 +953,11 @@ $$;
 create function core.base_of(p_type text) returns text language sql stable security definer set search_path = '' as $$
   select coalesce((select base_type from core.types where key = p_type and base_type is not null limit 1), p_type)
 $$;
+-- the action that writes a type: write:<type>, except a pack's type extending the base's order (an order carrying the pack's own words,
+-- radiology's side), which whoever may order writes with the base's write:order, wherever they order from (spec §5.5, core change (a))
+create function core.write_action(p_type text) returns text language sql stable security definer set search_path = '' as $$
+  select case when exists (select 1 from core.types t where t.key = p_type and t.layer <> 'base' and t.base_type = 'order') then 'write:order' else 'write:' || p_type end
+$$;
 
 -- ── the core's own layer, actions and settings keys ──
 select core.declare_layer('core', 'postgres', 'core', '{"en":"Core"}');

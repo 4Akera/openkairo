@@ -839,7 +839,7 @@ grant execute on function public.write(jsonb), public.read(jsonb), public.choose
 -- the base and the packs call these core helpers from their own definer functions
 grant execute on function core.may(uuid, text, uuid), core.may_somewhere(uuid, text), core.setting_at(uuid, text, uuid, timestamptz),
   core.settings_at(uuid, text, timestamptz), core.survivor(uuid, uuid), core.family(uuid, uuid), core.uuid5(uuid, text), core.uuid7(),
-  core.kinds(text), core.base_of(text), core.type_latest(text), core.holders_in(uuid, text, uuid), core.live_holdings(uuid), core.hint(text),
+  core.kinds(text), core.base_of(text), core.write_action(text), core.type_latest(text), core.holders_in(uuid, text, uuid), core.live_holdings(uuid), core.hint(text),
   core.refuse(text, text), core.fold(text), core.packs_used(uuid, timestamptz), core.layer_on(uuid, text), core.department_uses(uuid, uuid, text),
   core.codings(jsonb), core.nodes(jsonb),
   core.next_number(uuid, text, text, date), core.role_actions_of(uuid, uuid), core.score(text, text, jsonb) to base_role, core_eraser;
