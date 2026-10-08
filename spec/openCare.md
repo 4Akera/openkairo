@@ -1612,13 +1612,14 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   regimen's checks against the latest values (eGFR by CKD-EPI 2021 when only creatinine is there; shown, never a stop), grades the
   toxicity, and writes the cycle, each drug as the base's medication sent where prescriptions go and each grade; its card's chips rewrite
   the line, so the line and the drafts agree; `/cancer` fills a new cancer's card, and on one already recorded writes today's ECOG. The
-  day unit's tile line ("AC C3 D1", a dose reduced, "reaction watch" in the first 30 minutes of a drug the regimen marks). Demo: the
+  day unit's tile line ("AC C3 D1", a dose reduced, "reaction watch" in the first 30 minutes of a drug the regimen marks) and, under the
+  board, today's cycles not in a chair yet (C5: each with the base's Admit here as its Start; one whose patient had a chair here today,
+  or delayed, is not listed; "Not today" is not built: it would change the oncologist's order from the day unit). Demo: the
   Oncology clinic and the Chemotherapy day unit; Dr. Hesham Abdallah (oncology@demo.com) and Asmaa Farid (chemo@demo.com); Wafaa Shaker
   (in consult for AC 3), Samir Tolba (FOLFOX 5, in Chair 2), Nesma Sabry (paclitaxel week 3 signed for today, not in a chair). Tests:
   `supabase/tests/oncology.sql`, `npm run test:oncology`. *Not yet, and why:* changing a recorded cancer's stage, intent, plan or regimen
   from the line needs a pack draft that changes its own entry (`refers_to`, a core door not in C1–C5): `/cancer` on a recorded cancer
-  writes ECOG only and shows the rest; the day unit's rows of today's cycles not in a chair and their Start wait for C5 (lane
-  `clinics-shared`): `notInAChair` and the read are ready; the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
+  writes ECOG only and shows the rest; the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
   ward nursing's (`bedside`, beds lane), not in this base: the cycle is ended by the unit's note until then; the composer reads no
   setting, so `/chemo` takes the regimens the chart last read (the Cancer section's).
 - *Built 2026-10-08 (lane `clinics-theatre`), theatre* (`theatre`, migration 35, role block ea): the operation `theatre.op` (the base's order

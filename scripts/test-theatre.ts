@@ -50,7 +50,7 @@ test('the sessions with room for the usual time, from tomorrow; what is booked t
   const sessions = [{ room: 'Theatre 1', weekday: 'sat' as const, from: '08:30', to: '14:30' }, { room: 'Theatre 1', weekday: 'mon' as const, from: '08:30', to: '14:30' }]
   const thu = new Date('2026-10-08T09:00:00')
   const free = freeSessions(sessions, 75, new Map([['Theatre 1|2026-10-10', 290]]), null, thu)
-  assert.deepEqual(free.map((f) => [f.day, f.from, f.free]), [['2026-10-10', '13:20', 70 + 0 >= 75 ? 70 : 70]].slice(0, 0).concat([['2026-10-12', '08:30', 360], ['2026-10-17', '08:30', 360], ['2026-10-19', '08:30', 360]]),
+  assert.deepEqual(free.map((f) => [f.day, f.from, f.free]), [['2026-10-12', '08:30', 360], ['2026-10-17', '08:30', 360], ['2026-10-19', '08:30', 360]],
     'Saturday has 70 minutes left: too little for 75')
   assert.equal(freeSessions(sessions, 60, new Map([['Theatre 1|2026-10-10', 290]]), null, thu)[0].from, '13:20')
 })

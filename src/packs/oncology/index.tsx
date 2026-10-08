@@ -1,11 +1,12 @@
 // The oncology pack's client (spec/openCare.md §5.7; the pictures #onc-plan, #onc-cycle, #onc-unit). The Cancer section and its banner
 // words; /cancer (a new cancer's card; on one already recorded, today's ECOG) and /chemo (the cycle to the day unit, each dose worked
 // out, the checks shown, the toxicity graded, each drug sent where prescriptions go), offered wherever the day unit works for the department;
-// the day unit's tile line (the regimen and cycle, a dose reduced, a reaction watch).
+// the day unit's tile line (the regimen and cycle, a dose reduced, a reaction watch) and its rows of today's cycles not in a chair yet.
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerCard, registerCommand } from '@core/screens/visit/commands'
 import { registerTileLine } from '@core/screens/ward/tiles'
+import { registerBoardRows } from '@core/screens/ward/rows'
 import { bannerWords, cancersOf, cyclesOf, chipWord, latestOf } from './model'
 import { parseCancer, parseChemo } from './line'
 import { CancerCard, CancerNote, CycleCard, cancerCardLine, cycleCardLine } from './Cards'
@@ -13,6 +14,7 @@ import { CancerSection, entriesOf, valuesIn } from './Section'
 import { saw, seenEntries, seenRegimens } from './seen'
 import { setCycleReader, tileWords } from './unit'
 import { readCycles } from './unitRead'
+import { cycleRows } from './rows'
 
 const TYPES = ['oncology.cancer', 'oncology.cycle']
 registerSection({ key: 'oncology.cancer', title: 'Cancer', types: TYPES, fit: ANYONE, Body: CancerSection,
@@ -39,4 +41,6 @@ registerCard({ function: 'oncology.cancer', pack: 'oncology', Editor: CancerCard
 
 setCycleReader(readCycles)
 registerTileLine('oncology', (row, ctx) => tileWords(row, ctx))
+// today's cycles not in a chair yet, under the board, each with the base's Admit here as its Start (core change C5)
+registerBoardRows('oncology', cycleRows)
 export const key = 'oncology'
