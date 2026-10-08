@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { dueNow, dueWord, eddOf, efw, efwCentile, fitsWeeks, fundusFits, gestOf, gpOf, markWord, methodDue, nextVisit, type Mark, type ScheduleRow } from '../src/packs/obgyn/pregnancy'
 import { ancLine, parseAnc, parseFp, parsePeriods, parsePn, parseScan, scanIn } from '../src/packs/obgyn/lines'
 import type { Parsed, Result } from '../src/core/screens/visit/parse'
+import { pregnancyWord } from '../src/packs/obgyn/words'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -92,5 +93,11 @@ test('/fp, /periods, /pn: base entries where the base has the idea, the pack\'s 
   assert.deepEqual(pn.map((d) => d.function), ['vitals', 'obgyn.postnatal', 'pregnancy', 'breastfeeding'], 'a pregnancy still standing ends here, once')
   assert.equal((pn[2].params as { action: string; reason: string }).action, 'end'); assert.equal((pn[2].params as { reason: string }).reason, 'Delivered', 'the base card\'s own word')
   assert.deepEqual(ok(parsePn('bleeding light', { facts: { pregnancy: null, breastfeeding: null, alerts: [] } })).map((d) => d.function), ['obgyn.postnatal'], 'no pregnancy standing: nothing to end')
+})
+test('the Pregnancy chip: the weeks, or not ended past 44 weeks (by the weeks themselves)', () => {
+  const at = new Date(now.getTime() - 251 * DAY).toISOString()
+  const preg = (lmpDays: number, overdue = false) => ({ item: 'p', entry: {} as never, pregnant: true, weeks: null, lmp: daysAgo(lmpDays), at, overdue, data: { status: 'current', pregnant: true } as never })
+  assert.deepEqual(pregnancyWord(preg(199), [], now), { word: '28+3 w' })
+  assert.deepEqual(pregnancyWord(preg(315), [], now), { word: 'not ended', tone: 'warn' }, 'Aya at 45 weeks, though the flag says not')
 })
 console.log(`obgyn: ${n} groups passed`)

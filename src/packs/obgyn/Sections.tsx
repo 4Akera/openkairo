@@ -43,7 +43,7 @@ export function PregnancyBody({ p, own }: SectionBody) {
   const birth = pns.map((e) => (e.data as { obgyn?: PnO }).obgyn?.birth).find(Boolean)
   return <div className="grid gap-0.5">
     {preg?.pregnant && <Row k="Dates">{lmp ? `LMP ${dayMonth(lmp)} · ` : ''}EDD <b className="font-semibold">{edd ? dayMonth(edd) : '—'}</b>{lmp ? ' by the LMP' : ' by the weeks said'}{g ? ` · ${gestText(g)} today` : ''}</Row>}
-    {preg?.overdue && <Row k="The birth" tone="warn">not written · the record still counts {g?.weeks ?? '45'} w</Row>}
+    {(preg?.overdue || (g && g.weeks > 44)) && <Row k="The birth" tone="warn">not written · the record still counts {g?.weeks ?? '45'} w</Row>}
     {booking && <Row k="Before">{[gpOf(booking), booking.before].filter(Boolean).join(' · ') || '—'}</Row>}
     {booking?.blood_group && <Row k="Blood group" tone={booking.rh === 'negative' ? 'warn' : undefined}>{booking.blood_group} Rh {booking.rh ?? '?'}{booking.antibodies ? ` · antibodies ${booking.antibodies}` : ''}</Row>}
     {booking?.risks?.length ? <Row k="Risks">{booking.risks.map((r) => r.replace(/_/g, ' ')).join(' · ')}{booking.rh === 'negative' ? ' · Rh negative' : ''}</Row> : null}

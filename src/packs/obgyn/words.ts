@@ -9,8 +9,10 @@ import { bookingOf, gestOf, gpOf, methodDue, type MethodRule } from './pregnancy
 import { methodNow } from './gyn'
 
 export function pregnancyWord(preg: Pregnancy | null, own: ServerEntry[], now: Date): ChipWord | null {
-  if (preg?.overdue) return { word: 'not ended', tone: 'warn' }
-  if (preg?.pregnant) { const g = gestOf({ lmp: preg.lmp, weeks: preg.data.weeks, at: preg.at }, now); return g ? { word: `${g.weeks}+${g.days} w` } : { word: 'pregnant' } }
+  const g = preg?.pregnant ? gestOf({ lmp: preg.lmp, weeks: preg.data.weeks, at: preg.at }, now) : null
+  // past 44 weeks and never ended (the base's own word for it: "Pregnancy · check")
+  if (preg?.overdue || (g && g.weeks > 44)) return { word: 'not ended', tone: 'warn' }
+  if (preg?.pregnant) return g ? { word: `${g.weeks}+${g.days} w` } : { word: 'pregnant' }
   const b = bookingOf(own); return b?.para !== undefined ? { word: `P${(b.para ?? 0) + (preg ? 0 : 1)}` } : null
 }
 export function gynWord(facts: ServerEntry[] | undefined, rules: MethodRule[], now: Date): ChipWord | null {
