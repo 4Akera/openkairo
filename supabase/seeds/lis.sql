@@ -13,3 +13,9 @@ select demo.grant(demo.id('lis', 'collector'), '00000000-0000-0000-0000-00000000
 -- its senior: approves on To check (never what she released herself)
 select demo.person(demo.id('lis', 'senior'), 'senior@demo.com', 'Hala Mansour');
 select demo.grant(demo.id('lis', 'senior'), '00000000-0000-0000-0000-00000000cf02', demo.base('lab'));
+-- the Blood bank (spec §5.7, Q35): a department using the pack, from its starter setup lis.blood_bank (its four products answered on the base's
+-- bench after their steps; it works for every department); its technician, Mahmoud Fekry
+select demo.setup(demo.id('lis', 'blood_bank'), 'lis.blood_bank', 'Blood bank', 25);
+
+select demo.person(demo.id('lis', 'blood_tech'), 'bloodbank@demo.com', 'Mahmoud Fekry');
+select demo.grant(demo.id('lis', 'blood_tech'), '00000000-0000-0000-0000-00000000cf01', demo.id('lis', 'blood_bank'));

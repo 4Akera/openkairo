@@ -7,6 +7,7 @@ import { changeOf, columnsOf, workedOut } from '../src/packs/lis/grid'
 import { byArrival, lateBy, nextUp, notFound, nowAt, sampleKey, scanned, sectionKey, targetOf, ticketOf, type Large, type Ticket } from '../src/packs/lis/large'
 import type { RequestQueueRow } from '../src/core/db/types'
 import '../src/packs/lis/order'
+import { bedsideMissing, bedsideOf, parseBlood, parseTransfuse, transfusionData, CHECKS } from '../src/packs/lis/blood'
 import { lineOf, parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
 import { suggest } from '../src/core/screens/visit/expand'
 import { commandsFor } from '../src/core/screens/visit/commands'
@@ -159,5 +160,27 @@ test('where /lab is offered: where the Laboratory takes orders from; elsewhere i
   assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].detail, 'lcxr · Imaging', 'offered, with no tube')
   assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].swatch, undefined, 'nor a colour')
   assert.deepEqual(ok('/lab lcxr', lab).map((p) => p.params.service_id), ['lcx'], 'ordered like any of its services')
+})
+// ── the Blood bank (spec §5.7, Q35, Q36) ──
+const BB = [{ id: 'rbc1', code: 'rbc', name: 'Red cells', department_id: 'bb', section_name: 'Blood bank' }, { id: 'plt1', code: 'plt', name: 'Platelets', department_id: 'bb', section_name: 'Blood bank' },
+  { id: 'cbc1', code: 'cbc', name: 'Complete blood count', department_id: 'lab', section_name: 'Haematology' }]
+const bctx: Pick<Ctx, 'services' | 'departments' | 'departmentId'> = { services: BB, departments: [{ id: 'bb', name: 'Blood bank', packs: ['lis'] }, { id: 'lab', name: 'Laboratory', packs: ['lis'] }, { id: 'hc', name: 'Clinic', packs: [] }], departmentId: 'hc' }
+test('/blood: the product, the units, what the red cells need, why; the Blood bank\'s service, its words on the order (its own type)', () => {
+  const r = parseBlood('rbc 2 leuco kell ? thalassaemia programme', bctx); assert.ok(r && 'ok' in r)
+  assert.deepEqual(r.ok[0].params, { service_id: 'rbc1', priority: 'routine', question_text: 'thalassaemia programme', as: { type: 'lis.blood', words: { product: 'rbc', needs: ['leucodepleted', 'Rh and Kell matched'], units: 2,
+    why: 'thalassaemia programme', consent: 'on file', sample: 'taken here' } } })
+  const e = parseBlood('plt 1 emergency', bctx); assert.ok(e && 'ok' in e); assert.equal(e.ok[0].params.priority, 'stat'); assert.equal((e.ok[0].params.as as { words: { consent: string } }).words.consent, 'emergency, no time')
+  assert.ok('error' in (parseBlood('2 units', bctx) as object), 'a product is said'); assert.ok('error' in (parseBlood('rbc 2 wobble', bctx) as object))
+  assert.ok('error' in (parseBlood('rbc 2', { ...bctx, departments: bctx.departments.map((d) => ({ ...d, packs: [] })) }) as object), 'no Blood bank serving here')
+})
+test('/transfuse: one unit at the bedside, the base\'s given (the unit its lot, the volume its dose); two who check and every check before it is added', () => {
+  const r = parseTransfuse('26-118452', 'Basma Khalifa', new Date('2026-10-08T11:32:00')); assert.ok(r && 'ok' in r)
+  const d = r.ok[0]; assert.equal(d.function, 'lis.transfusion'); assert.equal(d.params.lot, '26-118452'); assert.deepEqual(d.params.dose, { value: '290', unit: 'mL', ucum: 'mL' })
+  const { b } = bedsideOf(d.params); assert.equal(bedsideMissing(b), 'Two people check the unit at the bedside: name the second')
+  assert.match(bedsideMissing({ ...b, checked_by: ['Basma Khalifa', 'Marwa Gaber'] }) ?? '', /Tick every check/)
+  assert.equal(bedsideMissing({ ...b, checked_by: ['Basma Khalifa', 'Marwa Gaber'], checks: [...CHECKS] }), null)
+  const stopped = transfusionData({ ...b, ended: '11:51', reaction: { what: ['hives, itch'], severity: 'mild', doctor: 'do not restart · return the unit' } }, 60)
+  assert.equal(stopped.note, '11:32 to 11:51 · about 60 mL · stopped: hives, itch, mild · do not restart · return the unit', 'the reaction said in the given\'s note, read on every chart')
+  assert.ok('error' in (parseTransfuse('x', '') as object))
 })
 console.log(`lis: ${n} groups passed`)
