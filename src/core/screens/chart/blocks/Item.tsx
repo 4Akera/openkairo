@@ -45,7 +45,7 @@ export function ItemFrame({ item, head, tags: more, children }: { item: ChartIte
     <div className="text-faint line-through [&_*]:text-faint">{children}</div>
     <p className="mt-1 text-12 text-faint">Crossed out · {CROSSED_REASON[item.crossed.reason] ?? item.crossed.reason}{item.crossed.text ? ` (${item.crossed.text})` : ''}
       {' · '}{personName(env, item.crossed.by) ?? 'someone'} · {when(item.crossed.at)}</p>
-  </> : children
+  </> : item.draft && env.draftLine ? <>{children}{env.draftLine(item.draft)}</> : children
   const label = typeof head?.label === 'string' ? head.label : undefined
   if (head) return <div ref={ref} id={`entry-${item.entry.id}`} tabIndex={0} role="article" aria-label={label} onKeyDown={keys}
     className={cn('group/item', FOCUS, item.draft && DRAFT_LOOK, critical && 'rail-danger')}>

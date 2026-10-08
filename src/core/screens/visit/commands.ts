@@ -2,7 +2,8 @@
 // Core registers its commands here the same way a pack registers its own (in src/packs/<key>): a pack's command
 // writes the pack's own type through its own write function. The "/" menu lists the commands the reader's role
 // may write in this department, and a pack's only where this department uses the pack (§5.1 rule 1; elsewhere typing it says where);
-// a pack's order command (/lab) where a department using the pack works for this one (rule 1, added 2026-10-07).
+// a pack's order command (/lab) where a department using the pack works for this one (rule 1, added 2026-10-07); a pack's command
+// that is not an order, declared worksFor (/transfuse), there too, as well as where the pack is ticked (§5.7 C3, 2026-10-08).
 // A pack never takes a command over for the whole clinic: a name that is taken is refused. It may give its own
 // department type its own version of a core command (overrideCommand) and its own card (registerCard) — which still
 // write what the core command writes, so the record keeps one medication list, one problem list — and each
@@ -19,6 +20,7 @@ export interface Command {
   pack?: string                     // a pack's command shows only in a department that uses the pack
   orders?: boolean                  // …or, a pack's order command: where a department using the pack works for this one, searching its services only
   section?: string                  // …and only this section of them (an imaging pack's /ct: CT; spec §5.1 rule 1, "each its section")
+  worksFor?: boolean                // …or, a pack's command that is not an order: where this department uses the pack, or a department using it works for this one (§5.7 C3, /transfuse)
   group?: 'record' | 'orders' | 'safety'   // where the / list shows it (a pack's commands sit under the pack's own name)
   groupTitle?: string               // a pack's group in the / list, in its words ("Laboratory")
   title?: string                    // its name in the / list, in a word or two ("Vitals", "Diagnosis"); else its label
@@ -55,19 +57,27 @@ function resolve(c: Command, w?: Where): Command {
 }
 /** "rx", "RX", "plan:" → the command (this department's version), if one is registered under that name or alias */
 export const commandNamed = (word: string, w?: Where) => { const n = names.get(word.toLowerCase().replace(/:$/, '')); const c = n ? commands.get(n) : undefined; return c ? resolve(c, w) : undefined }
-type Here = Pick<Ctx, 'can' | 'packs'> & Partial<Pick<Ctx, 'services' | 'departments' | 'departmentId'>>
+type Here = Pick<Ctx, 'can' | 'packs'> & Partial<Pick<Ctx, 'services' | 'departments' | 'departmentId' | 'servedBy'>>
 /** the departments using a pack that take orders from this one: a service of theirs is offered here (the composer's services are the ones that work for it) */
 export const ordersFrom = (pack: string, ctx: Partial<Pick<Ctx, 'services' | 'departments' | 'departmentId'>>) => {
   const using = new Set((ctx.departments ?? []).filter((d) => d.packs?.includes(pack)).map((d) => d.id))
   return new Set((ctx.services ?? []).filter((s) => s.department_id && s.department_id !== ctx.departmentId && using.has(s.department_id)).map((s) => s.department_id!))
 }
-/** a pack's command is here: an order command where a department using the pack takes orders from this one, any other where this department uses the pack */
-const packHere = (c: Pick<Command, 'pack' | 'orders'>, ctx: Here) => !c.pack || !ctx.packs || (c.orders ? !ctx.services || ordersFrom(c.pack, ctx).size > 0 : ctx.packs.includes(c.pack))
+/** the departments using a pack that work for this one (C3): a pack's command that is not an order is offered by works for */
+export const servedFrom = (pack: string, ctx: Partial<Pick<Ctx, 'departments' | 'departmentId' | 'servedBy'>>) =>
+  (ctx.departments ?? []).filter((d) => d.id !== ctx.departmentId && d.packs?.includes(pack) && (ctx.servedBy ?? []).includes(d.id))
+/** a pack's command is here: an order command where a department using the pack takes orders from this one; a works-for command
+ *  where this department uses the pack or one using it works for this one; any other where this department uses the pack */
+const packHere = (c: Pick<Command, 'pack' | 'orders' | 'worksFor'>, ctx: Here) => !c.pack || !ctx.packs || (c.orders ? !ctx.services || ordersFrom(c.pack, ctx).size > 0
+  : c.worksFor ? ctx.packs.includes(c.pack) || !ctx.servedBy || servedFrom(c.pack, ctx).length > 0 : ctx.packs.includes(c.pack))
 /** may this reader use it here: their role holds its action, and its pack is here (no ctx.can: every command, as in tests and previews) */
 export const allowed = (c: Command, ctx: Here) => (!ctx.can || ctx.can(c.action)) && packHere(c, ctx)
 /** why a pack's command is not here: where it is used, or, an order command, where it orders from */
-export function notHere(c: Pick<Command, 'name' | 'pack' | 'orders'>, ctx: Here & Pick<Partial<Ctx>, 'usedIn'>): string | null {
+export function notHere(c: Pick<Command, 'name' | 'pack' | 'orders' | 'worksFor'>, ctx: Here & Pick<Partial<Ctx>, 'usedIn'>): string | null {
   if (packHere(c, ctx)) return null
+  if (c.worksFor) { const using = (ctx.departments ?? []).filter((d) => d.packs?.includes(c.pack!)); const here = ctx.departments?.find((d) => d.id === ctx.departmentId)
+    return using.length ? `/${c.name} is offered where ${using.map((d) => d.name).join(', ')} ${using.length > 1 ? 'work' : 'works'} for the department; ${using.length > 1 ? 'they do' : 'it does'} not work for ${here?.name ?? 'this department'}`
+      : usedWhere(c.name, []) }
   if (!c.orders) return usedWhere(c.name, ctx.usedIn?.(c.pack!) ?? [])
   const using = (ctx.departments ?? []).filter((d) => d.packs?.includes(c.pack!))
   const here = ctx.departments?.find((d) => d.id === ctx.departmentId)
