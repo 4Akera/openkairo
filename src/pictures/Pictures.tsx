@@ -9,6 +9,13 @@ import { LabAnalysers, LabChairs, LabReceive, LabSettings } from './biglab'
 import { OrderAsk, OrderList, OrderScan, OrderSet, OrderTyping, OrderWhere } from './order'
 import { RadBack, RadContrast, RadCritical, RadList, RadOrder, RadReport, RadScan, RadSettings, RadWalkIn } from './radiology'
 import { StoreArrived, StoreSend, StoreSetup, StoreStock } from './store'
+import { BookBench, BookCalls, BookConsult, BookDesk, BookDiary, BookQueue, BookSettings, BookToday, BookWalkIn } from './bookings'
+
+import { StaysMap, WardBoard, WardDischarge, WardFluids, WardHandover, WardObs, WardRound, WardSettings, WardSheet } from './ward'
+import { ErBoard, ErTriage, ErWhereTo } from './er'
+import { CcuChart, IcuBoard, IcuChart, IcuGoals } from './icu'
+import { LabourBirth, LabourBoard, LabourPartograph } from './labour'
+import { HdSchedule, HdSession, HdUnit } from './dialysis'
 
 const LIST: { id: string; title: string; note: string; Page: ComponentType }[] = [
   { id: 'bench-walkin', title: 'Any bench · a walk-in', note: 'Two steps: first who (search, or New patient), then what for (this room\'s services); who asked folded.', Page: BenchWalkIn },
@@ -46,6 +53,37 @@ const LIST: { id: string; title: string; note: string; Page: ComponentType }[] =
   { id: 'rad-back', title: 'Radiology · what comes back to the doctor', note: 'To review: critical first; the report in the chart, impression first; a film-only X-ray asks for the doctor\'s reading.', Page: RadBack },
   { id: 'rad-settings', title: 'Radiology · settings', note: 'The exams (side, contrast, what to tell the patient, film only) and three switches.', Page: RadSettings },
   { id: 'doctor', title: "Doctor · what comes back", note: 'To review: the pharmacy\'s questions beside the results; Answer opens the chart, where the question is a card.', Page: DoctorSide },
+  { id: 'book-desk', title: 'Bookings · the desk books', note: 'Book beside Send on the patient card: where, with whom (last doctor first), a session by number or by time, a note.', Page: BookDesk },
+  { id: 'book-consult', title: 'Bookings · /book in the consult', note: '/book 3m: the nearest free places with the same doctor; Done saves it with the visit. Not a record entry.', Page: BookConsult },
+  { id: 'book-today', title: 'Bookings · Booked today at the desk', note: 'Everyone expected across the clinics and benches it checks in for; Here is the ordinary check-in.', Page: BookToday },
+  { id: 'book-calls', title: "Bookings · tomorrow's calls", note: 'The desk phones each booking and marks what they said; SMS and WhatsApp later.', Page: BookCalls },
+  { id: 'book-queue', title: 'Bookings · the queue', note: 'Booked patients go in at their number or time; walk-ins fill the gaps (the core change you approved).', Page: BookQueue },
+  { id: 'book-diary', title: 'Bookings · the clinic\'s Diary', note: 'A column per session; each place free, booked, here, seen, missed, walk-in or cancelled; Move and Cancel with a reason.', Page: BookDiary },
+  { id: 'book-bench', title: 'Bookings · Radiology books a CT', note: 'The doctor\'s order waits in To book; Book folds out the CT room\'s times and what to tell the patient. A missed one: Book again.', Page: BookBench },
+  { id: 'book-walkin', title: 'Bookings · a walk-in at Radiology', note: 'Who, what for, then when: Now (always offered) or a time; booked, the order is made now.', Page: BookWalkIn },
+  { id: 'book-settings', title: 'Bookings · a clinic\'s settings', note: 'Sessions (by time or number, doctor or anyone, overbook and walk-in places), leave and closed days, what to tell the patient.', Page: BookSettings },
+  { id: 'stay-map', title: 'Beds · who ticks what', note: 'Ward, ER, ICU, CCU, labour ward, dialysis: one board, one shared ward-nursing pack, four small packs on top; the department\'s pack order says whose two buttons a tile shows. Q1.', Page: StaysMap },
+  { id: 'ward-board', title: 'Ward · the board', note: 'The base\'s tiles; the ward pack\'s line (NEWS2, obs due, a dose late, the balance) and, on the ward, its two buttons, Give and Obs.', Page: WardBoard },
+  { id: 'ward-round', title: 'Ward · the drug round', note: 'Every dose due on the ward at this round; clean ones in one key; the facts beside a dose; a high-alert one asks who checked. Q4.', Page: WardRound },
+  { id: 'ward-sheet', title: 'Ward · the treatment sheet and /rx in a stay', note: 'Drug × hour from the prescriptions and every given; a new /rx takes the ward\'s times and asks about the first dose.', Page: WardSheet },
+  { id: 'ward-obs', title: 'Ward · obs and NEWS2', note: '/v asks air or oxygen and ACVPU, the server scores it, the ward\'s response as a notice, the next obs due. Q5.', Page: WardObs },
+  { id: 'ward-fluids', title: 'Ward · fluid balance', note: '/in and /out, by the ward\'s shifts; the day\'s balance against the doctor\'s target; urine per kg per hour.', Page: WardFluids },
+  { id: 'ward-handover', title: 'Ward · handover', note: 'A row per bed: the facts from the record, then what happened and what to do next. Q11.', Page: WardHandover },
+  { id: 'ward-discharge', title: 'Ward · the discharge letter', note: 'Discharge folds out the letter: diagnoses, what was done, medicines for home, follow-up, words for the patient. Q12.', Page: WardDischarge },
+  { id: 'ward-settings', title: 'Ward · settings', note: 'Dose times, the NEWS2 response, the high-alert list, the shifts.', Page: WardSettings },
+  { id: 'er-triage', title: 'ER · triage at the door', note: 'Arrived, what brings them, vitals, five levels with a time to the doctor, police case; a resus bay offered first. Q6.', Page: ErTriage },
+  { id: 'er-board', title: 'ER · the board', note: 'Bays and cubicles are the base\'s places, the chairs its “no bed” list (not triaged first, then by level); red when past the level\'s time. Q2.', Page: ErBoard },
+  { id: 'er-where', title: 'ER · where the patient goes', note: 'The base\'s Discharge in the ER: home, a ward (its free beds), ICU, CCU, theatre, another facility, left, died; at Sign the ER stay ends and the ward\'s starts. Q3.', Page: ErWhereTo },
+  { id: 'icu-board', title: 'ICU · the board', note: 'Critical care\'s words first (ventilated and the day, the infusion that holds the pressure, MAP, SOFA), then the ward pack\'s late dose; ICU chart and Goals on each tile, by the pack order.', Page: IcuBoard },
+  { id: 'icu-chart', title: 'ICU · the hourly chart', note: 'Hours across: vitals, ventilator, infusions, in and out, bloods; carried settings faint; one column typed and signed each hour, the signer on the last row. Q7.', Page: IcuChart },
+  { id: 'icu-goals', title: 'ICU · SOFA and the daily goals', note: 'The morning round: SOFA from the record, checked and scored by the server; the FAST HUGS BID goals, each line asked about; one Sign for both. Q8.', Page: IcuGoals },
+  { id: 'ccu-chart', title: 'CCU · the same chart, its own rows', note: 'Rhythm, chest pain, ST fall after lysis, heparin by aPTT; the times from pain to needle and the angiography plan. Q14.', Page: CcuChart },
+  { id: 'labour-board', title: 'Labour ward · the board', note: 'Delivery beds, postnatal beds and cots: G/P, weeks, cervix and hours, the alert line; after birth ObGyn\'s MEOWS (triggers); the baby her own tile.', Page: LabourBoard },
+  { id: 'labour-partograph', title: 'Labour ward · the partograph', note: 'The cervix and the head against the alert and action lines; the baby\'s heart, liquor and moulding, contractions, the mother, the drugs; past the alert line only a notice. Q9.', Page: LabourPartograph },
+  { id: 'labour-birth', title: 'Labour ward · the birth', note: 'Who delivered, how, perineum, third stage, blood loss; the baby: sex, weight, Apgar, breathing, vitamin K and hepatitis B, his own record and a cot beside her; twins in the same Done. Q10.', Page: LabourBirth },
+  { id: 'hd-unit', title: 'Dialysis · the unit today', note: 'Shift 2 at 14:10, chairs on the base\'s board: time left, fluid off against the target, last BP. Who is due is the pack\'s own rows from the schedule; Start = Admit here, End = Discharge (Q2).', Page: HdUnit },
+  { id: 'hd-session', title: 'Dialysis · the session', note: 'Before (weights, access, the fluid to take off), the standing prescription with the dry weight, readings every 30 min (arterial, venous, TMP), events, the unit\'s drugs.', Page: HdSession },
+  { id: 'hd-schedule', title: 'Dialysis · the schedule and monthly bloods', note: 'Each chair\'s two patients by day (Sat/Mon/Wed, Sun/Tue/Thu); a one-off move keeps the pattern; HBV and HCV chairs apart; Kt/V, URR, Hb, virology due. Q13.', Page: HdSchedule },
 ]
 
 export function Pictures() {
@@ -53,7 +91,7 @@ export function Pictures() {
   useEffect(() => { const f = () => setId(location.hash.slice(1)); addEventListener('hashchange', f); return () => removeEventListener('hashchange', f) }, [])
   const i = LIST.findIndex((p) => p.id === id)
   if (i < 0) return <div className="mx-auto grid max-w-2xl gap-3 p-6 text-14">
-    <p className="text-18 font-semibold text-fg">Pictures · pharmacy, laboratory and radiology</p>
+    <p className="text-18 font-semibold text-fg">Pictures · pharmacy, laboratory, radiology, bookings and the departments of beds</p>
     <p className="text-muted">Made-up patients, the real kit. Nothing here is built yet.</p>
     <ol className="grid gap-1.5">{LIST.map((p, n) => <li key={p.id}><a className="text-accent hover:underline" href={`#${p.id}`}>{n + 1}. {p.title}</a> <span className="text-muted">— {p.note}</span></li>)}</ol>
   </div>
