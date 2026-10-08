@@ -45,7 +45,9 @@ function vitals(q: Q): EntryData['vitals'] {
   const sys = qty(q.systolic, 'mmHg', 'mm[Hg]'); const dia = qty(q.diastolic, 'mmHg', 'mm[Hg]')   // a pressure is both or neither
   return clean<EntryData['vitals']>({ bp: sys && dia ? { sys, dia } : undefined,
     hr: qty(q.pulse, 'bpm', '/min'), rr: qty(q.respiratory_rate, '/min', '/min'), temp: qty(q.temperature, '°C', 'Cel'), spo2: qty(q.spo2, '%', '%'),
-    weight: qty(q.weight, 'kg', 'kg'), height: qty(q.height, 'cm', 'cm'), glucose: qty(q.glucose, 'mg/dL', 'mg/dL'), pain: qty(q.pain, '/10', '{score}') })
+    weight: qty(q.weight, 'kg', 'kg'), height: qty(q.height ?? q.length, 'cm', 'cm'), head: qty(q.head, 'cm', 'cm'), glucose: qty(q.glucose, 'mg/dL', 'mg/dL'), pain: qty(q.pain, '/10', '{score}'),
+    // a child's length is the base's height measured lying (core change C2, §5.7 Q22)
+    method: q.length != null && q.height == null ? 'lying' : undefined })
 }
 function problemData(q: Q, was?: EntryData['problem']): EntryData['problem'] {
   const code = String(q.code ?? '').startsWith('icd10:') ? String(q.code).slice(6) : null

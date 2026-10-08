@@ -29,6 +29,7 @@
     "test:surgery": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-surgery.ts",
     "test:theatre": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-theatre.ts",
     "test:anaesthesia": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-anaesthesia.ts",
+    "test:clinics-core": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-clinics-core.ts",
     "gen:types": "supabase gen types typescript --local --schema public > src/core/db/types.generated.ts",
     "gen:shapes": "npx --yes tsx scripts/gen-shapes.ts",
     "gen:logins": "npx --yes tsx scripts/gen-logins.ts",

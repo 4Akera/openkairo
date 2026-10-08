@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDepartment } from '../../hooks/organization'
 import { usePatientSearch, useStays } from '../../hooks/reads'
@@ -12,9 +12,11 @@ import { Button, Card, Empty, Input, ScreenFrame, Select, Spinner, errorText, ty
 import { DISPOSITION } from './words'
 import { BedTile, type Occupant } from './Tile'
 import { noBedActions, tileActions, tileButtonDefs, tileLineDefs, tileLineOf, type TileAction, type TileCtx } from './tiles'
+import { boardRowsDefs, boardRowsFor, type BoardRow, type BoardRowsDef } from './rows'
+import { PackRows } from './PackRows'
 
 type Open = { bed: string; what: 'admit' | 'move' | 'discharge' } | null
-type View = 'all' | 'in' | 'free' | 'closed'
+type View = 'all' | 'in' | 'free' | 'closed' | `rows:${string}`
 
 /** A department's board of places (base.beds, spec/openCare.md §4.2, §5.1 rule 4): one board, the same in every ward, ICU, labour
  *  ward, dialysis unit and ER, whatever packs it uses. Its beds (all, in, free and closed as counted views), each a tile: who is in
@@ -25,6 +27,9 @@ export function BedBoard({ dept }: ScreenProps) {
   const stays = useStays(dept.id)
   const w = useWrite()
   const [open, setOpen] = useState<Open>(null); const [view, setView] = useState<View>('all')
+  // the packs' rows under the board (core change C5): each pack's own count, for its view in the toolbar
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const onCount = useCallback((pack: string, n: number) => setCounts((c) => c[pack] === n ? c : { ...c, [pack]: n }), [])
   if (!org) return null
   const beds = org.places.filter((p) => p.department_id === dept.id).sort((a, b) => a.position - b.position)
   // who is in each of this ward's beds; a stay with no bed, or a bed not here, is listed apart (and counted with In)
@@ -35,9 +40,18 @@ export function BedBoard({ dept }: ScreenProps) {
   const done = { onSuccess: () => setOpen(null) }
   // the board's views: every bed, the occupied, the free (and the closed, when any)
   const closed = beds.filter((b) => b.closed)
+  const rowDefs = boardRowsFor(boardRowsDefs(), dept)
   const views: ScreenView<View>[] = [{ id: 'all', label: 'All beds', count: beds.length }, { id: 'in', label: 'In', count: inBed.size + noBed.length }, { id: 'free', label: 'Free', count: free.length },
-    ...(closed.length ? [{ id: 'closed' as const, label: 'Closed', count: closed.length }] : [])]
-  const shown = beds.filter((b) => view === 'all' || (view === 'in' ? inBed.has(b.id) : view === 'free' ? free.includes(b) : b.closed))
+    ...(closed.length ? [{ id: 'closed' as const, label: 'Closed', count: closed.length }] : []),
+    ...rowDefs.map((d) => ({ id: `rows:${d.pack}` as const, label: d.view, count: counts[d.pack] ?? 0, needs: 'warn' as const }))]
+  const rowsView = view.startsWith('rows:') ? view.slice(5) : null
+  const shown = rowsView ? [] : beds.filter((b) => view === 'all' || (view === 'in' ? inBed.has(b.id) : view === 'free' ? free.includes(b) : b.closed))
+  // the patients with a stay here are not listed again under the board
+  const inHere = new Set((stays.data?.rows ?? []).map((r) => r.patient_id))
+  /** a row's Start: the base's admission into the chosen free place, with the pack's own entries in the same set */
+  const startRow = (d: BoardRowsDef) => (row: BoardRow, placeId: string, closeRow: () => void) => { const id = newId()
+    w.mutate(oneSet([{ id, type: 'admitted', patient_id: row.patientId, department_id: dept.id, visit_id: id, data: { admit_source: 'outp', place_id: placeId, ...(row.reason ? { reason: row.reason } : {}) } },
+      ...(d.start?.(row, { id, place_id: placeId, department_id: dept.id }) ?? [])]), { onSuccess: closeRow }) }
   const read = stays.data
   const ctxOf = (r: PresenceRow, place: Place | null): TileCtx => ({ dept, place, identity: read?.patients[r.patient_id] ?? null, day: stayDay(startOf(r, read)), can })
   const who = (r: PresenceRow): Occupant => occupant(r, read, userName(org, r.assigned_id), () => navigate(`/visit/${r.item}`))
@@ -50,7 +64,7 @@ export function BedBoard({ dept }: ScreenProps) {
   }
   return <ScreenFrame views={views} view={view} onView={setView} notice={w.error && <p className="text-14 text-danger">{errorText(w.error)}</p>}>
     {stays.isLoading ? <Spinner /> : beds.length === 0 ? <Card><Empty>No beds yet — add them in Settings.</Empty></Card>
-    : !shown.length ? (view === 'in' && noBed.length ? null : <Card><Empty>No beds here.</Empty></Card>)
+    : rowsView ? null : !shown.length ? (view === 'in' && noBed.length ? null : <Card><Empty>No beds here.</Empty></Card>)
     : <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{shown.map((b) => { const r = inBed.get(b.id); const here = open?.bed === b.id ? open.what : null
       const taken = r ? { row: r, ctx: ctxOf(r, b) } : null
       return <BedTile key={b.id} name={b.name} closed={b.closed} who={r ? who(r) : null} line={taken ? tileLineOf(tileLineDefs(), taken.row, taken.ctx) : []}
@@ -62,9 +76,11 @@ export function BedBoard({ dept }: ScreenProps) {
         {here === 'discharge' && r && <Choose label="To" options={DISPOSITION} go="Discharge" busy={w.isPending} onCancel={() => setOpen(null)}
           onGo={(disposition) => w.mutate(oneSet([move('discharged', { id: r.item, patient_id: r.patient_id, latest_entry: r.latest_entry }, dept.id, { disposition })]), done)} />}
       </BedTile> })}</div>}
-    {noBed.length > 0 && view !== 'free' && view !== 'closed' && <section className="grid gap-2"><p className="text-12 font-medium text-faint">Admitted, no bed here</p>
+    {noBed.length > 0 && (view === 'all' || view === 'in') && <section className="grid gap-2"><p className="text-12 font-medium text-faint">Admitted, no bed here</p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{noBed.map((r) => { const taken = { row: r, ctx: ctxOf(r, null) }
         return <BedTile key={r.item} name="No bed" closed={false} who={who(r)} line={tileLineOf(tileLineDefs(), r, taken.ctx)} actions={noBedActions(tileButtonDefs(), taken, may)} onAction={act(null, r)} /> })}</div></section>}
+    {!stays.isLoading && (view === 'all' || rowsView) && rowDefs.filter((d) => !rowsView || d.pack === rowsView).map((d) =>
+      <PackRows key={d.pack} def={d} dept={dept} inHere={inHere} free={free} may={may} busy={w.isPending} can={can} onStart={startRow(d)} onCount={onCount} />)}
   </ScreenFrame>
 }
 
