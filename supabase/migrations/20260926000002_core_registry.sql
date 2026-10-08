@@ -442,8 +442,10 @@ begin
 end $$;
 
 -- a derived table (§3.8). reads: what of a patient's identity its refresh reads (age, sex), so only such tables are refreshed when it
--- changes (§5.2); a refresh calling the identity door must say so
-create function core.declare_table(key text, layer text, refresh regprocedure, action text, reads text[] default '{}') returns void language plpgsql as $$
+-- changes (§5.2); a refresh calling the identity door must say so. entries false: the table sends no record entries with its rows, whoever
+-- asks (owner, 2026-10-08, F08)
+create function core.declare_table(key text, layer text, refresh regprocedure, action text, reads text[] default '{}', entries boolean default true)
+returns void language plpgsql as $$
 #variable_conflict use_variable
 declare rel regclass := to_regclass(key); c text;
 begin
@@ -472,10 +474,11 @@ begin
        select 1 from f join pg_proc p on p.oid = f.oid where p.prosrc ~ 'pack_identity') then
     perform core.refuse('identity_undeclared', format('%s reads identity: declare reads => ''{age}'' or ''{sex}''', key));
   end if;
-  insert into core.derived (key, layer, relation, refresh, action, reads, hashes)
+  insert into core.derived (key, layer, relation, refresh, action, reads, entries, hashes)
   values (declare_table.key, declare_table.layer, rel, declare_table.refresh, declare_table.action, (select coalesce(array_agg(distinct r order by r), '{}') from unnest(reads) r),
-          jsonb_build_object('refresh', core.check_fn(layer, refresh, 'v', 'refresh')))
-  on conflict on constraint derived_pkey do update set refresh = excluded.refresh, action = excluded.action, reads = excluded.reads, hashes = excluded.hashes
+          coalesce(declare_table.entries, true), jsonb_build_object('refresh', core.check_fn(layer, refresh, 'v', 'refresh')))
+  on conflict on constraint derived_pkey do update set refresh = excluded.refresh, action = excluded.action, reads = excluded.reads, entries = excluded.entries,
+     hashes = excluded.hashes
   where core.derived.layer = excluded.layer;
 end $$;
 
@@ -825,8 +828,9 @@ end $$;
 
 -- a pack's operation on its own table that holds no entries (spec §5.3: the pharmacy's stock): a definer function of the pack (owned,
 -- in its schema, search_path pinned) taking (organization, department, user, arguments) and returning jsonb; public.pack_op runs it
--- for the user signed in, only where they hold its action in a department that uses the pack
-create function core.declare_op(key text, layer text, fn regprocedure, action text) returns void language plpgsql as $$
+-- for the user signed in, only where they hold its action in a department that uses the pack. patients: it returns patient ids (its
+-- answer names each in patient_ids), and the core logs a read of each (owner, 2026-10-08, F28)
+create function core.declare_op(key text, layer text, fn regprocedure, action text, patients boolean default false) returns void language plpgsql as $$
 #variable_conflict use_variable
 begin
   perform core.check_prefix(layer, key);
@@ -834,8 +838,44 @@ begin
   if pg_get_function_identity_arguments(fn) <> 'p_org uuid, p_department uuid, p_user uuid, p_args jsonb' then
     perform core.refuse('wrong_signature', format('op %s must take (p_org uuid, p_department uuid, p_user uuid, p_args jsonb)', fn));
   end if;
-  insert into core.ops (key, layer, fn, action, hashes) values (key, layer, fn, action, jsonb_build_object('fn', core.check_fn(layer, fn, 'v', 'op')))
-  on conflict on constraint ops_pkey do update set fn = excluded.fn, action = excluded.action, hashes = excluded.hashes;
+  insert into core.ops (key, layer, fn, action, patients, hashes) values (key, layer, fn, action, coalesce(patients, false), jsonb_build_object('fn', core.check_fn(layer, fn, 'v', 'op')))
+  on conflict on constraint ops_pkey do update set fn = excluded.fn, action = excluded.action, patients = excluded.patients, hashes = excluded.hashes;
+end $$;
+
+-- a pack's own table that holds a patient and is not rebuilt from entries (spec §3.11; owner, 2026-10-08, D17): Erase reaches it. It is
+-- the layer's (its prefix and schema), holds organization_id and patient_id, and is no derived table (Erase empties those already). clear
+-- null: Erase removes the patient's rows (the eraser may delete them); else it keeps them and empties these columns, the patient link
+-- among them (the eraser may update each; each may be empty): billing's money keeps its amounts and receipt numbers (D18)
+create function core.declare_store(key text, layer text, clear text[] default null) returns void language plpgsql as $$
+#variable_conflict use_variable
+declare rel regclass := to_regclass(key); c text;
+begin
+  if rel is null then perform core.refuse('no_such_table', key); end if;
+  perform core.check_prefix(layer, key);
+  if split_part(key, '.', 1) <> (select l.schema_name from core.layers l where l.key = layer) then perform core.refuse('wrong_schema', key); end if;
+  if exists (select 1 from core.derived d where d.relation = rel) then perform core.refuse('derived_table', key); end if;
+  foreach c in array array['organization_id', 'patient_id'] loop
+    if not exists (select 1 from pg_attribute a where a.attrelid = rel and a.attname = c and a.attnum > 0 and not a.attisdropped) then
+      perform core.refuse('store_needs', format('%s needs column %s', key, c));
+    end if;
+  end loop;
+  if clear is null then
+    if not (has_table_privilege('core_eraser', rel, 'SELECT') and has_table_privilege('core_eraser', rel, 'DELETE')) then
+      perform core.refuse('eraser_cannot', format('the eraser may not delete from %s', key));
+    end if;
+  else
+    if not ('patient_id' = any (clear)) then perform core.refuse('keeps_patient', format('%s: a row kept after an Erase loses its patient', key)); end if;
+    foreach c in array clear loop
+      if not exists (select 1 from pg_attribute a where a.attrelid = rel and a.attname = c and a.attnum > 0 and not a.attisdropped) then
+        perform core.refuse('unknown_column', format('%s.%s', key, c));
+      end if;
+      if exists (select 1 from pg_attribute a where a.attrelid = rel and a.attname = c and a.attnotnull) then perform core.refuse('not_nullable', format('%s.%s', key, c)); end if;
+      if not has_column_privilege('core_eraser', rel, c, 'UPDATE') then perform core.refuse('eraser_cannot', format('the eraser may not empty %s.%s', key, c)); end if;
+    end loop;
+    if not has_table_privilege('core_eraser', rel, 'SELECT') then perform core.refuse('eraser_cannot', format('the eraser may not read %s', key)); end if;
+  end if;
+  insert into core.stores (key, layer, relation, clear) values (declare_store.key, declare_store.layer, rel, declare_store.clear)
+  on conflict on constraint stores_pkey do update set relation = excluded.relation, clear = excluded.clear where core.stores.layer = excluded.layer;
 end $$;
 
 create function core.declare_listener(layer text, types text[], refresh regprocedure) returns void language plpgsql as $$

@@ -11,7 +11,7 @@ Prerequisites: Docker (Colima on this machine), the Supabase CLI, Node 22+.
 ```bash
 colima start                    # once per boot
 supabase start                  # Postgres 17, Auth, Realtime, Storage, Studio
-npm run db:reset                # migrations → codes, the demo kit, the base's clinic and staff, the pharmacy's (supabase/seeds/)
+npm run db:reset                # migrations → codes, the demo kit, the base's clinic and staff, each pack's seed (supabase/seeds/, in config.toml's order)
 npm run db:test                 # every SQL suite (22), each in its own rolled-back transaction
 npm run db:demo                 # a working day, times relative to now: the base's, each pack's, the shared journey (run again to reload)
 npm run test:composer           # the composer's typed lines and drafts → entries (no browser, no database)
@@ -21,7 +21,7 @@ npm install && npm run dev      # the client on http://localhost:3000 (copy .env
 
 Studio: http://127.0.0.1:54323 · API: http://127.0.0.1:54321 · DB: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 
-Demo people (password `Demo123!`, the kit's `demo.password()`), one for every built-in role: Amira Lotfy admin@demo.com (owner), Mai Samir reception@demo.com (Front desk), Dr. Ali Hassan dr.ali@demo.com and Sara Mahmoud nurse@demo.com (General Practice and the Medical Ward), Dr. Salma Adel psych@demo.com (Psychiatry, a private department), Karim Fawzy lab@demo.com (Laboratory), Dr. Reem Hamdy pharm@demo.com and Hesham Ragab store@demo.com (Pharmacy). With `VITE_DEMO_LOGINS=true` the login page lists them grouped by department, one click each, from `src/core/shell/logins.generated.ts` (`npm run gen:logins` after a seed changes; `db:test` fails when it is stale).
+Demo people (password `Demo123!`, the kit's `demo.password()`), one for every built-in role: Amira Lotfy admin@demo.com (owner), Mai Samir reception@demo.com (Front desk), Dr. Ali Hassan dr.ali@demo.com and Sara Mahmoud nurse@demo.com (General Practice and the Medical Ward), Dr. Salma Adel psych@demo.com (Psychiatry, a private department), Karim Fawzy lab@demo.com (Laboratory), Dr. Reem Hamdy pharm@demo.com and Hesham Ragab store@demo.com (Pharmacy), Mona Saad cashier@demo.com (Cashier) and Wael Shawky accounts@demo.com (accountant, everywhere). With `VITE_DEMO_LOGINS=true` the login page lists them grouped by department, one click each, from `src/core/shell/logins.generated.ts` (`npm run gen:logins` after a seed changes; `db:test` fails when it is stale).
 
 Settings changes need a second factor. The dev seed turns that off locally (`core.server_settings`, `require_mfa = off`); when it is on, the Settings page enrols an authenticator app the first time a save is refused.
 
@@ -42,7 +42,9 @@ Settings changes need a second factor. The dev seed turns that off locally (`cor
 | 09 | FHIR R4: one mapping per type version | §6.4 |
 | 10 | guards: the rebuild check, the cron jobs (outbox every 5 s, the file sweep), realtime | §8 |
 | 11 | the pharmacy pack on the pack contract: its role and schema, `pharmacy.dispense`, `pharmacy.queue`, its screen | §5 |
-| 12 | privileges: every routine revoked from PUBLIC, then granted by name | §8 |
+| 12 | the laboratory pack (`lis`): Collect, Results, sample numbers, the large lab's switches | §5.3 |
+| 13 | the billing pack: charges, prices, payments, refunds, drawers, the cashier's reads | §5.4 |
+| 14 | privileges: every routine revoked from PUBLIC, then granted by name | §8 |
 
 **The client** (`src/core/`, Vite · React · TanStack Query · zustand). Every read goes through `read`, every Done through `write` as one set; settings through `save`/`remove`/`write_setting`.
 
@@ -68,6 +70,8 @@ Settings changes need a second factor. The dev seed turns that off locally (`cor
 
 **The pharmacy pack** (`…000011_pharmacy.sql`, `src/packs/pharmacy`): a prescription reaches the pharmacy only when the doctor sends it; its bench (To give · Given today) gives with **Give all** or Given / Not given with a reason. Its `pharmacy.queue` table is filled by a listener after commit.
 
+**The billing pack** (`…000013_billing.sql`, `src/packs/billing`, spec §5.4): the Cashier (who owes, the payment card under the row, receipts, Give back…), Today (the day's totals, closing the drawer) and Billing → Prices. Charges come from entries and settings only and carry no amount; money is only ever added to, in billing's own tables, through its operations.
+
 ## Tests
 
 `supabase/tests/`, run by `scripts/db-test.sh`: spine · presence · clinic · review · lists · admin · privacy · pharmacy, and the eight permanent tests — rebuild (= live) · boundary · canary · concurrency · registry · fhir · tenancy · pack contract. `supabase/tests/ported.md` maps every check of the earlier suites to its new home.
@@ -82,7 +86,7 @@ supabase/demo/        each layer's demo day and the shared journey's steps (jour
 supabase/tests/       SQL suites (lib/: assertions and the fixture)
 scripts/              db-test.sh, demo.sh, include.awk, gen-logins.ts, gen-shapes.ts, gen-codes.py, import-codes.sh, test-*.ts
 src/core/             the client: db, auth, hooks, shell, screens, renderers
-src/packs/            packs: pharmacy
+src/packs/            packs: pharmacy, lis (the laboratory), billing
 ```
 
 ## Next

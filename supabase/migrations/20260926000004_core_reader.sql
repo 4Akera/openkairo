@@ -35,7 +35,24 @@ create function core.identity(p core.patients) returns jsonb language sql stable
                              from core.patient_identifiers i where i.organization_id = p.organization_id and i.patient_id = p.id), '[]'::jsonb))
 $$;
 
--- the read log: one row per (user, patient, purpose) per 10 minutes; if it cannot be written, the read fails (§3.10)
+-- what two reads merged into one row of the read log read (owner, 2026-10-08, D19): detail by detail, two lists joined (each value once),
+-- a detail only one of them names kept, else the later's. Every reader logs its details as lists (the items, tables, patients, searches
+-- it read), so a row of ten minutes loses none of what each read
+create function core.read_merge(p_before jsonb, p_after jsonb) returns jsonb language plpgsql immutable as $$
+begin
+  if jsonb_typeof(p_before) = 'array' and jsonb_typeof(p_after) = 'array' then
+    return (select coalesce(jsonb_agg(r.x order by r.n), '[]') from (select q.x, min(q.n) n from (
+      select b.x, b.n from jsonb_array_elements(p_before) with ordinality b(x, n)
+      union all select a.x, a.n + 1000000 from jsonb_array_elements(p_after) with ordinality a(x, n)) q group by q.x) r);
+  elsif jsonb_typeof(p_before) = 'object' and jsonb_typeof(p_after) = 'object' then
+    return (select coalesce(jsonb_object_agg(ks.k, case when p_before ? ks.k and p_after ? ks.k then core.read_merge(p_before -> ks.k, p_after -> ks.k)
+                                                        when p_after ? ks.k then p_after -> ks.k else p_before -> ks.k end), '{}')
+              from (select jsonb_object_keys(p_before) k union select jsonb_object_keys(p_after)) ks);
+  end if;
+  return coalesce(p_after, p_before);
+end $$;
+-- the read log: one row per (user, patient, purpose) per 10 minutes, what each read merged in (core.read_merge); if it cannot be written,
+-- the read fails (§3.10)
 create function core.log_read(me core.users, p_department uuid, p_patient uuid, p_purpose text, p_reason text, p_what jsonb, p_withheld int)
 returns void language plpgsql volatile security definer set search_path = '' as $$
 declare v_id uuid;
@@ -47,7 +64,7 @@ begin
    order by l.at desc limit 1;
   if found then
     update core.read_log set last_at = clock_timestamp(), reads = reads + 1, withheld = withheld + coalesce(p_withheld, 0),
-      what = case when jsonb_typeof(what) = 'array' and jsonb_typeof(p_what) = 'array' then (select jsonb_agg(distinct x) from (select jsonb_array_elements(what) x union select jsonb_array_elements(p_what)) q) else p_what end
+      what = core.read_merge(what, coalesce(p_what, '{}'))
      where organization_id = me.organization_id and id = v_id;
   else
     insert into core.read_log (organization_id, user_id, department_id, patient_id, purpose, reason, what, withheld)
@@ -104,6 +121,14 @@ begin
    where p.organization_id = v_org and p.id in (select (r ->> 'patient_id')::uuid from jsonb_array_elements(kept) r);
   return jsonb_build_object('rows', kept, 'entries', coalesce(v_entries, '{}'), 'patients', v_patients,
     'withheld', jsonb_array_length(p_rows) - jsonb_array_length(kept));
+end $$;
+-- one derived table's rows as a read sends them: masked (rows_out), with their source entries when asked; a table declared to send no
+-- record entries (core.derived.entries false: billing's charges) sends neither them nor their ids, whoever asks (owner, 2026-10-08, F08)
+create function core.table_out(me core.users, d core.derived, p_rows jsonb, p_with_entries boolean default true) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v jsonb := core.rows_out(me, p_rows, coalesce(p_with_entries, true) and d.entries);
+begin
+  if d.entries then return v; end if;
+  return v || jsonb_build_object('rows', (select coalesce(jsonb_agg(r.x - 'source_entries' order by r.n), '[]') from jsonb_array_elements(v -> 'rows') with ordinality r(x, n)));
 end $$;
 
 -- ── the shapes ──
@@ -201,7 +226,7 @@ begin
      order by (p.folded like v_folded || '%') desc, extensions.similarity(p.folded, v_folded) desc, p.number desc
      limit greatest(1, least(coalesce((q ->> 'limit')::int, 20), 50))) x;
   select coalesce(jsonb_agg(core.identity(p) order by array_position(hits, p.id)), '[]') into out from core.patients p where p.organization_id = v_org and p.id = any (hits);
-  perform core.log_read(me, (q ->> 'department_id')::uuid, null, 'PATADMIN', null, jsonb_build_object('search', term, 'hits', to_jsonb(hits)), 0);
+  perform core.log_read(me, (q ->> 'department_id')::uuid, null, 'PATADMIN', null, jsonb_build_object('searches', jsonb_build_array(term), 'hits', to_jsonb(hits)), 0);
   return jsonb_build_object('patients', out, 'tables', core.read_includes(me, (q ->> 'department_id')::uuid, hits, q -> 'include'));
 end $$;
 
@@ -215,7 +240,7 @@ begin
     select * into d from core.derived x where x.key = k;
     if not found then perform core.refuse('unknown_table', k); end if;
     if not (core.may(me.id, d.action, p_department) or (p_department is null and core.may_somewhere(me.id, d.action))) then continue; end if;
-    out := out || jsonb_build_object(k, core.rows_out(me, core.table_rows(me.organization_id, d, coalesce(w, '{}') || jsonb_build_object('patient_id', to_jsonb(fams)), 2000)));
+    out := out || jsonb_build_object(k, core.table_out(me, d, core.table_rows(me.organization_id, d, coalesce(w, '{}') || jsonb_build_object('patient_id', to_jsonb(fams)), 2000)));
   end loop;
   return out;
 end $$;
@@ -226,7 +251,7 @@ begin
   if not core.may_somewhere(me.id, 'read:patients') then perform core.refuse('not_allowed', 'read:patients'); end if;
   select * into p from core.patients x where x.organization_id = me.organization_id and x.id = core.survivor(me.organization_id, v_id);
   if not found then perform core.refuse('not_found', 'patient'); end if;
-  perform core.log_read(me, (q ->> 'department_id')::uuid, p.id, 'PATADMIN', null, '{"shape": "patient"}', 0);
+  perform core.log_read(me, (q ->> 'department_id')::uuid, p.id, 'PATADMIN', null, '{"shapes": ["patient"]}', 0);
   return jsonb_build_object('patient', core.identity(p),
     'relations', coalesce((select jsonb_agg(jsonb_build_object('relation', r.relation, 'other_id', r.other_id, 'patient_id', r.patient_id))
       from core.patient_relations r where r.organization_id = me.organization_id and (r.patient_id = p.id or r.other_id = p.id) and r.ended_at is null), '[]'),
@@ -262,7 +287,7 @@ begin
   -- the derived tables of the family: all readable ones unless named
   -- whoever reads the record reads every derived row of the family (the table's own action gates only the table read)
   for d in select * from core.derived x where (v_include is null or x.key in (select jsonb_array_elements_text(v_include))) order by x.position loop
-    v_t := core.rows_out(me, core.table_rows(v_org, d, jsonb_build_object('patient_id', to_jsonb(fam)), 2000));
+    v_t := core.table_out(me, d, core.table_rows(v_org, d, jsonb_build_object('patient_id', to_jsonb(fam)), 2000));
     v_withheld := v_withheld + (v_t ->> 'withheld')::int;
     v_tables := v_tables || jsonb_build_object(d.key, v_t - 'patients');
   end loop;
@@ -274,7 +299,8 @@ begin
          where y.organization_id = v_org and y.patient_id = any (fam) and t.may_be_private)))
      group by e.department_id) x;
   perform core.log_read(me, v_dept, p.id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason',
-    jsonb_build_object('entries', cardinality(page), 'types', to_jsonb(v_types), 'visits', to_jsonb(v_visits)), cardinality(hid) + v_withheld);
+    jsonb_build_object('records', jsonb_build_array(jsonb_build_object('entries', cardinality(page), 'types', to_jsonb(v_types), 'visits', to_jsonb(v_visits)))),
+    cardinality(hid) + v_withheld);
   return jsonb_build_object('patient', core.identity(p), 'family', to_jsonb(fam), 'entries', v_entries, 'tables', v_tables, 'hidden', v_hidden,
     'more', cardinality(page) = v_limit);
 end $$;
@@ -294,7 +320,7 @@ begin
   rows := rows || (select coalesce(array_agg(e order by e.recorded_at, e.id), '{}') from core.entries e
      where e.organization_id = v_org and e.refers_to = any (select x.id from unnest(rows) x) and e.item <> rows[1].item);
   hid := core.hidden(v_org, me.id, (select array_agg(x.id) from unnest(rows) x));
-  perform core.log_read(me, v_dept, core.survivor(v_org, v_patient), coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('item', v_item), cardinality(hid));
+  perform core.log_read(me, v_dept, core.survivor(v_org, v_patient), coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('items', jsonb_build_array(v_item)), cardinality(hid));
   return jsonb_build_object('entries', (select jsonb_agg(core.entry_out(x, x.id = any (hid))) from unnest(rows) x));
 end $$;
 
@@ -305,9 +331,9 @@ begin
   select * into d from core.derived x where x.key = q ->> 'table';
   if not found then perform core.refuse('unknown_table', q ->> 'table'); end if;
   if v_dept is null or not core.may(me.id, d.action, v_dept) then perform core.refuse('not_allowed', d.action); end if;
-  out := core.rows_out(me, core.table_rows(me.organization_id, d, q -> 'where', (q ->> 'limit')::int), coalesce((q ->> 'entries')::boolean, true));
+  out := core.table_out(me, d, core.table_rows(me.organization_id, d, q -> 'where', (q ->> 'limit')::int), coalesce((q ->> 'entries')::boolean, true));
   select coalesce(jsonb_agg(distinct x), '[]') into pts from jsonb_object_keys(out -> 'patients') x;
-  perform core.log_read(me, v_dept, null, coalesce(q ->> 'purpose', 'TREAT'), null, jsonb_build_object('table', d.key, 'patients', pts), (out ->> 'withheld')::int);
+  perform core.log_read(me, v_dept, null, coalesce(q ->> 'purpose', 'TREAT'), null, jsonb_build_object('tables', jsonb_build_array(d.key), 'patients', pts), (out ->> 'withheld')::int);
   return out;
 end $$;
 
@@ -333,7 +359,7 @@ begin
      or not exists (select 1 from core.file_uses f where f.organization_id = e.organization_id and f.entry_id = e.id and f.sha256 = q ->> 'sha256') then
     perform core.refuse('not_found', 'file');
   end if;
-  perform core.log_read(me, v_dept, e.patient_id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('file', q ->> 'sha256', 'entry', e.id), 0);
+  perform core.log_read(me, v_dept, e.patient_id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('files', jsonb_build_array(q ->> 'sha256'), 'entries', jsonb_build_array(e.id)), 0);
   return jsonb_build_object('bucket', 'files', 'path', e.organization_id || '/' || e.patient_id || '/' || (q ->> 'sha256'));
 end $$;
 

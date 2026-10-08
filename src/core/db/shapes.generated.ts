@@ -420,6 +420,29 @@ export interface Vitals {
 }
 
 // ── settings (core.setting_keys) ──
+/** setting billing.desk (billing; owner department) */
+export interface BillingDeskSetting {
+  float?: string
+  takes: 'none' | 'own' | 'everyone'
+}
+/** setting billing.pay_first (billing; owner department) */
+export interface BillingPayFirstSetting {
+  on: boolean
+}
+/** setting billing.price (billing; owner department, many) */
+export interface BillingPriceSetting {
+  at_order?: boolean
+  price?: string
+  service_id: string
+}
+/** setting billing.reasons (billing; owner organization) */
+export interface BillingReasonsSetting {
+  reasons: string[]
+}
+/** setting billing.visit_fee (billing; owner department, many) */
+export interface BillingVisitFeeSetting {
+  amount: string
+}
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
   after: 'next' | 'queue'
@@ -618,6 +641,11 @@ export interface EntryData {
 }
 /** each setting's data, by its key */
 export interface SettingData {
+  'billing.desk': BillingDeskSetting
+  'billing.pay_first': BillingPayFirstSetting
+  'billing.price': BillingPriceSetting
+  'billing.reasons': BillingReasonsSetting
+  'billing.visit_fee': BillingVisitFeeSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting

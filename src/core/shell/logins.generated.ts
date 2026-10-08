@@ -7,6 +7,7 @@ export interface DemoLogin { email: string; name: string; role: string }
 export interface DemoGroup { department: string; departmentId: string | null; people: DemoLogin[] }
 export const DEMO_GROUPS: DemoGroup[] = [
   { department: 'Everywhere', departmentId: null, people: [
+    { email: 'accounts@demo.com', name: 'Wael Shawky', role: 'Accountant' },
     { email: 'admin@demo.com', name: 'Amira Lotfy', role: 'Owner' },
   ] },
   { department: 'Front desk', departmentId: '00000000-0000-0000-0000-00000000d001', people: [
@@ -34,5 +35,8 @@ export const DEMO_GROUPS: DemoGroup[] = [
   ] },
   { department: 'Main store', departmentId: '1d64cf4d-60f9-5945-a245-e9764b6c294f', people: [
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
+  ] },
+  { department: 'Cashier', departmentId: '1d5d62c1-1b7d-5d6a-8375-6f9cd8f0fc9a', people: [
+    { email: 'cashier@demo.com', name: 'Mona Saad', role: 'Cashier' },
   ] },
 ]

@@ -199,7 +199,12 @@ select core.declare_type(
   labels         => '{"en":"Medication","ar":"دواء"}');
 select core.declare_system  (key, kind, uri, version, closed, check, licence, labels);
 select core.declare_table   (key => 'base.lists', layer => 'base', refresh => 'base.lists_refresh(uuid,uuid[])', action => 'read:record',
-                             reads => '{}');           -- what of identity its refresh reads ('age', 'sex'): refreshed when that changes
+                             reads => '{}',            -- what of identity its refresh reads ('age', 'sex'): refreshed when that changes
+                             entries => true);         -- false: it never sends its rows' source entries (nor their ids), whoever asks (F08)
+select core.declare_op      (key => 'pharmacy.stock', layer => 'pharmacy', fn => 'pharmacy.stock_read(uuid,uuid,uuid,jsonb)', action => 'read:pharmacy.queue',
+                             patients => false);       -- true: it returns patient ids (patient_ids in its answer), each read-logged (F28)
+select core.declare_store   (key => 'billing.payments', layer => 'billing', clear => array['patient_id']);   -- a pack's own table Erase reaches:
+                             -- its patient's rows go (clear null), or stay with these columns emptied (D17, D18)
 select core.declare_rule    (key => 'base.private', layer => 'base', hidden => 'base.private_hidden(uuid,uuid[])');
 select core.declare_action  (key => 'write:note', layer => 'base', scope => 'department', labels => '{…}',
                              everyday => false);       -- a pack's only: held by the everyday roles where a department uses the pack
@@ -309,7 +314,12 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 ### 3.10 The reader: `public.read(query)` (the only way out)
 - One VOLATILE function. It logs in the same transaction; if the log insert fails, the read fails. The log (`core.read_log`) keeps one
   row per (user, patient, purpose) per 10 minutes: organization, user, department, patient, purpose, what (items or the query), the
-  withheld count, time. `purpose` is a registered key: TREAT (default), ETREAT, PATADMIN, HOPERAT, HRESCH, PATRQT, BTG; free text is
+  withheld count, time. *Built 2026-10-08 (owner, D19, with core change (f)):* reads merged into one row lose none of what each read —
+  `core.read_merge` joins two lists detail by detail (each value once), keeps a detail only one names, else the later's, and every
+  reader logs its details as lists (`items`, `tables`, `patients`, `searches`, `records`, `files`, `fhir`). A pack operation that
+  returns patient ids (`declare_op(…, patients => true)`) names them in its answer's `patient_ids`, and `public.pack_op` logs one read a
+  patient (`ops`: its key; purpose the request's, PATADMIN unless it says — chosen in the build, awaiting the owner); one that declares
+  so and names none is refused `patients_unnamed`. `purpose` is a registered key: TREAT (default), ETREAT, PATADMIN, HOPERAT, HRESCH, PATRQT, BTG; free text is
   only added to it.
 - Read shapes (`query.shape`):
 
@@ -342,7 +352,10 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 
 ### 3.11 The two exceptions (owned by `core_eraser`; the permanence trigger allows only `current_user = core_eraser`)
 - **Erase** (the law): removes the merged family from entries, every registered table (base and packs), patient stores and storage,
-  then refreshes what it touched. The log (`core.erasures`) keeps only the fact: who, when, reason, row count. Only a user holding
+  then refreshes what it touched. *Built 2026-10-08 (owner, D17, core change (g)):* it reaches the tables a pack declares
+  (`core.declare_store`: the layer's own table holding organization_id and patient_id, never a derived one, the eraser able to delete
+  its rows or empty the columns named — `store_needs`, `derived_table`, `keeps_patient`, `unknown_column`, `not_nullable`,
+  `eraser_cannot`): their rows go, or stay with those columns emptied (billing's payments keep their amounts and receipt numbers, D18). The log (`core.erasures`) keeps only the fact: who, when, reason, row count. Only a user holding
   `erase:patient` everywhere, with a second factor, never pack or machine users; the writer never calls it.
 - **Redact** (a misfiled entry): blanks `data` and `codes` on the whole item and keeps tombstones (id, type, patient, set, times); logs
   `core.redactions (entry, by, at, reason)` without quoting the content; refused while other entries refer to it unless they are
@@ -928,7 +941,8 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   pharmacist and the store keeper hold), `pharmacy.stock` (its own table: received, counted, expired, damaged; clock time), and the
   derived `pharmacy.given` (each thing a dispense gave from a product, by batch). A pack's own table is reached through one core door,
   `public.pack_op`, and the operations a pack declares (`core.declare_op`: owned, definer, pinned, its action checked in a department
-  that uses the pack); such an operation counts as registered, so it may read its own pack's derived tables (it returns no patient
+  that uses the pack); such an operation counts as registered, so it may read its own pack's derived tables (one that returns patient
+  ids declares so and each is read-logged, §3.10, core change (f); otherwise it returns no patient
   data). The Stock tab (`registerScreen(…, shown)`: only where the pharmacy keeps stock); each give records its product and its batch,
   first to expire (a generic prescribed: the brand with the most on hand); the check shows what is on hand. *Built 2026-10-07 (piece
   7, the main store; owner: one step, no requests, the store and the pharmacies only, the store a department of the pack):* the
@@ -986,7 +1000,7 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   one number and the record another. Receive says why a number finds nothing (never given; given to whom and not marked Collected
   yet; saved under another number, via `lis.sample_of`) and receives by hand a tube with no number or one that will not scan.
 
-### 5.4 Billing (the owner's decisions, 2026-10-07 and 2026-10-08; all to build)
+### 5.4 Billing (the owner's decisions, 2026-10-07 and 2026-10-08; built in part 2026-10-08, each item marked)
 The owner asked for billing on 2026-10-07 ("let make billing next"), approved its pictures that day and decided the rest in chat;
 early on 2026-10-08 he answered the audit of that day's build (D1–D36, F08, F28) and had this branch rewound to before it, so nothing
 of billing is built here. That afternoon he chose three simplifications, **soft checks**, **open prices** and **a department's own
@@ -1005,45 +1019,59 @@ says "held", read "waiting" (the soft check, below).
 
 - **The rules** (owner, 2026-10-07):
   - Money never reaches the record or the chart. The chart keeps what was ordered and given; billing keeps its own tables. Only words
-    reach the chart (a waiting order's word), never an amount, a price, a number or an insurer's decision (hold-doctor). *To build.*
+    reach the chart (a waiting order's word), never an amount, a price, a number or an insurer's decision (hold-doctor). *Built 2026-10-08:* billing's own tables, reached only by its
+    operations; a charge row holds no amount and sends no record entries, so the record read carries none (no entry holds a price, a
+    receipt or a reason: billing.sql). The waiting word waits for core change (c).
   - A department that does not use billing (§5.1 rule 1) sees no money word: no price, no fee, no charge, no Pay or Send to cashier
-    button and no waiting word, not even on an order it sent to a department that uses billing. *To build.*
+    button and no waiting word, not even on an order it sent to a department that uses billing. *Built 2026-10-08 for billing's screens and operations:* drawn, and
+    answered (else `not_used_here`), only where the department uses billing; the rows' buttons and words come with core changes (a)–(d).
   - A card folds out under its row, never a pop-up, a menu or anything over the record (the standing rule, 2026-09-24; bill-pay).
-    *To build.*
+    *Built 2026-10-08* (the cashier's list: the payment card and the receipt under the row).
   - The original money data (payments, refunds, drawer closings, claim lines and their marks; and, from 2026-10-08, the prices the
     cashier types, the bills sent to the cashier and the reasons for going ahead before payment) is only ever added to; a mistake is
     a new row with its reason; a closed drawer and a claim line are never edited (bill-today, ins-claims). Erase is the one exception
-    (below). *To build.*
+    (below). *Built 2026-10-08:* a trigger on each refuses every change but the eraser's.
   - Care is never blocked: billing waits on a screen, never in the server (bill-held; owner, 2026-10-08, *Pay first* below).
-    *To build.*
+    *Built 2026-10-08:* nothing of billing refuses a write; Pay first is a read (`billing.waiting`).
   - Billing is a pack like any other (§5): it names no other pack's types, tables, settings or ids, holds no privilege on core tables,
     learns what another department charges for its own work only from the lines that department's rows hand it (*A department's own
-    priced lines*, below; owner, 2026-10-08), and brings its own demo (§5.1 rule 9). *To build.* Hearing what others give through a
+    priced lines*, below; owner, 2026-10-08), and brings its own demo (§5.1 rule 9). *Built 2026-10-08:* no billing file names another pack (test:billing scans them); its demo
+    below. Hearing what others give through a
     chargeables door: replaced by the owner, 2026-10-08 (*Later*).
 - **What is charged** (owner, 2026-10-07): a department's **visit fee**, once the patient is seen there (bill-settings); each
   ordered **service** that has a price, charged to the department that performs it; and the **lines a department hands** for the work
   it prices itself, the pharmacy's medicines first (owner, 2026-10-08; "each medicine on a prescription, at its product's price" is
   replaced by the owner, 2026-10-08). Without a price a thing is free and never waits (bill-settings, rx-payfirst); a service priced
   *At the order* is not free (below). A price billing keeps belongs to the thing that owns it (a service, a department's visit fee)
-  and is copied into the charge as it stood when ordered; a later price is for later orders. *To build.*
+  and is copied into the charge as it stood when ordered; a later price is for later orders. *Built 2026-10-08:* `billing.charges`, from
+  the base's visits, orders and their steps after commit (a listener), with the settings as they stood when the order or the seeing was
+  written, where the charging department used billing then (so an untick neither drops a charge nor charges the past); seen as the
+  base's presence counts it (a seen or done move, or what a clinician writes there after the call); a visit sent on is charged in each
+  department it was seen in that bills. *Chosen in the build, awaiting the owner:* the charge keeps the moment (`priced_at`) and billing's
+  operations read its price as of then, so no amount sits in a derived row the record read sends to every reader of the record.
 - **Where prices live:**
   - Services: billing's own page, **Billing → Prices**, separate from Settings → Services (owner, 2026-10-08, D27; the bill-settings
     picture had a Price column inside Settings → Services, which would need a base door); each service a price, none, or *At the
-    order* (below). *To build.*
+    order* (below). *Built 2026-10-08* (`billing.price`, a row a service, its department's, by `write:billing.prices`; checked: one a
+    service, a price or At the order, no more than 10,000,000).
   - The visit fee and **Pay first**, per department, in the pack's table *Each department* (Settings → Packs → Billing; bill-settings,
-    owner, 2026-10-07), and on the department's own card like every per-department setting (§5.1 rule 7). *To build.*
+    owner, 2026-10-07), and on the department's own card like every per-department setting (§5.1 rule 7). *Built 2026-10-08 in part:* Pay first on the
+    department's card (`billing.pay_first`). *Chosen in the build, awaiting the owner:* the visit fee is kept as a service's price is, a row
+    of its department on Billing → Prices (`billing.visit_fee`), so neither the department's card (whose form draws one value a department)
+    nor the pack's table *Each department* is built.
   - **A department's own work**: in its own pack's settings, never in billing's (owner, 2026-10-08). The pharmacy's medicines: a
     price on each product in the pharmacy's own product list, per box, and per strip where it is sold in strips; it needs no *Keep
     stock* (bill-settings, rx-payfirst, owner, 2026-10-07). A department shows these prices only where it uses a pack that declares
-    that it charges (core change (d)), and names no such pack (owner, 2026-10-08, D8). *To build.*
+    that it charges (core change (d)), and names no such pack (owner, 2026-10-08, D8). *To build* (with core change (d) and the
+    pharmacy's lines due).
   - The reasons a charge may be waived (Staff, Charity, Follow-up within 7 days): the clinic's own list on the pack's page
     (bill-settings, owner, 2026-10-07); a discount takes its reason from that list only, never free text (owner, 2026-10-08, D35).
-    *To build.*
+    *Built 2026-10-08* (`billing.reasons`; the pay operation refuses another, `unknown_reason`).
 - **A service priced at the order** (the feature: owner, 2026-10-07, "make 2, 3"; how it is kept: **open prices**, owner,
   2026-10-08): the price list may say *At the order* for a service. Its order reaches the cashier unpriced, and the cashier types its
   price on the payment card; billing keeps that price in its own insert-only table with who typed it and when, never in the order,
   the record or a pack's `details` (D1). The doctor's order card has no price box, and no pack adds a field to the order card.
-  *To build.* Replaced by the owner, 2026-10-08: the **Price** box on the order card where both departments use billing (D2), Done
+  *Built 2026-10-08:* the card's empty price, kept as the payment's line (`typed`, with the payment's who and when). Replaced by the owner, 2026-10-08: the **Price** box on the order card where both departments use billing (D2), Done
   waiting for that price (D33's bound on the box) and billing saving it just before Done (D1); the order-card extension point.
   - *Chosen in the build, awaiting the owner:* the typed price is above nothing and no more than 10,000,000 (the bound D33 set for the
     box); under Pay first such an order waits like any priced one until the cashier prices it and takes the payment.
@@ -1051,19 +1079,24 @@ says "held", read "waiting" (the soft check, below).
   paid, owed and waived, and the insurer's share, are worked out when read, from billing's own original tables (D12, which settles
   D25); no core door lets a pack have its own tables worked out again. The charges table sends no record entries with its rows (F08,
   core change (e)). A charge is paid once, wherever it is taken (owner, 2026-10-07). Billing locks per charge, always in the same
-  order, inside its own data, and no core door to lock a patient is added for it (D13). *To build.*
+  order, inside its own data, and no core door to lock a patient is added for it (D13). *Built 2026-10-08* (`billing.lock`: each charge and line, sorted). *Chosen in
+  the build, awaiting the owner:* a charge is void when its order is revoked, crossed out, or closed undone where it was sent (rejected,
+  cancelled, failed); one still holding money shows on the payment card, to give back from its receipt.
   - *Chosen in the build, awaiting the owner:* the lines a department hands are not charges (they come from a screen, not from
     entries); billing keeps them only once they are taken (a payment's lines) or sent (an open bill), and the owed sum adds them in.
 - **A department's own priced lines** (owner, 2026-10-08):
   - Any department that prices its own work (the pharmacy first; later any other pack) hands its priced lines (a name, a quantity,
     an amount) on its own list rows, through the core's generic *lines due* row field (core change (b)). Billing does not know these
-    prices before they are handed. *To build.*
+    prices before they are handed. *Server built 2026-10-08:* lines reach billing only as handed (to `billing.send`, or paid with
+    `billing.pay`); the row field waits for core change (b).
   - Billing's button on that row (core change (a)) reads **Pay** where the department takes payment here: the money is taken at that
     counter, on billing's payment card folded out under the row. It reads **Send to cashier** where the department does not: billing
     saves the lines as an **open bill** in its own insert-only table, and the main cashier takes them with the rest of the visit.
-    *To build.*
+    *Server built 2026-10-08:* `billing.send` (an open bill in `billing.sent`; a resend for an order replaces its lines not yet paid) and
+    a row's lines paid at its counter (`billing.pay`, `handed`); the button waits for core change (a). *Chosen in the build, awaiting the
+    owner:* lines are sent, and …anyway recorded, by whoever works the department's list (`read:bench`, the base's).
   - Billing never names, in its code, the department or pack the lines came from; it trusts the amounts as handed and records who
-    took or sent them, and when. *To build.*
+    took or sent them, and when. *Built 2026-10-08.*
   - *Chosen in the build, awaiting the owner:* each line names the order it belongs to where it has one, so Pay first can wait per
     order; on the payment card and the receipt a sending department's lines for a patient are one line, the department's name as
     the clinic calls it (read from the row, never named in code) and the lines' names, with the sum ("Pharmacy · Augmentin 1 g,
@@ -1075,55 +1108,63 @@ says "held", read "waiting" (the soft check, below).
     (D31).
 - **Taking payment** (owner, 2026-10-07):
   - Any department may switch on **Takes payment here**: its own charges (the lab takes the lab's), or everyone's (the main cashier). One
-    money table; each person closes their own drawer; the clinic's totals add every drawer's. *To build.*
+    money table; each person closes their own drawer; the clinic's totals add every drawer's. *Built 2026-10-08* (`billing.desk`: none, own or everyone; *chosen in the build, awaiting
+    the owner:* each drawer's float is the desk's setting, as the bill-today picture counts it).
   - **The main cashier** is a department made from billing's own starter setup, Cashier (its tabs Cashier and Today); a reception may
-    tick the same switch instead. It has no check-in screen and its people check nobody in (owner, 2026-10-08, D36). *To build.*
+    tick the same switch instead. It has no check-in screen and its people check nobody in (owner, 2026-10-08, D36). *Built 2026-10-08* (`billing.cashier`; *chosen in the build, awaiting the owner:* a third tab, Prices, shown
+    only to whoever sets prices; and two small setups, `billing.clinic` and `billing.bench`, that tick billing and change nothing else).
   - **The cashier's list** (bill-list): views *To pay* · *Paid today* · *Nothing to pay*; search by record number or name, or scan a
     card. One row a patient who owes: who, what for ("Visit · 2 tests · 3 medicines"), where someone already waits ("Laboratory is
     waiting", in warn) and the amount, the sum of the lines, so nobody adds anything up. A patient appears once something priced was
     ordered or seen, or a department sent its lines to the cashier (a walk-in too). A patient whose work was done before payment is
-    marked so on the list, "done before payment" (owner, 2026-10-08). *To build.*
+    marked so on the list, "done before payment" (owner, 2026-10-08). *Built 2026-10-08* (`billing.owed`, grouped and paged on the server,
+    newest first; search through the reader; the mark from billing's …anyway reasons; what for in words: "Visit · CBC, HbA1c · Pharmacy";
+    scanning a card not built).
   - **The payment card** (bill-pay) folds out under the row: each line ticked, with where and when it came from ("Laboratory ·
     ordered 10:24"); a line unticked is left for later, since only what is ticked is paid and only that stops waiting; a line priced
     at the order comes with an empty price for the cashier to type (above); *Add a discount* (D) with a reason from the list; Cash
-    (received, change) or **Card** (tonight: owner, 2026-10-08); one key takes it (↵). *To build.*
+    (received, change) or **Card** (tonight: owner, 2026-10-08); one key takes it (↵). *Built 2026-10-08* (`PayCard.tsx`; the total it
+    showed must be the server's, `total_changed`).
   - **Pay on a row** (owner, 2026-10-07, "make 2, 3"; its places and Send to cashier, owner, 2026-10-08): billing's one button among
     a row's actions (core change (a)) on the desk, the clinic queue, the base bench and the bench patient page, and on every pack list
     built on the core `ListRow` (the pharmacy's Dispensing, the laboratory's Collect): **Pay** where the department takes payment
     here and the patient owes what this desk takes (its charges, or the lines the row hands); **Send to cashier** where the row hands
     lines and the department does not take payment; none otherwise, nor for a role that may not. Pay folds the cashier's own card out
-    under the row. *To build.*
+    under the row. *To build* with core change (a); the card it folds out (`PayCard`, taking a row's lines) is built.
   - **The receipt** (bill-receipt) is shown and kept: the clinic, the clinic's receipt number (R-00412), the date and time, the patient
     and record number, the lines, the total, the cash received and the change, who took it. Where work was waiting, its word goes;
-    nothing else changes in the chart. *To build.*
+    nothing else changes in the chart. *Built 2026-10-08* (shown and kept; no print button).
   - **A refund** is a payment of its own, naming the receipt it undoes, with its reason, and prints its own slip (print-receipt,
-    ins-claims). *To build.*
+    ins-claims). *Built 2026-10-08:* any day, once, a whole receipt (Give back… with its reason, its own number); its slip with printing.
   - **Today** (bill-today): *Taken today* (and the receipts), *Cash* (in the drawer, with the float), *Card*, *Waived* (the charges and
     their reasons); a row per cashier (receipts, cash, card, waived); **Close the drawer**: the float plus the cash taken is what is
     expected, counted against what is there, a difference needs its reason, and the closing is a new row, never edited (closing the
-    drawer tonight: owner, 2026-10-08). *To build.*
+    drawer tonight: owner, 2026-10-08). *Built 2026-10-08* (`billing.day`, this desk's, or the clinic's for `read:billing.accounts`, the
+    accountant's; a row a department whose work was paid; `billing.close`).
   - A running balance for a stay: not needed (owner, 2026-10-08).
 - **Pay first: a soft check** (the switch: owner, 2026-10-07, bill-held, rx-payfirst, hold-doctor; a screen rule, never a server
   refusal: owner, 2026-10-08):
   - Off by default: pay after, at the cashier at the end of the visit. Switched on, a department's priced work that is not paid
     waits: its order shows the word **"Waiting for payment"** on the performing department's row, through the core's soft check (core
     change (c)), and the word goes the moment the payment is taken; nobody clears it by hand, and marking the order urgent never
-    clears it. The writer never refuses work because of it, and nothing of it is kept in core. *To build.*
+    clears it. The writer never refuses work because of it, and nothing of it is kept in core. *Server built 2026-10-08:* `billing.waiting` (of the
+    orders a row names, those waiting and those paid; words only); the words on the rows wait for core change (c).
   - **Per order** (owner, 2026-10-08, D6; "Build now no pics"): only the waiting order's buttons are greyed; the patient's other
     orders on the same row stay workable; a stop (couldn't collect) is never greyed; a row opens with one free order; a collection
     chair calls a patient with one free test; a patient with free and waiting tests is in *To collect* for the free ones and in
-    *Waiting for payment* for the others, a view named by its word, with its count (D9). *To build.*
+    *Waiting for payment* for the others, a view named by its word, with its count (D9). *To build* with core change (c).
   - **…anyway** (owner, 2026-10-08): **Collect anyway…**, **Give anyway…**, and **Answer anyway…** for a doctor of the performing
     department on the page that answers consults and reports (D4), are always possible, with a one-line reason (an emergency, or a
     patient who will pay after: bill-held), on an inline card under the row or the answer. Whoever may do the work may do it anyway;
     there is no right of its own. Billing records the reason in its own insert-only table, with who and when. The base bench and its
-    patient page go ahead as Collect and Dispensing do (D7). *To build.*
+    patient page go ahead as Collect and Dispensing do (D7). *Server built 2026-10-08:* `billing.anyway` (the order sent here, the reason,
+    who and when); the inline cards wait for core change (c).
   - **The doctor's chart shows only the word** (owner, 2026-10-08), where the ordering department uses billing (the rule above):
     never the reason, an amount or a price. *Awaiting the owner:* core change (c) as approved reaches the lists and the page that
     answers consults and reports, not the chart's order card; how the word reaches the chart is not decided. *To build.*
   - The word shows only where the performing department uses billing (D3) and has Pay first on, as its settings stand now: unticking
     billing or switching Pay first off takes the words away at once; the settings history keeps the change, as for every setting.
-    *To build.*
+    *Server built 2026-10-08* (read as it stands now).
   - Replaced by the owner, 2026-10-08: the hard hold (the writer refusing the performing department's work on a held order, D4, D6),
     the hold decided in the same save as the order (D26), a hold lifted by a setting and recorded as such (D3), a setting change
     reaching billing through the listener queue for it (D11; that nothing of a pack runs inside a settings save still stands), the
@@ -1150,7 +1191,8 @@ says "held", read "waiting" (the soft check, below).
   - Insurance on a department's own priced lines (medicines) needs the chargeables door (*Later*, owner, 2026-10-08).
 - **Erase** (owner, 2026-10-08): Erase reaches the tables a pack declares (D17, core change (g)). Billing's money rows (payments,
   their lines, claim lines) keep their amounts and receipt numbers and lose the patient link and the approval number (D18); its other
-  rows of the patient go (the insurer on file, the insurer's answers). *To build.*
+  rows of the patient go (the insurer on file, the insurer's answers). *Built 2026-10-08* for payments (the patient emptied; their lines
+  stay), open bills and the reasons for going ahead (gone); insurance's rows come with insurance.
   - *Chosen in the build, awaiting the owner:* a typed price and an open bill, once paid, live on as the payment's lines; unpaid,
     they go with the patient, and so do the reasons for going ahead before payment.
 - **Printing** (owner, 2026-10-07, with the print-label and print-receipt pictures; tomorrow: owner, 2026-10-08):
@@ -1196,11 +1238,13 @@ for billing. Each is **to build**, in the core's own files, never a pack's (owne
 - **(d) A pack declares that it charges** (D8): an option of `core.declare_pack`; the department read carries the packs each
   department uses with what they declare. *To build.*
 - **(e) "Sends no record entries"** (F08): a per-table flag of `core.declare_table`; a table so declared never sends its rows'
-  source entries, whoever asks; billing's charges table is declared so. *To build.*
+  source entries, whoever asks; billing's charges table is declared so. *Built 2026-10-08* (`core.derived.entries`; `core.table_out`
+  for the table, record and included reads: no entries and no source ids; its rows are still masked by them).
 - **(f) Read-logging pack actions** (F28): a pack operation that returns patient ids declares so, and the core writes one read-log row
-  per patient it returns; reads merged into one row of the ten minutes lose none of what each read (D19). *To build.*
+  per patient it returns; reads merged into one row of the ten minutes lose none of what each read (D19). *Built 2026-10-08*
+  (`declare_op(…, patients)`, `public.pack_op`, `core.read_merge`; §3.10).
 - **(g) Erase reaches a pack's declared tables** (D17, `core.declare_store`): billing keeps amounts and receipt numbers and loses the
-  patient link after an Erase (D18, *Erase* above). *To build.*
+  patient link after an Erase (D18, *Erase* above). *Built 2026-10-08* (`core.stores`; §3.11).
 - **Later** (owner, 2026-10-08): the chargeables door (server); the core client print facility (the browser's own print dialog at a
   paper's size, printing what a pack hands it, which is what its screen shows); what insurance needs of the core.
 - Replaced by the owner, 2026-10-08, and not to build: the holds door (approved in principle on 2026-10-07; D3, D4, D6, D14, D15,
@@ -1746,4 +1790,24 @@ types, parked pack calls with per-call Retry, Postgres enums.
 - 2026-10-07: **the bench speaks generally** (the owner): the base bench's views are To do · In progress · Done today and its older work
   "Not started, older days"; a pack the department uses may give its own words (the lab's "To collect"), registered by pack, never by
   a department type. `test:registries` 8 groups.
+- 2026-10-08: the billing pack, its server and screens, with core changes (e), (f) and (g) (§5.4; the row button, the lines due, the
+  soft check and the charging declaration, core changes (a)–(d), are built beside it and wired after the merge).
+  - **Core**: `declare_table(…, entries)` and `core.table_out` (a table that sends no record entries nor their ids, whoever asks);
+    `declare_op(…, patients)` and `public.pack_op` logging one read a patient an operation returns (`patients_unnamed`);
+    `core.read_merge` (two reads of ten minutes keep both: lists joined detail by detail) and every reader logging its details as
+    lists; `core.stores` and `core.declare_store` (Erase deletes a pack's declared rows, or empties the columns named).
+  - **Billing** (migration 13, privileges 14): `billing.charges` (derived, no amount, no entries sent); its own tables only ever added
+    to (`sent`, `payments`, `payment_lines`, `anyway`, `drawers`; a trigger refuses all but the eraser); its operations (`owed`, `lines`,
+    `paid`, `day`, `pay`, `refund`, `close`, `send`, `waiting`, `anyway`); prices (`billing.price`, `billing.visit_fee`), Pay first,
+    Takes payment here with the float, the waiver reasons; the Cashier and Accountant roles (block ce); the Cashier setup and two that
+    tick billing on a clinic or a bench; the clinic's receipt numbers; the day in the clinic's time zone. Screens: Cashier (To pay ·
+    Paid today · Nothing to pay, the payment card and the receipt under the row, Give back…), Today (totals, the drawer closed), Prices.
+  - **Demo**: billing's seed (the Cashier; GP and the Laboratory bill; the GP's visit fee, five lab prices, the lithium level At the
+    order; Mona Saad, cashier; Wael Shawky, accountant, everywhere) and day (Magdy owes, Hoda paid in cash, Waleed's line to price).
+    Seeds now run in a listed order (`supabase/config.toml`): billing's after the base's.
+  - **Tests**: `billing` (161 checks: declarations; prices and their refusals; charges as they stood, void, a later price, a department
+    not billing; payments and every refusal; who owes paged and searched; Pay first and …anyway; refunds any day; only ever added to;
+    the desk's scope; lines sent and handed; the drawer; the day; the read log and its merge; stores declared and refused; the row rule; Erase; Nothing
+    to pay; an untick; off); `boundary` checks every layer's schema; `demo` counts billing's patients and its Cashier. `npm run
+    test:billing` (10 groups).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

@@ -639,7 +639,7 @@ begin
          core.fhir_people(v_org, (select array_agg(distinct a) from unnest(v_authors) a)) || res;
   select string_agg((y ->> 'resourceType') || ': ' || pr, '; ') into v_bad from jsonb_array_elements(res || prov) y, unnest(core.fhir_problems(y)) pr;
   if v_bad is not null then perform core.refuse('fhir_invalid', v_bad); end if;
-  perform core.log_read(me, v_dept, p.id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('fhir', v_kind), withheld);
+  perform core.log_read(me, v_dept, p.id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason', jsonb_build_object('fhir', jsonb_build_array(v_kind)), withheld);
   if v_kind = 'ips' then
     -- the International Patient Summary: a document; sections by resource; an empty required section says so (§6.4 rule 10)
     sections := jsonb_build_array(

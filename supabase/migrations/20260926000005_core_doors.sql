@@ -455,9 +455,11 @@ end $$;
 
 -- ── a pack's own operation (spec §5.3, core.declare_op): for the user signed in, the pack on for the clinic and used by the
 -- department, the user holding the operation's action there; the pack's function gets the organization, department, user and
--- arguments, and answers or refuses ──
+-- arguments, and answers or refuses. One that returns patient ids (declared so) names each in its answer's patient_ids, and each is
+-- logged as a read like the reader's own, its purpose the request's (PATADMIN unless it says: a pack's own data, not the record);
+-- one that declares so and names none is refused, so nothing it returns goes unlogged (owner, 2026-10-08, F28) ──
 create function public.pack_op(p jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare me core.users := core.me(); v_org uuid := me.organization_id; o core.ops; v_dept uuid := (p ->> 'department_id')::uuid; r jsonb;
+declare me core.users := core.me(); v_org uuid := me.organization_id; o core.ops; v_dept uuid := (p ->> 'department_id')::uuid; r jsonb; v_who uuid;
 begin
   select * into o from core.ops x where x.key = p ->> 'op';
   if not found then perform core.refuse('unknown_op', p ->> 'op'); end if;
@@ -465,6 +467,13 @@ begin
   if v_dept is null or not core.department_uses(v_org, v_dept, o.layer) then perform core.refuse('not_used_here', o.layer); end if;
   if not core.may(me.id, o.action, v_dept) then perform core.refuse('not_allowed', o.action); end if;
   execute format('select %s($1, $2, $3, $4)', o.fn::oid::regproc) into r using v_org, v_dept, me.id, coalesce(p -> 'args', '{}'::jsonb);
+  if o.patients then
+    if jsonb_typeof(r -> 'patient_ids') is distinct from 'array' then perform core.refuse('patients_unnamed', o.key); end if;
+    for v_who in select distinct core.survivor(v_org, x::uuid) from jsonb_array_elements_text(r -> 'patient_ids') x loop
+      continue when v_who is null;
+      perform core.log_read(me, v_dept, v_who, coalesce(p ->> 'purpose', 'PATADMIN'), null, jsonb_build_object('ops', jsonb_build_array(o.key)), 0);
+    end loop;
+  end if;
   return r;
 end $$;
 
@@ -697,7 +706,7 @@ end $$;
 -- ── the two exceptions (§3.11): owned by core_eraser, the only role the permanence trigger lets through ──
 grant usage, create on schema core to core_eraser;   -- to own its two functions; CREATE is taken back below
 create function core.erase(p_org uuid, p_user uuid, p_patient uuid, p_reason text) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare fam uuid[] := core.family(p_org, p_patient); v_ids uuid[]; v_sets uuid[]; n bigint := 0; c bigint; d core.derived;
+declare fam uuid[] := core.family(p_org, p_patient); v_ids uuid[]; v_sets uuid[]; n bigint := 0; c bigint; d core.derived; st core.stores;
 begin
   select coalesce(array_agg(e.id), '{}'), coalesce(array_agg(distinct e.set_id), '{}') into v_ids, v_sets from core.entries e where e.organization_id = p_org and e.patient_id = any (fam);
   if exists (select 1 from core.entries e where e.organization_id = p_org and not (e.patient_id = any (fam)) and (e.refers_to = any (v_ids) or e.replaces = any (v_ids))) then
@@ -705,6 +714,16 @@ begin
   end if;
   for d in select * from core.derived loop
     execute format('delete from %s where organization_id = $1 and patient_id = any ($2)', d.relation) using p_org, fam;
+    get diagnostics c = row_count; n := n + c;
+  end loop;
+  -- a pack's own tables that hold the patient (core.declare_store): the rows go, or stay with the declared columns emptied (D17, D18)
+  for st in select * from core.stores order by key loop
+    if st.clear is null then
+      execute format('delete from %s where organization_id = $1 and patient_id = any ($2)', st.relation) using p_org, fam;
+    else
+      execute format('update %s set %s where organization_id = $1 and patient_id = any ($2)', st.relation,
+        (select string_agg(format('%I = null', x), ', ') from unnest(st.clear) x)) using p_org, fam;
+    end if;
     get diagnostics c = row_count; n := n + c;
   end loop;
   perform set_config('storage.allow_delete_query', 'true', true);   -- the rows; the stored bytes go with the Storage API's sweep
@@ -801,7 +820,7 @@ grant usage on schema extensions to core_eraser, base_role;
 grant select, delete on core.entries, core.sets, core.patients, core.patient_identifiers, core.patient_relations, core.patient_changes, core.merges,
   core.read_log, core.file_uses, core.stale, core.outbox, core.catch_ups, core.redactions to core_eraser;
 grant update on core.entries, core.patients to core_eraser;
-grant select on core.derived, core.types, core.layers, core.systems, core.codes, core.users, core.departments to core_eraser;
+grant select on core.derived, core.stores, core.types, core.layers, core.systems, core.codes, core.users, core.departments to core_eraser;
 grant insert on core.erasures, core.redactions to core_eraser;
 grant usage on schema storage to core_eraser;
 grant select, delete on storage.objects to core_eraser;

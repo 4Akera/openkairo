@@ -10,6 +10,8 @@
 -- include: supabase/demo/pharmacy.sql
 -- include: supabase/seeds/lis.sql
 -- include: supabase/demo/lis.sql
+-- include: supabase/seeds/billing.sql
+-- include: supabase/demo/billing.sql
 -- include: supabase/demo/journey/1-base.sql
 -- include: supabase/demo/journey/2-pharmacy.sql
 -- include: supabase/demo/journey/9-base.sql

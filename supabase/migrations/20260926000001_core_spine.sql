@@ -268,6 +268,9 @@ create table core.derived (
   refresh     regprocedure not null,
   action      text not null,
   reads       text[] not null default '{}',             -- what of a patient's identity it reads (age, sex): refreshed when that changes (§5.2)
+  -- false: the table never sends its rows' source entries, whoever asks (owner, 2026-10-08, F08: billing's charges); its rows are still
+  -- masked by them
+  entries     boolean not null default true,
   hashes      jsonb not null default '{}'
 );
 create table core.rules (
@@ -358,7 +361,18 @@ create table core.ops (
   layer       text not null references core.layers,
   fn          regprocedure not null,
   action      text not null references core.actions,
+  -- it returns patient ids (its answer's patient_ids): the core logs one read for each patient it returns (owner, 2026-10-08, F28)
+  patients    boolean not null default false,
   hashes      jsonb not null default '{}'
+);
+-- a pack's own table that holds a patient and is not rebuilt from entries (spec §3.11; owner, 2026-10-08, D17): Erase reaches it. clear
+-- null: the patient's rows go; else the row stays and these columns are emptied (billing's money keeps its amounts and receipt numbers
+-- and loses the patient link, D18)
+create table core.stores (
+  key         text primary key,
+  layer       text not null references core.layers,
+  relation    regclass not null,
+  clear       text[]
 );
 create table core.purposes (
   key         text primary key,

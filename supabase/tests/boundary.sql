@@ -33,16 +33,16 @@ select t.report('boundary', n.nspname || '.' || p.proname || ' names a derived t
 select t.ok(true, 'every function naming a derived table is registered, or the identity door');
 
 \echo '── grants: the API holds no table; only the doors are callable'
-select t.ok(not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('core', 'base', 'pharmacy') and c.relkind in ('r', 'v', 'm')
-  and (has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE') or has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))), 'authenticated and anon hold no table in core, base or a pack');
+select t.ok(not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in (select schema_name from core.layers) and c.relkind in ('r', 'v', 'm')
+  and (has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE') or has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))), 'authenticated and anon hold no table in core, base or any pack: ' || (select string_agg(schema_name, ', ' order by schema_name) from core.layers));
 select t.ok(coalesce(string_agg(p.proname, ', ' order by p.proname), '') = 'choose_user, create_organization, erase_patient, merge_patients, my_users, pack_op, read, redact, remove, retry_pack, save, save_patient, setup, write, write_setting',
   'the public doors: ' || coalesce(string_agg(p.proname, ', ' order by p.proname), '')) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
 select t.ok(coalesce(string_agg(p.proname, ', ' order by p.proname), '') = 'may_listen, may_read_file, may_upload_file', 'core functions the API may call: ' || coalesce(string_agg(p.proname, ', ' order by p.proname), ''))
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'core' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
-select t.ok(not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('base', 'pharmacy') and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  'no base or pack function is callable from the API');
-select t.ok(not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('core', 'base', 'pharmacy', 'public') and p.prokind = 'f'
+select t.ok(not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in (select schema_name from core.layers where key <> 'core') and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
+  'no base or pack function is callable from the API (every layer''s schema)');
+select t.ok(not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in (select schema_name from core.layers union select 'public') and p.prokind = 'f'
   and p.prosecdef and not coalesce(p.proconfig @> array['search_path=""'], false)), 'every definer function pins search_path empty');
 
 \echo '── only the owners write derived tables (the eraser deletes); the spine is written by the writer only'
