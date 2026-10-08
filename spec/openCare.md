@@ -607,7 +607,7 @@ it works ("/x is used in: …").
   built from the kit (`@core/ui`) and the tokens only (`opencare/tokens-only`, §4.6 Design system), so it reads natively in both
   themes; a record block of its own type goes through `registerRenderer(type, { Block })`, drawn inside the chart's shell. A colour
   the tokens lack is asked for in core, never invented in the pack.
-- **No new packs until the owner says so.** Pharmacy is the one pack, ported as the proof.
+- **No new packs until the owner says so.** The packs he asked for: pharmacy and laboratory (§5.3), and billing (§5.4, to build).
 
 ### 5.1 How a pack shows up (decided with the owner, one rule at a time, from 2026-10-04)
 - **Rule 1 · on per department.** Two switches: the clinic turns a pack on (`organization.packs_used`), then each department ticks
@@ -959,8 +959,8 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   a share for the rest); a critical value's notice (tell the doctor who asked; a walk-in, the patient or the doctor who asked), then
   Release writes each test whose fields are all there as a final result. 19 more LOINC codes in the base's list (the panels, urea,
   eGFR 2021, troponin, the serology). The demo: Rania and Osama, each with an earlier result, collected this morning.
-- **Large lab (separate switches in the laboratory's settings, all off for a small lab):** sample labels (printed barcodes — waits
-  for printing, whose first use is these labels), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
+- **Large lab (separate switches in the laboratory's settings, all off for a small lab):** sample labels (printed barcodes; printing
+  is approved, these labels first, §5.4 *Printing*), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
   list, patients called by number), results from analysers (a small outside program, as the network is closed to packs), release
   normal results by themselves (no flag, no big change, the analyser content), a second person checks, turnaround targets per section.
   *Built 2026-10-07 (piece 6):* one card on the laboratory's page, `lis.large` (all off by default). *Turnaround targets* (minutes per
@@ -985,6 +985,196 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   which orders each number went to; the rejected step carries its number); before, each screen drew its own, so the tubes could carry
   one number and the record another. Receive says why a number finds nothing (never given; given to whom and not marked Collected
   yet; saved under another number, via `lis.sample_of`) and receives by hand a tube with no number or one that will not scan.
+
+### 5.4 Billing (the owner's decisions, 2026-10-07 and 2026-10-08; all to build)
+The owner asked for billing on 2026-10-07 ("let make billing next"), approved its pictures that day and decided the rest in chat; on
+2026-10-08 he answered the audit of that day's build (D1–D36, F08, F28) and had this branch rewound to before it, so nothing of
+billing is built here. This section holds only his decisions, each with its date: "owner" means his own words or a picture he
+approved, nothing else. Every item is **to build**; the change that builds one replaces its mark with "built" and the date. What this
+section does not say is not decided: a build that needs a core or base function, table, column, registry option or extension point
+not listed under *Core and base changes the owner approved* stops and asks the owner first (owner, 2026-10-08). The pictures as he
+approved them are at commit `687d535` (branch `billing-sonnet-2026-10-08`, `src/pictures/billing.tsx`: bill-list, bill-pay,
+bill-receipt, bill-held, bill-settings, bill-today; `src/pictures/later.tsx`: rx-payfirst, hold-doctor, ins-setup, ins-pay,
+ins-approval, ins-claims, print-label, print-receipt); they are described here in words and are not on this branch.
+
+- **The rules** (owner, 2026-10-07):
+  - Money never reaches the record or the chart. The chart keeps what was ordered and given; billing keeps its own tables. Only words
+    reach the chart (a hold's word), never an amount, a price, a number or an insurer's decision (hold-doctor). *To build.*
+  - A department that does not use billing (§5.1 rule 1) sees no money word: no price, no fee, no charge, no Pay button and no hold
+    word, not even on an order it sent to a department that uses billing. *To build.*
+  - A card folds out under its row, never a pop-up, a menu or anything over the record (the standing rule, 2026-09-24; bill-pay).
+    *To build.*
+  - The original money data (payments, refunds, drawer closings, claim lines and their marks) is only ever added to; a mistake is a
+    new row with its reason; a closed drawer and a claim line are never edited (bill-today, ins-claims). Erase is the one exception
+    (below). *To build.*
+  - Billing is a pack like any other (§5): it names no other pack's types, tables, settings or ids, holds no privilege on core tables,
+    hears what others give only through the chargeables door (below), and brings its own demo (§5.1 rule 9). *To build.*
+- **What is charged** (owner, 2026-10-07): a department's **visit fee**, once the patient is seen there (bill-settings); each
+  ordered **service** that has a price, charged to the department that performs it; each **medicine** on a prescription, at its
+  product's price (*Medicines*, below). Without a price a thing is free and never held (bill-settings, rx-payfirst). A price belongs to
+  the thing that owns it (a service, a department's visit fee, a product) and is copied into the charge as it stood when ordered; a
+  later price is for later orders. *To build.*
+- **Where prices live:**
+  - Services: billing's own page, **Billing → Prices**, separate from Settings → Services (owner, 2026-10-08, D27; the bill-settings
+    picture had a Price column inside Settings → Services, which would need a base door). *To build.*
+  - The visit fee and **Pay first**, per department, in the pack's table *Each department* (Settings → Packs → Billing; bill-settings,
+    owner, 2026-10-07), and on the department's own card like every per-department setting (§5.1 rule 7). *To build.*
+  - Medicines: a price on each product in the pharmacy's own list, per box, and per strip where it is sold in strips; it needs no
+    *Keep stock* (bill-settings, rx-payfirst, owner, 2026-10-07). The pharmacy shows prices only where the department uses a pack that
+    declares that it charges, and names no such pack (owner, 2026-10-08, D8). *To build.*
+  - The reasons a charge may be waived (Staff, Charity, Follow-up within 7 days): the clinic's own list on the pack's page
+    (bill-settings, owner, 2026-10-07); a discount takes its reason from that list only, never free text (owner, 2026-10-08, D35).
+    *To build.*
+- **A service priced at the order** (the feature: owner, 2026-10-07, "make 2, 3"; how it is kept: owner, 2026-10-08): the price list
+  may say *at the order* for a service. The order card then shows a **Price** box for it only where both the ordering and the
+  performing department use billing (D2), and Done waits for a price above nothing and no more than 10,000,000 (D33). The price is
+  billing's, never the record's: billing's own action saves it just before Done in billing's own insert-only table (the order, the
+  price, who, when), keyed by the order's id made on screen; never in the order, the record or a pack's `details` (D1). Where the box
+  does not show, the order goes unpriced and the cashier types its price at payment, inline on the payment card (D2). *To build.*
+- **Charges** (owner, 2026-10-08): billing's charges come from entries and settings only, as every derived table does (§3.8); what is
+  paid, owed and waived, and the insurer's share, are worked out when read, from billing's own original tables (D12, which settles
+  D25); no core door lets a pack have its own tables worked out again. The charges table sends no record entries with its rows (F08).
+  A charge is paid once, wherever it is taken (owner, 2026-10-07). Billing locks per charge, always in the same order, inside its own
+  data, and no core door to lock a patient is added for it (D13). *To build.*
+- **Medicines** (owner, 2026-10-07):
+  - **When a medicine is charged:** where the dispensing department has Pay first on, when the doctor sends it, priced as sent, and
+    held until paid; otherwise when it is given, priced on what was actually given (the product handed over, as much as was handed
+    over). The approved rx-payfirst picture said "charged when it is given"; the owner's decision the same day stands over it (owner,
+    2026-10-08, D32). *To build.*
+  - A paid medicine charge may grow to what was actually given: the difference shows as owed and the cashier takes it as usual (owner,
+    2026-10-08, D24). *To build.*
+  - The pharmacy tells billing what a prescription is worth through the chargeables door; billing names no pharmacy type or table.
+    *To build.*
+  - At the cashier one department's medicines for a patient are one line, "Medicines · Augmentin 1 g, Cidophage 500, Nexium 40", with
+    the sum, and the receipt prints "Medicines (3)" (bill-pay, bill-receipt, rx-payfirst; owner, 2026-10-08, D10). *To build.*
+  - Everything a pack reports as given is charged and printed as a medicine, for now; only the pharmacy gives (owner, 2026-10-08, D31;
+    *Later*, below). *To build.*
+- **Taking payment** (owner, 2026-10-07):
+  - Any department may switch on **Takes payment here**: its own charges (the lab takes the lab's), or everyone's (the main cashier). One
+    money table; each person closes their own drawer; the clinic's totals add every drawer's. *To build.*
+  - **The main cashier** is a department made from billing's own starter setup, Cashier (its tabs Cashier and Today); a reception may
+    tick the same switch instead. It has no check-in screen and its people check nobody in (owner, 2026-10-08, D36). *To build.*
+  - **The cashier's list** (bill-list): views *To pay* · *Paid today* · *Nothing to pay*; search by record number or name, or scan a
+    card. One row a patient who owes: who, what for ("Visit · 2 tests · 3 medicines"), where someone already waits ("Laboratory is
+    waiting", in warn) and the amount, the sum of the lines, so nobody adds anything up. A patient appears once something priced was
+    ordered, prescribed or seen; a walk-in the pharmacy started appears too. *To build.*
+  - **The payment card** (bill-pay) folds out under the row: each line ticked, with where and when it came from ("Laboratory ·
+    ordered 10:24"); a line unticked is left for later, since only what is ticked is paid and only that is released; *Add a discount*
+    (D) with a reason from the list; Cash (received, change) or Card; one key takes it (↵). *To build.*
+  - **Pay on a row** (owner, 2026-10-07, "make 2, 3"): a small **Pay** button among a row's actions on the base bench, the clinic
+    queue, the pharmacy's Dispensing and the laboratory's Collect, for a patient who owes what this desk takes; none where the
+    department does not take payment, nor for a role that may not. It folds the cashier's own card out under the row. *To build.*
+  - **The receipt** (bill-receipt) is shown and kept: the clinic, the clinic's receipt number (R-00412), the date and time, the patient
+    and record number, the lines, the total, the cash received and the change, who took it. The departments waiting see it is paid;
+    nothing else changes in the chart. *To build.*
+  - **A refund** is a payment of its own, naming the receipt it undoes, with its reason, and prints its own slip (print-receipt,
+    ins-claims). *To build.*
+  - **Today** (bill-today): *Taken today* (and the receipts), *Cash* (in the drawer, with the float), *Card*, *Waived* (the charges and
+    their reasons); a row per cashier (receipts, cash, card, waived); **Close the drawer**: the float plus the cash taken is what is
+    expected, counted against what is there, a difference needs its reason, and the closing is a new row, never edited. *To build.*
+- **Pay first** (owner, 2026-10-07; bill-held, rx-payfirst, hold-doctor):
+  - Off by default: pay after, at the cashier at the end of the visit. Switched on, a department's priced orders are held at once,
+    decided in the same save as the order (owner, 2026-10-08, D26), and released the moment the cashier takes the payment; nobody
+    releases by hand. *To build.*
+  - The word: **"Waiting for payment · Cashier"** on the held order in the ordering doctor's chart (hold-doctor) and on the performing
+    department's row; a view per reason named by its word, with its count (*Waiting for payment*; owner, 2026-10-08, D9). When it is
+    paid the word goes. Marking it urgent never skips the hold. *To build.*
+  - **Per order** (owner, 2026-10-08, D6; "Build now no pics"): the normal buttons act on the orders not held; the *…anyway* card adds
+    the held ones, with a reason for them only; a stop (couldn't collect) is never held; a row opens with one free order; a collection
+    chair calls a patient with one free test; a patient with free and held tests is in *To collect* for the free ones and in *Waiting
+    for payment* for the held. *To build.*
+  - **Give anyway… / Collect anyway…** with a one-line reason: an emergency, or a patient who will pay after, so care is never blocked
+    (bill-held). The reason is kept only with the hold; the chart says only "Given though it was held" (owner, 2026-10-08, D5). It is a
+    right of its own, held by the laboratory technician, the pharmacist and the owner (D21); a doctor of the performing department may
+    answer a held consult or report anyway, with a reason, and the page that answers consults and reports behaves like the other
+    lists: the word, no Release on a held order, an inline *Answer anyway…* card (D4). The base bench gives anyway as Collect and
+    Dispensing do (D7). *To build.*
+  - A hold counts only where its pack is used in the department whose work waits. A setting change (billing unticked, Pay first off)
+    may lift holds; each lift is recorded on the hold as *lifted by a setting*, with who and when (owner, 2026-10-08, D3). A setting
+    change reaches billing after the save, through the background listener queue; nothing of a pack runs inside a settings save (D11).
+    *To build.*
+- **Insurance** (owner, 2026-10-07; ins-setup, ins-pay, ins-approval, ins-claims, hold-doctor):
+  - **Insurers** on the pack's page (Settings → Packs → Billing → Insurance): what the patient pays, **a share or a flat amount** (20%,
+    10 EGP flat, 0%); the insurer's own price list beside Cash, where a service it does not price falls back to Cash; and the services
+    it approves first, per service and insurer. A patient has one insurer on file, or none (cash). *To build.*
+  - **Paying with an insurer**: the insurer as a mark on the cashier's row; the card shows each line's price, what the insurer pays and
+    what the patient pays, with the totals; only the patient's share is taken; the insurer's share is the insurer's debt, a line of its
+    claim, never a payment; the receipt says both. *To build.*
+  - **Approvals** hold the order the same way Pay first does, in the warning tone and naming the insurer: **"Waiting for approval ·
+    Misr Insurance"** (owner, 2026-10-08, D22). The Insurance desk is a department with the tabs Approvals and Claims; Approvals has *To
+    ask* · *Asked* · *Decided today*, a row each held order (the patient, the service, the insurer, the price, who asked), folding out
+    the insurer's approval number with **Approved** (releases the order at once), **Refused…** (asks the insurer's reason) and **Not
+    asked yet**. A refusal reaches the doctor in words only, "Not approved · Misr Insurance"; the number and the reason never reach the
+    chart. *To build.*
+  - **A refused approval lets the patient pay cash** (owner, 2026-10-07): the order is priced again from the Cash list and released
+    when paid, everywhere, whether or not Pay first is on (owner, 2026-10-08, D23). *To build.*
+  - **The claim sheet**: one per insurer a month, line by line (the date, the patient, the service, the approval number, what the
+    insurer owes) with the count and the total; **Mark sent** and **Mark paid…**; a line is never edited, a mistake is a credit line in
+    the next sheet with its reason, like a refund; **Print the sheet** (A4). After an Erase it still prints, the line reading *erased
+    patient* (owner, 2026-10-08, D28). *To build.*
+- **Erase** (owner, 2026-10-08): Erase reaches the tables a pack declares (D17). Billing's money rows (payments, their lines, claim
+  lines) keep their amounts and receipt numbers and lose the patient link and the approval number (D18); its other rows of the patient
+  go (the insurer on file, the insurer's answers). *To build.*
+- **Printing** (owner, 2026-10-07, with the print-label and print-receipt pictures):
+  - Through the browser's own print dialog, its printer chosen there once per computer; no driver of ours. Print is always a person's
+    button (its key **P** where the screen shows one), never automatic; *Print again* is a reprint, never a new number. Specimen labels
+    first, then the receipt; the claim sheet prints on A4 (ins-claims). *To build.*
+  - **Specimen labels**, where the laboratory prints them (*Sample labels*, a Large lab switch, §5.3): at Collected, "Collected · 3
+    tubes · labels ready", **Print 3 labels** (P), *Print again*. One label a tube, no bigger than 50 × 25 mm: the patient's name, age
+    and sex, the record number, the date and time, the tube's word (never its colour alone), fasting where asked, and the sample number
+    with its barcode, which is what Scan to receive reads. Every tube of a sample carries the sample's one number (owner, 2026-10-08,
+    D34). *To build.*
+  - **The receipt** prints as it is shown and kept, at a thermal roll's width, saying nothing the screen did not; **Print receipt** (P)
+    and *Print again*; every later copy is marked "Reprint" with its time; a refund prints its own slip naming the receipt it undoes.
+    *To build.*
+- **Not to be built** until the owner asks again: the laboratory's critical-call log (its picture, lab-call, was left out: owner,
+  2026-10-07, "leave number 5"); a critical value stays a notice (§5.3).
+- **The order of work** (owner, 2026-10-07): the billing pack (charges, payments, the cashier, Pay on a row, the price at the order),
+  then the two core doors, medicines and Pay first, insurance, printing.
+- **Known gaps** are listed as open defects, never written as normal behaviour (owner, 2026-10-08, D33).
+- **Later** (owner, 2026-10-08): the base declares which of its types are work on an order and which statuses are stops, and the
+  core's hold check reads that instead of naming them; until then the core's hold check names the base's words (D29). A second pack
+  that gives (radiology) needs its own word, insurer prices and approvals, and the charge then keeps the pack (D31).
+
+#### Core and base changes the owner approved
+Nothing else in core or base changes for billing. Each is **to build**, in the core's own files, never a pack's (owner, 2026-10-08,
+D30).
+1. **The holds door** (approved in principle, owner, 2026-10-07: a pack may hold a department's work on an order and release it, with
+   words only). With the owner's choices of 2026-10-08: a hold counts only where its pack is used in the department whose work waits
+   (D3); only the pack's own work places and releases its holds (D15); a pack may ask which of its own holds still wait (words and
+   a department, never an amount), and holds stay right when two people act at once (D14); the writer refuses the performing
+   department's work on a held order (its steps, handing over, results and reports), never a stop or an entry only about the order
+   (D4, D6); the holds read gives words only and is logged only when it finds a hold (D20); held work per order on every list, the
+   base bench and the chart's order card (D6, D7), with a view per reason named by its word (D9); the reason for going ahead is kept
+   only with the hold (D5). *To build.*
+2. **The chargeables door** (approved in principle, owner, 2026-10-07: a pack says "this was given, worth N" through the core, and a
+   pack that charges hears it without naming the giver). It tells what was asked for and its worth then, and, once given, what was
+   given and its worth then, so the charge timing above can be kept. With the owner's choices of 2026-10-08: it reaches an order the
+   giving pack answers and the types its worth depends on (a prescription's medicine); a pack that gives, turned on or off, has those
+   that hear it catch up (D16). *To build.*
+3. **The settings-change listener** (D11): a pack's listener may name setting keys, and a change reaches it after the save through the
+   background listener queue; nothing of a pack runs inside the save. *To build.*
+4. **A pack declares that it charges** (D8), in its own declaration; read `me` carries each department's packs with what they declare.
+   *To build.*
+5. **Erase reaches the tables a pack declares** (D17), with the cut of the money rows above (D18). *To build.*
+6. **The same-save hold decision** (D26): a pack's hold on a new order is decided in the save that writes the order, so an order is
+   never unheld for a moment. *To build.*
+7. **A hold's short name and tone** (D22): beside its reason's word, a short name its pack supplies (never an amount, a price or a
+   number) and a tone. *To build.*
+8. **The lift-by-setting record** (D3): a hold a setting change lifts is closed as *lifted by a setting*, with who and when. *To
+   build.*
+9. **"Sends no record entries"**, a flag of `core.declare_table` (F08): a table so declared never sends its rows' source entries,
+   whoever asks; billing's charges table is declared so. *To build.*
+10. **Read-logging pack actions** (F28): a pack operation that returns patient ids declares so, and the core writes one read-log row
+    per patient it returns; reads merged into one row of the ten minutes lose none of what each read (D19). *To build.*
+11. **The override right** (D21, D4): going ahead on held work is a right of its own, held by the laboratory technician, the
+    pharmacist and the owner; a doctor of the performing department may answer a held consult or report anyway, with a reason. *To
+    build.*
+12. **Two client extension points** (approved with the billing pictures, owner, 2026-10-07; D1, 2026-10-08): a pack the department
+    uses may put one small button of its own among a row's actions (billing's Pay) and fold its own card out under the row; and a
+    pack both departments use may add one field to the order card, whose value never enters the entry or the record. *To build.*
+13. **A small core client print facility** (printing approved, owner, 2026-10-07): the browser's own print dialog at a paper's size (a
+    label, a receipt roll, an A4 sheet), printing what a pack hands it, which is what its screen shows. *To build.*
 
 ---
 
