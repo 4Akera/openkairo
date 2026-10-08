@@ -12,13 +12,13 @@ import { purposeFor, useRequestQueue } from '@core/hooks/reads'
 import { refresh } from '@core/hooks/writes'
 import { newId, oneSet } from '@core/db/entries'
 import { read, write, type EntryIn } from '@core/db/rpc'
-import type { RequestQueueRow, ServerEntry, ServerRecord } from '@core/db/types'
+import type { RequestQueueRow, ServerEntry, ServerRecord, TableRead } from '@core/db/types'
 import type { ScreenProps } from '@core/screens/registry'
 import { ageSex, matches } from '@core/screens/bench/shared'
 import { isWalkIn } from '@core/screens/bench/walkins'
 import { Button, Callout, Card, Chip, Empty, Input, Kbd, ListSection, ScreenFrame, Spinner, Tag, Textarea, cn, errorText, hm, minutesSince, shortDate, ymd, type ScreenView } from '@core/ui'
-import { KINDS } from './exams'
-import { useWords } from './requests'
+import { KINDS, samePart } from './exams'
+import { useWords, type RequestWords } from './requests'
 import { templateOf, templatesFor } from './templates'
 import { reportOf } from './reports'
 
@@ -34,8 +34,10 @@ export function Report({ dept }: ScreenProps) {
   const q = useRequestQueue(dept.id); const { org } = useDepartment(); const qc = useQueryClient()
   const [view, setView] = useState<View>('todo'); const [kind, setKind] = useState<string | null>(null); const [find, setFind] = useState('')
   const [at, setAt] = useState<string | null>(null); const [said, setSaid] = useState<string | null>(null); const [n, setN] = useState(0)
+  // signed here: gone from To report at once, before the list reads again (a second ⌘↵ never signs it twice)
+  const [signedHere, setSignedHere] = useState<string[]>([])
   const f = find.trim().toLowerCase(); const today = ymd(new Date().toISOString())
-  const waiting = useMemo(() => (q.data?.requests ?? []).filter(toReport).sort((a, b) => rank(a) - rank(b) || (a.order.last_at ?? '').localeCompare(b.order.last_at ?? '')), [q.data])
+  const waiting = useMemo(() => (q.data?.requests ?? []).filter((r) => toReport(r) && !signedHere.includes(r.item)).sort((a, b) => rank(a) - rank(b) || (a.order.last_at ?? '').localeCompare(b.order.last_at ?? '')), [q.data, signedHere])
   const drafts = waiting.filter((r) => load(r.item)); void n
   const signed = (q.data?.recent ?? []).filter((r) => r.reply && r.order.answered_at && ymd(r.order.answered_at) === today)
   const lists: Record<View, RequestQueueRow[]> = { todo: waiting, drafts, done: signed }
@@ -73,30 +75,45 @@ export function Report({ dept }: ScreenProps) {
                 {w?.portable && <Tag>portable</Tag>}<span className="truncate">{r.service_name}</span>{w?.side && <span className={SIDE}>{w.side}</span>}</span>
             </button></li> })}
         </ul></Card>
-        {current && <ReportCard key={current.item} r={current} deptId={dept.id} side={words.data?.get(current.item)?.side}
-          onKept={() => setN((x) => x + 1)} onSigned={(x) => { setSaid(x); setAt(null); refresh(qc) }} templates={templatesFor((org?.templates ?? []).filter((t) => t.department_id === dept.id), current.section_name)} />}
+        {current && <ReportCard key={current.item} r={current} deptId={dept.id} side={words.data?.get(current.item)?.side} sideKnown={words.isSuccess && !words.isPlaceholderData}
+          onKept={() => setN((x) => x + 1)} onSigned={(x) => { setSaid(x); setSignedHere((v) => [...v, current.item]); setAt(null); refresh(qc) }} templates={templatesFor((org?.templates ?? []).filter((t) => t.department_id === dept.id), current.section_name)} />}
       </div>}
   </ScreenFrame>
 }
 const rank = (r: RequestQueueRow) => r.request?.priority === 'stat' ? 0 : r.request?.priority === 'urgent' ? 1 : 2
 
-/** the patient's last report of the same kind here, before this one: its exam, date, who signed it and its impression */
-function usePrior(r: RequestQueueRow, deptId: string) {
+/** the patient's last report of the same part of the body, of any kind (a CT abdomen beside an ultrasound of the abdomen), before this
+ *  one: its exam, date and impression. Read from the departments that report radiology (so a long run of lab results never pushes it
+ *  out); never a report crossed out, nor one the reader may not see, nor one of the other side (a left knee is not compared with a right) */
+function usePrior(r: RequestQueueRow, deptId: string, side: string | undefined, sideKnown: boolean) {
   const { org } = useDepartment()
-  return useQuery({ queryKey: ['radiology.prior', r.patient.id, r.item], staleTime: 60_000,
+  const radiology = (org?.departments ?? []).filter((d) => d.packs.includes('radiology')).map((d) => d.id)
+  // only once this order's side is read (else a report of the other side could show for a moment)
+  return useQuery({ queryKey: ['radiology.prior', r.patient.id, r.item, side], staleTime: 60_000, enabled: sideKnown,
     queryFn: async () => {
-      const page = await read<ServerRecord>({ shape: 'record', patient_id: r.patient.id, department_id: deptId, include: [], types: ['result'], departments: [deptId], limit: 30, ...purposeFor(r.patient.id) })
-      const kindOf = (e: ServerEntry) => org?.services.find((s) => s.id === (e.data?.service as { id?: string } | undefined)?.id)?.section_name
-      const prior = page.entries.filter((e) => !e.hidden && e.refers_to !== r.order.latest_entry && kindOf(e) === r.section_name).sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))[0]
+      const page = await read<ServerRecord>({ shape: 'record', patient_id: r.patient.id, department_id: deptId, include: [], types: ['result', 'crossed_out'],
+        departments: radiology.length ? radiology : [deptId], limit: 100, ...purposeFor(r.patient.id) })
+      const serviceOf = (e: ServerEntry) => org?.services.find((s) => s.id === (e.data?.service as { id?: string } | undefined)?.id)
+      const crossed = new Set(page.entries.filter((e) => e.type === 'crossed_out').map((e) => e.item))
+      const latest = new Map<string, ServerEntry>()
+      for (const e of page.entries) if ((latest.get(e.item)?.item_version ?? 0) < e.item_version) latest.set(e.item, e)
+      const candidates = [...latest.values()].filter((e) => e.type === 'result' && !crossed.has(e.item) && !e.hidden && !e.redacted && e.refers_to !== r.order.latest_entry
+        && !!serviceOf(e) && radiology.includes(serviceOf(e)!.department_id ?? '') && samePart(serviceOf(e)!.name, r.service_name ?? ''))
+        .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+      // the side each was of: radiology's words on its order (an order's first version is its item)
+      const orders = candidates.map((e) => e.refers_to).filter((x): x is string => !!x)
+      const sides = side && side !== 'both' && orders.length ? new Map((await read<TableRead<RequestWords>>({ shape: 'table', table: 'radiology.requests', department_id: deptId,
+        where: { item: orders }, entries: false })).rows.map((w) => [w.item, w.side])) : new Map<string, string | undefined>()
+      const prior = candidates.find((e) => { const s = sides.get(e.refers_to ?? ''); return !s || s === 'both' || s === side })
       return prior ? { name: String((prior.data?.service as { name?: string } | undefined)?.name ?? 'Study'), at: prior.occurred_at, impression: reportOf(prior.data).impression } : null
     } })
 }
 
-function ReportCard({ r, deptId, side, templates, onKept, onSigned }: { r: RequestQueueRow; deptId: string; side?: string; templates: { id: string; name: string; lines: string[] }[]
+function ReportCard({ r, deptId, side, sideKnown, templates, onKept, onSigned }: { r: RequestQueueRow; deptId: string; side?: string; sideKnown: boolean; templates: { id: string; name: string; lines: string[] }[]
   onKept: () => void; onSigned: (said: string) => void }) {
   const [d, setD] = useState<Draft>(() => load(r.item) ?? { findings: '', impression: '' })
   const [critical, setCritical] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null)
-  const prior = usePrior(r, deptId); const { org } = useDepartment()
+  const prior = usePrior(r, deptId, side, sideKnown); const { org } = useDepartment()
   useEffect(() => { const t = setTimeout(() => { keep(r.item, d); onKept() }, 400); return () => clearTimeout(t) }, [d, r.item]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }))
   const walk = isWalkIn(r.order, org?.allDepartments ?? [])
@@ -113,7 +130,7 @@ function ReportCard({ r, deptId, side, templates, onKept, onSigned }: { r: Reque
         analytes: [{ key: 'impression', name: 'Impression', code: { system: 'loinc', code: '19005-8', display: 'Impression' }, text: d.impression.trim(), ...(critical ? { interpretation: 'AA' } : {}) },
           ...(findings ? [{ key: 'findings', name: 'Findings', code: { system: 'loinc', code: '18782-3', display: 'Findings' }, text: findings }] : [])] } } as EntryIn
     try { await write(oneSet([e])); keep(r.item, null); onSigned(`${name} · ${r.service_name}: signed${critical ? ' · critical, on the doctor\'s To review now' : ''}`) }
-    catch (x) { setError(errorText(x)) } finally { setBusy(false) }
+    catch (x) { setError(errorText(x)); setBusy(false) }
   }
   return <Card className="grid content-start gap-3 p-4" onKeyDown={(k) => { if (k.key === 'Enter' && (k.metaKey || k.ctrlKey)) { k.preventDefault(); void sign() } }}>
     <div className="grid gap-0.5">

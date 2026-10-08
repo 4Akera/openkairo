@@ -10,11 +10,12 @@ import type { Service } from '@core/db/types'
 import { Button, Callout, Chip, Input, Kbd, errorText } from '@core/ui'
 import { KINDS, examOf, packOrder } from './exams'
 import { MOST_ASKED, examsIn } from './walkin'
+import { contrastOf } from './line'
 
 export function ExamStep({ bench, busy, error, onStart, note }: WhatForProps) {
   const { org } = useDepartment(); const offered = benchOffers(org, bench.id)
   const [line, setLine] = useState('/xr '); const [ticked, setTicked] = useState<string[]>([]); const [asked, setAsked] = useState<string | null>(null)
-  const typed = examsIn(line, offered)
+  const typed = examsIn(line, offered, (s) => examOf(org, s).contrast || contrastOf(s))
   const chosen = [...typed.found, ...offered.filter((s) => ticked.includes(s.id) && !typed.found.includes(s))]
   const most = MOST_ASKED.map((c) => offered.find((s) => s.code === c)).filter((s): s is Service => !!s)
   const preps = chosen.map((s) => ({ s, e: examOf(org, s) })).filter((x) => x.e.prep)
@@ -25,6 +26,8 @@ export function ExamStep({ bench, busy, error, onStart, note }: WhatForProps) {
     <Input autoFocus value={line} onChange={(e) => setLine(e.target.value)} aria-label="The exams, as the doctor would type them" className="font-mono" />
     <p className="text-12 text-faint">{word} and the exam · left right both · +c · portable · report · urgent stat</p>
     {typed.unknown.length > 0 && <p className="text-12 text-warn">Not one exam here: {typed.unknown.join(', ')}</p>}
+    {typed.fits.map((x) => <p key={x.word} className="text-12 text-warn">“{x.word}” fits {x.names.length}: {x.names.join(', ')} — type more of it, or tick one below</p>)}
+    {typed.said.question && <p className="text-12 text-warn">Not kept on a walk-in: the question after “?”.</p>}
     <div className="flex flex-wrap items-center gap-1.5"><span className="text-12 text-faint">Asked for most:</span>
       {most.map((s) => { const on = chosen.includes(s)
         return <Chip key={s.id} variant="check" on={on} onClick={() => typed.found.includes(s) ? undefined : setTicked((x) => on ? x.filter((y) => y !== s.id) : [...x, s.id])}>{s.name}</Chip> })}</div>

@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 import { ordersFrom, registerCommand } from '@core/screens/visit/commands'
 import type { Ctx, Parsed, Result } from '@core/screens/visit/parse'
-import { examsFor, packOrder, wordsOf, type Kind } from './exams'
+import { contrastMissed, examsFor, packOrder, wordsOf, type Kind } from './exams'
 
 type Svc = Ctx['services'][number]
 /** with contrast: two exams, the one with contrast named so (the starter's "CT brain with contrast") */
@@ -27,6 +27,9 @@ export function parseKind(kind: Kind, rest: string, ctx: Ctx): Result {
   const out: Parsed[] = []; const missing: string[] = []
   for (const seg of said.exams) {
     const hits = examsFor(seg, pool, contrastOf, said.contrast)
+    if (contrastMissed(hits, contrastOf, said.contrast)) return { error: said.contrast === 'both' ? 'Say +c (with contrast) or −c (without): each is its own exam here'
+      : said.contrast === 'without' ? `${hits.length === 1 ? hits[0].name : `“${seg}”`} is with contrast here: type it without −c, or choose another`
+      : `${hits.length === 1 ? hits[0].name : `“${seg}”`} has no exam with contrast here: type it without +c, or choose another` }
     if (hits.length === 1) out.push({ function: 'order', kind: 'request', params: { service_id: hits[0].id, ...extra }, line: `${hits[0].name}${tail ? ` · ${tail}` : ''} → ${where(hits[0])}` })
     else if (hits.length > 1) out.push({ function: 'order', kind: 'request', params: { choices: hits.map((s) => s.id), word: seg, ...extra }, line: `“${seg}”: ${hits.length} fit — choose one` })
     else missing.push(seg)

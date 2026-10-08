@@ -99,7 +99,9 @@ export function useToReview(departmentId: string | null = null, enabled = true) 
       const mine = await table<ReviewRow>('base.review', at!, { for_user: org!.me.id })
       // an order done with no report (spec §5.5 (c)): its row names the exam, from the order, for the doctor's own reading
       const unread = mine.rows.filter((r) => r.why === 'no_answer' && r.order_item).map((r) => r.order_item!)
-      const exams = new Map(unread.length ? (await table<OrderRow>('base.orders', at!, { item: unread }, { entries: false })).rows.map((o) => [o.item, o.service_name]) : [])
+      // (only a label: where the reader may not read the orders, or the read fails, the row keeps its own line; the list never fails for it)
+      const exams = new Map(unread.length && mayIn(org, 'read:bench', at) ? (await table<OrderRow>('base.orders', at!, { item: unread }, { entries: false })
+        .catch(() => ({ rows: [] as OrderRow[] }))).rows.map((o) => [o.item, o.service_name]) : [])
       return mine.rows.sort((a, b) => Number(b.critical) - Number(a.critical) || b.at.localeCompare(a.at)).map((r) => {
         const e = mine.entries[r.entry_id]; const c0 = card(e, org); const p = banner(mine.patients[r.patient_id])
         const c = r.why === 'no_answer' ? { ...c0, display_line: `${exams.get(r.order_item ?? '') ?? c0.display_line} · done, no report asked` } : c0

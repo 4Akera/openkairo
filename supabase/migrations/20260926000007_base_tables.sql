@@ -299,9 +299,13 @@ begin
         v_why := null; v_level := null;
         if b = 'step' then
           if l.data ->> 'status' in ('rejected', 'cancelled', 'failed') then v_why := 'rejected';
-          -- done with no answer to come (an X-ray nobody reports): the order's author reads it themselves (spec §5.5, core change (c))
-          elsif l.data ->> 'status' = 'completed' and (select coalesce(t.data -> 'service' ->> 'answer', (select s.data ->> 'answer' from core.settings_at(p_org, 'service') s
-                  where s.thing_id = (t.data -> 'service' ->> 'id')::uuid), 'result') from core.entries t where t.organization_id = p_org and t.id = f.refers_to) in ('result', 'note') then
+          -- done with no answer to come (an X-ray nobody reports): the order's author reads it themselves (spec §5.5, core change (c)). Only
+          -- the base's own step (a pack's step answering its own service, dispensing, is that answer), and the service as it stood when
+          -- ordered, retired since or not; a service not found raises nothing
+          elsif l.type = 'step' and l.data ->> 'status' = 'completed' and (select coalesce(t.data -> 'service' ->> 'answer',
+                  (select coalesce(z.s ->> 'answer', 'result') from (select core.setting_at(p_org, 'service', (t.data -> 'service' ->> 'id')::uuid, t.recorded_at) s) z
+                    where z.s is not null))
+                from core.entries t where t.organization_id = p_org and t.id = f.refers_to) in ('result', 'note') then
             v_why := 'no_answer';
           end if;
         elsif b in ('result', 'note') and (b = 'note' or coalesce(l.data ->> 'status', 'final') in ('final', 'corrected', 'amended', 'preliminary')) then

@@ -4,7 +4,7 @@
 // core's part (spec §5.5 (a)): an order and a walk-in carrying a pack's own type and words.   npm run test:radiology
 import assert from 'node:assert/strict'
 import { registerKinds } from '../src/packs/radiology/line'
-import { examIn, examsFor, filmOnly, packOrder, wordsOf } from '../src/packs/radiology/exams'
+import { examIn, examsFor, filmOnly, packOrder, samePart, wordsOf } from '../src/packs/radiology/exams'
 import { ckdEpi, factsOf } from '../src/packs/radiology/facts'
 import { templateOf, templatesFor } from '../src/packs/radiology/templates'
 import { examsIn } from '../src/packs/radiology/walkin'
@@ -33,6 +33,8 @@ test('a line\'s words: the side, contrast, portable, report, urgent or stat, ? t
   assert.deepEqual(wordsOf('knee left portable report, chest').words, { side: 'left', portable: true, report: true })
   assert.deepEqual(wordsOf('knee left portable report, chest').exams, ['knee', 'chest'])
   assert.equal(wordsOf('brain -c stat').contrast, 'without'); assert.equal(wordsOf('both knees').words.side, 'both')
+  assert.equal(wordsOf('brain with contrast').contrast, 'with', 'spelled out: +c'); assert.equal(wordsOf('abd pelvis without contrast').contrast, 'without')
+  assert.deepEqual(wordsOf('l spine').words, {}, 'a single l is no side: the lumbar spine'); assert.deepEqual(wordsOf('l spine').exams, ['l spine'])
 })
 test('which exams: by code, else every word the start of a word of the name; +c the one with contrast, nothing the one without', () => {
   const ct = RAD.filter((s) => s.section_name === 'CT')
@@ -43,6 +45,9 @@ test('which exams: by code, else every word the start of a word of the name; +c 
   assert.deepEqual(examsFor('ct brain', ct, contrastOf, null).map((s) => s.code), ['ctbrain'], 'the kind\'s own word typed')
   const xr = RAD.filter((s) => s.section_name === 'X-ray')
   assert.deepEqual(examsFor('spine', xr, contrastOf, null).map((s) => s.code), ['xrcspine', 'xrlspine'], 'two parts: asked, never guessed')
+  assert.deepEqual(examsFor('l spine', xr, contrastOf, null).map((s) => s.code), ['xrlspine'], 'l: the lumbar spine')
+  assert.deepEqual(examsFor('chest knee', xr, contrastOf, null), [], 'two exams typed without a comma: none, never the last word\'s')
+  assert.deepEqual(examsFor('xr chest', xr, contrastOf, null).map((s) => s.code), ['xrchest'], 'only the kind\'s own word is dropped')
   const us = RAD.filter((s) => s.section_name === 'Ultrasound')
   assert.deepEqual(examsFor('abd', us, contrastOf, null).map((s) => s.code), ['usabd'], 'every word of the abdomen typed, not of the abdomen & pelvis')
   assert.deepEqual(examsFor('abd pel', us, contrastOf, null).map((s) => s.code), ['usap'])
@@ -54,6 +59,16 @@ test('/ct /xr /us /mri: only their kind of Radiology\'s exams, with radiology\'s
   const [k] = ok('/xr knee left'); assert.deepEqual(k.params.as, { type: 'radiology.request', words: { side: 'left' } }); assert.equal(k.line, 'X-ray knee · left → Radiology')
   const [s] = ok('/xr spine'); assert.deepEqual(s.params.choices, ['xrcspine', 'xrlspine'])
   assert.match(err('/us brain'), /No Ultrasound exam “brain”/, 'a CT is not an ultrasound')
+  assert.equal(ok('/ct brain with contrast')[0].params.service_id, 'ctbrainc', '"with contrast" spelled out')
+  assert.match(err('/mri lumbar +c'), /has no exam with contrast here/, '+c is never dropped: one exam without contrast is refused')
+  assert.match(err('/us abd +c'), /has no exam with contrast here/, 'nor when several fit and none is with contrast')
+  assert.equal(ok('/ct brain contrast')[0].params.service_id, 'ctbrainc', '"contrast" alone is +c')
+  assert.match(err('/ct brain with and without contrast'), /Say \+c .* or −c/, '"with and without": asked, never guessed')
+  for (const x of ['with & without contrast', 'with/without contrast', 'with or without contrast', '± contrast', '+/- contrast', 'w/wo'])
+    assert.match(err(`/ct brain ${x}`), /Say \+c .* or −c/, `"${x}": asked`)
+  for (const x of ['-contrast', 'non-contrast', 'w/o contrast', 'without contrast']) assert.equal(ok(`/ct brain ${x}`)[0].params.service_id, 'ctbrain', `"${x}": without`)
+  assert.equal(ok('/ct brain +contrast')[0].params.service_id, 'ctbrainc', '"+contrast": with')
+  assert.equal(ok('/ct abd pelvis +c ? contrast allergy last year')[0].params.question_text, 'contrast allergy last year', 'the question\'s words stay its own')
   assert.match(err('/xr cbc'), /No X-ray exam/, 'the laboratory\'s is not Radiology\'s')
   assert.equal(ok('/mr lumbar')[0].params.service_id, 'mrlspine', '/mr is /mri')
   assert.ok(commandsFor(at()).some((x) => x.name === 'ct'))
@@ -78,6 +93,8 @@ test('the walk-in\'s line: the doctor\'s words among this bench\'s exams', () =>
   const a = examsIn('/us abd', offered); assert.deepEqual(a.found.map((s) => s.code), ['usabd'])
   const b = examsIn('/xr knee left', offered); assert.deepEqual(b.found.map((s) => s.code), ['xrknee']); assert.equal(b.said.words.side, 'left')
   assert.deepEqual(examsIn('/ct zzz', offered).unknown, ['zzz'])
+  assert.deepEqual(examsIn('/xr spine', offered).fits, [{ word: 'spine', names: ['X-ray cervical spine', 'X-ray lumbar spine'] }], 'fits two: said which')
+  assert.deepEqual(examsIn('/us abd +c', offered, (s) => s.code === 'usap').found.map((s) => s.code), ['usap'], 'with contrast as the department says, not by the name')
 })
 test('what an exam needs; film only: reported only when asked, and not asked', () => {
   const list = [{ code: 'xrchest', report: 'asked' as const }, { code: 'xrknee', side: true }, { code: 'ctapc', contrast: true, prep: 'Fasting 4 hours' }]
@@ -97,7 +114,13 @@ test('the facts before contrast: the latest eGFR, else worked out from creatinin
   const g = factsOf({ patient: { sex: 'male', age: 61 }, values: [{ key: 'egfr', code: null, value: 64, at: ago(2) }, { key: 'creat', code: null, value: 1.2, at: ago(5) }], medications: [], allergies: [], allergy_review: null }, null, now)
   assert.deepEqual(g.egfr, { value: 64, days: 2 }, 'a reported eGFR newer than the creatinine is taken as it is')
   assert.equal(g.mayBePregnant, false); assert.equal(g.allergiesAsked, false)
-  assert.equal(factsOf({ values: [{ key: 'egfr', code: null, value: 50, at: ago(200) }] }, null, now).egfr, null, 'older than 90 days: not shown as recent')
+  assert.equal(factsOf({ values: [{ key: 'egfr', code: null, value: 50, at: ago(40) }] }, null, now).egfr, null, 'older than 30 days: no recent eGFR (the picture)')
+  assert.equal(factsOf({ patient: { sex: 'male', age: 40 }, values: [{ key: 'creat', code: 'loinc:2160-0', value: 97, ucum: 'umol/L', at: ago(1) }] }, null, now).egfr?.value, 87,
+    'creatinine in µmol/L converted before CKD-EPI')
+  assert.equal(factsOf({ patient: { sex: 'male', age: 40 }, values: [{ key: 'creat', code: null, value: 1.1, ucum: 'mmol/L', at: ago(1) }] }, null, now).egfr, null, 'an unknown unit: no eGFR rather than a wrong one')
+  const met = (drug_name: string, drug_code: string | null = null) => factsOf({ medications: [{ drug_code, drug_name, status: 'active', dose_number: null, dose_unit: null, frequency: null }] }, null, now).metformin
+  assert.ok(met('Galvus Met 50/1000') && met('Janumet') && met('x', 'atc:A10BD07')); assert.equal(met('Synjardy XR', 'atc:A10BD19'), 'metformin', 'by its name')
+  assert.equal(met('Glyxambi', 'atc:A10BD19'), null, 'empagliflozin + linagliptin: no metformin')
   assert.equal(factsOf({}, { pregnancy: { entry_id: 'x', data: { status: 'current', pregnant: true }, words: 'Pregnant' } }, now).pregnancy, 'pregnant')
 })
 test('templates: the impression line is the impression, the rest the findings; this kind\'s first', () => {
@@ -105,5 +128,9 @@ test('templates: the impression line is the impression, the rest the findings; t
   const ts = [{ name: 'Normal chest X-ray' }, { name: 'Normal CT brain' }, { name: 'CT renal colic' }, { name: 'Normal US abdomen' }]
   assert.deepEqual(templatesFor(ts, 'CT').map((t) => t.name), ['Normal CT brain', 'CT renal colic'])
   assert.deepEqual(templatesFor(ts, 'MRI').length, 4, 'none of its kind: every one')
+})
+test('the study before: the same part of the body, of any kind', () => {
+  assert.ok(samePart('US abdomen', 'CT abdomen & pelvis with contrast')); assert.ok(samePart('X-ray lumbar spine', 'MRI lumbar spine'))
+  assert.ok(!samePart('CT brain', 'CT chest')); assert.ok(!samePart('X-ray cervical spine', 'MRI lumbar spine'), 'two spines are two parts')
 })
 console.log(`radiology: ${n} groups passed`)

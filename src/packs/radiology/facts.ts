@@ -11,23 +11,31 @@ export interface Facts {
   pregnancy: 'pregnant' | 'not' | null; mayBePregnant: boolean
 }
 const EGFR = new Set(['98979-8', '62238-1', '33914-3', '48642-3', '48643-1']); const CREAT = new Set(['2160-0', '38483-4'])
-const RECENT = 90   // days: an older value is not shown as recent
+const RECENT = 30   // days: an older eGFR or creatinine reads "no recent eGFR" (the approved picture)
 const daysAgo = (at: string, now: number) => Math.max(0, Math.floor((now - Date.parse(at)) / 86_400_000))
-const latest = (vals: Pick<ValueRow, 'key' | 'code' | 'value' | 'at'>[], keys: string[], codes: Set<string>, now: number) => {
+type Val = Pick<ValueRow, 'key' | 'code' | 'value' | 'at'> & Partial<Pick<ValueRow, 'ucum' | 'unit'>>
+const latest = (vals: Val[], keys: string[], codes: Set<string>, now: number) => {
   const v = vals.filter((x) => keys.includes(x.key) || (x.code && codes.has(x.code.replace(/^loinc:/, '')))).sort((a, b) => b.at.localeCompare(a.at))[0]
-  return v && daysAgo(v.at, now) <= RECENT ? { value: Number(v.value), days: daysAgo(v.at, now) } : null
+  return v && daysAgo(v.at, now) <= RECENT ? { value: Number(v.value), days: daysAgo(v.at, now), unit: (v.ucum ?? v.unit ?? null) } : null
 }
+/** creatinine in mg/dL, as CKD-EPI takes it: µmol/L converted, an unknown unit dropped (no eGFR rather than a wrong one) */
+const inMgDl = (c: { value: number; days: number; unit: string | null } | null) => !c ? null
+  : !c.unit || /^mg\/dl$/i.test(c.unit) ? { value: c.value, days: c.days }
+  : /^(umol|µmol)\/l$/i.test(c.unit) ? { value: Math.round(c.value / 88.42 * 100) / 100, days: c.days } : null
 const CONTRAST = /contrast|iodin|gadolin|omnipaque|ultravist|visipaque|iohexol|iopromide|iodixanol/i
-export const isMetformin = (m: Pick<Medication, 'drug_code' | 'drug_name'>) => /metformin|glucophage|cidophage/i.test(m.drug_name) || /^(atc:)?A10B(A02|D)/.test(m.drug_code ?? '')
+// metformin alone or in a combination, by name (brands sold in Egypt among them) or by ATC (A10BA02, and the A10BD combinations with it)
+const MET_NAME = /metformin|glucophage|cidophage|janumet|galvus\s*met|eucreas|xigduo|synjardy|jentadueto|kombiglyze|komboglyze|vipdomet|segluromet|invokamet|vokanamet|glucovance|amaryl\s*m\b|glimet|competact|actoplus|\bmet\b/i
+const MET_ATC = /^(atc:)?A10B(A02|D(02|03|05|07|08|10|11|13|14|15|16|17|18|20|22|23|25|26|27))/
+export const isMetformin = (m: Pick<Medication, 'drug_code' | 'drug_name'>) => MET_NAME.test(m.drug_name) || MET_ATC.test(m.drug_code ?? '')
 
-export function factsOf(r: { patient?: Pick<PatientBanner, 'sex' | 'age'>; values?: Pick<ValueRow, 'key' | 'code' | 'value' | 'at'>[]; medications?: Pick<Medication, 'drug_code' | 'drug_name' | 'status' | 'dose_number' | 'dose_unit' | 'frequency'>[]
+export function factsOf(r: { patient?: Pick<PatientBanner, 'sex' | 'age'>; values?: Val[]; medications?: Pick<Medication, 'drug_code' | 'drug_name' | 'status' | 'dose_number' | 'dose_unit' | 'frequency'>[]
   allergies?: Pick<Allergy, 'substance_name' | 'status'>[]; allergy_review?: Pick<ListReview, 'outcome'> | null } | null | undefined, standing?: Pick<StandingFacts, 'pregnancy'> | null, now = Date.now()): Facts {
   const vals = r?.values ?? []
   const met = (r?.medications ?? []).find((m) => m.status === 'active' && isMetformin(m))
   const allergies = (r?.allergies ?? []).filter((a) => a.status === 'active').map((a) => a.substance_name)
   const preg = standing?.pregnancy?.data
-  const age = r?.patient?.age ?? null; const creatinine = latest(vals, ['creat'], CREAT, now)
-  const egfr = latest(vals, ['egfr'], EGFR, now)
+  const age = r?.patient?.age ?? null; const creatinine = inMgDl(latest(vals, ['creat'], CREAT, now))
+  const e = latest(vals, ['egfr'], EGFR, now); const egfr = e && { value: e.value, days: e.days }
   // none reported: worked out from the creatinine (CKD-EPI 2021, an adult's), when it is the newer
   const worked = creatinine && age != null && age >= 18 && (r?.patient?.sex === 'female' || r?.patient?.sex === 'male') && (!egfr || creatinine.days < egfr.days)
     ? { value: ckdEpi(creatinine.value, age, r!.patient!.sex === 'female'), days: creatinine.days, worked: true } : null

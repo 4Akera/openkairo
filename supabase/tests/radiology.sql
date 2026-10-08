@@ -39,6 +39,19 @@ select t.ok((select r ->> 'side' from t.rows('radiology.requests', :'rad', jsonb
 select t.ok(exists (select 1 from t.rows('base.orders', :'rad', jsonb_build_object('to_department_id', :'rad')) r where r ->> 'item' = '00000000-0000-0000-0000-00000000ae01'
   and r ->> 'status' = 'active'), 'the base''s order: on Radiology''s list, open');
 
+\echo '── its FHIR adds the side beside the base''s ServiceRequest, and the export stays valid'
+select t.as(:'dr');
+create temp table bundle as select public.read(jsonb_build_object('shape', 'fhir', 'patient_id', :'pt', 'department_id', :'im')) b;
+grant select on bundle to authenticated;
+select t.ok((select e -> 'resource' -> 'bodySite' -> 0 ->> 'text' from bundle, jsonb_array_elements(b -> 'entry') e
+  where e -> 'resource' ->> 'resourceType' = 'ServiceRequest' and e -> 'resource' ->> 'id' = '00000000-0000-0000-0000-00000000ae01') = 'xrknee, left'
+  and (select e -> 'resource' -> 'orderDetail' -> 0 ->> 'text' from bundle, jsonb_array_elements(b -> 'entry') e
+  where e -> 'resource' ->> 'resourceType' = 'ServiceRequest' and e -> 'resource' ->> 'id' = '00000000-0000-0000-0000-00000000ae01') = 'Side: left',
+  'the ServiceRequest says the side (bodySite, orderDetail)');
+select t.ok((select count(*) from bundle, jsonb_array_elements(b -> 'entry') e where e -> 'resource' ->> 'id' = '00000000-0000-0000-0000-00000000ae01') = 1,
+  'one ServiceRequest: the pack''s words merged into the base''s, not a second');
+select t.as(:'rg');
+
 \echo '── the scan (the base''s step), then the report (the base''s result): a critical impression reaches the doctor as critical'
 select t.landed(t.w(t.e('step', :'pt', :'rad', '{"status":"in-progress","step":"scanned"}', '00000000-0000-0000-0000-00000000ae02', null,
   '00000000-0000-0000-0000-00000000ae01', 'answers')), 'scanned');
@@ -79,6 +92,9 @@ select t.ok(not core.may('00000000-0000-0000-0000-0000000000bc', 'report:radiolo
 select t.ok(core.may('00000000-0000-0000-0000-0000000000bc', 'read:record', :'rad') and core.may('00000000-0000-0000-0000-0000000000bc', 'write:pregnancy', :'rad')
   and core.may('00000000-0000-0000-0000-0000000000bc', 'write:given', :'rad'), 'the radiographer reads the record and writes pregnant and the contrast given');
 select t.ok(core.may('00000000-0000-0000-0000-0000000000bd', 'write:result', :'rad'), 'the radiologist is built on Doctor');
+select t.ok((select s.action from core.screens s where s.key = 'radiology.scan') = 'write:step'
+  and not core.may('00000000-0000-0000-0000-0000000000bd', 'write:step', :'rad') and core.may('00000000-0000-0000-0000-0000000000bc', 'write:step', :'rad'),
+  'the Scan tab is the radiographer''s (whoever writes the scan); the radiologist''s line opens on Report');
 set role authenticated;
 
 \echo '── off for the clinic: no new radiology order'

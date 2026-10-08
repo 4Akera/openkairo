@@ -46,6 +46,21 @@ create function radiology.request_line(e jsonb) returns text language sql stable
     coalesce(' · ' || nullif(e -> 'data' ->> 'question', ''), '') || coalesce(' · ' || nullif(e -> 'data' ->> 'reason', ''), '')
 $$;
 
+-- its FHIR, beside the base's ServiceRequest (§5.2 Export: it only adds): the part and side as the bodySite ("knee, left"), and the side, portable and a report
+-- asked as orderDetail, from the latest version that says them
+create function radiology.request_fhir(p jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select coalesce((select jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('resourceType', 'ServiceRequest', 'id', p -> 'entries' -> 0 ->> 'item',
+      'bodySite', case when w ->> 'side' is not null then jsonb_build_array(jsonb_build_object('text', regexp_replace(coalesce(n, ''), '^(x-ray|us|ct|mri|doppler)\s+', '', 'i')
+        || ', ' || (w ->> 'side'))) end,
+      'orderDetail', nullif(coalesce((select jsonb_agg(jsonb_build_object('text', t)) from unnest(array[
+        case when w ->> 'side' is not null then 'Side: ' || (w ->> 'side') end,
+        case when (w ->> 'portable')::boolean then 'Portable' end,
+        case when (w ->> 'report')::boolean then 'Report asked' end]) t where t is not null), '[]'), '[]'))))
+    from (select e -> 'data' -> 'radiology' w, e -> 'data' -> 'service' ->> 'name' n from jsonb_array_elements(p -> 'entries') with ordinality x(e, k)
+           where e ->> 'type' <> 'crossed_out' and e -> 'data' ? 'radiology' order by k desc limit 1) q
+    where w <> '{}'::jsonb), '[]')
+$$;
+
 reset role;
 
 grant select, delete on radiology.requests to core_eraser;
@@ -56,7 +71,7 @@ select core.declare_table('radiology.requests', 'radiology', 'radiology.requests
 select core.declare_type('radiology.request', 1, 'radiology',
   jsonb_set((select t.shape from core.types t where t.key = 'order' order by t.version desc limit 1), '{properties,radiology}',
     '{"type":"object","additionalProperties":false,"properties":{"side":{"enum":["left","right","both"]},"portable":{"type":"boolean"},"report":{"type":"boolean"}}}'),
-  'radiology.request_line(jsonb)', array['ServiceRequest'], base_type => 'order', feeds => array['radiology.requests'],
+  'radiology.request_line(jsonb)', array['ServiceRequest'], base_type => 'order', feeds => array['radiology.requests'], to_fhir => 'radiology.request_fhir(jsonb)',
   labels => '{"en":"Radiology order","ar":"طلب أشعة"}');
 
 -- the Report tab is the radiologist's: writing a report is a result (the base's write:result), the tab is held by this action
@@ -71,7 +86,8 @@ select core.declare_role('00000000-0000-0000-0000-00000000cc02', 'radiology.radi
   '{"en":"Radiographer"}');
 
 -- its screens, in place of the bench: Scan (one list for every room, by kind) and Report (the radiologist's)
-select core.declare_screen('radiology.scan', 'radiology', 'bench', '{"en":"Scan"}', 'read:bench', array['base.bench']);
+-- (each only for whoever does that work, Q1: the Scan tab for whoever writes the scan, the radiographer; the radiologist lands on Report)
+select core.declare_screen('radiology.scan', 'radiology', 'bench', '{"en":"Scan"}', 'write:step', array['base.bench']);
 select core.declare_screen('radiology.report', 'radiology', 'bench', '{"en":"Report"}', 'report:radiology.studies');
 
 -- its exams (§5.5): what each needs, by the service's code — a side, contrast (with or without is two exams), what to tell the patient
