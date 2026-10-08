@@ -8,7 +8,8 @@
 --     billing's operations only. It sends no record entries (F08).
 --   · its own original data, only ever added to (a mistake is a new row with its reason; Erase the one exception, core.declare_store):
 --     the lines a department sends to the cashier (an open bill), payments and their lines (cash with received and change, or card; a
---     refund is a payment of its own naming the one it undoes), the reasons for going ahead before payment, and each drawer closed.
+--     refund is a payment of its own naming the one it undoes), the reasons for going ahead before payment, each drawer closed, and each
+--     receipt printed (§3.13 Printing, owner 2026-10-08: a later copy is marked "Reprint" with its time, even after a reload).
 --   · what is paid, owed and waived is worked out when read, from those tables (D12); billing locks per charge, in one sorted order (D13).
 -- Billing never names another pack: what another department prices itself reaches it only as the lines that department's rows hand it.
 
@@ -131,6 +132,18 @@ create table billing.drawers (
   reason        text,                      -- a difference needs one
   primary key (organization_id, id)
 );
+-- each copy of a receipt or a refund slip printed (owner, 2026-10-08): which, at which desk, by whom, when; the first is the original,
+-- every later one a reprint. It holds no patient (the payment does), so Erase leaves it as the payment's number and amount stay
+create table billing.prints (
+  organization_id uuid not null,
+  id            uuid not null default gen_random_uuid(),
+  payment_id    uuid not null,
+  department_id uuid not null,             -- the desk it was printed at
+  author_id     uuid not null,
+  at            timestamptz not null default clock_timestamp(),
+  primary key (organization_id, id)
+);
+create index prints_payment on billing.prints (organization_id, payment_id, at);
 -- the clinic's last receipt number
 create table billing.receipts (
   organization_id uuid primary key,
@@ -148,11 +161,13 @@ create trigger payments_kept before update or delete on billing.payments for eac
 create trigger lines_kept before update or delete on billing.payment_lines for each row execute function billing.insert_only();
 create trigger anyway_kept before update or delete on billing.anyway for each row execute function billing.insert_only();
 create trigger drawers_kept before update or delete on billing.drawers for each row execute function billing.insert_only();
+create trigger prints_kept before update or delete on billing.prints for each row execute function billing.insert_only();
 create trigger sent_whole before truncate on billing.sent for each statement execute function billing.insert_only();
 create trigger payments_whole before truncate on billing.payments for each statement execute function billing.insert_only();
 create trigger lines_whole before truncate on billing.payment_lines for each statement execute function billing.insert_only();
 create trigger anyway_whole before truncate on billing.anyway for each statement execute function billing.insert_only();
 create trigger drawers_whole before truncate on billing.drawers for each statement execute function billing.insert_only();
+create trigger prints_whole before truncate on billing.prints for each statement execute function billing.insert_only();
 
 -- ── helpers ──
 -- the clinic's day (its time zone; Africa/Cairo unless it says)
@@ -475,6 +490,9 @@ begin
       'author_id', p.author_id, 'by', (select s.name from core.pack_staff(p_org, array[p.author_id]) s), 'reason', p.reason,
       'refund_of', (select r.receipt from billing.payments r where r.organization_id = p_org and r.id = p.refund_of),
       'refunded_by', (select r.receipt from billing.payments r where r.organization_id = p_org and r.refund_of = p.id),
+      -- each copy printed, the first the original (owner, 2026-10-08): so a later copy is marked a reprint, after a reload too
+      'prints', (select coalesce(jsonb_agg(jsonb_build_object('at', x.at, 'by', (select s.name from core.pack_staff(p_org, array[x.author_id]) s)) order by x.at, x.id), '[]')
+        from billing.prints x where x.organization_id = p_org and x.payment_id = p.id),
       'lines', (select coalesce(jsonb_agg(jsonb_build_object('n', l.n, 'kind', l.kind, 'department_id', l.department_id, 'name', l.name, 'quantity', l.quantity,
           'amount', l.amount, 'typed', l.typed, 'order_item', l.order_item) order by l.n), '[]') from billing.payment_lines l where l.organization_id = p_org and l.payment_id = p.id))
       order by p.at desc), '[]') into v_rows
@@ -658,6 +676,22 @@ begin
     'patient_ids', case when p.patient_id is null then '[]'::jsonb else jsonb_build_array(core.survivor(p_org, p.patient_id)) end);
 end $$;
 
+-- a receipt or a refund slip printed at this desk (§3.13 Printing, owner 2026-10-08): recorded before it prints, one row a copy, so the
+-- copy knows whether it is the first or a reprint (and when the first was), whoever prints it and after any reload. The desk's scope is
+-- the receipts': a desk of everyone's prints any desk's, a desk of its own only what it took; a department taking no payment none
+create function billing.print(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare v_desk text := billing.desk(p_org, p_department); p billing.payments; v_id uuid := gen_random_uuid(); v_at timestamptz; v_copy int; v_first timestamptz;
+begin
+  if v_desk not in ('own', 'everyone') then perform core.refuse('not_a_desk'); end if;
+  perform billing.lock(array['print ' || coalesce(p_args ->> 'payment_id', '')]);
+  select x.* into p from billing.payments x where x.organization_id = p_org and x.id = (p_args ->> 'payment_id')::uuid;
+  if p.id is null then perform core.refuse('not_found', 'receipt'); end if;
+  if v_desk = 'own' and p.department_id <> p_department then perform core.refuse('not_this_desk', p.receipt); end if;
+  insert into billing.prints (organization_id, id, payment_id, department_id, author_id) values (p_org, v_id, p.id, p_department, p_user) returning at into v_at;
+  select count(*), min(x.at) into v_copy, v_first from billing.prints x where x.organization_id = p_org and x.payment_id = p.id;
+  return jsonb_build_object('id', v_id, 'receipt', p.receipt, 'copy', v_copy, 'reprint', v_copy > 1, 'at', v_at, 'first_at', v_first);
+end $$;
+
 -- close my drawer at this desk: the float and the cash since my last closing, counted against what is there; a difference needs its
 -- reason; a new row, never edited
 create function billing.close_drawer(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
@@ -830,6 +864,9 @@ select core.declare_op('billing.day', 'billing', 'billing.totals(uuid,uuid,uuid,
 select core.declare_op('billing.pay', 'billing', 'billing.pay(uuid,uuid,uuid,jsonb)', 'write:billing.payment', patients => true);
 select core.declare_op('billing.refund', 'billing', 'billing.refund(uuid,uuid,uuid,jsonb)', 'write:billing.refund', patients => true);
 select core.declare_op('billing.close', 'billing', 'billing.close_drawer(uuid,uuid,uuid,jsonb)', 'write:billing.payment');
+-- a receipt or a refund slip printed (owner, 2026-10-08): whoever sees the desk's receipts; it names no patient (the core logs the print
+-- of a patient's receipt itself, like a read: §3.13)
+select core.declare_op('billing.print', 'billing', 'billing.print(uuid,uuid,uuid,jsonb)', 'read:billing.cashier');
 -- a department's own lines, the soft check and going ahead anyway: anyone working its bench (read:bench, the base's), where it uses
 -- billing (owner, 2026-10-08)
 select core.declare_op('billing.send', 'billing', 'billing.send(uuid,uuid,uuid,jsonb)', 'read:bench', patients => true);

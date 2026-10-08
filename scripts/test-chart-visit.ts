@@ -7,7 +7,12 @@ import type { Department, OrderRow, PresenceRow, QueueRow, VisitRow } from '../s
 import { afterDone, backOf, backReason, barOf, callsOnOpen, cmdEnter, doneLabel, ordersOut, roleOf, stayWords, visitMoves } from '../src/core/screens/chart/model/visit'
 import { byDate, bySet, byVisit, filterSets } from '../src/core/screens/chart/model/encounter'
 import { itemsOf } from '../src/core/screens/chart/model/items'
-import { E, T0, presence, types } from './chart-fixtures'
+import { E, T0, org, presence, types } from './chart-fixtures'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { arabicDigits, arabicDose, arabicSig } from '../src/core/screens/chart/model/arabic'
+import { newestRxSet, prescriptionOf, printable } from '../src/core/screens/chart/model/prescription'
+import { PrescriptionSheet } from '../src/core/screens/chart/print/PrescriptionSheet'
 
 setClinicTimeZone('Africa/Cairo')
 let n = 0
@@ -93,5 +98,51 @@ test('the kind filter over sets; the Whole record by visit (outside last) and by
   assert.deepEqual(filterSets(sets, 'notes').map((s) => [s.set_id, s.items.length]), [['b', 1], ['a', 1]]); assert.deepEqual(filterSets(sets, 'orders'), [])
   assert.deepEqual(byVisit(sets).map((g) => g.visit_id), ['v2', 'v1', null])
   assert.deepEqual(byDate(sets).map((d) => [d.day, d.sets.length]), [['2026-09-27', 2], ['2026-09-26', 1]])
+})
+// the prescription on A5 (§3.13 Printing, owner 2026-10-08): written in the visit, for the patient to take away
+const rxData = (drug: string, more: Record<string, unknown>) => ({ basis: 'prescribed', drug: { text: drug }, status: 'active', ...more })
+const augmentin = rxData('Augmentin', { strength: '1 g', dosage: { dose: { value: '1', unit: 'tablet' }, route: 'oral', timing: { code: 'BD' } }, duration_days: 7,
+  quantity: { value: '14', unit: 'tablets' }, instructions: 'after meals' })
+const glucophage = rxData('Glucophage', { strength: '500 mg', dosage: { dose: { value: '500', unit: 'mg' }, route: 'oral', timing: { code: 'OD' } }, duration_days: 30 })
+const ventolin = rxData('Ventolin', { dosage: { dose: { value: '2', unit: 'puffs' }, route: 'inhaled', timing: { code: 'q6h' }, as_needed: true, as_needed_for: 'wheeze' } })
+test('the directions in Arabic, as the base can say them: dose, route, how often, as needed, its own known words, how long; Arabic-Indic digits', () => {
+  assert.equal(arabicSig({ dose: '1 tablet', route: 'oral', frequency: 'BD', prn: null, days: 7, instructions: 'after meals' }), 'قرص واحد بالفم مرتين يومياً بعد الأكل لمدة ٧ أيام')
+  assert.equal(arabicSig({ dose: '500 mg', route: 'oral', frequency: 'OD', prn: null, days: 30, instructions: null }), '٥٠٠ مجم بالفم مرة واحدة يومياً لمدة ٣٠ يوماً')
+  assert.equal(arabicSig({ dose: '2 puffs', route: 'inhaled', frequency: 'q6h', prn: 'when needed for wheeze', days: null, instructions: null }), 'بختين استنشاق كل ٦ ساعات عند اللزوم')
+  assert.equal(arabicSig({ dose: 'a pea-sized amount', route: 'topical', frequency: 'PRN', prn: 'when needed', days: 2, instructions: 'thinly' }), 'دهان موضعي على الجلد عند اللزوم لمدة يومين',
+    'what it cannot say is left out, never guessed')
+  assert.deepEqual(['0.5 tab', '3 caps', '12 drops', '10 ml'].map(arabicDose), ['نصف قرص', '٣ كبسولات', '١٢ نقطة', '١٠ مل']); assert.equal(arabicDigits('1.5'), '١٫٥')
+})
+const rxItems = () => itemsOf([E('medication', { id: 'm1', visit_id: 'v1', set_id: 'rx1', data: augmentin }), E('medication', { id: 'm2', visit_id: 'v1', set_id: 'rx1', data: glucophage }),
+  E('medication', { id: 'm3', visit_id: 'v1', set_id: 'rx1', data: ventolin }), E('medication', { id: 'm4', visit_id: 'v1', set_id: 'rx1', data: { ...glucophage, basis: 'reported' } }),
+  E('medication', { id: 'm5', visit_id: 'v1', set_id: 'rx1', data: { ...augmentin, status: 'stopped' } }), E('medication', { id: 'm6', visit_id: null, set_id: 'rx1', data: augmentin })], { types })
+const patient = { full_name: 'نادية كامل', age: 34, sex: 'female', number: 1042 }
+test('the prescription: the patient\'s name as written, age and sex, record number, the date, each medicine with its line and its directions in Arabic, the doctor and department', () => {
+  const rx = prescriptionOf(rxItems(), { org, patient })!
+  assert.deepEqual(rx.patient, { name: 'نادية كامل', age_sex: '34 y · F', record: 1042 }); assert.equal(rx.doctor, 'Dr. Ali Hassan'); assert.equal(rx.department, 'General Practice')
+  assert.deepEqual(rx.lines.map((l) => l.drug), printable(rxItems()).map((i) => [(i.entry.data as { drug: { text: string } }).drug.text, i.entry.data?.strength].filter(Boolean).join(' ')),
+    'in the block\'s own order')
+  assert.deepEqual(rx.lines.map((l) => [l.drug, l.sig, l.quantity, l.arabic]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))), [
+    ['Augmentin 1 g', '1 tablet, by mouth, twice a day, 7 days', '14 tablets', 'قرص واحد بالفم مرتين يومياً بعد الأكل لمدة ٧ أيام'],
+    ['Glucophage 500 mg', '500 mg, by mouth, once a day, 30 days', null, '٥٠٠ مجم بالفم مرة واحدة يومياً لمدة ٣٠ يوماً'],
+    ['Ventolin', '2 puffs, inhaled, every 6 hours, when needed for wheeze', null, 'بختين استنشاق كل ٦ ساعات عند اللزوم']], 'a reported, a stopped, one outside a visit: not on it')
+  assert.deepEqual(printable(rxItems()).map((i) => i.id).sort(), ['m1', 'm2', 'm3'])
+  assert.equal(prescriptionOf(rxItems().filter((i) => ['m4', 'm5', 'm6'].includes(i.id)), { org, patient }), null, 'nothing to take away: no Print')
+  assert.equal(prescriptionOf(rxItems().map((i) => ({ ...i, draft: {} as never })), { org, patient }), null, 'a draft is not printed')
+})
+test('printed on A5: the header, the patient (Arabic right to left, the numbers kept left to right), the directions right to left, no price; a later copy says so', () => {
+  const rx = prescriptionOf(rxItems(), { org, patient })!
+  const html = renderToStaticMarkup(createElement(PrescriptionSheet, { data: rx, header: { name: 'Nile Clinic', logo: null, address: 'Cairo', phone: null, tax_number: '123' }, reprint: null }))
+  assert.match(html, /Nile Clinic/); assert.match(html, /Tax no\. 123/); assert.match(html, /<span dir="auto"[^>]*>نادية كامل<\/span>/); assert.match(html, /<bdi dir="ltr">#1042<\/bdi>/)
+  assert.match(html, /<bdi dir="ltr">2026-09-27 11:00<\/bdi>/, 'the date, in the clinic\'s time'); assert.match(html, /34 y · F/)
+  assert.equal((html.match(/<p dir="rtl" lang="ar"[^>]*>[^<]*(يومياً|اللزوم)/g) ?? []).length, 3, 'each medicine\'s directions right to left, in Arabic')
+  assert.match(html, /Dr\. Ali Hassan/); assert.match(html, /General Practice/); assert.doesNotMatch(html, /Reprint/)
+  assert.doesNotMatch(html, /EGP|price|amount|total/i, 'no price'); assert.doesNotMatch(JSON.stringify(rx), /price|amount|total/i)
+  assert.match(renderToStaticMarkup(createElement(PrescriptionSheet, { data: rx, header: { name: 'N', logo: null, address: null, phone: null, tax_number: null }, reprint: '11:05' })), /Reprint · 11:05/)
+})
+test('P prints this visit\'s newest prescription', () => {
+  const es = [E('medication', { visit_id: 'v1', set_id: 'old', recorded_at: '2026-09-27T08:00:00Z', data: augmentin }), E('medication', { visit_id: 'v1', set_id: 'new', recorded_at: '2026-09-27T09:00:00Z', data: glucophage }),
+    E('medication', { visit_id: 'v1', set_id: 'told', recorded_at: '2026-09-27T09:30:00Z', data: { ...glucophage, basis: 'reported' } }), E('medication', { visit_id: 'v2', set_id: 'other', recorded_at: '2026-09-27T10:00:00Z', data: augmentin })]
+  assert.equal(newestRxSet(es, 'v1', types), 'new'); assert.equal(newestRxSet(es, null, types), null); assert.equal(newestRxSet(es, 'v9', types), null)
 })
 console.log(`chart (the patient screen): ${n} groups passed`)

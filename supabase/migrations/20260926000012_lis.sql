@@ -5,7 +5,8 @@
 -- director to confirm); the sample number a collection gets (a counter of its own, through public.pack_op); and each value a patient
 -- had, for the change check (a derived table, fed by a listener on the base's results). A large lab switches on, each on its own: turnaround
 -- targets per section, a second person who checks, scan to receive, collection chairs (its queue tickets, a table of its own); sample
--- labels and results from analysers are drawn as placeholders, for later.
+-- sample labels print at Collected where the laboratory says so (§3.13 Printing, owner 2026-10-08); results from analysers are drawn as
+-- placeholders, for later.
 
 set client_min_messages = warning;
 
@@ -14,7 +15,7 @@ select core.create_pack('lis');
 
 set role pack_lis;
 
--- ── the sample numbers: one counter per laboratory and day; S-MMDD-NNNN, written on the tubes until labels print. A number is the
+-- ── the sample numbers: one counter per laboratory and day; S-MMDD-NNNN, written on the tubes or printed on their labels. A number is the
 -- patient's tests', not a screen's: the same orders get the same number however many screens open them, until a tube of it is sent
 -- back (then a new one, never the one rejected); a test asked for later joins it while it waits. Each number keeps the orders it was
 -- given to, so Receive can say whose a number is that never arrived ──
@@ -175,8 +176,9 @@ select core.declare_screen('lis.results', 'lis', 'bench', '{"en":"Results"}', 'r
 
 -- the large lab (spec §5.3), each switch on its own and all off for a small lab, on the laboratory's card: turnaround targets per
 -- section (minutes from the sample's last step: collected, or received where tubes are scanned in), a second person checks (Release
--- writes a preliminary result; a senior approves it final), scan to receive, collection chairs (0: one list). Printed labels, results
--- from analysers and releasing normal ones by themselves are placeholders, held at their const until they are built
+-- writes a preliminary result; a senior approves it final), scan to receive, collection chairs (0: one list), and sample labels (a
+-- written number, or labels printed at Collected: §3.13 Printing, owner 2026-10-08). Results from analysers and releasing normal ones by
+-- themselves are placeholders, held at their const until they are built
 select core.declare_setting('lis.large', 'lis', 'department',
   '{"type":"object","additionalProperties":false,"required":["turnaround","targets","second_check","scan_receive","chairs","labels","analysers","auto_release"],
     "properties":{"turnaround":{"type":"boolean","default":false},
@@ -186,7 +188,7 @@ select core.declare_setting('lis.large', 'lis', 'department',
         "serology":{"type":"integer","minimum":5,"maximum":10080,"default":240},"urine_stool":{"type":"integer","minimum":5,"maximum":10080,"default":60}}},
       "second_check":{"type":"boolean","default":false},"scan_receive":{"type":"boolean","default":false},
       "chairs":{"type":"integer","minimum":0,"maximum":12,"default":0},
-      "labels":{"enum":["written","printed"],"const":"written","default":"written"},
+      "labels":{"enum":["written","printed"],"default":"written"},
       "analysers":{"type":"boolean","const":false,"default":false},"auto_release":{"type":"boolean","const":false,"default":false}}}',
   labels => '{"en":"Large lab"}', form => 'department',
   fields => '[{"key":"turnaround","labels":{"en":"Turnaround targets"},"help":{"en":"A sample waiting past its section''s target turns amber on Results, and Late counts it."}},
@@ -197,7 +199,7 @@ select core.declare_setting('lis.large', 'lis', 'department',
     {"key":"second_check","labels":{"en":"Second person checks"},"help":{"en":"Release sends a preliminary result; a lab senior approves it on To check, never their own."}},
     {"key":"scan_receive","labels":{"en":"Scan to receive"},"help":{"en":"Tubes are scanned in as they arrive (the Receive tab); a rejected tube goes back to Collect for a new sample."}},
     {"key":"chairs","labels":{"en":"Collection chairs"},"help":{"en":"Each collector picks a chair and calls the next patient by number. 0: one list for all."}},
-    {"key":"labels","labels":{"en":"Sample labels"},"help":{"en":"Printed barcode labels for each tube, when printing comes."},"later":true,
+    {"key":"labels","labels":{"en":"Sample labels"},"help":{"en":"Printed: at Collected, a label for each tube (50 × 25 mm, through the browser''s print dialog) with the sample number and its barcode, which Scan to receive reads. Written: the number is written on each tube."},
      "choices":{"written":{"en":"Written number"},"printed":{"en":"Printed barcode"}}},
     {"key":"analysers","labels":{"en":"Results from analysers"},"help":{"en":"Results come in from the machines; people check them."},"later":true},
     {"key":"auto_release","labels":{"en":"Release normal results by themselves"},"help":{"en":"No flag, no big change, the analyser content: it goes out."},"later":true}]');

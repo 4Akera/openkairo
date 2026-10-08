@@ -1,16 +1,17 @@
 // The large lab's switches as the laboratory's screens read them (spec/openCare.md §5.3; the setting lis.large, on the laboratory's
-// card, all off for a small lab): turnaround targets per section, a second person checks, scan to receive, collection chairs. Pure:
-// what is late, which ticket is whose, who calls next, what a scan names.
+// card, all off for a small lab): turnaround targets per section, a second person checks, scan to receive, collection chairs, sample
+// labels (a written number, or labels printed at Collected: §3.13 Printing, owner 2026-10-08). Pure: what is late, which ticket is
+// whose, who calls next, what a scan names.
 import { settingIn } from '@core/screens/settings/form/model'
 import type { Organization, RequestQueueRow } from '@core/db/types'
 import type { PatientGroup } from '@core/screens/bench/shared'
 
-export interface Large { turnaround: boolean; targets: Record<string, number>; second_check: boolean; scan_receive: boolean; chairs: number }
+export interface Large { turnaround: boolean; targets: Record<string, number>; second_check: boolean; scan_receive: boolean; chairs: number; labels: 'written' | 'printed' }
 /** this laboratory's switches, the shape's defaults where unset */
 export function largeOf(org: Organization | undefined, departmentId: string): Large {
   const s = settingIn(org, 'lis.large', departmentId)
   return { turnaround: s.turnaround ?? false, targets: (s.targets ?? {}) as Record<string, number>, second_check: s.second_check ?? false,
-    scan_receive: s.scan_receive ?? false, chairs: s.chairs ?? 0 }
+    scan_receive: s.scan_receive ?? false, chairs: s.chairs ?? 0, labels: s.labels === 'printed' ? 'printed' : 'written' }
 }
 /** Urine & stool → urine_stool: a section's key among the targets */
 export const sectionKey = (section: string) => section.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')

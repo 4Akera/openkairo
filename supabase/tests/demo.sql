@@ -109,6 +109,9 @@ select t.ok(count(*) = 1, 'one critical result waiting') from base.review where 
 select t.ok(count(*) = 1, 'a pregnant patient') from core.entries where organization_id = demo.base('clinic') and type = 'pregnancy' and (data ->> 'pregnant')::boolean;
 select t.ok(count(*) = 1, 'a breastfeeding patient') from core.entries where organization_id = demo.base('clinic') and type = 'breastfeeding' and (data ->> 'breastfeeding')::boolean;
 select t.ok(count(*) = 1, 'a private note (Psychiatry)') from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'note' and e.department_id = demo.base('psychiatry');
+select t.ok(core.setting_at(demo.base('clinic'), 'organization.header', demo.base('clinic')) ->> 'tax_number' = '512-338-907', 'printouts carry the clinic''s header (§3.13)');
+select t.ok(core.setting_at(demo.base('clinic'), 'lis.large', demo.base('lab')) ->> 'labels' = 'printed'
+  and not (core.setting_at(demo.base('clinic'), 'lis.large', demo.base('lab')) ->> 'scan_receive')::boolean, 'the Laboratory prints its sample labels at Collected; its other large-lab switches off');
 
 \echo '── the packs'' fit: values for each patient''s age and sex'
 create temp view aged as select e.*, p.gender, extract(year from age(e.occurred_at::date, p.birth_date)) as years, (e.occurred_at::date - p.birth_date) as days

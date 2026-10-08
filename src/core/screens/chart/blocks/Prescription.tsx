@@ -3,8 +3,14 @@
 // (the version before), a stop with its reason; where it was sent on, from the order about it in the same set, in the words of the pack
 // that answers it (visit/send.ts: Sent, given at 12:40, not given), and, while its order is open and a pack holds it waiting, that
 // pack's word in its tone (spec §5.4: "Waiting for payment" for a department's own lines; owner, 2026-10-08: the word only). A reported
-// medicine says so and carries no ℞.
+// medicine says so and carries no ℞. In the chart, a prescription written in a visit prints on A5 for the patient to take away
+// (§3.13 Printing, owner 2026-10-08): Print prescription, and P for this visit's newest; the sheet says what the block says, with the
+// directions in Arabic and no price.
+import { useContext } from 'react'
 import type { EntryData } from '../../../db/shapes.generated'
+import { PrintButton, usePrint } from '../../../print'
+import { ChartContext, type Chart } from '../context'
+import { newestRxSet, prescriptionOf, sigOf, type RxSheet } from '../model/prescription'
 import { stepOf } from '../../../db/views'
 import { Tag, hm } from '../../../ui'
 import type { ChartItem } from '../model/items'
@@ -23,13 +29,25 @@ export function Prescription({ items }: GroupProps) {
   const orderFor = (m: ChartItem) => orders.find((o) => o.order?.row?.about_item === m.item || (o.entry.relation === 'about' && (o.entry.refers_to === m.entry.id || o.entry.refers_to === m.item)))
   const loose = orders.filter((o) => !meds.some((m) => orderFor(m) === o))
   const prescribed = meds.some((m) => med(m)?.basis !== 'reported')
+  const env = useBlockEnv(); const chart = useContext(ChartContext)
+  const rx = chart && !env.sample && !env.compact ? prescriptionOf(meds, { org: env.org, patient: { full_name: chart.r.identity.full_name, age: chart.r.patient.age,
+    sex: chart.r.patient.sex, number: chart.r.patient.record_number } }) : null
   return <div className="flex gap-3">
     {prescribed && <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent-soft text-16 font-semibold text-accent">℞</span>}
     <div className="grid min-w-0 flex-1 gap-1">
       {meds.map((m) => <ItemFrame key={m.id} item={m} tags={<SentOn med={m} order={orderFor(m)} />}><MedLine item={m} /></ItemFrame>)}
       {loose.map((o) => <ItemFrame key={o.id} item={o}><p className="text-13 text-muted">{o.entry.line}</p></ItemFrame>)}
+      {rx && chart && <PrintRx rx={rx} chart={chart} />}
     </div>
   </div>
+}
+
+/** Print prescription (A5), and P where it is this visit's newest; the print of the patient's prescription is logged like a read */
+function PrintRx({ rx, chart: c }: { rx: RxSheet; chart: Chart }) {
+  const print = usePrint(); const env = useBlockEnv()
+  const newest = newestRxSet(c.r.server.entries, c.encounter?.id, env.org?.types) === rx.set
+  return <PrintButton className="justify-self-start" size="sm" variant="ghost" label="Print prescription" keyed={newest}
+    print={() => print({ key: 'base.prescription', data: rx, thing: rx.set, patientId: c.patientId, departmentId: c.departmentId, purpose: 'TREAT' })} />
 }
 
 function MedLine({ item }: { item: ChartItem }) {
@@ -39,7 +57,7 @@ function MedLine({ item }: { item: ChartItem }) {
   const was = [...item.versions].reverse().map((v) => v.data as EntryData['medication'] | undefined).find((x) => x?.drug)
   const change = was && !ended ? changeText(medLine(was), l) : null
   const repeat = !!was && !ended && !change && doseText(medLine(was)) === doseText(l)
-  const sig = [[l.dose, l.route_words, l.frequency_words, l.prn].filter(Boolean).join(', '), l.days ? `${l.days} days` : null].filter(Boolean).join(', ')
+  const sig = sigOf(l)
   const reasons = (d.reasons ?? []).map((r) => r.display ?? itemName(env, r.id)).filter(Boolean)
   return <div>
     <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">

@@ -487,7 +487,7 @@ export interface LisLargeSetting {
   analysers: false
   auto_release: false
   chairs: number
-  labels: 'written'
+  labels: 'written' | 'printed'
   scan_receive: boolean
   second_check: boolean
   targets: {
@@ -499,6 +499,14 @@ export interface LisLargeSetting {
     urine_stool: number
   }
   turnaround: boolean
+}
+/** setting organization.header (core; owner organization) */
+export interface OrganizationHeaderSetting {
+  address?: string
+  logo?: string
+  name: string
+  phone?: string
+  tax_number?: string
 }
 /** setting organization.packs_used (core; owner organization) */
 export interface OrganizationPacksUsedSetting {
@@ -659,6 +667,7 @@ export interface SettingData {
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
   'lis.large': LisLargeSetting
+  'organization.header': OrganizationHeaderSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting

@@ -60,13 +60,20 @@ select t.ok(count(*) = 1 and min(r ->> 'key') = 'hb' and min((r ->> 'value')::nu
 select t.as(:'dr');
 select t.refuses(format($q$select count(*) from t.rows('lis.values', %L, '{}')$q$, :'im'), 'not_allowed');
 
-\echo '── the large lab: its placeholders hold (a written number, no analysers); chairs are its own count'
+\echo '── the large lab: its placeholders hold (no analysers); sample labels written or printed (owner, 2026-10-08); chairs are its own count'
 select t.as(:'ow');
 create temp table large as select jsonb_build_object('turnaround', true, 'targets', jsonb_build_object('haematology', 60, 'coagulation', 60, 'chemistry', 120,
   'hormones', 240, 'serology', 240, 'urine_stool', 60), 'second_check', true, 'scan_receive', true, 'chairs', 2, 'labels', 'written', 'analysers', false, 'auto_release', false) v;
 grant select on large to authenticated;
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'lis.large', 'owner_id', %L, 'data', (select v from large) || '{"analysers":true}'))$q$, :'labd'), 'bad_shape');
-select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'lis.large', 'owner_id', %L, 'data', (select v from large) || '{"labels":"printed"}'))$q$, :'labd'), 'bad_shape');
+select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'lis.large', 'owner_id', %L, 'data', (select v from large) || '{"labels":"stamped"}'))$q$, :'labd'), 'bad_shape');
+select t.ok(public.write_setting(jsonb_build_object('key', 'lis.large', 'owner_id', :'labd', 'data', (select v from large) || '{"labels":"printed"}')) ->> 'key' = 'lis.large',
+  'Sample labels: printed, at Collected (§3.13 Printing, owner 2026-10-08)');
+reset role;
+select t.ok(core.setting_at('00000000-0000-0000-0000-0000000000a1', 'lis.large', :'labd') ->> 'labels' = 'printed', 'the laboratory prints its labels');
+select t.ok(not exists (select 1 from core.setting_keys k, jsonb_array_elements(k.fields) f where k.key = 'lis.large' and f ->> 'key' = 'labels' and f ? 'later'),
+  'no longer a placeholder: the switch is live');
+set role authenticated;
 select public.write_setting(jsonb_build_object('key', 'lis.large', 'owner_id', :'labd', 'data', (select v from large))) ->> 'key' as large;
 
 \echo '── the queue tickets: one per patient''s tests of the day, in the order given; a test asked for later joins its ticket'

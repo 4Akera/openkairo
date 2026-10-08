@@ -440,6 +440,26 @@ create function core.read_score(me core.users, q jsonb) returns jsonb language s
   select core.score(q ->> 'score', q ->> 'version', coalesce(q -> 'inputs', '{}')) where me.id is not null
 $$;
 
+-- a printout of a patient's information, logged like a read (§3.13 Printing, the owner's (p4), 2026-10-08): who printed what (the
+-- printout's key and the thing it carries: a sample number, a receipt's number), for which patient, when, and from where — one row of
+-- the read log, merged with the person's other reads of that patient in ten minutes. It returns nothing of the patient: what was
+-- printed was read through the doors already. For whoever finds patients (read:patients), as a read of the patient is
+create function core.read_printed(me core.users, q jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare p core.patients; v_dept uuid := (q ->> 'department_id')::uuid; v_key text := q ->> 'printout'; v_what text := nullif(trim(coalesce(q ->> 'what', '')), '');
+begin
+  if not core.may_somewhere(me.id, 'read:patients') then perform core.refuse('not_allowed', 'read:patients'); end if;
+  if v_dept is not null and not exists (select 1 from core.departments d where d.organization_id = me.organization_id and d.id = v_dept) then
+    perform core.refuse('not_found', 'department');
+  end if;
+  if coalesce(v_key, '') !~ '^[a-z0-9]+\.[a-z0-9_.-]+$' or length(v_key) > 64 then perform core.refuse('bad_printout', left(coalesce(v_key, ''), 64)); end if;
+  if length(v_what) > 200 then perform core.refuse('bad_printout', 'what'); end if;
+  select * into p from core.patients x where x.organization_id = me.organization_id and x.id = core.survivor(me.organization_id, (q ->> 'patient_id')::uuid);
+  if not found then perform core.refuse('not_found', 'patient'); end if;
+  perform core.log_read(me, v_dept, p.id, coalesce(q ->> 'purpose', 'TREAT'), null,
+    jsonb_build_object('prints', jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('printout', v_key, 'what', v_what)))), 0);
+  return jsonb_build_object('logged', true);
+end $$;
+
 -- the one door out. FHIR (shape fhir) is added by the base's export migration through core.read_fhir.
 create function core.read_fhir(me core.users, q jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 begin
@@ -467,6 +487,7 @@ begin
     when 'codes'    then core.read_codes(me, p_query)
     when 'reference' then core.read_reference(me)
     when 'score'    then core.read_score(me, p_query)
+    when 'printed'  then core.read_printed(me, p_query)
     else null end;
 end $$;
 revoke all on function public.read(jsonb) from public, anon;

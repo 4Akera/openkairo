@@ -338,6 +338,7 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 | `audit` | settings and admin changes; `what` and `thing_id` narrow it to one setting's history | `manage:settings` |
 | `reference` | the licensed lists loaded here: each system's latest load (version, source, licence, sample or not, codes, when) | a live user |
 | `score` | a score worked out by the server while the clinician types (`core.score(score, version, inputs)`: each item's points, the points so far, and once every item is answered the total and its band; a value it cannot score is a problem of its item, never a raise); no version: the latest in use; not logged | a live user |
+| `printed` | nothing of the patient: a printout of a patient's information logged like a read (§3.13, the owner's (p4), 2026-10-08) — `printout` (its key) and `what` (the thing it carried: a sample number, a receipt's number) kept as `prints` in the read log's row of that person, patient, department and purpose (TREAT unless it says), merged with their other reads of ten minutes; `bad_printout`, `not_found`, `unknown_purpose` | `read:patients` somewhere |
 
 - It collects the source entry ids of every row and calls each visibility rule once as `rule(reader, ids[]) → hidden ids[]`. Rules only
   hide and combine with OR over hidden (AND over visible); a rule that raises means hidden, and is logged. Base rules apply to every
@@ -369,6 +370,44 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 anything used is refused `in_use` and retired instead), `save_patient` (register or change identity), `merge_patients`,
 `write_setting`, `setup` (a starter setup on a new or an existing department, §5.2), `erase_patient`, `redact`. Every change is a
 row in `core.audit` (an AuditEvent).
+
+### 3.13 Printing (the core's facility: the owner's decisions of 2026-10-08, evening, "build now no pics"; built 2026-10-08)
+- **Through the browser's own print dialog** (owner, 2026-10-08): nothing to install, no driver of ours; the printer is chosen in the
+  dialog, once a computer. Print is a person's button and its key **P** — never while typing in a field, never with a modifier (so the
+  browser's own Cmd-P stays the browser's), never held down; where several printouts are on screen, the one shown last answers. Nothing
+  prints by itself. Only the printout prints, never the screen around it, and the browser's own Cmd-P still prints the page as usual.
+  What prints is what the screen shows (each printout draws the model its screen draws). A second print of the same thing is marked
+  **"Reprint"** with its time.
+- **The facility** (the owner's (p1)): `src/core/print`. The papers (`paper.ts`): a **label** 50 × 25 mm, one label a page, no margin; a
+  **receipt roll** 80 mm wide, as long as what it carries (measured once drawn); an **A5** sheet (12 mm margins). A print (`session.ts`,
+  one at a time): the read log first (below), then the printout drawn into an element of its own off screen in the light theme at its
+  paper's width, then one stylesheet put in place — the page's size (`@page`), each label a page, and in print every other child of the
+  body hidden (the print-only rule) — then the browser's print dialog, then everything taken away again, whatever happened; outside a
+  print of ours no rule is in place. The P key (`key.ts`); `usePrint`; `PrintButton` (Print …, then Print again; why it did not print,
+  under it).
+- **A printout is registered** (the owner's (p2)): `registerPrintout(key, {paper, Component})` (`print/registry.ts`; its key in its
+  layer's prefix, one component a key), so the core prints by the key and never names it. A printout draws only what it is handed
+  (`data`), with the clinic's header and, on a later copy, the reprint's time.
+- **The clinic's header** (the owner's (p3)): the core's setting `organization.header` — name, logo, address, phone, tax number; the
+  logo a PNG, JPEG or WebP `data:` URI of at most 100,000 characters (it goes with every directory read), made at most 600 × 200 pixels
+  by Settings before it is kept — edited in Settings → Organization → *Printouts* by whoever changes settings everywhere; until it is
+  set, the organization's name. Every printout with room for it draws it (`PrintHeader`, an Arabic name right to left). *Chosen in the
+  build, awaiting the owner:* the specimen label (50 × 25 mm) has no room for it and carries only what the owner listed.
+- **A print of a patient's information is logged like a read** (the owner's (p4)): before anything is drawn, the reader's `printed`
+  (§3.10) writes who printed what (the printout and the thing it carried), for which patient, from where and when into the core read
+  log, merged with that person's other reads of the patient in ten minutes; if it cannot be written, nothing prints (as a read fails).
+  Settings → Record reads says it: "printed labels S-1008-0001".
+- **Code 128** (the owner's (p5)): a pure encoder (`print/code128.ts`: set B, set C for runs of digits, the modulo-103 check, the stop;
+  checked against the published patterns and known encodings, no new dependency) and the barcode (`Barcode`: a module 0.25 mm, two dots
+  of a 203 dpi label printer, where it fits; the quiet zones drawn).
+- **Arabic and English** (owner, 2026-10-08): Arabic laid out right to left inside the printout (`Arabic`, `Words` in its own direction),
+  numbers kept readable (a record number, a date, a dose left to right inside any line: `Num`; Arabic directions in Arabic-Indic digits).
+- *Chosen in the build, awaiting the owner:* where a pack keeps no copies of its own (the labels, the prescription), "the same thing
+  printed again" is what this browser printed within a day (`oc.printed`), so a copy printed again at another computer is not marked; the
+  receipt's copies are billing's own (§5.4), known at every desk and after a reload. A receipt's copy is recorded before it prints.
+- The printouts: the specimen labels (§5.3), the receipt and the refund slip (§5.4), the prescription on A5 (§4.6, the chart).
+  Tests: `npm run test:print` (the encoder, the papers and the print-only rule, a print's lifecycle, the P key, the header, the parts),
+  `printing.sql` (the header's shape and who writes it; a print logged like a read, merged, refused).
 
 ---
 
@@ -508,8 +547,8 @@ the patient was still waiting in the ordering visit and saw it there (then only 
 latest version clears it. Flagged entries raise a review row for the entry's department.
 
 ### 4.6 Settings keys, actions, roles and screens
-- Settings keys: `organization.time_zone`, `organization.packs_used` and `score.signed_off` (declared by the core; the last written by
-  `sign:score`, §5.1 rule 8), `organization.record_view` (visits ·
+- Settings keys: `organization.time_zone`, `organization.packs_used`, `organization.header` (the clinic's header on every printout,
+  §3.13) and `score.signed_off` (declared by the core; the last written by `sign:score`, §5.1 rule 8), `organization.record_view` (visits ·
   entries), `department.private`, `department.encounter_class`, `department.after_done` (next · queue),
   `department.review_results`, `department.works_for` (a bench: department ids, or all), `department.checks_in_for` (a desk: the
   clinics it checks in for, or all), `department.packs` (the packs used here, §5.1 rule 1: each a known pack, on for the clinic, once:
@@ -557,6 +596,15 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
     yesterday**, **Since Done** for a clinic patient back with results; an older visit (read-only, Esc back), Outside a visit, the
     **Whole record** (by visit or by day per `organization.record_view`, paged), results over time, one entry with its Details under
     it. A kind filter (`?kind=`, `[` `]`) narrows each. Nothing opens over the record.
+  - *The prescription on A5* (owner, 2026-10-08; built 2026-10-08): a prescription written in the visit (its prescribed medicines still
+    standing: not reported, stopped, crossed out, hidden or a draft) carries **Print prescription** at the end of its block, and **P**
+    prints this visit's newest. The sheet (`chart/print/PrescriptionSheet.tsx`, the base's printout `base.prescription`, A5) is for the
+    patient to take away to be dispensed outside: the clinic's header; the patient's name as written (Arabic right to left), age and sex,
+    record number; the date; each medicine with its line as the block shows it (the dose, route, how often, for how long, the quantity,
+    its own words) and the directions in Arabic as the base can say them (`model/arabic.ts`: the dose, the route, how often, as needed,
+    the few words it knows, how long, Arabic-Indic digits; what it cannot say is left out, never guessed), right to left; the doctor's
+    name and department, a line to sign. No price. *Chosen in the build, awaiting the owner:* the reason a medicine is for (a diagnosis)
+    stays off the sheet, which leaves the clinic; the base's Arabic words are its own, beside a pack's.
   - *Record panel* (right; tabs under 640 px, on a phone): the **Summary** — the phone, active problems, current medicines, allergies
     and alerts, pregnancy & feeding (when either is recorded, each with End), last
     vitals, key results, last visits, still waiting, each with its limit and empty state, and before Last visits each shown pack
@@ -569,7 +617,7 @@ latest version clears it. Flagged entries raise a review row for the entry's dep
     desk's card folds out the same visits).
   - *Keys*: `/` the composer · Alt+P / M / A start /dx /rx /al · ⌘↵ Done (Sign in a stay; Sign N for someone else's patient) · Alt+R
     the record's sections and back · 1–9 the section chip in that place (never while typing) · `[` `]` the kind filter · ↵ a block's
-    Details · Esc closes them, then back to this visit · Alt+J Who's in.
+    Details · Esc closes them, then back to this visit · P prints this visit's newest prescription (§3.13) · Alt+J Who's in.
 
 #### Design system
 One system for core and packs (`src/core/ui`, imported as `@core/ui`): **tokens** in `src/core/styles.css`, a light and a dark value
@@ -959,7 +1007,7 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   other places have against their minimums (`elsewhere`), so a store's **Low at pharmacies** view lists what to send, and Send adds
   what a place is low on, in the boxes back to its minimum. Movements say "Sent to …" and "From …", in boxes. Wards' stock comes
   with a ward pack.
-- **Laboratory:** *Collect* (tubes by colour, the sample number written on them until labels print, fasting asked at the grey tube,
+- **Laboratory:** *Collect* (tubes by colour, the sample number written on them, or printed on their labels where the laboratory prints them, fasting asked at the grey tube,
   *Collected* or *Couldn't collect* with a reason the doctor sees) and *Results* (one grid per section, ranges by age and sex, flags as
   typed, the change check against the last result, calculated values such as LDL and eGFR). A critical value is only a notice —
   "Critical: tell Dr. X now", then *Release*; logging the call (who, when, read back) is later. Critical limits per test are the
@@ -977,8 +1025,8 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   a share for the rest); a critical value's notice (tell the doctor who asked; a walk-in, the patient or the doctor who asked), then
   Release writes each test whose fields are all there as a final result. 19 more LOINC codes in the base's list (the panels, urea,
   eGFR 2021, troponin, the serology). The demo: Rania and Osama, each with an earlier result, collected this morning.
-- **Large lab (separate switches in the laboratory's settings, all off for a small lab):** sample labels (printed barcodes; printing
-  is approved, these labels first, §5.4 *Printing*), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
+- **Large lab (separate switches in the laboratory's settings, all off for a small lab):** sample labels (printed barcodes, §3.13; built
+  2026-10-08, below), scan to receive (a rejected tube goes back to Collect), collection chairs (each its
   list, patients called by number), results from analysers (a small outside program, as the network is closed to packs), release
   normal results by themselves (no flag, no big change, the analyser content), a second person checks, turnaround targets per section.
   *Built 2026-10-07 (piece 6):* one card on the laboratory's page, `lis.large` (all off by default). *Turnaround targets* (minutes per
@@ -993,9 +1041,9 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   *Collection chairs* (0–12): a collector picks a chair (kept in the browser), each patient's tests of the day get a ticket number in
   the order they came (`lis.tickets`, the pack's own table, naming the orders, never the patient; `lis.tickets` and `lis.call`
   through `public.pack_op`), Call next calls the next with no chair (stat first) and the chair's card holds who it called, ready to
-  collect; one another chair called is taken only on purpose (`called_elsewhere`). Sample labels, results from analysers and releasing
-  normal results by themselves are placeholders on the card, read-only with a small *later* beside them (a field declared `later`
-  holds its value by the shape's `const`; `core.check_fields` refuses one without). The queue's row carries its latest step's data
+  collect; one another chair called is taken only on purpose (`called_elsewhere`). Results from analysers and releasing normal results
+  by themselves are placeholders on the card, read-only with a small *later* beside them (a field declared `later` holds its value by
+  the shape's `const`; `core.check_fields` refuses one without); *Sample labels* was one until 2026-10-08 (below). The queue's row carries its latest step's data
   (the sample number, a reason) and its latest answer. The demo adds Nabil (a lipid profile collected two and a half hours ago), two
   walk-ins waiting to be collected (Dina; Omar, stat) and the senior, Hala Mansour (senior@demo.com). *Fixed 2026-10-07:* a sample
   number is the patient's tests', not a screen's — `lis.sample` takes the orders and gives the same number on every screen that opens
@@ -1003,6 +1051,19 @@ shown: (1) walk-ins on the shared bench and at the desk; (2) the pharmacy's day 
   which orders each number went to; the rejected step carries its number); before, each screen drew its own, so the tubes could carry
   one number and the record another. Receive says why a number finds nothing (never given; given to whom and not marked Collected
   yet; saved under another number, via `lis.sample_of`) and receives by hand a tube with no number or one that will not scan.
+- **Specimen labels** (owner, 2026-10-07 with the print-label picture, and 2026-10-08; built 2026-10-08, §3.13): where the laboratory's
+  *Sample labels* (`lis.large`, its card) says **printed** — no longer a placeholder: *written* (the number on each tube) or *printed*,
+  written by default — Collected says "Rania Samir · S-1008-0003 · Collected · 3 tubes · labels ready" with **Print 3 labels** (**P**),
+  then *Print again*, the same numbers. One label a tube, on the core's label paper (50 × 25 mm, one a page; the pack's printout
+  `lis.labels`, `packs/lis/LabelSheet.tsx`, from `labels.ts`): the patient's name, age and sex, the record number, when the sample was
+  collected, the tube's word (never its colour alone) and its tests, fasting where it was asked (Fasting, or Not fasting where the
+  answer was no), and the sample number under its Code 128 barcode, which Scan to receive reads (the scanner types the number into
+  Receive). Every tube of a sample carries its one number (D34); where one patient has two samples waiting, each tube gets its own
+  sample's number (labels by sample, then by tube). *Chosen in the build, awaiting the owner:* on *Collected* a patient's tubes still at
+  Collected (not yet received) print again from their row; the label carries no clinic header (no room); the demo's Laboratory prints
+  its labels. Each print of a patient's labels is logged like a read (§3.13). Tests: `test:lis` (one label a tube and what it says,
+  two samples, again the same numbers, the barcode read back by Receive, the switch), `lis.sql` (the switch: written, printed, nothing
+  else), `demo.sql`.
 
 ### 5.4 Billing (the owner's decisions, 2026-10-07 and 2026-10-08; built in part 2026-10-08, each item marked)
 The owner asked for billing on 2026-10-07 ("let make billing next"), approved its pictures that day and decided the rest in chat; early
@@ -1200,9 +1261,11 @@ picture says "held", read "waiting" (the soft check, below).
     paid on a row, **View receipt** shows its receipt there, as kept.
   - **The receipt** (bill-receipt) is shown and kept: the clinic, the clinic's receipt number (R-00412), the date and time, the patient
     and record number, the lines, the total, the cash received and the change, who took it. Where work was waiting, its word goes;
-    nothing else changes in the chart. *Built 2026-10-08* (shown and kept; no print button).
+    nothing else changes in the chart. *Built 2026-10-08* (shown and kept), with the clinic's header (§3.13), drawn once
+    (`ReceiptPaper.tsx`, from `receiptView`) for the screen and the paper; printed: *Printing*, below.
   - **A refund** is a payment of its own, naming the receipt it undoes, with its reason, and prints its own slip (print-receipt,
-    ins-claims). *Built 2026-10-08:* any day, once, a whole receipt (Give back… with its reason, its own number); its slip with printing.
+    ins-claims). *Built 2026-10-08:* any day, once, a whole receipt (Give back… with its reason, its own number); its slip is shown under
+    the receipt it gives back, to print (*Printing*, below).
   - **Today** (bill-today): *Taken today* (and the receipts), *Cash* (in the drawer, with the float), *Card*, *Waived* (the charges and
     their reasons); a row per cashier (receipts, cash, card, waived); **Close the drawer**: the float plus the cash taken is what is
     expected, counted against what is there, a difference needs its reason, and the closing is a new row, never edited (closing the
@@ -1317,18 +1380,34 @@ picture says "held", read "waiting" (the soft check, below).
   stay), open bills and the reasons for going ahead (gone); insurance's rows come with insurance.
   - *Chosen in the build, awaiting the owner:* a typed price and an open bill, once paid, live on as the payment's lines; unpaid,
     they go with the patient, and so do the reasons for going ahead before payment.
-- **Printing** (owner, 2026-10-07, with the print-label and print-receipt pictures; tomorrow: owner, 2026-10-08):
+- **Printing** (owner, 2026-10-07, with the print-label and print-receipt pictures; 2026-10-08 evening, "build now no pics"; built
+  2026-10-08 through the core's facility, §3.13):
   - Through the browser's own print dialog, its printer chosen there once per computer; no driver of ours. Print is always a person's
     button (its key **P** where the screen shows one), never automatic; *Print again* is a reprint, never a new number. Specimen labels
-    first, then the receipt; the claim sheet prints on A4 (ins-claims). *To build.*
+    first, then the receipt (*built 2026-10-08*); the claim sheet prints on A4 (ins-claims), with insurance.
   - **Specimen labels**, where the laboratory prints them (*Sample labels*, a Large lab switch, §5.3): at Collected, "Collected · 3
     tubes · labels ready", **Print 3 labels** (P), *Print again*. One label a tube, no bigger than 50 × 25 mm: the patient's name, age
     and sex, the record number, the date and time, the tube's word (never its colour alone), fasting where asked, and the sample number
     with its barcode, which is what Scan to receive reads. Every tube of a sample carries the sample's one number (owner, 2026-10-08,
-    D34). *To build.*
+    D34); where one patient has two samples waiting, each tube gets its own sample's number (owner, 2026-10-08). *Built 2026-10-08:*
+    the laboratory pack's printout (§5.3 *Specimen labels*).
   - **The receipt** prints as it is shown and kept, at a thermal roll's width, saying nothing the screen did not; **Print receipt** (P)
     and *Print again*; every later copy is marked "Reprint" with its time; a refund prints its own slip naming the receipt it undoes.
-    *To build.*
+    The same text as the receipt on screen — the clinic's header, the receipt number, the date and time, the patient, each line with its
+    amount, the discount, the total, the cash received and the change or the card, who took it; a refunded receipt shows it was refunded
+    (owner, 2026-10-08). *Built 2026-10-08:* billing's printout `billing.receipt` on the core's receipt roll (80 mm, as long as it
+    carries; `ReceiptSlip.tsx`), the same drawing as the screen's (`ReceiptPaper.tsx`): "Receipt R-00412 · date time", or "Refund slip
+    R-00413" with "Gives back receipt R-00412 · why", and on a receipt given back "Refunded · given back on R-00413". Each copy is
+    recorded in billing's own insert-only table (`billing.prints`: which payment, at which desk, by whom, when; a trigger refuses every
+    change; it names no patient, so Erase leaves it) through its operation `billing.print` (`read:billing.cashier`, the desk's scope as
+    its receipts': a desk of everyone's prints any desk's, one of its own only what it took, `not_this_desk`; one taking no payment none,
+    `not_a_desk`) **before** it prints, so a second copy is marked "Reprint · 10:50" even after a reload or at another desk; the receipt
+    says its copies ("Printed 10:42 · again 10:50", `billing.paid`'s `prints`). The core logs the print of the patient's receipt like a
+    read (PATADMIN, §3.13). Give back… shows the refund slip it made under the receipt, to print. *Chosen in the build, awaiting the
+    owner:* a copy is recorded when Print is pressed (the dialog may still be cancelled); the receipt on screen now carries the clinic's
+    header as the paper does. Tests: `test:billing` (the receipt's words, the paper the same as the screen, the reprint mark, the slip, a
+    refunded receipt, the copy recorded first), `billing.sql` (copies kept, a reprint with its time after a reload, the slip its own
+    thing, only ever added to, the desk's scope, who may, nothing but the door).
 - **Not to be built** until the owner asks again: the laboratory's critical-call log (its picture, lab-call, was left out: owner,
   2026-10-07, "leave number 5"); a critical value stays a notice (§5.3).
 - **The order of work** (owner, 2026-10-08): tonight, the billing pack with core changes (a)–(g): charges, Billing → Prices with *At
@@ -1400,8 +1479,8 @@ files, never a pack's (owner, 2026-10-08, D30).
   (`declare_op(…, patients)`, `public.pack_op`, `core.read_merge`; §3.10).
 - **(g) Erase reaches a pack's declared tables** (D17, `core.declare_store`): billing keeps amounts and receipt numbers and loses the
   patient link after an Erase (D18, *Erase* above). *Built 2026-10-08* (`core.stores`; §3.11).
-- **Later** (owner, 2026-10-08): the chargeables door (server); the core client print facility (the browser's own print dialog at a
-  paper's size, printing what a pack hands it, which is what its screen shows); what insurance needs of the core.
+- **Later** (owner, 2026-10-08): the chargeables door (server); what insurance needs of the core. The core client print facility, listed
+  here that afternoon, was approved that evening as the owner's (p1)–(p5) and is built (§3.13).
 - Replaced by the owner, 2026-10-08, and not to build: the holds door (approved in principle on 2026-10-07; D3, D4, D6, D14, D15,
   D20), the same-save hold decision (D26), the lift-by-setting record (D3), the override right (D21), the settings-change listener
   (D11), a hold's short name beside its word (D22: the soft check's word carries it), the order-card field (D1), and the
@@ -2034,4 +2113,26 @@ types, parked pack calls with per-call Retry, Postgres enums.
   - **Tests**: `billing` 273 (+36: the fee at check-in, undone, left, sent on, as it stood; Pay first's switch; …anyway's gate; the
     chart's read, its words only, its gate, another patient's orders or none, Pay first off, gone ahead, paid), `demo` 72 (+2: the waiting room
     owes the fee; Magdy's chart); `test:board` 27 (+3), `test:billing` 20 (+1); 31 suites, 1528 checks.
+- 2026-10-08: **printing** (the owner's decisions of that evening, "build now no pics"; §3.13, §4.6 the chart, §5.3, §5.4; nothing in core or
+  base beyond the approved (p1)–(p5)):
+  - **Core**: `src/core/print` — the papers and the one stylesheet of a print (`@page`, one label a page, the print-only rule, in place
+    only during a print of ours), the printout drawn off screen in the light theme and measured (a roll as long as it carries), a print's
+    lifecycle (logged, drawn, the dialog, all taken away; one at a time; the reprint mark), the P key, `registerPrintout`, `usePrint`,
+    `PrintButton`, the shared parts (the header, the barcode, the reprint mark, Arabic right to left, numbers kept left to right), Code
+    128; the setting `organization.header` (Settings → Organization → Printouts, its logo made small); the reader's `printed` (a print
+    of a patient's information in the read log; Settings → Record reads says it).
+  - **Base**: the prescription on A5 from the chart's prescription block (Print prescription; P for this visit's newest), the base's
+    Arabic directions (`model/arabic.ts`), `base.prescription`.
+  - **Laboratory**: *Sample labels* live on the Large lab card (written or printed); at Collected "labels ready", Print 3 labels (P),
+    Print again; a patient's tubes still at Collected print again from their row; `lis.labels`.
+  - **Billing**: the receipt and the refund slip on the roll, the same drawing as the screen (`ReceiptPaper`); each copy recorded first in
+    `billing.prints` through `billing.print` (the desk's scope), so a later one says "Reprint" with its time after a reload; the copies
+    said under the receipt; Give back… shows its slip to print; `billing.receipt`.
+  - **Demo**: the clinic's header; the Laboratory prints its labels (chosen in the build, awaiting the owner).
+  - **Tests**: `printing` (new, 25: the header's shape and who writes it; a print logged like a read, merged, refused), `billing` 288 (+15:
+    copies, a reprint after a reload, the slip, only ever added to, the desk's scope, who may), `lis` 34 (+3: the switch), `demo` 74 (+2);
+    32 suites, 1573 checks. `npm run test:print` (new, 14 groups), `test:lis` 16 (+4: one label a tube, two samples, the barcode read back,
+    the switch), `test:billing` 22 (+2: the receipt's words, the paper the same as the screen), `test:chart` 23 + 14 (+4: the Arabic
+    directions, the sheet, no price, P's prescription); typecheck, eslint and the build clean. Not seen in a browser: the shared browser
+    pane had no free tab and port 3010 was another lane's, so the printouts were checked as rendered by the tests.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

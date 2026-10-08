@@ -18,6 +18,8 @@ import { PackPage } from './settings/PackSettings'
 import { PacksPage } from './settings/PackList'
 import { ReferencePage } from './settings/Reference'
 import { ScoresPage } from './settings/Scores'
+import { ClinicHeaderSetting } from './settings/Header'
+import { headerOf } from '../print/header'
 
 const PAGES = [['organization', 'Organization', Building2], ['departments', 'Departments', LayoutGrid], ['services', 'Services', FlaskConical], ['users', 'Users', Users],
   ['roles', 'Roles', KeyRound], ['templates', 'Presets', ListChecks], ['packs', 'Packs', Puzzle], ['scores', 'Scores', Calculator], ['reference', 'Reference lists', BookOpen], ['reads', 'Record reads', Eye]] as const
@@ -75,6 +77,10 @@ function OrganizationPage({ org }: { org: Organization }) {
     {org.parked_pack_calls > 0 && <Callout tone="danger"><Link to="/settings/packs" className="rounded-sm hover:underline focus-ring">{org.parked_pack_calls === 1 ? 'A pack\'s refresh failed' : `${org.parked_pack_calls} pack refreshes failed`}: see Packs, where Retry runs them again.</Link></Callout>}
     <Section flush id="org.general" title="The clinic" summary={`${org.organization.time_zone.replace(/_/g, ' ')} · record ${org.organization.record_view === 'entries' ? 'as all entries' : 'by visit'}`}>
       <div className="grid gap-6 p-4"><ClinicZone org={org} /><RecordViewSetting org={org} /></div>
+    </Section>
+    <Section id="org.printouts" title="Printouts" summary={`the clinic's header: ${headerOf(org).name}`}>
+      <p className="mb-3 text-12 text-faint">Every printout (a receipt, a prescription) carries this header. Printing goes through the browser's own print dialog: choose the printer there once on each computer.</p>
+      <ClinicHeaderSetting org={org} />
     </Section>
     <Section flush id="org.changes" title="Recent changes" count={ch.data?.length} summary="the last 30 changes to settings, newest first">
       {ch.isLoading ? <div className="p-4"><Spinner /></div> : (ch.data ?? []).length === 0 ? <Empty>Nothing changed yet.</Empty>

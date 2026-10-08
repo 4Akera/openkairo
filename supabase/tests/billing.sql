@@ -52,7 +52,7 @@ select t.ok((select jsonb_object_agg(key, coalesce(to_jsonb(clear), 'null')) fro
   = '{"billing.payments":["patient_id"],"billing.sent":null,"billing.anyway":null}', 'Erase: payments lose the patient, open bills and reasons go');
 select t.ok((select jsonb_object_agg(key, patients) from core.ops where layer = 'billing')
   = '{"billing.owed":true,"billing.lines":true,"billing.paid":true,"billing.day":false,"billing.pay":true,"billing.refund":true,"billing.close":false,
-      "billing.send":true,"billing.waiting":true,"billing.anyway":true,"billing.chart":true}', 'every operation returning patient ids says so');
+      "billing.send":true,"billing.waiting":true,"billing.anyway":true,"billing.chart":true,"billing.print":false}', 'every operation returning patient ids says so');
 select t.ok((select jsonb_object_agg(key, action) from core.ops where layer = 'billing' and key in ('billing.send', 'billing.waiting', 'billing.anyway', 'billing.chart'))
   = '{"billing.send":"read:bench","billing.waiting":"read:bench","billing.anyway":"read:bench","billing.chart":"read:record"}',
   'Send to cashier and …anyway for anyone working the bench (owner, 2026-10-08); the chart''s word for whoever reads the record');
@@ -333,6 +333,43 @@ select t.as(:'sal');
 select t.refuses(format($q$select pg_temp.op('billing.owed', %L)$q$, :'psy'), 'not_used_here');
 select t.as(:'dr');
 select t.refuses(format($q$select pg_temp.op('billing.owed', %L)$q$, :'im'), 'not_allowed');
+
+\echo '── a receipt printed (§3.13 Printing, owner 2026-10-08): each copy kept in billing''s own table, the first the original and every later one a reprint, after a reload too; the desk''s scope'
+select t.as(:'cr');
+reset role;
+select id as r5 from billing.payments where receipt = 'R-00005' \gset
+set role authenticated;
+select t.ok((c ->> 'copy')::int = 1 and not (c ->> 'reprint')::boolean and c ->> 'receipt' = 'R-00001', 'R-00001 printed at the Cashier: the original')
+  from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r1')) c;
+select t.ok((c ->> 'copy')::int = 2 and (c ->> 'reprint')::boolean and (c ->> 'first_at')::timestamptz < (c ->> 'at')::timestamptz, 'printed again: a reprint, with its time')
+  from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r1')) c;
+select t.ok(jsonb_array_length(p -> 'payments' -> 0 -> 'prints') = 2 and p -> 'payments' -> 0 -> 'prints' -> 0 ->> 'by' = 'Cashier Mona',
+  'the receipt read again (a reload) knows both copies, who printed them and when') from pg_temp.op('billing.paid', :'cash', '{"receipt":"R-00001"}') p;
+select t.ok((c ->> 'copy')::int = 1, 'the refund slip R-00003 is a thing of its own: its first copy') from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r3')) c;
+select t.ok(p -> 'payments' -> 0 ->> 'refund_of' = 'R-00001' and p -> 'payments' -> 0 ->> 'reason' = 'the patient was charged twice', 'the slip names the receipt it undoes, and why')
+  from pg_temp.op('billing.paid', :'cash', '{"receipt":"R-00003"}') p;
+select t.ok(p -> 'payments' -> 0 ->> 'refunded_by' = 'R-00003', 'and the receipt given back says on which slip') from pg_temp.op('billing.paid', :'cash', '{"receipt":"R-00001"}') p;
+select t.refuses(format($q$select pg_temp.op('billing.print', %L, '{"payment_id":"00000000-0000-0000-0000-000000000000"}')$q$, :'cash'), 'not_found');
+-- the desk's scope (the receipts'): the Lab, taking its own charges, prints what it took and not the Cashier's; the Cashier (everyone's)
+-- prints any desk's; whoever may not see receipts may not print one; a department not using billing has no such door
+select t.as(:'tech');
+select t.ok((c ->> 'copy')::int = 1, 'the Lab prints its own R-00005') from pg_temp.op('billing.print', :'lab', jsonb_build_object('payment_id', :'r5')) c;
+select t.refuses(format($q$select pg_temp.op('billing.print', %L, '{"payment_id":"%s"}')$q$, :'lab', :'r1'), 'not_this_desk');
+select t.as(:'cr');
+select t.ok((c ->> 'copy')::int = 2 and (c ->> 'reprint')::boolean, 'the Cashier prints the Lab''s receipt too: a reprint wherever the first was printed')
+  from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r5')) c;
+select t.as(:'dr');
+select t.refuses(format($q$select pg_temp.op('billing.print', %L, '{"payment_id":"%s"}')$q$, :'im', :'r1'), 'not_allowed');
+select t.as(:'sal');
+select t.refuses(format($q$select pg_temp.op('billing.print', %L, '{"payment_id":"%s"}')$q$, :'psy', :'r1'), 'not_used_here');
+reset role;
+select t.ok((select count(*) from billing.prints) = 5 and not exists (select 1 from pg_attribute a where a.attrelid = 'billing.prints'::regclass and a.attname = 'patient_id' and not a.attisdropped),
+  'five copies kept, naming no patient (the payment does)');
+select t.ok(t.try('update billing.prints set at = now()') like 'P0001 prints are only ever added to%' and t.try('delete from billing.prints') like 'P0001 prints are only ever added to%'
+  and t.try('truncate billing.prints') like 'P0001 prints are only ever added to%', 'a copy printed is only ever added to');
+select t.ok(not has_table_privilege('authenticated', 'billing.prints', 'SELECT,INSERT,UPDATE,DELETE') and not has_function_privilege('authenticated', 'billing.print(uuid,uuid,uuid,jsonb)', 'EXECUTE'),
+  'reached only through public.pack_op');
+set role authenticated;
 
 \echo '── a department''s own priced lines: Send to cashier (an open bill), a resend replaces what was not paid; Pay at a counter that takes payment'
 select t.as(:'ow');

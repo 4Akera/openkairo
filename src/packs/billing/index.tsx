@@ -3,10 +3,12 @@
 // the rows of every list of a department that uses billing (core changes (a)–(c)), its one button (Pay, or Send to cashier with the
 // lines the row hands) and its soft check (Pay first: "Waiting for payment" on an order not paid, "…anyway" recorded with its reason),
 // whose word alone reaches the doctor's chart on a waiting order's line (owner, 2026-10-08). Money never reaches the chart: these read
-// billing's own tables through its operations, and only where a department uses billing.
+// billing's own tables through its operations, and only where a department uses billing. Its printout: the receipt and the refund slip on
+// the core's receipt roll (§3.13 Printing), the same drawing as the screen's receipt.
 import { registerScreen } from '@core/screens/registry'
 import { registerRowAction, registerSoftCheck, type PackRow, type RowCtx } from '@core/screens/rows'
 import { registerWords } from '@core/db/words'
+import { registerPrintout } from '@core/print/registry'
 import { packOp } from '@core/db/rpc'
 import { settingIn } from '@core/screens/settings/form/model'
 import { Cashier } from './Cashier'
@@ -14,13 +16,15 @@ import { Today } from './Today'
 import { Prices } from './Prices'
 import { RowCard } from './RowCard'
 import { REFUSALS } from './words'
-import type { Desk, Owed } from './money'
+import { ReceiptSlip } from './ReceiptSlip'
+import type { Desk, Owed, ReceiptView } from './money'
 import { anywayDue, asSent, chartData, noData, ordersOf, rowButton, rowData, rowWaits, type ChartWaiting, type RowData, type Waiting } from './rows'
 
 registerScreen('billing.cashier', Cashier)
 registerScreen('billing.today', Today)
 registerScreen('billing.prices', Prices)
 registerWords(REFUSALS)
+registerPrintout<ReceiptView>('billing.receipt', { paper: 'receipt', Component: ReceiptSlip })
 
 /** Takes payment here, as the department's settings stand */
 const deskOf = (ctx: RowCtx): Desk => (settingIn(ctx.org, 'billing.desk', ctx.dept.id).takes as Desk | undefined) ?? 'none'

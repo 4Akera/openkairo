@@ -1,8 +1,10 @@
 // Collect (lis.collect, spec/openCare.md §5.3; the picture "Lab · collecting"): the laboratory's first screen, in place of the bench.
 // Its views are counted filters — To collect (nothing done yet), Collected (results to come), Couldn't collect (today, with why). A row
 // is one patient: the tests, stat, a walk-in, where they are. Collect folds out the sample number (one per patient, written on each
-// tube until labels print), the tubes by colour with the tests drawn into each, fasting asked where it matters, then Collected — a
-// collected step on each order, carrying the sample number — or Couldn't collect with a reason the doctor sees. + Walk-in as on any
+// tube, or printed on its label where the laboratory's Sample labels says printed), the tubes by colour with the tests drawn into each,
+// fasting asked where it matters, then Collected — a collected step on each order, carrying the sample number — or Couldn't collect with
+// a reason the doctor sees. Where labels print (§3.13 Printing, owner 2026-10-08): at Collected, "Collected · 3 tubes · labels ready",
+// Print 3 labels (P), then Print again (the same numbers); a patient's tubes still at Collected print again from their row. + Walk-in as on any
 // bench, with the laboratory's own second step (Step.tsx). A tube Receive rejected comes back to To collect, "new sample" and why.
 // With collection chairs (the large lab's switch): each collector picks a chair (kept in this browser), every patient's tests of the
 // day get a ticket number in the order they came (lis.tickets), Call next calls the next with no chair (stat first) to mine, and my
@@ -29,6 +31,8 @@ import { benchMarkRow } from '@core/screens/marks'
 import { byWord, packRowOf } from '@core/screens/rows'
 import { usePackRows } from '@core/screens/useRows'
 import { needsFasting, tubesFor } from './tubes'
+import { PrintButton, usePrint } from '@core/print'
+import { atCollected, labelsOf, printWords, samplesOf, type Label } from './labels'
 import { Cap } from './Cap'
 import { byArrival, largeOf, nextUp, nowAt, ticketOf, type Ticket } from './large'
 
@@ -54,7 +58,10 @@ export function Collect({ dept }: ScreenProps) {
   const [walkIn, setWalkIn] = useState(false); const [said, setSaid] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null); const [error, setError] = useState<string | null>(null)
   const [fasting, setFasting] = useState<boolean | null>(null); const [why, setWhy] = useState<string | null>(null)
+  const [ready, setReady] = useState<{ words: string; labels: Label[]; patient: string } | null>(null)
   const large = largeOf(org, dept.id); const [chair, setChair] = useChair(dept.id, large.chairs)
+  const printing = large.labels === 'printed'; const print = usePrint()
+  const printLabels = (labels: Label[], patientId: string) => print({ key: 'lis.labels', data: labels, thing: samplesOf(labels), patientId, purpose: 'TREAT' })
   const f = find.trim().toLowerCase()
   const rows = useMemo(() => q.data?.requests ?? [], [q.data])
   const packs = usePackRows('screen', useMemo(() => groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g))), [rows]), dept)
@@ -91,18 +98,25 @@ export function Collect({ dept }: ScreenProps) {
     try { await packOp('lis.call', dept.id, { number: t.number, chair, take }); await tickets.refetch(); setOpen(g.patient.id); setFasting(null); setWhy(null); setSaid(`#${t.number} · ${g.patient.given_name} ${g.patient.family_name} → Chair ${chair}`) }
     catch (x) { setSaid(null); setError(errorText(x)); void tickets.refetch() } finally { setBusy(null) }
   }
-  const land = async (g: PatientGroup, items: EntryIn[], words: string) => {
+  const land = async (g: PatientGroup, items: EntryIn[], words: string, labels?: Label[]) => {
     setBusy(g.patient.id); setError(null)
     // the number went on these tubes: a new sample (one sent back) gets a new one
-    try { await write(oneSet(items)); qc.removeQueries({ queryKey: ['lis.sample', dept.id, g.patient.id] }); setOpen(null); setSaid(words); refresh(qc) }
+    try { await write(oneSet(items)); qc.removeQueries({ queryKey: ['lis.sample', dept.id, g.patient.id] }); setOpen(null); setSaid(words)
+      setReady(labels?.length ? { words, labels, patient: g.patient.id } : null); refresh(qc) }
     catch (x) { setError(errorText(x)) } finally { setBusy(null) }
   }
+  // collected: the step on each test with the number; where labels print, its labels ready (the number, now, the fasting answer)
   const collect = (g: PatientGroup, n: string) => land(g, g.rows.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'in-progress',
     ...(serviceOf(r)?.steps.includes('collected') ? { step: 'collected' } : {}), specimen: n, ...(fasting === false ? { note: 'not fasting' } : {}) } })),
-    `${g.patient.given_name} ${g.patient.family_name} · ${n}: write it on each tube`)
+    printing ? `${g.patient.given_name} ${g.patient.family_name} · ${n} · Collected · ${tubesOf(g)} ${tubesOf(g) === 1 ? 'tube' : 'tubes'} · labels ready`
+      : `${g.patient.given_name} ${g.patient.family_name} · ${n}: write it on each tube`,
+    printing ? labelsOf(g.rows, serviceOf, { sample: n, at: new Date().toISOString(), fasting }) : undefined)
   const notCollected = (g: PatientGroup, reason: string) => land(g, g.rows.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'cancelled', reason } })),
     `${g.patient.given_name} ${g.patient.family_name}: not collected (${reason.toLowerCase()}) — the doctor sees why`)
 
+  const tubesOf = (g: PatientGroup) => tubesFor(g.rows.map((r) => ({ code: serviceOf(r)?.code ?? '', section_name: r.section_name }))).length
+  // a patient's tubes still at Collected: their labels again, each tube its own sample's number
+  const again = (g: PatientGroup) => printing ? labelsOf(g.rows.filter(atCollected), serviceOf) : []
   const row = (g: PatientGroup) => {
     const isOpen = open === g.patient.id; const walk = g.rows.some((r) => isWalkIn(r.order, org?.allDepartments ?? []))
     const pr = packRowOf(`${view} ${g.patient.id}`, benchMarkRow(g)); const hold = g.rows.filter((r) => !free(r))
@@ -121,7 +135,8 @@ export function Collect({ dept }: ScreenProps) {
         {can('write:step') && <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : "Couldn't…"}</Button>}</span>
       : view === 'todo' && can('write:step') ? <span className="flex gap-1.5">
         {chair && t && t.chair !== chair && <Button size="sm" variant="ghost" loading={busy === `call ${t.number}`} onClick={() => void call(t, g, elsewhere)}><Megaphone />{elsewhere ? 'Call here' : 'Call'}</Button>}
-        <Button size="sm" variant={isOpen ? 'ghost' : 'outline'} aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : 'Collect'}</Button></span> : undefined} />,
+        <Button size="sm" variant={isOpen ? 'ghost' : 'outline'} aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : 'Collect'}</Button></span>
+      : view === 'collected' && again(g).length ? <PrintButton label={printWords(again(g))} printed print={() => printLabels(again(g), g.patient.id)} /> : undefined} />,
       isOpen && (view === 'todo' || heldView) && fold(g, false, word)]
   }
   // the fold to collect: the sample number, the tubes by colour, fasting where it matters, then Collected or why not
@@ -131,7 +146,7 @@ export function Collect({ dept }: ScreenProps) {
     return <li key={`${g.patient.id} fold`} className={inCard ? 'grid gap-4 border-t border-line pt-4 md:grid-cols-[14rem_minmax(0,1fr)]' : 'grid gap-4 border-t border-line bg-sunken p-4 md:grid-cols-[14rem_minmax(0,1fr)]'}>
       <div className="grid content-start gap-1"><p className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Sample number</p>
         {sample.isLoading ? <Spinner label="A number" /> : <p className="font-mono text-22 font-semibold tracking-wide text-fg">{sample.data?.sample ?? '—'}</p>}
-        <p className="text-12 text-muted">Write it on each tube. Labels come with printing.</p></div>
+        <p className="text-12 text-muted">{printing ? 'Its labels print at Collected, one for each tube.' : 'Write it on each tube.'}</p></div>
       <div className="grid gap-2"><p className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Tubes · {groups.length}</p>
         {groups.map(({ tube, tests }) => <div key={tube.cap} className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2">
           <Cap cap={tube.cap} big /><span className="w-36 text-13 font-medium text-fg">{tube.word}</span><span className="text-13 text-muted">{tests.map((t) => t.name).join(' · ')}</span></div>)}
@@ -154,7 +169,8 @@ export function Collect({ dept }: ScreenProps) {
       options={[['all', 'All chairs'], ...Array.from({ length: large.chairs }, (_, i) => [String(i + 1), `Chair ${i + 1}`] as [string, string])]} />}
     search={<Input value={find} onChange={(e) => setFind(e.target.value)} placeholder={large.chairs > 0 ? 'Ticket, record number or name' : 'Sample number, record number or name'} className="w-full sm:w-72" />}
     action={can('write:order') && <Button size="sm" variant="outline" aria-expanded={walkIn} onClick={() => { setWalkIn(!walkIn); setSaid(null) }}><Plus />Walk-in</Button>}
-    notice={said && <Callout key={said} tone="accent" icon={false} role="status">✓ {said}</Callout>}>
+    notice={said && <Callout key={said} tone="accent" icon={false} role="status"
+      actions={ready?.words === said && <PrintButton label={printWords(ready.labels)} keyed print={() => printLabels(ready.labels, ready.patient)} />}>✓ {said}</Callout>}>
     {walkIn && <WalkIn dept={dept} onClose={() => setWalkIn(false)} onStarted={(x) => { setWalkIn(false); setSaid(x); setView('todo') }} />}
     {view === 'todo' && chair && <Card className="grid gap-3 p-4 ring-1 ring-accent-line">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
