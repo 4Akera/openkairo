@@ -63,7 +63,7 @@ export interface ServerMe {
   sites: { id: string; name: string; retired_at: string | null }[]
   // packs: the packs it uses (ticked and on); screens, opens: its Screens line, or the base's screens of its work until one is set
   departments: { id: string; name: string; work: 'desk' | 'visits' | 'stays' | 'bench' | 'outside'; site_id: string | null; position: number; retired_at: string | null
-    packs: string[]; screens: string[]; opens?: string }[]
+    packs: string[]; declared?: Record<string, PackDeclared>; screens: string[]; opens?: string }[]
   places: { id: string; department_id: string; parent_id: string | null; label: string; name: string; position: number; retired_at: string | null }[]
   users: { id: string; name: string; title: string | null; kind: string; retired_at: string | null; signed_in_at: string | null; has_login: boolean }[]
   holdings: { id: string; user_id: string; role_id: string; department_id: string | null }[]
@@ -150,8 +150,11 @@ export interface Department {
   serves: (string | null)[]; checks_in_for: (string | null)[]; review_results: 'critical' | 'abnormal' | 'all'; is_private: boolean; after_done: 'next' | 'queue'
   pack_cards: boolean; screens: string[]; opens: string | null; encounter_class: SettingData['department.encounter_class']['class'] | null
   packs: string[]   // the packs it uses: ticked here and on for the clinic (§5.1 rule 1)
+  declared?: Record<string, PackDeclared>   // each pack it uses with what that pack declares (§5.4 core change (d)): ask chargesHere, never a pack's name
   setup: string | null   // the starter setup it was made from (§5.2)
 }
+/** what a pack declares of itself (core.declare_pack): it charges for work */
+export interface PackDeclared { charges: boolean }
 export interface ServiceField { position: number; key: string; code: string; name: string; kind: 'number' | 'text' | 'choice'; unit: string | null; ucum: string | null; choices: string[] | null
   reference_low: number | null; reference_high: number | null; critical_low: number | null; critical_high: number | null; ranges: FieldRange[] }
 export interface Service { id: string; department_id: string | null; section_name: string | null; code: string; name: string; reply_type: string; coding: { system: string; code: string } | null; fields: ServiceField[]

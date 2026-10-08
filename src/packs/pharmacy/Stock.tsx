@@ -18,6 +18,8 @@ import type { ScreenProps } from '@core/screens/registry'
 import { Button, Callout, Card, Chip, Empty, Input, Kbd, ScreenFrame, Select, Spinner, Tag, cn, errorText, shortDate, type ScreenView } from '@core/ui'
 import { batchFor, boxesToMinimum, inBoxes, lowAt, stateOf, type Elsewhere, type Product, type StockRead } from './shelf'
 import { keepStock } from './settings'
+import { chargesHere } from '@core/screens/rows'
+import { withPrices } from './pricing'
 
 type View = 'all' | 'low' | 'expiring' | 'out' | 'away'
 const LABEL = 'text-11 font-semibold uppercase tracking-[0.06em] text-faint'
@@ -64,7 +66,7 @@ export function Stock({ dept }: ScreenProps) {
     {card === 'receive' && <Receive departmentId={dept.id} products={all} onClose={() => setCard(null)} onDone={done} onNew={() => setCard('product')} />}
     {card === 'send' && <SendCard departmentId={dept.id} places={places} products={products.filter((p) => p.on_hand > 0)} elsewhere={elsewhere} onClose={() => setCard(null)} onDone={done} />}
     {card === 'count' && <Count departmentId={dept.id} products={shown.length ? shown : products} onClose={() => setCard(null)} onDone={done} />}
-    {card === 'product' && <NewProduct org={org} departmentId={dept.id} onClose={() => setCard(null)} onDone={done} />}
+    {card === 'product' && <NewProduct org={org} departmentId={dept.id} charges={chargesHere(dept)} onClose={() => setCard(null)} onDone={done} />}
     {q.isLoading ? <Spinner label="Loading the stock" /> : q.error ? <Callout tone="danger" title="Not loaded">{errorText(q.error)}</Callout>
       : !products.length && !shown.length ? <Card><Empty action={<Button size="sm" onClick={() => setCard('product')}><Plus />Add the first product</Button>}>No products kept here yet. Add the products this place stocks, then receive a delivery.</Empty></Card>
       : <Card className="overflow-x-auto"><table className="w-full text-13">
@@ -178,18 +180,19 @@ function Count({ departmentId, products, onClose, onDone }: { departmentId: stri
 }
 
 const FORMS = ['tablet', 'capsule', 'syrup', 'suspension', 'injection', 'cream', 'drops', 'inhaler', 'sachet', 'other']
-/** a product on the clinic's one list (brand, active ingredient, strength, form, pack size, barcode), kept here with its minimum (boxes) */
-function NewProduct({ org, departmentId, onClose, onDone }: { org: Organization | undefined; departmentId: string; onClose: () => void; onDone: (said: string) => void }) {
-  const [p, setP] = useState({ brand: '', generic: '', strength: '', form: 'tablet', pack_size: '', minimum: '', barcode: '' })
+/** a product on the clinic's one list (brand, active ingredient, strength, form, pack size, barcode), kept here with its minimum (boxes);
+ *  where a pack used here charges, its prices too (per box, per strip: spec §5.4) */
+function NewProduct({ org, departmentId, charges, onClose, onDone }: { org: Organization | undefined; departmentId: string; charges: boolean; onClose: () => void; onDone: (said: string) => void }) {
+  const [p, setP] = useState({ brand: '', generic: '', strength: '', form: 'tablet', pack_size: '', minimum: '', barcode: '', box: '', strip: '', size: '' })
   const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>(null)
   const set = (x: Partial<typeof p>) => setP((v) => ({ ...v, ...x }))
-  const ok = p.brand.trim() && Number(p.pack_size) >= 1
+  const data = withPrices({ id: '', brand: p.brand.trim(), pack_size: Number(p.pack_size), form: p.form, ...(p.generic.trim() ? { generic: p.generic.trim() } : {}),
+    ...(p.strength.trim() ? { strength: p.strength.trim() } : {}), ...(p.barcode.trim() ? { barcode: p.barcode.trim() } : {}) }, charges ? p.box : '', charges ? p.strip : '', charges ? p.size : '')
+  const ok = p.brand.trim() && Number(p.pack_size) >= 1 && !!data
   const save = async () => {
-    setBusy(true); setError(null)
+    if (!data) return; setBusy(true); setError(null)
     try {
-      const made = await writeSetting({ key: 'pharmacy.product', data: { brand: p.brand.trim(), pack_size: Number(p.pack_size), form: p.form as never,
-        ...(p.generic.trim() ? { generic: p.generic.trim() } : {}), ...(p.strength.trim() ? { strength: p.strength.trim() } : {}),
-        ...(p.barcode.trim() ? { barcode: p.barcode.trim() } : {}) } })
+      const made = await writeSetting({ key: 'pharmacy.product', data })
       await setMinimum(org, departmentId, made.thing_id, p.minimum.trim() ? Number(p.minimum) : 0)   // kept here from now on
       onDone(`${p.brand.trim()} added to the clinic's products, kept here`)
     } catch (x) { setError(x) } finally { setBusy(false) }
@@ -205,6 +208,10 @@ function NewProduct({ org, departmentId, onClose, onDone }: { org: Organization 
       <Input inputMode="numeric" value={p.minimum} onChange={(e) => set({ minimum: e.target.value })} placeholder="Minimum boxes" aria-label="Minimum, in boxes" className="w-32 text-end" />
       <Input value={p.barcode} onChange={(e) => set({ barcode: e.target.value })} placeholder="Barcode (optional)" className="w-44 font-mono" />
     </div>
+    {charges && <div className="flex flex-wrap items-center gap-2 text-13 text-muted">Price a box<Input inputMode="decimal" value={p.box} onChange={(e) => set({ box: e.target.value })} aria-label="Price a box" className="w-24 text-end tnum" />
+      · sold in strips of<Input inputMode="numeric" value={p.size} onChange={(e) => set({ size: e.target.value })} aria-label="Units in a strip" className="w-16 text-end tnum" />
+      at<Input inputMode="decimal" value={p.strip} onChange={(e) => set({ strip: e.target.value })} aria-label="Price a strip" className="w-24 text-end tnum" />
+      <span className="text-12 text-faint">empty is free; a strip price needs its size</span></div>}
     {!!error && <Callout tone="danger" title="Not added">{errorText(error)}</Callout>}
     <div className="flex items-center gap-2 border-t border-line pt-3"><Button onClick={() => void save()} disabled={!ok} loading={busy}>Add the product</Button>
       <span className="text-12 text-faint">One list for the clinic; the minimum is this place's (below it, it reads low). The box size turns tablets into boxes.</span></div>

@@ -89,7 +89,7 @@ export function payArgs(patientId: string, lines: CardLine[], c: Card) {
     ...(c.discount && s.discount > 0 ? { discount: { amount: wire(s.discount), reason: c.discount.reason } } : {}) }
 }
 
-/** a row of who owes in words: "Visit · CBC, HbA1c · Pharmacy" and how many wait for a price */
+/** a row of who owes in words: "Visit · CBC, HbA1c · Dispensary" and how many wait for a price */
 export function owedWords(r: Pick<OwedRow, 'visits' | 'names' | 'sent' | 'unpriced'>, nameOf: Names) {
   const names = r.names.filter((x): x is string => !!x)
   const parts = [r.visits ? (r.visits > 1 ? `${r.visits} visits` : 'Visit') : '', names.length > 3 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', '),

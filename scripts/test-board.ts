@@ -10,9 +10,13 @@ import type { OrderRow, PresenceRow } from '../src/core/db/types'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PackLine } from '../src/core/screens/ward/Tile'
+import { ListRow } from '../src/core/ui/patient'
+import { anywayCalls, byWord, chargesHere, dueLines, dueTotal, freeRows, goAhead, packRowOf, reasonReady, registerRowAction, registerSoftCheck, rowActionDefs, rowButtonsOf,
+  rowsKey, softCheckDefs, waitsOf, waitWords, type Anyway, type DueLine, type RowActionDef, type RowCtx, type SoftCheckDef } from '../src/core/screens/rows'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
+const testAsync = async (name: string, fn: () => Promise<void>) => { try { await fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
 const quiet = <T,>(fn: () => T): T => { const e = console.error; console.error = () => {}; try { return fn() } finally { console.error = e } }
 
 const stay = (more: Partial<PresenceRow> = {}) => ({ item: 's1', patient_id: 'p1', kind: 'stay', department_id: 'icu', place_id: 'b1', state: 'admitted', urgent: false, reason: null, ...more }) as PresenceRow
@@ -138,5 +142,105 @@ test('pharmacy\'s mark follows its own Prepared, whatever the service calls its 
   for (const step_key of ['ready', 'counted', 'packed']) assert.deepEqual(collectMark(row([order({ step_key })]), mctx(['pharmacy'])), { word: 'Rx to collect' }, step_key)
   assert.deepEqual(collectMark(row([order({ status: 'active', step_key: 'checked' })]), mctx(['pharmacy'])), { word: 'Rx to collect' }, 'a step reached, the order still active')
   assert.deepEqual(collectMark(row([order({ step_key: null })]), mctx(['pharmacy'])), { word: 'Rx to collect' }, 'in progress with no step, as the banner\'s "to collect"')
+})
+
+// ── spec §5.4 (owner, 2026-10-08): a pack's row action (a), the lines a screen hands (b), a soft check (c), a pack that charges (d) ──
+const rctx = (packs: string[], more: Partial<RowCtx> = {}): RowCtx => ({ list: 'bench', dept: { id: 'lab', name: 'Laboratory', packs, declared: {} }, can: () => true, ...more })
+const prow = (orders: OrderRow[] = [order({ item: 'o1' }), order({ item: 'o2' })], lines?: DueLine[]) => packRowOf('p1', { patient_id: 'p1', visit_id: null, orders }, lines)
+const Card = () => null
+test('row actions: one a pack, never the core\'s or the base\'s; a button and a card', () => {
+  assert.equal(registerRowAction('probe', { load: async () => ({}), Card,
+    button: (r, c, data) => !c.can('write:probe') ? null : r.lines?.length ? 'Send to cashier' : (data as { owes?: boolean } | undefined)?.owes ? 'Pay' : null }), true)
+  quiet(() => {
+    assert.equal(registerRowAction('probe', { button: () => 'Again', Card }), false, 'one a pack')
+    assert.equal(registerRowAction('base', { button: () => 'Pay', Card }), false); assert.equal(registerRowAction('core', { button: () => 'Pay', Card }), false)
+    assert.equal(registerRowAction('other', { button: () => 'Pay' } as never), false, 'a card to fold out')
+  })
+  assert.equal(rowActionDefs().filter((d) => d.pack === 'probe').length, 1)
+})
+test('row actions: only the packs the department uses, in its pack order, one each; loading, failing or wordless says nothing', () => {
+  assert.deepEqual(rowButtonsOf(rowActionDefs(), prow(), rctx(['probe']), { probe: { owes: true } }), [{ pack: 'probe', label: 'Pay' }])
+  assert.deepEqual(rowButtonsOf(rowActionDefs(), prow(), rctx([]), { probe: { owes: true } }), [], 'not used here')
+  assert.deepEqual(rowButtonsOf(rowActionDefs(), prow(), rctx(['probe']), {}), [], 'its data not here yet (loading, or failed): nothing')
+  assert.deepEqual(rowButtonsOf(rowActionDefs(), prow(), rctx(['probe']), { probe: {} }), [], 'nothing to pay: no button')
+  assert.deepEqual(rowButtonsOf(rowActionDefs(), prow(), rctx(['probe'], { can: () => false }), { probe: { owes: true } }), [], 'nor for a role that may not')
+  const more: RowActionDef[] = [...rowActionDefs(), { pack: 'till', button: () => '  Pay  here ', Card }, { pack: 'broken', button: () => { throw new Error('no') }, Card },
+    { pack: 'blank', button: () => '   ', Card }]
+  assert.deepEqual(quiet(() => rowButtonsOf(more, prow(), rctx(['broken', 'till', 'blank', 'probe']), { probe: { owes: true } })), [{ pack: 'till', label: 'Pay here' }, { pack: 'probe', label: 'Pay' }])
+  assert.deepEqual(rowButtonsOf(more, prow(), rctx(['probe', 'till']), { probe: { owes: true } }).map((b) => b.pack), ['probe', 'till'], 'the department\'s pack order')
+})
+test('lines due: a name, a quantity, an amount — plain numbers to the hundredth, the order where there is one; anything else is dropped', () => {
+  const handed = [{ name: ' Augmentin 1 g ·  box ', quantity: 1, amount: 145, order: 'o1' }, { name: 'Nexium 40 · strip', quantity: 2, amount: 95.005 },
+    { name: '', quantity: 1, amount: 1 }, { name: 'free', quantity: 1, amount: 0 }, { name: 'x', quantity: 0, amount: 3 }, { name: 'y', quantity: 1, amount: -1 },
+    { name: 'z', quantity: 1, amount: '12' }, { name: 'w', quantity: Number.NaN, amount: 1 }, null, 'EGP 12']
+  assert.deepEqual(dueLines(handed), [{ name: 'Augmentin 1 g · box', quantity: 1, amount: 145, order: 'o1' }, { name: 'Nexium 40 · strip', quantity: 2, amount: 95.01 }, { name: 'free', quantity: 1, amount: 0 }])
+  assert.equal(dueTotal(dueLines(handed)), 240.01); assert.equal(dueTotal([]), 0)
+  assert.deepEqual(dueLines(undefined), [])
+  const r = prow([order()], dueLines(handed)); assert.equal(r.lines?.length, 3, 'a row carries them for a row action to read')
+  assert.ok(!('lines' in prow([order()], [])), 'a row with none carries none')
+  assert.deepEqual(rowButtonsOf(rowActionDefs(), r, rctx(['probe']), { probe: {} }), [{ pack: 'probe', label: 'Send to cashier' }], 'the row action reads them')
+})
+test('the words of the row are kept beside the packs\' buttons: who (the doctor on a Back row), the card folded out under the row', () => {
+  const html = renderToStaticMarkup(createElement(ListRow, { number: 7, name: 'Nadia Kamel', age: '34 F', status: 'back', who: 'Dr. Ali Hassan',
+    extra: createElement('button', null, 'Pay'), below: createElement('div', null, 'the payment card') }))
+  assert.match(html, /Dr\. Ali Hassan/, 'the doctor\'s name stays'); assert.match(html, /<button>Pay<\/button>/)
+  assert.ok(html.indexOf('Dr. Ali Hassan') < html.indexOf('>Pay<'), 'after the row\'s own words'); assert.match(html, /the payment card<\/div><\/li>$/, 'inline, under the row')
+  const own = renderToStaticMarkup(createElement(ListRow, { number: 7, name: 'Nadia Kamel', age: '34 F', who: 'Laboratory', actions: createElement('button', null, 'Collect'), extra: createElement('button', null, 'Pay') }))
+  assert.match(own, /Collect<\/button><button>Pay/, 'the row\'s own actions first, then the pack\'s')
+  assert.doesNotMatch(renderToStaticMarkup(createElement(ListRow, { number: 7, name: 'N', age: '1', who: 'Dr. Ali' })), /<button/, 'no pack: nothing added')
+})
+
+const recorded: Anyway[] = []
+test('soft checks: one a pack, never the core\'s or the base\'s; waiting and anyway', () => {
+  assert.equal(registerSoftCheck('probe', { load: async () => ({}), anyway: async (a) => { recorded.push(a) },
+    waiting: (r, _c, data) => ((data as { due?: string[] } | undefined)?.due ?? []).map((o) => ({ order: o, word: 'Waiting for payment', tone: 'warn' as const })) }), true)
+  quiet(() => {
+    assert.equal(registerSoftCheck('probe', { waiting: () => [], anyway: () => {} }), false, 'one a pack')
+    assert.equal(registerSoftCheck('base', { waiting: () => [], anyway: () => {} }), false)
+    assert.equal(registerSoftCheck('other', { waiting: () => [] } as never), false, 'it records going ahead')
+  })
+  assert.equal(softCheckDefs().filter((d) => d.pack === 'probe').length, 1)
+})
+test('soft checks mark single orders: only orders on the row, from packs used here, in pack order; a word, a state tone, never a number', () => {
+  const w = waitsOf(softCheckDefs(), prow(), rctx(['probe']), { probe: { due: ['o2', 'elsewhere'] } })
+  assert.deepEqual([...w], [['o2', { word: 'Waiting for payment', tone: 'warn', packs: ['probe'] }]], 'o2 waits; an order not on the row is ignored')
+  assert.equal(waitsOf(softCheckDefs(), prow(), rctx([]), { probe: { due: ['o2'] } }).size, 0, 'not used here: nothing waits')
+  assert.equal(waitsOf(softCheckDefs(), prow(), rctx(['probe']), {}).size, 0, 'its data not here (loading, failed): nothing waits')
+  const more: SoftCheckDef[] = [...softCheckDefs(), { pack: 'cover', waiting: () => [{ order: 'o2', word: 'Waiting for approval · Misr Insurance', tone: 'accent' as never },
+      { order: 'o1', word: 'Pay 120 first' }, { order: 'o1', word: '  ' }], anyway: () => {} },
+    { pack: 'broken', waiting: () => { throw new Error('no') }, anyway: () => {} }]
+  const both = quiet(() => waitsOf(more, prow(), rctx(['broken', 'cover', 'probe']), { probe: { due: ['o2'] } }))
+  assert.deepEqual([...both], [['o2', { word: 'Waiting for approval · Misr Insurance', packs: ['cover', 'probe'] }]],
+    'the first pack\'s word (no colour but a state\'s), every pack holding it; a word with a number, or none, is dropped; a failing pack says nothing')
+})
+test('per order: the free ones stay workable, the waiting ones go to their word\'s view; going ahead frees them', () => {
+  const rows = [{ order: order({ item: 'o1' }) }, { order: order({ item: 'o2' }) }, { order: order({ item: 'o3' }) }]
+  const w = waitsOf(softCheckDefs(), prow(rows.map((r) => r.order)), rctx(['probe']), { probe: { due: ['o2', 'o3'] } })
+  assert.deepEqual(freeRows(rows, w, new Set()).map((r) => r.order.item), ['o1'], 'To do keeps the free one: the row opens with it')
+  assert.deepEqual(byWord(rows, w, new Set()).map((g) => [g.word, g.tone, g.rows.map((r) => r.order.item)]), [['Waiting for payment', 'warn', ['o2', 'o3']]], 'a view named by its word')
+  assert.deepEqual(freeRows(rows, w, new Set(['o2'])).map((r) => r.order.item), ['o1', 'o2'], 'gone ahead anyway: free')
+  assert.deepEqual(byWord(rows, w, new Set(['o2', 'o3'])), [])
+  assert.deepEqual(waitWords(['o1', 'o2', 'o3'], w, new Set()), [{ word: 'Waiting for payment', tone: 'warn' }], 'the row says it once')
+  assert.deepEqual(waitWords(['o1'], w, new Set()), [], 'a free order says nothing')
+})
+await testAsync('…anyway: a reason is required, one line; each pack holding an order records it for its own orders only', async () => {
+  assert.equal(reasonReady(''), false); assert.equal(reasonReady('   '), false); assert.equal(reasonReady('Emergency'), true); assert.equal(reasonReady('x'.repeat(201)), false)
+  const w = waitsOf([...softCheckDefs(), { pack: 'cover', waiting: () => [{ order: 'o1', word: 'Waiting for approval' }], anyway: (a) => { recorded.push({ ...a, reason: `cover: ${a.reason}` }) } }],
+    prow(), rctx(['probe', 'cover']), { probe: { due: ['o2'] } })
+  assert.deepEqual(anywayCalls(['o1', 'o2'], w), [{ pack: 'cover', orders: ['o1'] }, { pack: 'probe', orders: ['o2'] }])
+  const defs: SoftCheckDef[] = [...softCheckDefs(), { pack: 'cover', waiting: () => [], anyway: (a) => { recorded.push({ ...a, reason: `cover: ${a.reason}` }) } }]
+  await assert.rejects(goAhead(defs, prow(), ['o2'], '  ', w, rctx(['probe'])), /why/, 'no reason, nothing recorded')
+  assert.equal(recorded.length, 0)
+  assert.deepEqual(await goAhead(defs, prow(), ['o1', 'o2'], '  patient will pay   after ', w, rctx(['probe', 'cover'])), ['o1', 'o2'])
+  assert.deepEqual(recorded.map((a) => [a.orders, a.reason]), [[['o1'], 'cover: patient will pay after'], [['o2'], 'patient will pay after']])
+})
+test('a pack that charges (core change (d)): asked of the department without naming the pack; only a pack used there counts', () => {
+  assert.equal(chargesHere({ packs: ['pharmacy', 'till'], declared: { pharmacy: { charges: false }, till: { charges: true } } }), true)
+  assert.equal(chargesHere({ packs: ['pharmacy'], declared: { pharmacy: { charges: false }, till: { charges: true } } }), false, 'declared, not used here')
+  assert.equal(chargesHere({ packs: ['pharmacy'] }), false); assert.equal(chargesHere(null), false)
+})
+test('a list\'s pack data is read once for its patients and orders, whatever their order', () => {
+  const a = [prow([order({ item: 'o1' })]), packRowOf('p2', { patient_id: 'p2', visit_id: null, orders: [order({ item: 'o9', patient_id: 'p2' })] })]
+  assert.equal(rowsKey(a), rowsKey([...a].reverse())); assert.notEqual(rowsKey(a), rowsKey(a.slice(0, 1)))
 })
 console.log(`board: ${n} groups passed`)

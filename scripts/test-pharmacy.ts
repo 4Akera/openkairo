@@ -4,6 +4,9 @@ import assert from 'node:assert/strict'
 import { amountToGive, ar, arabicDirections } from '../src/packs/pharmacy/directions'
 import { bareName, sameMedicine } from '../src/packs/pharmacy/substitutes'
 import { batchFor, boxesToMinimum, inBoxes, lowAt, pickProduct, productsFor, stateOf, type Elsewhere, type Product } from '../src/packs/pharmacy/shelf'
+import { countIn, inStrips, linesFor, priceOf, priceWords, productFor, productsOf, withPrices, type PricedProduct } from '../src/packs/pharmacy/pricing'
+import { dueLines, dueTotal } from '../src/core/screens/rows'
+import type { Organization } from '../src/core/db/types'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -58,5 +61,49 @@ test('the store: what is low at the other places (out first), and the boxes back
   assert.deepEqual(lowAt(aug, away).map((e) => e.department_id), ['ward', 'ph'], 'out at the ward first, then the pharmacy (8 boxes of 15); the inpatient pharmacy is fine')
   assert.equal(boxesToMinimum(E('ph', 'aug', 112, 15), 14), 7, '8 boxes there, 15 the minimum: 7 more')
   assert.equal(boxesToMinimum(E('ward', 'aug', 0, 5), 14), 5); assert.equal(boxesToMinimum(E('ph', 'aug', 205, 15), 14), 1, 'never less than a box')
+})
+
+// ── the pharmacy's own prices (spec §5.4, owner 2026-10-08): per box, per strip; its lines handed on the Dispensing row ──
+const PP = (over: Partial<PricedProduct>): PricedProduct => ({ id: 'aug', brand: 'Augmentin 1 g', generic: 'Amoxicillin + clavulanic acid', atc: 'J01CR02', form: 'tablet', pack_size: 14,
+  price_box: 145, strip_size: 7, price_strip: 75, ...over })
+test('prices: counted in the product\'s own units — whole boxes, then strips for the rest, else a box more; one box where it cannot be counted', () => {
+  assert.equal(inStrips(PP({})), true); assert.equal(inStrips(PP({ price_strip: undefined })), false, 'a strip with no price is not sold'); assert.equal(inStrips(PP({ strip_size: 14 })), false, 'a strip the size of the box')
+  assert.deepEqual(countIn(PP({}), 14), { boxes: 1, strips: 0 }); assert.deepEqual(countIn(PP({}), 21), { boxes: 1, strips: 1 })
+  assert.deepEqual(countIn(PP({}), 6), { boxes: 0, strips: 1 }, 'six tablets: a strip'); assert.deepEqual(countIn(PP({}), 10), { boxes: 1, strips: 0 }, 'strips that would fill a box are a box')
+  assert.deepEqual(countIn(PP({ strip_size: undefined, price_strip: undefined }), 15), { boxes: 2, strips: 0 }, 'not sold in strips: a box more')
+  assert.deepEqual(countIn(PP({ form: 'syrup', pack_size: 1 }), 21), { boxes: 1, strips: 0 }, 'a syrup: one bottle, whatever the dose count')
+  assert.deepEqual(countIn(PP({}), null), { boxes: 1, strips: 0 }, 'an amount not known: one box'); assert.deepEqual(countIn(PP({}), Number.NaN), { boxes: 1, strips: 0 })
+  assert.deepEqual(countIn(PP({ form: undefined, pack_size: 30 }), 60), { boxes: 2, strips: 0 }, 'no form, a box of 30: counted')
+})
+test('prices: the lines handed — a name, a quantity, an amount (plain numbers), the order; free without a box price', () => {
+  assert.deepEqual(linesFor(PP({}), 21, 'o1'), [{ name: 'Augmentin 1 g · box', quantity: 1, amount: 145, order: 'o1' }, { name: 'Augmentin 1 g · strip', quantity: 1, amount: 75, order: 'o1' }])
+  assert.deepEqual(linesFor(PP({ price_box: undefined }), 14), [], 'no price on the box: free, no line')
+  assert.deepEqual(linesFor(PP({ brand: 'Panadol syrup', form: 'syrup', pack_size: 1, price_box: 32.5, strip_size: undefined, price_strip: undefined }), 30),
+    [{ name: 'Panadol syrup', quantity: 1, amount: 32.5 }], 'a bottle is its own unit')
+  assert.deepEqual(linesFor(PP({ price_box: 0.1 }), 42), [{ name: 'Augmentin 1 g · box', quantity: 3, amount: 0.3 }], 'to the hundredth')
+  const lines = [...linesFor(PP({}), 21, 'o1'), ...linesFor(PP({ id: 'nex', brand: 'Nexium 40', pack_size: 14, price_box: 190, strip_size: undefined, price_strip: undefined }), 28, 'o2')]
+  assert.deepEqual(dueLines(lines), lines, 'they pass the core\'s lines-due rule as they are'); assert.equal(dueTotal(lines), 600)
+  assert.equal(priceWords(linesFor(PP({}), 21)), '1 box + 1 strip · 220'); assert.equal(priceWords(linesFor(PP({ pack_size: 30, strip_size: 10, price_strip: 50 }), 20)), '2 strips · 100')
+  assert.equal(priceWords([]), '')
+  assert.ok(lines.every((l) => !/EGP|£|\$/.test(JSON.stringify(l))), 'no currency word')
+})
+test('prices: the product a medicine is — chosen, its brand, else the only one with its active ingredient; the clinic\'s list from its settings', () => {
+  const org = { settings: [{ key: 'pharmacy.product', thing_id: 'g', owner_id: null, recorded_at: '', data: { brand: 'Glucophage 500', generic: 'Metformin', atc: 'A10BA02', form: 'tablet', pack_size: 30, price_box: 45 } },
+    { key: 'pharmacy.product', thing_id: 'c', owner_id: null, recorded_at: '', data: { brand: 'Cidophage 500', generic: 'Metformin', atc: 'A10BA02', form: 'tablet', pack_size: 30, price_box: 30 } },
+    { key: 'pharmacy.product', thing_id: 'n', owner_id: null, recorded_at: '', data: { brand: 'Nexium 40', generic: 'Esomeprazole', atc: 'A02BC05', form: 'tablet', pack_size: 14 } },
+    { key: 'pharmacy.counselling', thing_id: 'o', owner_id: null, recorded_at: '', data: { show: true } }] } as unknown as Organization
+  const list = productsOf(org)
+  assert.deepEqual(list.map((p) => p.id), ['c', 'g', 'n'], 'the products only, by brand')
+  assert.equal(productFor(list, 'Glucophage 500 mg')?.id, 'g'); assert.equal(productFor(list, 'Metformin 500 mg', 'c')?.id, 'c', 'the one chosen from the shelf')
+  assert.equal(productFor(list, 'Metformin 500 mg'), null, 'two brands of it: none guessed'); assert.equal(productFor(list, 'Esomeprazole 40 mg')?.id, 'n', 'the only one of it')
+  assert.equal(productFor(list, 'Unknown tonic'), null)
+})
+test('prices as typed and saved: a number to the hundredth (a comma too), empty is free; a strip price needs its size', () => {
+  assert.equal(priceOf(' 145 '), 145); assert.equal(priceOf('72,5'), 72.5); assert.equal(priceOf(''), undefined)
+  for (const bad of ['1.234', '-3', 'abc', '12 EGP', '100000000']) assert.ok(Number.isNaN(priceOf(bad)), bad)
+  const base = PP({ price_box: undefined, strip_size: undefined, price_strip: undefined })
+  assert.deepEqual(withPrices(base, '145', '75', '7'), { brand: 'Augmentin 1 g', generic: 'Amoxicillin + clavulanic acid', atc: 'J01CR02', form: 'tablet', pack_size: 14, price_box: 145, strip_size: 7, price_strip: 75 })
+  assert.deepEqual(withPrices(PP({}), '', '', ''), { brand: 'Augmentin 1 g', generic: 'Amoxicillin + clavulanic acid', atc: 'J01CR02', form: 'tablet', pack_size: 14 }, 'emptied: free again, no id saved')
+  assert.equal(withPrices(base, '145', '75', ''), null, 'a strip price needs the strip\'s size'); assert.equal(withPrices(base, 'x', '', ''), null); assert.equal(withPrices(base, '1', '', '0'), null)
 })
 console.log(`pharmacy: ${n} groups passed`)

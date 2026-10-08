@@ -10,9 +10,12 @@ import { fitField } from '../../hooks/ranges'
 import { answerEntry, oneSet, resultEntry, stepEntry } from '../../db/entries'
 import { replyFormFor } from '../../renderers'
 import type { RequestQueueRow, ServiceField } from '../../db/types'
-import { Badge, Button, Callout, Card, Centered, Heading, IconButton, Input, Kbd, Select, Spinner, Toolbar, cn, errorText, flagClass, hm } from '../../ui'
+import { Badge, Button, Callout, Card, Centered, Heading, IconButton, Input, Kbd, Select, Spinner, Tag, Toolbar, cn, errorText, flagClass, hm } from '../../ui'
 import { ageOf, fieldTone, groupByPatient, nextSteps, STEP_TONE, stepLabel, stepName } from './shared'
 import { ChartGlance } from '../chart/glance/ChartGlance'
+import { benchMarkRow } from '../marks'
+import { packRowOf } from '../rows'
+import { usePackRows } from '../useRows'
 
 interface Entry { vals: Record<string, string>; text: string; notDone: boolean; reason: string }
 const blank = (): Entry => ({ vals: {}, text: '', notDone: false, reason: '' })
@@ -51,6 +54,12 @@ export function BenchPatient() {
   const groups = useMemo(() => groupByPatient(q.data?.requests ?? []), [q.data])
   const g = groups.find((x) => x.patient.id === patientId)
   const next = groups.find((x) => x.patient.id !== patientId)
+  // the packs on the page (spec §5.4): a pack's button and card under the header; an order a pack holds waiting is greyed with its word
+  // (not done, a stop, still works) and goes ahead anyway with a reason, while the patient's other orders stay workable
+  const prow = useMemo(() => g ? packRowOf(g.patient.id, benchMarkRow(g)) : null, [g])
+  const packs = usePackRows('patient', useMemo(() => prow ? [prow] : [], [prow]), dept)
+  const free = (r: RequestQueueRow) => packs.isFree(r.order.item)
+  const orderRow = (r: RequestQueueRow) => packRowOf(`${r.patient.id} ${r.order.item}`, { patient_id: r.patient.id, visit_id: null, orders: [r.order] })
   const [entries, setEntries] = useState<Record<string, Entry>>({}); const [packVals, setPackVals] = useState<Record<string, unknown>>({}); const [checked, setChecked] = useState(false); const [prelim, setPrelim] = useState(false); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   const root = useRef<HTMLDivElement>(null); const wide = useWide(); const [record, setRecord] = useState(false)
   const glance = can('read:record'); const width = glance ? 'max-w-7xl' : 'max-w-5xl'   // the glance widens the screen beside the grid
@@ -59,7 +68,8 @@ export function BenchPatient() {
   // each field carries the range that fits this patient, as the server will flag it
   const fieldsOf = (r: RequestQueueRow) => (org?.services.find((s) => s.id === r.service_id)?.fields ?? []).map((f) => fitField(f, r.patient.sex, ageOf(r.patient.born_on)))
   const formOf = (r: RequestQueueRow) => replyFormFor(r.reply_type)
-  const ready = (g?.rows ?? []).filter((r) => { const pf = formOf(r); if (pf) return !!pf.toWrite(r, packVals[r.id]); const x = e(r.id); return x.notDone ? !!x.reason.trim() : Object.values(x.vals).some((v) => v !== '') || !!x.text.trim() })
+  const ready = (g?.rows ?? []).filter((r) => { const pf = formOf(r); if (pf) return free(r) && !!pf.toWrite(r, packVals[r.id]); const x = e(r.id)
+    return x.notDone ? !!x.reason.trim() : free(r) && (Object.values(x.vals).some((v) => v !== '') || !!x.text.trim()) })
   const problems = ready.flatMap((r) => fieldsOf(r).map((f) => problemOf(f, e(r.id).vals[f.key] ?? '')).filter(Boolean))
   const invalid = problems.includes('not a number'); const toCheck = problems.filter((p) => p === 'check value').length
   const flagged = ready.flatMap((r) => fieldsOf(r).map((f) => flagOf(f, e(r.id).vals[f.key] ?? ''))).filter((f) => f && f !== 'normal')
@@ -98,12 +108,14 @@ export function BenchPatient() {
         <p className="text-12 text-faint tnum">#{g.patient.record_number} · {g.rows.length} open · from {g.from.join(', ')}</p></div>
       {g.priority !== 'routine' && <Badge tone="danger">{g.priority.toUpperCase()}</Badge>}
       <div className="ms-auto flex items-center gap-2">
-        {nextSteps(g.rows, org, can).map((s) => <Button key={`${s.type} ${s.key}`} variant="outline" onClick={() => void write(oneSet(s.rows.map((r) => stepEntry(r, dept.id, 'in-progress', undefined, s.key, s.type))))
+        {nextSteps(g.rows.filter(free), org, can).map((s) => <Button key={`${s.type} ${s.key}`} variant="outline" onClick={() => void write(oneSet(s.rows.map((r) => stepEntry(r, dept.id, 'in-progress', undefined, s.key, s.type))))
           .then(() => refresh(qc), (x) => setErr(errorText(x)))}>{stepName(s.key)} {s.rows.length}</Button>)}
+        {prow && packs.buttons(prow)}
         {next && <Button variant="ghost" onClick={() => navigate(`/bench/${next.patient.id}`)}>Skip →</Button>}
       </div>
     </div></div>
 
+    {prow && packs.below(prow) && <div className={cn('mx-auto mt-4 px-4', width)}><Card className="overflow-hidden">{packs.below(prow)}</Card></div>}
     <div className={cn('mx-auto mt-4 grid gap-4 px-4', width, glance && 'xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start')}>
       {glance && <aside aria-label="Record" className="order-first grid content-start gap-2 xl:sticky xl:top-20 xl:order-last xl:max-h-[calc(100dvh-7rem)] xl:overflow-y-auto">
         {!wide && <button type="button" aria-expanded={record} onClick={() => setRecord(!record)} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-13 font-medium text-muted ring-1 ring-inset ring-line transition-colors hover:bg-hover hover:text-fg focus-ring">
@@ -112,15 +124,21 @@ export function BenchPatient() {
       </aside>}
       <div className="grid min-w-0 content-start gap-4">
       {bySection.map((sec) => <section key={sec}><Heading className="mb-1.5">{sec}</Heading><div className="grid gap-3">
-        {g.rows.filter((r) => (r.section_name ?? 'Other') === sec).map((r) => { const x = e(r.id); const fields = fieldsOf(r); return <Card key={r.id} className={cn('p-4', x.notDone && 'bg-sunken')}>
+        {g.rows.filter((r) => (r.section_name ?? 'Other') === sec).map((r) => { const x = e(r.id); const fields = fieldsOf(r); const held = !free(r); const or = orderRow(r)
+          const mayWork = can(formOf(r)?.action ?? 'write:result') || nextSteps([r], org, can).length > 0
+          return <Card key={r.id} className={cn('p-4', (x.notDone || held) && 'bg-sunken')}>
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
             <span className="text-16 font-semibold">{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}</span>
             <Badge tone={STEP_TONE[r.request?.step ?? 'sent'] ?? 'neutral'}>{stepLabel(r.request?.step)}</Badge>
             {r.request?.priority !== 'routine' && <Badge tone="danger">{r.request?.priority}</Badge>}
             <span className="text-12 text-faint">{r.requester_name} · {r.from_department_name} · {hm(r.occurred_at)}</span>
+            {held && <Tag tone={packs.waits.get(r.order.item)?.tone ?? 'warn'}>{packs.waits.get(r.order.item)?.word}</Tag>}
+            {held && mayWork && packs.anyway(or, [r.order.item], 'Go ahead')}
             {!formOf(r) && <label className="ms-auto flex items-center gap-1.5 text-12 text-muted"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>}
           </div>
           {r.question_text && <p className="mb-2 rounded-md bg-warn-soft px-2.5 py-1.5 text-14 text-warn">“{r.question_text}”</p>}
+          {packs.below(or)}
+          <fieldset disabled={held && !x.notDone} className="contents">
           {formOf(r) ? (() => { const F = formOf(r)!.Editor; return <F request={r} value={packVals[r.id]} onChange={(v) => setPackVals((p) => ({ ...p, [r.id]: v }))} /> })()
           : x.notDone ? <Input data-v value={x.reason} onChange={(ev) => set(r.id, { reason: ev.target.value })} placeholder="Why not — haemolysed, insufficient sample, patient left…" /> : <>
             {fields.length > 0 && <table className="w-full text-14"><tbody>{fields.map((f) => { const raw = x.vals[f.key] ?? ''; const fl = flagOf(f, raw); return <tr key={f.key} className="border-b border-line last:border-0">
@@ -134,6 +152,7 @@ export function BenchPatient() {
             </tr> })}</tbody></table>}
             <Input data-v value={x.text} onChange={(ev) => set(r.id, { text: ev.target.value })} placeholder={fields.length ? 'Comment (optional)' : 'Report / answer'} className="mt-2 h-8" />
           </>}
+          </fieldset>
         </Card> })}
       </div></section>)}
       </div>

@@ -41,6 +41,17 @@ select t.ok(public.write_setting(jsonb_build_object('key', 'pharmacy.minimums', 
 select t.ok(p -> 'kept' = 'true' and (p ->> 'minimum')::int = 10, 'the Pharmacy keeps it, minimum 10') from jsonb_array_elements(pg_temp.op('pharmacy.stock', :'ph', '{}') -> 'products') p where (p ->> 'id')::uuid = :'glu';
 select t.ok(p -> 'kept' = 'false' and p -> 'minimum' = 'null', 'the store does not keep it yet') from jsonb_array_elements(pg_temp.op('pharmacy.stock', :'st', '{}') -> 'products') p where (p ->> 'id')::uuid = :'glu';
 
+\echo '── its prices (spec §5.4): per box, and per strip with the strip''s size; a strip smaller than its box; plain numbers; never in an entry'
+select t.ok(public.write_setting(jsonb_build_object('key', 'pharmacy.product', 'thing_id', :'glu', 'data',
+  '{"brand":"Glucophage 500","generic":"Metformin","atc":"A10BA02","strength":"500 mg","form":"tablet","pack_size":30,"unit":"tablets","price_box":45,"strip_size":10,"price_strip":15.5}'::jsonb)) ->> 'key' = 'pharmacy.product',
+  'priced: 45 a box, 15.50 a strip of 10');
+select t.refuses(format($q$select public.write_setting('{"key":"pharmacy.product","thing_id":%s,"data":{"brand":"Glucophage 500","pack_size":30,"price_strip":15}}')$q$, to_json(:'glu'::text)), 'strip_size_missing');
+select t.refuses(format($q$select public.write_setting('{"key":"pharmacy.product","thing_id":%s,"data":{"brand":"Glucophage 500","pack_size":30,"strip_size":30,"price_strip":15}}')$q$, to_json(:'glu'::text)), 'strip_not_smaller');
+select t.refuses(format($q$select public.write_setting('{"key":"pharmacy.product","thing_id":%s,"data":{"brand":"Glucophage 500","pack_size":30,"price_box":-1}}')$q$, to_json(:'glu'::text)), 'bad_shape');
+select t.refuses(format($q$select public.write_setting('{"key":"pharmacy.product","thing_id":%s,"data":{"brand":"Glucophage 500","pack_size":30,"price_box":"45 EGP"}}')$q$, to_json(:'glu'::text)), 'bad_shape');
+select t.ok((p ->> 'price_box')::numeric = 45 and (p ->> 'strip_size')::int = 10, 'the stock read carries the product as written, prices too')
+  from jsonb_array_elements(pg_temp.op('pharmacy.stock', :'ph', '{}') -> 'products') p where (p ->> 'id')::uuid = :'glu';
+
 \echo '── a delivery: by batch and expiry, in boxes; refused when expired, with no batch, nothing, or a product it does not have'
 select t.ok((pg_temp.op('pharmacy.stock_write', :'ph', jsonb_build_object('do', 'receive', 'supplier', 'Ibn Sina Pharma', 'invoice', 'INV-55821', 'lines',
   jsonb_build_array(jsonb_build_object('product_id', :'glu', 'batch', '23K114', 'expiry', to_char(current_date + interval '8 months', 'YYYY-MM'), 'boxes', 2)))) ->> 'rows')::int = 1, 'received 2 boxes');

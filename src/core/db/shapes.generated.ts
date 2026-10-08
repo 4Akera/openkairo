@@ -542,7 +542,10 @@ export interface PharmacyProductSetting {
   form?: 'tablet' | 'capsule' | 'syrup' | 'suspension' | 'injection' | 'cream' | 'drops' | 'inhaler' | 'sachet' | 'other'
   generic?: string
   pack_size: number
+  price_box?: number
+  price_strip?: number
   strength?: string
+  strip_size?: number
   unit?: string
 }
 /** setting place.closed (base; owner place) */

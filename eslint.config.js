@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tokensOnly from './eslint/tokens-only.js'
-import noPackNames from './eslint/no-pack-names.js'
+import noPackNames, { packKeys } from './eslint/no-pack-names.js'
 
 // The import guards. In flat config the last entry that matches a file replaces the rule's options, so each file group has one
 // merged no-restricted-imports (three overlapping entries used to leave only the db-client one in force).
@@ -35,4 +35,6 @@ export default tseslint.config(
   { files: ['src/core/ui/**'], rules: { 'opencare/tokens-only': 'off' } },
   // the core names no pack (spec §5.2): pharmacy goes behind the registries every pack uses; generated files hold the database's words
   { files: ['src/core/**/*.{ts,tsx}'], ignores: ['src/core/**/*.generated.ts'], rules: { 'opencare/no-pack-names': 'error' } },
+  // and a pack names no other pack (spec §5, §5.4): each pack's folder, every pack's key but its own
+  ...packKeys().map((own) => ({ files: [`src/packs/${own}/**/*.{ts,tsx}`], rules: { 'opencare/no-pack-names': ['error', { own }] } })),
 )

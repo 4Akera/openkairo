@@ -7,7 +7,11 @@
 // With collection chairs (the large lab's switch): each collector picks a chair (kept in this browser), every patient's tests of the
 // day get a ticket number in the order they came (lis.tickets), Call next calls the next with no chair (stat first) to mine, and my
 // chair's card holds who I called, ready to collect.
-import { useState } from 'react'
+// A pack the laboratory uses may put its button on a row (Pay) with its card under it, and may hold single tests waiting (a soft check,
+// spec §5.4): a waiting test leaves To collect for its word's view ("Waiting for payment"), where Collected is greyed and Couldn't
+// collect (a stop) still works, and Collect anyway… asks why; a patient's free tests stay in To collect, and a chair calls a patient
+// with one free test.
+import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Megaphone, Plus } from 'lucide-react'
 import { useDepartment } from '@core/hooks/organization'
@@ -21,11 +25,14 @@ import { ageSex, groupByPatient, matches, testsLine, type PatientGroup } from '@
 import { isWalkIn } from '@core/screens/bench/walkins'
 import { WalkIn } from '@core/screens/bench/WalkIn'
 import { Button, Callout, Card, Chip, Empty, Input, Kbd, ListRow, ScreenFrame, Segmented, Spinner, Tag, errorText, hm, minutesSince, type ScreenView } from '@core/ui'
+import { benchMarkRow } from '@core/screens/marks'
+import { byWord, packRowOf } from '@core/screens/rows'
+import { usePackRows } from '@core/screens/useRows'
 import { needsFasting, tubesFor } from './tubes'
 import { Cap } from './Cap'
 import { byArrival, largeOf, nextUp, nowAt, ticketOf, type Ticket } from './large'
 
-type View = 'todo' | 'collected' | 'not'
+type View = 'todo' | 'collected' | 'not' | `wait:${string}`
 const REASONS = ['Refused', 'No vein', 'Not fasting', 'Left']
 /** collected: any step reached (collected, received) */
 const started = (r: RequestQueueRow) => !!r.order.step_key || (!!r.request?.step && r.request.step !== 'sent')
@@ -43,14 +50,19 @@ function useChair(deptId: string, chairs: number): [number | null, (n: number | 
 
 export function Collect({ dept }: ScreenProps) {
   const q = useRequestQueue(dept.id); const qc = useQueryClient(); const { org, can } = useDepartment()
-  const [view, setView] = useState<View>('todo'); const [find, setFind] = useState(''); const [open, setOpen] = useState<string | null>(null)
+  const [chosen, setView] = useState<View>('todo'); const [find, setFind] = useState(''); const [open, setOpen] = useState<string | null>(null)
   const [walkIn, setWalkIn] = useState(false); const [said, setSaid] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null); const [error, setError] = useState<string | null>(null)
   const [fasting, setFasting] = useState<boolean | null>(null); const [why, setWhy] = useState<string | null>(null)
   const large = largeOf(org, dept.id); const [chair, setChair] = useChair(dept.id, large.chairs)
   const f = find.trim().toLowerCase()
-  const rows = q.data?.requests ?? []
-  const waiting = groupByPatient(rows.filter(toCollect))
+  const rows = useMemo(() => q.data?.requests ?? [], [q.data])
+  const packs = usePackRows('screen', useMemo(() => groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g))), [rows]), dept)
+  const free = (r: RequestQueueRow) => packs.isFree(r.order.item)
+  // to collect: the free tests only (a chair calls a patient with one); each word a pack holds tests waiting with is a view of its own
+  const waiting = groupByPatient(rows.filter((r) => toCollect(r) && free(r)))
+  const held = byWord(rows.filter(toCollect), packs.waits, packs.ahead).map((w) => ({ id: `wait:${w.word}` as const, word: w.word, groups: groupByPatient(w.rows).filter((g) => matches(g.patient, f)) }))
+  const view: View = chosen.startsWith('wait:') && !held.some((h) => h.id === chosen) ? 'todo' : chosen   // a word's view goes once nothing waits with it
   // the tickets: each patient waiting, numbered in the order they came (a patient keeps theirs; a test asked for later joins it)
   const order = byArrival(waiting).map((g) => g.rows.map((r) => r.item))
   const tickets = useQuery({ queryKey: ['lis.tickets', dept.id, order.map((x) => x.join(',')).join('|')], enabled: large.chairs > 0 && order.length > 0,
@@ -64,12 +76,13 @@ export function Collect({ dept }: ScreenProps) {
   const collected = groupByPatient(rows.filter((r) => started(r) && r.order.status !== 'on-hold')).filter((g) => matches(g.patient, f))
   const couldnt = (q.data?.recent ?? []).filter((r) => r.order.status === 'cancelled' && matches(r.patient, f))
   const views: ScreenView<View>[] = [{ id: 'todo', label: 'To collect', count: waiting.length, needs: 'warn' }, { id: 'collected', label: 'Collected', count: collected.length },
-    { id: 'not', label: "Couldn't collect", count: couldnt.length }]
+    ...held.map((h) => ({ id: h.id, label: h.word, count: h.groups.length, needs: 'warn' as const })), { id: 'not', label: "Couldn't collect", count: couldnt.length }]
+  const heldView = held.find((h) => h.id === view)
   const serviceOf = (r: RequestQueueRow) => org?.services.find((s) => s.id === r.order.service_id)
   // the open patient's number: the laboratory's for these orders (the same on every screen until collected), a new one for a tube sent back
-  const openG = waiting.find((g) => g.patient.id === open)
+  const openG = (heldView?.groups ?? waiting).find((g) => g.patient.id === open)
   const items = openG?.rows.map((r) => r.item) ?? []; const rejected = openG?.rows.find((r) => r.order.status === 'on-hold')?.step_data?.specimen
-  const sample = useQuery({ queryKey: ['lis.sample', dept.id, open, items.join(','), rejected], enabled: !!openG && view === 'todo', staleTime: Number.POSITIVE_INFINITY,
+  const sample = useQuery({ queryKey: ['lis.sample', dept.id, open, items.join(','), rejected], enabled: !!openG && (view === 'todo' || !!heldView), staleTime: Number.POSITIVE_INFINITY,
     queryFn: () => packOp<{ sample: string }>('lis.sample', dept.id, { items, not: rejected }) })
   const toggle = (pid: string) => { setOpen(open === pid ? null : pid); setFasting(null); setWhy(null); setError(null) }
   // call a ticket to my chair (take: one another chair called), and open it to collect
@@ -92,6 +105,8 @@ export function Collect({ dept }: ScreenProps) {
 
   const row = (g: PatientGroup) => {
     const isOpen = open === g.patient.id; const walk = g.rows.some((r) => isWalkIn(r.order, org?.allDepartments ?? []))
+    const pr = packRowOf(`${view} ${g.patient.id}`, benchMarkRow(g)); const hold = g.rows.filter((r) => !free(r))
+    const word = hold.length ? packs.waits.get(hold[0].order.item)?.word : undefined
     const ward = g.rows.some((r) => org?.allDepartments.find((d) => d.id === r.order.from_department_id)?.work === 'stays')
     const back = g.rows.find((r) => r.order.status === 'on-hold'); const t = view === 'todo' ? ticketOf(g, ts) : undefined
     const elsewhere = t?.chair != null && t.chair !== chair
@@ -100,13 +115,17 @@ export function Collect({ dept }: ScreenProps) {
         {g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{back && <Tag tone="warn">new sample</Tag>}{walk && <Tag tone="info">walk-in</Tag>}{ward && <Tag>at the ward</Tag>}
         <span className="truncate">{back?.step_data?.reason ? `${back.step_data.reason} · ` : ''}{testsLine(g.rows)}</span></>}
       who={g.rows[0]?.from_department_name ?? undefined} minutes={g.since ? minutesSince(g.since) : null} onOpen={() => toggle(g.patient.id)}
-      actions={view === 'todo' && can('write:step') ? <span className="flex gap-1.5">
+      marks={packs.marks(pr)} extra={packs.buttons(pr)} below={packs.below(pr)}
+      actions={heldView && can('write:step') ? <span className="flex gap-1.5">
+        <Button size="sm" variant="outline" disabled title={word}>Collect</Button>{packs.anyway(pr, hold.map((r) => r.order.item), 'Collect')}
+        <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : "Couldn't…"}</Button></span>
+      : view === 'todo' && can('write:step') ? <span className="flex gap-1.5">
         {chair && t && t.chair !== chair && <Button size="sm" variant="ghost" loading={busy === `call ${t.number}`} onClick={() => void call(t, g, elsewhere)}><Megaphone />{elsewhere ? 'Call here' : 'Call'}</Button>}
         <Button size="sm" variant={isOpen ? 'ghost' : 'outline'} aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : 'Collect'}</Button></span> : undefined} />,
-      isOpen && view === 'todo' && fold(g)]
+      isOpen && (view === 'todo' || heldView) && fold(g, false, word)]
   }
   // the fold to collect: the sample number, the tubes by colour, fasting where it matters, then Collected or why not
-  const fold = (g: PatientGroup, inCard = false) => {
+  const fold = (g: PatientGroup, inCard = false, waitWord?: string) => {
     const groups = tubesFor(g.rows.map((r) => ({ code: serviceOf(r)?.code ?? '', section_name: r.section_name, name: r.service_name ?? r.display_line })))
     const fast = g.rows.some((r) => needsFasting(serviceOf(r)?.code ?? ''))
     return <li key={`${g.patient.id} fold`} className={inCard ? 'grid gap-4 border-t border-line pt-4 md:grid-cols-[14rem_minmax(0,1fr)]' : 'grid gap-4 border-t border-line bg-sunken p-4 md:grid-cols-[14rem_minmax(0,1fr)]'}>
@@ -121,14 +140,14 @@ export function Collect({ dept }: ScreenProps) {
           {fasting === false && <span className="text-12 text-warn">collected anyway, marked not fasting</span>}</div>}
         {error && <Callout tone="danger" title="Not saved">{error}</Callout>}
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          <Button size="sm" disabled={!sample.data || (fast && fasting === null)} loading={busy === g.patient.id} onClick={() => sample.data && void collect(g, sample.data.sample)}>
+          <Button size="sm" disabled={!sample.data || (fast && fasting === null) || !!waitWord} title={waitWord} loading={busy === g.patient.id} onClick={() => sample.data && void collect(g, sample.data.sample)}>
             Collected · {groups.length} {groups.length === 1 ? 'tube' : 'tubes'}<Kbd className="ms-1">↵</Kbd></Button>
           <span className="text-12 text-faint">Couldn't:</span>{REASONS.map((w) => <Chip key={w} on={why === w} onClick={() => setWhy(why === w ? null : w)}>{w}</Chip>)}
           {why && <Button size="sm" variant="outline" loading={busy === g.patient.id} onClick={() => void notCollected(g, why)}>Not collected</Button>}
         </div></div>
     </li>
   }
-  const list = view === 'todo' ? todo : view === 'collected' ? collected : []
+  const list = view === 'todo' ? todo : view === 'collected' ? collected : heldView?.groups ?? []
   const nowG = now?.group
   return <ScreenFrame views={views} view={view} onView={(v) => { setView(v); setOpen(null) }}
     filters={large.chairs > 0 && <Segmented aria-label="Chair" size="sm" value={chair ? String(chair) : 'all'} onChange={(v) => { setChair(v === 'all' ? null : Number(v)); setOpen(null) }}

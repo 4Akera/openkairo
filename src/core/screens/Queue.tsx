@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { useRequestQueue, useVisitQueue } from '../hooks/reads'
@@ -9,6 +9,8 @@ import { Card, Empty, Input, ListRow, ListSection, Spinner, Tag, minutesSince, m
 import { ageSex, backIn, matches, nextPatient, pendingWords, since, yearsOld } from './clinic/words'
 import { benchMarkRow, visitMarkRow } from './marks'
 import { useRowMarks } from './useMarks'
+import { packRowOf } from './rows'
+import { usePackRows } from './useRows'
 
 
 /** The clinic's list (spec 05): who is next, and who needs me. Next · Back · Waiting · With a doctor, then Waiting for
@@ -24,7 +26,10 @@ export function QueueList({ departmentId, compact = false, keys = false, frame }
   const [kbd, setKbd] = useState(false)                  // the keys are in use (arrows, typing): no hover
   const [arrows, setArrows] = useState(false)            // the arrows moved the cursor: show it as a bar
   const input = useRef<HTMLInputElement>(null); const list = useRef<HTMLUListElement>(null)
-  const all = q.data?.rows ?? []
+  const all = useMemo(() => q.data?.rows ?? [], [q.data])
+  // the packs on the rows (spec §5.4): a pack's button (Pay) and its card under the row; the words of orders waiting
+  const packRows = useMemo(() => all.map((r) => packRowOf(r.id, visitMarkRow(r))), [all])
+  const packs = usePackRows('queue', packRows)
   const f = filter.trim()
   // a search is for someone in particular: while one is typed, nobody is pinned as Next and the matches read plainly
   const next = compact || f ? null : nextPatient(all, org?.me.id)
@@ -71,10 +76,10 @@ export function QueueList({ departmentId, compact = false, keys = false, frame }
   const wait = q.isLoading ? <Spinner label="Loading queue" /> : q.error ? <p className="text-14 text-danger">{q.error.message}</p> : null
   if (wait) return frame ? <>{frame(search, wait)}</> : wait
   if (compact && !all.length) return <Card><Empty>Nobody here yet.</Empty></Card>
-  const row = (r: QueueRow, isNext: boolean) => { const n = at.get(r.id) ?? -1; return <ListRow key={r.id} number={r.patient.record_number}
+  const row = (r: QueueRow, isNext: boolean) => { const n = at.get(r.id) ?? -1; const pr = packRowOf(r.id, visitMarkRow(r)); return <ListRow key={r.id} number={r.patient.record_number}
     name={<>{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ms-1.5 inline h-3.5 w-3.5 text-danger" aria-label="allergies" />}</>}
     age={ageSex(r.patient.age, r.patient.sex)} status={<Status r={r} />} who={r.band === 'back' || r.band === 'consult' ? r.assignee_name : null}
-    minutes={minutesSince(since(r))} marks={marks(visitMarkRow(r))} next={isNext} muted={r.band === 'pending'} onOpen={() => open(r)} selected={keys && n === c && arrows} enter={keys && n === c && !arrows && !!f} hover={!kbd}
+    minutes={minutesSince(since(r))} marks={[...marks(visitMarkRow(r)), ...packs.marks(pr)]} extra={packs.buttons(pr)} below={packs.below(pr)} next={isNext} muted={r.band === 'pending'} onOpen={() => open(r)} selected={keys && n === c && arrows} enter={keys && n === c && !arrows && !!f} hover={!kbd}
     actions={r.band === 'pending' && can('write:not_here') ? <button type="button" disabled={visits.present.isPending} title="The patient left: results go to the doctor's review list"
       onClick={() => visits.present.mutate({ visit: r.visit, is_present: false })}
       className="rounded-md px-2 py-0.5 text-11 text-faint ring-1 ring-line hover:bg-surface hover:text-danger hover:ring-danger-line">Gone</button> : undefined} /> }
@@ -102,13 +107,16 @@ function Status({ r }: { r: QueueRow }) {
 /** Requests addressed to a clinic (consults): one row per request. Departments that offer services use the bench instead. */
 export function RequestList({ departmentId }: { departmentId: string }) {
   const q = useRequestQueue(departmentId); const navigate = useNavigate(); const marks = useRowMarks('queue')
+  const rows = useMemo(() => q.data?.requests ?? [], [q.data])
+  const packRows = useMemo(() => rows.map((r) => packRowOf(r.id, benchMarkRow({ patient: r.patient, rows: [r] }))), [rows])
+  const packs = usePackRows('queue', packRows)
   if (q.isLoading) return <Spinner label="Loading requests" />
   if (q.error) return <p className="text-14 text-danger">{q.error.message}</p>
-  const rows = q.data?.requests ?? []
   if (!rows.length) return <Card><Empty>No open requests.</Empty></Card>
-  return <Card className="overflow-hidden"><ul>{rows.map((r) => { const p = r.request?.priority; const step = r.request?.step; return <ListRow key={r.id}
+  return <Card className="overflow-hidden"><ul>{rows.map((r, i) => { const p = r.request?.priority; const step = r.request?.step; const pr = packRows[i]; return <ListRow key={r.id}
     number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(yearsOld(r.patient.born_on), r.patient.sex)}
     status={<>{p && p !== 'routine' && <Tag tone="danger">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-faint"> — “{r.question_text}”</span>}</span>
       {step && <span className="shrink-0 text-12 text-faint">{step}</span>}{r.patient.here && <Tag tone="ok">here</Tag>}</>}
-    who={r.from_department_name} minutes={minutesSince(r.occurred_at)} marks={marks(benchMarkRow({ patient: r.patient, rows: [r] }))} onOpen={() => navigate(`/request/${r.id}`)} /> })}</ul></Card>
+    who={r.from_department_name} minutes={minutesSince(r.occurred_at)} marks={[...marks(benchMarkRow({ patient: r.patient, rows: [r] })), ...packs.marks(pr)]}
+    extra={packs.buttons(pr)} below={packs.below(pr)} onOpen={() => navigate(`/request/${r.id}`)} /> })}</ul></Card>
 }

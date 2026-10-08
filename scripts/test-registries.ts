@@ -70,6 +70,19 @@ test('no core file names a pack (the scan the ESLint rule opencare/no-pack-names
   assert.deepEqual(packNamesIn("// sent to the Pharmacy\nconst t = 'pharmacy.dispense'; read('PHARMACY.queue')").map((h) => h.key), ['pharmacy', 'pharmacy', 'pharmacy'])
   assert.deepEqual(packNamesIn('pharmacyx · a_pharmacy · pharmacist · dispensary'), [], 'only the key as a word')
 })
+test('no pack names another pack, nor imports one (opencare/no-pack-names with its own key, and the import guards): spec §5, §5.4', () => {
+  for (const own of packKeys()) {
+    const mine = files(`src/packs/${own}`)
+    const others = packKeys().filter((k) => k !== own)
+    assert.deepEqual(mine.flatMap((f) => packNamesIn(readFileSync(f, 'utf8'), others).map((h) => `${f}: ${h.key}`)), [], `${own} names another pack`)
+    // every import is the core's (@core/…), a library's, or a file of its own folder: never @packs, never a path climbing out of it
+    const out = mine.flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])
+      .filter((x) => x.startsWith('@packs') || (x.startsWith('.') && !join(f, '..', x).startsWith(join('src', 'packs', own)))).map((x) => `${f}: ${x}`))
+    assert.deepEqual(out, [], `${own} imports outside its folder other than through @core`)
+  }
+  assert.deepEqual(packNamesIn('the pharmacy hands its lines', packKeys().filter((k) => k !== 'pharmacy')), [], 'its own key is its own')
+  assert.ok(packKeys().filter((k) => k !== 'lis').every((k) => packNamesIn(`a word about ${k}`, packKeys().filter((x) => x !== 'lis')).length === 1), 'any other key is caught')
+})
 
 const work = (w: Partial<PackWork>): PackWork => ({ stale: 0, failing: 0, parked: 0, waiting: 0, catchUp: null, ...w })
 test('Settings → Packs: catching up with its progress; failures and parked work with Retry; nothing to say when all is well', () => {

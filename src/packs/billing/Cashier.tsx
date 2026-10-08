@@ -1,5 +1,5 @@
 // The Cashier (billing.cashier, spec §5.4, the bill-list picture): views To pay · Paid today · Nothing to pay; search by name or record
-// number (or a receipt's number). One row a patient who owes: who, what for ("Visit · CBC, HbA1c · Pharmacy"), where someone already waits
+// number (or a receipt's number). One row a patient who owes: who, what for ("Visit · CBC, HbA1c · Dispensary"), where someone already waits
 // ("Laboratory is waiting", in warn), work done before payment, and the amount — the sum of the lines, so nobody adds anything up. The
 // patient folds out into the payment card under the row; taken, the receipt is shown and kept. Paid today lists the desk's receipts, each
 // folding out its receipt (and Give back…). Everyone who owes is reached: the server groups and pages them (Show more).

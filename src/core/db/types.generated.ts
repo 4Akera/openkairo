@@ -28,6 +28,7 @@ export type Database = {
       erase_patient: { Args: { p: Json }; Returns: Json }
       merge_patients: { Args: { p: Json }; Returns: Json }
       my_users: { Args: never; Returns: Json }
+      pack_op: { Args: { p: Json }; Returns: Json }
       read: { Args: { p_query: Json }; Returns: Json }
       redact: { Args: { p: Json }; Returns: Json }
       remove: { Args: { p_id: string; p_what: string }; Returns: Json }

@@ -147,10 +147,14 @@ create function core.read_me(me core.users) returns jsonb language sql stable se
         'packs_used', to_jsonb(core.packs_used(o.id))) from core.organizations o where o.id = me.organization_id),
     'sites', coalesce((select jsonb_agg(to_jsonb(s) - 'organization_id') from core.sites s where s.organization_id = me.organization_id), '[]'),
     -- each department with the packs it uses (ticked and on, §5.1 rule 1) and its Screens line: the one set, else the screens of its work
-    -- from the base and the packs it uses, the base's first, without a base screen one of those stands in for (one tick brings the tabs)
+    -- from the base and the packs it uses, the base's first, without a base screen one of those stands in for (one tick brings the tabs);
+    -- declared: each pack it uses with what that pack declares (core change (d), owner 2026-10-08: charges), so a screen asks "does a
+    -- pack used here charge" without naming one
     'departments', coalesce((select jsonb_agg(to_jsonb(d) - 'organization_id'
         || jsonb_build_object('packs', coalesce((select jsonb_agg(x) from jsonb_array_elements_text(coalesce(core.setting_at(d.organization_id, 'department.packs', d.id) -> 'packs', '[]')) x
                                                   where core.department_uses(d.organization_id, d.id, x)), '[]'))
+        || jsonb_build_object('declared', coalesce((select jsonb_object_agg(l.key, jsonb_build_object('charges', l.charges)) from core.layers l
+                                                     where l.is_pack and core.department_uses(d.organization_id, d.id, l.key)), '{}'))
         || coalesce(core.setting_at(d.organization_id, 'department.screens', d.id),
                     jsonb_build_object('screens', coalesce((select jsonb_agg(s.key order by s.layer <> 'base', s.key) from core.screens s
                       where s.layer <> 'core' and s.work = d.work and core.department_uses(d.organization_id, d.id, s.layer)

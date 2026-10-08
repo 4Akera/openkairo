@@ -18,22 +18,23 @@ select demo.grant(demo.id('pharmacy', 'pharmacist'), '00000000-0000-0000-0000-00
 select demo.person(demo.id('pharmacy', 'store keeper'), 'store@demo.com', 'Hesham Ragab');
 select demo.grant(demo.id('pharmacy', 'store keeper'), '00000000-0000-0000-0000-00000000ca02', demo.id('pharmacy', 'department'));
 
--- its stock (spec §5.3): the demo pharmacy keeps stock; the clinic's products, one list, by brand, strength and box; each place that keeps
--- stock has its own minimums (the deliveries and what the store sends are its day). The main store (owner, 2026-10-07) is made from its
+-- its stock (spec §5.3): the demo pharmacy keeps stock; the clinic's products, one list, by brand, strength and box, each with its price
+-- per box and per strip (spec §5.4: shown only where a pack the department uses charges); each place that keeps stock has its own
+-- minimums (the deliveries and what the store sends are its day). The main store (owner, 2026-10-07) is made from its
 -- own setup — the pack, Keep stock, Stock its one tab, no dispensing — where the suppliers deliver and the store keeper sends on
 select demo.setup(demo.id('pharmacy', 'store'), 'pharmacy.store', 'Main store', 7);
 select demo.grant(demo.id('pharmacy', 'store keeper'), '00000000-0000-0000-0000-00000000ca02', demo.id('pharmacy', 'store'));
 select demo.setting('pharmacy.keep_stock', demo.id('pharmacy', 'department'), null, '{"keep":true}');
 do $$
 declare ps jsonb := '[
-    {"brand":"Glucophage 500","generic":"Metformin","atc":"A10BA02","strength":"500 mg","form":"tablet","pack_size":30,"minimum":10,"store":60},
-    {"brand":"Cidophage 500","generic":"Metformin","atc":"A10BA02","strength":"500 mg","form":"tablet","pack_size":30,"minimum":20,"store":60},
-    {"brand":"Augmentin 1 g","generic":"Amoxicillin + clavulanic acid","atc":"J01CR02","strength":"1 g","form":"tablet","pack_size":14,"minimum":15,"store":40},
-    {"brand":"Nexium 40","generic":"Esomeprazole","atc":"A02BC05","strength":"40 mg","form":"tablet","pack_size":14,"minimum":10,"store":30},
-    {"brand":"Concor 5","generic":"Bisoprolol","atc":"C07AB07","strength":"5 mg","form":"tablet","pack_size":30,"minimum":10,"store":40},
-    {"brand":"Norvasc 10","generic":"Amlodipine","atc":"C08CA01","strength":"10 mg","form":"tablet","pack_size":30,"minimum":10,"store":40},
-    {"brand":"Lipitor 20","generic":"Atorvastatin","atc":"C10AA05","strength":"20 mg","form":"tablet","pack_size":30,"minimum":5,"store":20},
-    {"brand":"Panadol Extra","generic":"Paracetamol + caffeine","atc":"N02BE51","strength":"500 mg","form":"tablet","pack_size":24,"minimum":30,"store":100}]';
+    {"brand":"Glucophage 500","generic":"Metformin","atc":"A10BA02","strength":"500 mg","form":"tablet","pack_size":30,"price_box":45,"strip_size":10,"price_strip":15,"minimum":10,"store":60},
+    {"brand":"Cidophage 500","generic":"Metformin","atc":"A10BA02","strength":"500 mg","form":"tablet","pack_size":30,"price_box":30,"strip_size":10,"price_strip":10,"minimum":20,"store":60},
+    {"brand":"Augmentin 1 g","generic":"Amoxicillin + clavulanic acid","atc":"J01CR02","strength":"1 g","form":"tablet","pack_size":14,"price_box":145,"strip_size":7,"price_strip":75,"minimum":15,"store":40},
+    {"brand":"Nexium 40","generic":"Esomeprazole","atc":"A02BC05","strength":"40 mg","form":"tablet","pack_size":14,"price_box":190,"strip_size":7,"price_strip":97,"minimum":10,"store":30},
+    {"brand":"Concor 5","generic":"Bisoprolol","atc":"C07AB07","strength":"5 mg","form":"tablet","pack_size":30,"price_box":66,"strip_size":10,"price_strip":22,"minimum":10,"store":40},
+    {"brand":"Norvasc 10","generic":"Amlodipine","atc":"C08CA01","strength":"10 mg","form":"tablet","pack_size":30,"price_box":120,"strip_size":10,"price_strip":40,"minimum":10,"store":40},
+    {"brand":"Lipitor 20","generic":"Atorvastatin","atc":"C10AA05","strength":"20 mg","form":"tablet","pack_size":30,"price_box":210,"minimum":5,"store":20},
+    {"brand":"Panadol Extra","generic":"Paracetamol + caffeine","atc":"N02BE51","strength":"500 mg","form":"tablet","pack_size":24,"price_box":54,"strip_size":12,"price_strip":27,"minimum":30,"store":100}]';
   id text := 'product:';
 begin
   perform demo.setting('pharmacy.product', null, demo.id('pharmacy', id || (p ->> 'brand')), p - 'minimum' - 'store') from jsonb_array_elements(ps) p;
