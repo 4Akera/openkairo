@@ -1602,6 +1602,33 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   `clinics-shared`): `notInAChair` and the read are ready; the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
   ward nursing's (`bedside`, beds lane), not in this base: the cycle is ended by the unit's note until then; the composer reads no
   setting, so `/chemo` takes the regimens the chart last read (the Cancer section's).
+- *Built 2026-10-08 (lane `clinics-theatre`), theatre* (`theatre`, migration 35, role block ea): the operation `theatre.op` (the base's order
+  to the Theatre plus `theatre` {side left · right · both · none, the anaesthetic wanted (`technique`: general · spinal · local · the
+  anaesthetist decides), day case or admitted, surgeon, usual time, the risks told}; FHIR adds the side as bodySite and the rest as
+  orderDetail); the Theatre's step `theatre.step` (the base's step plus the operation, its room, start and place in the day; steps
+  scheduled · sent for · arrived · anaesthetic · operating · recovery · back, the last ending the order, so no "no report" row); a WHO
+  checklist part `theatre.check` (Sign in, Time out, Sign out: each item done or why not and who said it, signed by those who said it,
+  about the operation; Sign out's counts, implants with their lot, the specimen). Tables `theatre.cases`, `theatre.slots`,
+  `theatre.checks` (`read:bench`). Settings `theatre.operations` (by service code: usual time, a side asked, the risks to tell) and
+  `theatre.rooms` (rooms and the week's sessions). `write:theatre.step` and `write:theatre.check` are everyday where a department ticks
+  the pack; Theatre nurse (`theatre.nurse`, built on Nurse, with the bench, orders and steps). The setup `theatre.department` (13
+  operations by specialty, three rooms, their sessions; works for all). Client: `/op` (offered where the Theatre works for the
+  department; by code, the name's words or every word typed the start of one: "lap chole"; its card under the line: the side big,
+  chips for side, priority, surgeon, the anaesthetic wanted and the stay that rewrite the line, his record's blood thinners, SGLT2
+  inhibitors, metformin and BMI shown for the pre-op clinic, the risks told); the theatre list in place of the bench (rooms as chips,
+  the day with ← →, emergencies on top until put in a room now, each room's cases in order with the side, surgeon and anaesthetist, ASA,
+  where it stands, the parts signed and the next key; To schedule by priority then weeks waiting with Pre-op and Consent read from the
+  record, and the sessions with room for the usual time); the checklist on a case (Sign in → anaesthetic, Time out → operating; Sign out
+  sends the specimen as an order to the Laboratory's histopathology in the same set; a count that does not add up is a notice). What the
+  list shows of the pre-op, the anaesthetic record and the consent is read by shape from what refers to the operation, never by another
+  pack's name (rule: no pack names another). Demo: the Theatre, Iman Zidan (theatre@demo.com); Ghada Sharaf (operating, Sign out to say),
+  Amr Nassar (under a spinal), Aya Shehata (To schedule, urgent), Ziad Hafez (an emergency); the clinic's choices (`seeds/clinic_packs.sql`):
+  the Theatre ticks surgery and anaesthesia, the Anaesthetic record on its line, the surgeon and anaesthetist hold their roles there, the
+  Laboratory offers histopathology. Tests: `supabase/tests/theatre.sql`, `npm run test:theatre`. *Differences:* printing the list and the
+  consent form waits for printing (not in core-v3); the pre-op clinic's booking is the bookings pack's; the operating list's Pre-op
+  column fills once the pre-op refers to the operation (a composer draft cannot refer: the same core question as the cancer's change),
+  its ASA from the anaesthetic record meanwhile; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
+  anaesthesia out of the theatre pack).
 
 
 ---

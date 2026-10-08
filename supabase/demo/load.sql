@@ -17,6 +17,8 @@
 -- include: supabase/demo/radiology.sql
 -- include: supabase/seeds/oncology.sql
 -- include: supabase/demo/oncology.sql
+-- include: supabase/seeds/theatre.sql
+-- include: supabase/demo/theatre.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql
