@@ -1619,7 +1619,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   beside each test on the list (iron, ESA, binder, vitamin D, bicarbonate, ACEi/ARB/MRA) and where dialysis stands; its chip and banner say
   the square ("CKD G4 A3", danger for very high) and a fall of 5 or more a year. The renal list is the setting `nephrology.renal_list` (the
   clinic's: a medicine by name or ATC class, the eGFR under which it speaks, its words; twelve starter rows for the clinic's nephrologist to
-  confirm), and its line under `/rx` is core change C1 (`rxline.ts`, wired when `clinics-core-ready` is merged). Starter setup
+  confirm), and its line under `/rx` and its draft is core change C1 (`registerCardLine`, `rxline.ts`: "eGFR 28 (3 Oct): metformin — the clinic's renal
+  list says stop under 30", in warn). Starter setup
   `nephrology.clinic`; Nephrologist (`e501`, on Doctor). Demo: Saeed El-Gammal (G4 A3, eGFR 48 → 28 over two years, the panel, still on
   metformin), Hoda Fathy (G3a A2); Dr. Medhat Sorour (nephrology@demo.com). Three LOINC codes added (TSAT 2502-3, phosphate 2777-1, PTH 2731-8).
   Tests: `supabase/tests/nephrology.sql`, `npm run test:nephrology`.
@@ -1649,8 +1650,14 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   the base's bench, then answered by the base's result that issues the units (the group 882-1, the screen 890-4, the crossmatch, the units'
   numbers). `/blood` (its order type `lis.blood`: the product, the needs, the units, why, the consent, the sample) is offered wherever the Blood
   bank works for the department; under its card the Hb, platelets, the volume at her weight, allergies, the consent and the tube. `/transfuse`
-  (`lis.transfusion`, extending the base's given: the unit its lot, the volume its dose, what happened in its note; beside it the two who
-  checked, the six checks, the signs before, at 15 minutes and at the end, a reaction with the doctor's word). Demo: Mariam Tawfik
+  (`lis.transfusion`, extending the base's given: the unit its lot, the volume its dose, what happened in its note; beside it the second who
+  checked, the six checks, the signs before, at 15 minutes and at the end, a reaction with the doctor's word) is core change C3: offered by
+  works for and declared served, so the ward writes it with the base's `write:given` where the Blood bank works for it (`not_served`
+  elsewhere); on the line `/transfuse 26-118452 with Marwa Gaber checked`. *Differences:* its card (checks, signs, Stop and the reaction)
+  draws only where the department ticks the laboratory pack, since a pack's card is found by the department's packs (`cardFor`): on the
+  ward the line carries the second checker and the checks, and the signs and a reaction wait for that core question; the Blood bank's
+  steps are the base bench's buttons and its issue is the base's result (the units' numbers as text), not a unit-by-unit screen of its own;
+  her table and the action plan print when printing comes. Demo: Mariam Tawfik
   (thalassaemia programme), Ensaf Rizk (INR clinic), Dr. Ola Kandil (haematology@demo.com); the Blood bank's Nabila Farag and Soad Mahrous
   (two units on the ward, the second stopped for hives), Mahmoud Fekry (bloodbank@demo.com). Tests: `supabase/tests/haematology.sql`,
   `npm run test:haematology`, `npm run test:lis`.
