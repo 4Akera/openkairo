@@ -253,7 +253,8 @@ test('the wait wiring on the pages (spec §5.4, core change (c)): the bench\'s p
   assert.match(rq, /disabled=\{!!wait\} title=\{wait\?\.word\} onClick=\{\(\) => step\('in-progress'\)\}>Start/, 'Start greyed with the word')
   assert.match(rq, /packs\.anyway\(prow, \[row!\.order\.item\], 'Answer'\)/, 'Answer anyway…, for whoever may answer')
   assert.match(rq, /<CancelButton onCancel=\{\(why\) => step\('rejected', why\)\} \/>/, 'Decline (a stop) is never greyed')
-  assert.doesNotMatch(src('src/core/screens/chart/blocks/Orders.tsx'), /useRows|softCheck|useOrderWaits/, 'the chart draws no soft check: (c) is approved for the lists and Request.tsx only')
+  assert.doesNotMatch(src('src/core/screens/chart/blocks/Orders.tsx'), /softCheck|useOrderWaits|useRowWaits/, 'the chart draws no soft check: (c) is approved for the lists and Request.tsx only')
+  assert.match(src('src/core/screens/chart/blocks/Orders.tsx'), /useOrderWords\('chart'/, 'only a pack\'s words on an order\'s line: core change (l), approved for the chart (§5.7)')
   assert.doesNotMatch(src('src/core/screens/useRows.tsx'), /refetchInterval/, 'the packs\' data is read on hints and changes, never on a timer (a list left open logs no reads)')
 })
 test('a pack that charges (core change (d)): asked of the department without naming the pack; only a pack used there counts', () => {

@@ -623,7 +623,7 @@ it works ("/x is used in: …").
   the tokens lack is asked for in core, never invented in the pack.
 - **No new packs until the owner says so.** The packs he asked for: pharmacy and laboratory (§5.3), billing (§5.4, to build), radiology (§5.5, 2026-10-08), and the departments of beds — ward, ER, ICU, CCU, the labour ward and dialysis, "all at once, they share
   common things" (§5.6, 2026-10-08); after them ObGyn's clinic, paediatrics, surgery with theatre and anaesthesia, family medicine and
-  internal medicine with its branches (cardiology, haematology, nephrology, respiratory, oncology).
+  internal medicine with its branches (cardiology, haematology, nephrology, respiratory, oncology). Bookings (§5.7, 2026-10-08) is built.
 
 ### 5.1 How a pack shows up (decided with the owner, one rule at a time, from 2026-10-04)
 - **Rule 1 · on per department.** Two switches: the clinic turns a pack on (`organization.packs_used`), then each department ticks
@@ -1511,6 +1511,117 @@ numbered as on its picture.
 - **Later, not day one**: ward stock (the pharmacy's "wards' stock comes with a ward pack"), the controlled drugs book, diets and the
   kitchen, care plans, wound and pressure-area charts, fall and pressure-risk scores, APACHE II, the ICU census, monitor and
   ventilator feeds, mass casualty, the ER's and dialysis's monthly returns.
+
+### 5.7 Bookings (the owner's decisions, 2026-10-08)
+The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
+questions in chat and approved the pictures on 2026-10-08 ("approved, start building bookings"). The pictures are at
+`/pictures.html#book-desk` … `#book-settings` (`src/pictures/bookings.tsx`; shots in `spec/shots/2026-10-08/bookings/`): the desk
+books, `/book` in the consult, Booked today, Tomorrow's calls, the queue, the Diary, Radiology books a CT, a walk-in at Radiology, a
+clinic's settings. "Owner" means the owner's words or a picture approved; anything else is marked "chosen in the build, awaiting the
+owner". What this section does not say is not decided; a build that needs a core or base piece not listed under *Core changes the
+owner approved* stops and asks.
+
+- **One diary for the clinic** (owner): a department that uses bookings has **sessions** (days, hours, a doctor or anyone, a room);
+  a session books **by time** (every N minutes) or **by number** (N places, seen in number order), chosen per session (owner, 1).
+  A booking is for a session, or a named doctor where one is available (owner, 4); a follow-up offers the doctor who saw the patient
+  first (picture). Overbook and places kept for walk-ins are a number per session, 0 by default (owner, 6).
+- **Who books** (owner, 3): the desk (by phone or in person: Book beside Send on the patient card) and the doctor or nurse at the end
+  of a visit (`/book 3m`, a card under the line; Done saves it with the visit). Patients booking themselves online: later.
+- **Where a booking lives** (owner, 5): in the pack's own table, never a record entry; the chart says only "Next visit…". Its
+  changes (moved, cancelled, a call's answer) are new rows of the pack's own, who and when on each.
+- **The queue** (owner, 2; core change below): a booked patient goes in at their time or number, ahead of walk-ins who came earlier;
+  walk-ins fill the gaps. One who came early waits for their place; one who is late goes in at the next gap; an urgent patient still
+  goes first (picture).
+- **Booked today** (picture): at the desk, everyone expected today across the clinics and benches it checks in for; **Here** is the
+  base's ordinary check-in. Missed is worked out when read, once the session has ended; nothing writes it.
+- **Tomorrow's calls** (owner, 7): the desk phones each booking of the next open day and marks confirmed, will cancel, no answer or
+  wrong number; will cancel cancels the booking with its reason. SMS and WhatsApp reminders: later, with a sending service outside
+  openCare.
+- **New visit or re-visit** (owner, 9): carried as a note on the booking only; billing does not read it.
+- **Recall list** (a follow-up with no place yet): later (owner, 8).
+- **A bench books its rooms** (owner, "bench booking" accepted): a bench department that uses bookings has sessions on its rooms (the
+  CT room by time, ultrasound by number). A bench booking always names an order: the doctor's (Book on its row, the room's free times
+  folded out under it, what to tell the patient) or a walk-in's, made when it is booked. Missed: the order stays open, *Book again* or
+  *Cancel order*. The doctor's order line says "booked Tue 10:30".
+- **A walk-in at a bench that uses bookings** (owner): the walk-in card's third step, *when*: **Now** (always offered, "3 ahead") or a
+  time; the card informs, the person decides (owner: "always offer Now").
+- **What to tell the patient** (picture): a line per service in bookings' own settings, said on the booking card and the calls list
+  (English and Arabic).
+- **Settings** (picture): a department's Bookings card: sessions; leave and closed days (a doctor's sessions or the whole clinic's);
+  book ahead (90 days); who may book here (the clinic and the desks that check in for it); same doctor first.
+
+#### Core changes the owner approved
+- **(h) Queue order by booking** (owner, 2026-10-08, "yes to queue order"): a client hook through which a pack the department uses
+  gives a waiting row its place (a time), so the clinic queue and the bench's To do put a booked patient at their time or number and
+  walk-ins in the gaps. *Built 2026-10-08* (below).
+- Approved by the owner on 2026-10-08 ("yes to all five"), each general, naming no pack:
+  - **(i) A row action on the desk's patient card**: the pack's one row button (core change (a)) also shows on the desk's patient
+    card, its card folded out under it ("Book" beside Send). *Built 2026-10-08.*
+  - **(j) The walk-in card's third part**: after *what for*, a pack the bench uses may add a part (bookings' *when*); the core writes
+    the order as it does today, then hands the pack the new orders and the patient. *Built 2026-10-08.*
+  - **(k) A pack's composer line saved by its own operation at Done**: right after the record entries land, never a record entry;
+    if it fails, the visit is still saved and the line says what went wrong. *Built 2026-10-08.*
+  - **(l) A row mark that reads the pack's own data** once a list (as a row action does), also on the doctor's order line in the
+    chart ("booked · Sun 11 Oct 10:00"). *Built 2026-10-08.*
+  - **(m) A pack's own view on a bench**: one counted filter in the bench's toolbar, the orders it names, not greyed (Radiology's
+    *To book*). *Built 2026-10-08.*
+- Not core changes: the desk staff book through a pack role built on Reception (§5.2); the chart's *Next visit* is a pack section
+  whose body reads the pack's own table.
+
+#### Built (2026-10-08)
+- **The pack** `bookings` (role block `cd`; migration 16, after the privileges, ending with `core.lock_pack`): its own tables
+  `bookings.bookings` (patient, where, session, day, the time or the number's place, the number, the order it is for, a note, moved
+  from, booked from, the visit it was booked in, who and when) and `bookings.events` (cancelled with its reason, here with the visit,
+  a call's answer), only ever added to (a trigger refuses every change but the eraser's), reached by Erase (`core.declare_store`); no
+  record type. Its operations (`public.pack_op`): `bookings.free` (each session's free places day by day, never past book ahead, a day
+  on leave or a time gone), `bookings.book` (one lock a session and day; by number the next number, never given twice; by time a time
+  of the session, a taken one only into the overbooking; full is the places less those kept for walk-ins plus the overbooking; a
+  bench's booking names its order, open and sent there (a crossed-out order is gone), a service the session books, booked once, the
+  order and a moved booking each held by a lock before they are checked; moved_from cancels the old one, "moved", and carries its order:
+  a move never books another order, nor moves a booking already here), `bookings.cancel` (a reason from the list), `bookings.here`
+  (today; a clinic's names the visit the patient is in there: the one Here opens, or the one the desk's ordinary Send already opened),
+  `bookings.call` (will cancel cancels, "patient asked"), `bookings.list` (departments this one serves, a day to a day; or a patient's
+  from today), `bookings.places` (the visits' and orders' places for (h), (l), (m), ids only). Missed is worked out when read: a session
+  ended with no Here, unless the booking's order was started or done at the bench (then it came). Who may book where: the department
+  itself, or a desk that checks in for it. Actions `read:bookings.diary` and `write:bookings.booking` (everyday: a Doctor and a Nurse
+  hold them where the department uses bookings) and `write:bookings.sessions`; roles *Booking desk* (built on Reception) and *Books
+  its rooms* (built on the lab technician). Settings: `bookings.sessions` (sessions and leave; its own editor), `bookings.rules` (book
+  ahead, same doctor first; the automatic form), `bookings.tell` (per service; its own editor). Screens `bookings.today` (desk) and
+  `bookings.diary` (any). Setups: a clinic, a bench and a desk with a diary (each its Screens line). *Chosen in the build, awaiting the
+  owner:* a session may name what it books (a bench's services; none: any), so an ECG done on the spot stays in To do while echoes
+  wait in To book; a walk-in started with Now stays in To do (the patient is there); numbers are never given twice (a cancelled number
+  is not reused); a number's place is the session shared evenly; by time, what is left is the free times still to come and the
+  overbooking left, and a taken time may be picked into the overbooking; same doctor first offers the doctor who last saw the patient
+  in that department; the desk reads names one patient at a time. *Not built:* Cancel order beside Book again on a missed bench row
+  (the bench's own Reject or Not done closes an order).
+- **The core changes**, each in `screens/rows.ts` and drawn by `useRows.tsx`, a pack's once, only the packs the department uses:
+  (h) `registerRowPlace` — the queue's waiting band in its turn (`inTurn`, with the clock: urgent first; then a booked patient here for
+  a place that has come, in place order, ahead of walk-ins who came earlier; then the rest as they came — walk-ins, and a booked patient
+  who came after their place — with one who came early for a place still to come waiting for it), the chart's Done → next in the same
+  order (`useInTurn`), and the bench's patients (`groupByPatient(…, place)`: booked for today is today's) with the bench patient page's
+  next in the bench's order, never an order a pack's view holds; (i) the desk's patient card
+  draws the pack row actions (`RowList` 'card'); (j) `registerWalkInPart` (`bench/WhatFor.tsx`): its part drawn in the step
+  (`extra`, `start`), and after the orders land `after` gets them (the bench's card and the desk's); (k) `registerDraftSave`
+  (`visit/commands.ts`, only a pack's own `<pack>.<name>`): Done and Sign write the entries, then each pack line through its save, one
+  send at a time, clearing only what was sent; one that fails stays a draft and says why, with *Save it again* or *Go on without it*;
+  the walk-in's Start waits for the part's own before it is offered again; (l) `registerOrderWords` — the row's marks and the chart's order line (a date or a time allowed, at most 40 letters, a state
+  tone); (m) `registerBenchView` — one counted view on the bench, its orders by group in its order (its count only the groups it names),
+  each patient a row a group; an order not started leaves To do for it.
+- **The client** (`src/packs/bookings/`): Book on the desk's card and on a bench's order (the booking card: where, with whom, each
+  session's free places, later sessions, a note, what to tell the patient); Booked today (Now and next, Earlier today; Here checks in
+  and marks the booking), Tomorrow's calls, Missed; the Diary (a column per session, walk-ins today, a place's card with Move and
+  Cancel, a week); `/book 3m` (the nearest places, a week earlier or later, any doctor); the walk-in's Then · when; the chart's Next
+  visit section; the sessions and tell editors. Decisions pure in `logic.ts`.
+- **Demo** (`seeds/bookings.sql`, `demo/bookings.sql`): General Practice keeps a diary (Morning by number every day, 24 places, two
+  kept for walk-ins, two overbooked; Evening by time every 15 minutes with Dr. Ali), the Front desk books (Mai Samir: Booking desk), an
+  ECG room made from the bench setup (Echo every 30 minutes, booking echoes and Holters; Tamer Wahba: Books its rooms); Fathy booked
+  and here, Samira booked today and in twelve weeks, Laila and Ihab tomorrow (Ihab confirmed), Nevine's echo to book, Karima's echo
+  booked in three days. Today's bookings are made only while a session of today is still open.
+- **Tests**: `supabase/tests/bookings.sql` (the operations, who books where, full, taken, the bench's order, a move keeping its order,
+  another order and a booking already here refused, a crossed-out order, a started order that came, a number's place inside its
+  session, here, calls, the list, only added to, Erase), `npm run test:bookings` (the decisions and the core changes (h), (l), (m), the
+  queue's turn as the approved picture shows it). A review of the build on 2026-10-08 (four reviewers, each finding checked by two
+  more) found 45; each is fixed as above.
 
 ---
 

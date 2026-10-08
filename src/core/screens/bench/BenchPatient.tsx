@@ -11,7 +11,7 @@ import { answerEntry, oneSet, resultEntry, stepEntry } from '../../db/entries'
 import { replyFormFor } from '../../renderers'
 import type { RequestQueueRow, ServiceField } from '../../db/types'
 import { Badge, Button, Callout, Card, Centered, Heading, IconButton, Input, Kbd, Select, Spinner, Tag, Toolbar, cn, errorText, flagClass, hm } from '../../ui'
-import { ageOf, fieldTone, groupByPatient, nextSteps, STEP_TONE, stepLabel, stepName } from './shared'
+import { ageOf, fieldTone, groupByPatient, nextSteps, phaseOf, STEP_TONE, stepLabel, stepName, todayYmd } from './shared'
 import { ChartGlance } from '../chart/glance/ChartGlance'
 import { benchMarkRow } from '../marks'
 import { isStop, packRowOf } from '../rows'
@@ -53,7 +53,13 @@ export function BenchPatient() {
   const q = useRequestQueue(dept?.id ?? null)
   const groups = useMemo(() => groupByPatient(q.data?.requests ?? []), [q.data])
   const g = groups.find((x) => x.patient.id === patientId)
-  const next = groups.find((x) => x.patient.id !== patientId)
+  // the next patient as the bench lists them (§5.7): a booked patient at their place, and never an order a pack's own view holds (To
+  // book, booked for another day) nor one a pack holds waiting
+  const listRows = useMemo(() => groups.map((x) => packRowOf(x.patient.id, benchMarkRow(x))), [groups])
+  const list = usePackRows('bench', listRows, dept)
+  const held = new Set(list.views(listRows).flatMap((v) => [...v.groups.keys()]))
+  const next = groupByPatient((q.data?.requests ?? []).filter((r) => list.isFree(r.order.item) && !(phaseOf(r.request?.step) === 'todo' && held.has(r.order.item))),
+    todayYmd(), (x) => list.place(packRowOf(x.patient.id, benchMarkRow(x)))).find((x) => x.patient.id !== patientId)
   // the packs on the page (spec §5.4): a pack's button and card under the header; an order a pack holds waiting is greyed with its word
   // and goes ahead anyway with a reason, while the patient's other orders stay workable; a stop is never greyed — not done, and a pack's
   // own form stays open on it so its stop (not given) can be written; only what is not a stop waits

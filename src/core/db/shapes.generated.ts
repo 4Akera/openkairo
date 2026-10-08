@@ -468,6 +468,43 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
+/** setting bookings.rules (bookings; owner department) */
+export interface BookingsRulesSetting {
+  ahead?: number
+  same_doctor?: boolean
+}
+/** setting bookings.sessions (bookings; owner department) */
+export interface BookingsSessionsSetting {
+  leave?: {
+    doctor_id?: string
+    from: string
+    reason?: string
+    to: string
+  }[]
+  sessions?: {
+    days: ('sat' | 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri')[]
+    doctor_id?: string
+    every?: number
+    from: string
+    how: 'time' | 'number'
+    id: string
+    name: string
+    overbook?: number
+    place_id?: string
+    places?: number
+    services?: string[]
+    to: string
+    walk_ins?: number
+  }[]
+}
+/** setting bookings.tell (bookings; owner department) */
+export interface BookingsTellSetting {
+  lines?: {
+    ar?: string
+    en: string
+    service_id?: string
+  }[]
+}
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
   after: 'next' | 'queue'
@@ -690,6 +727,9 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
+  'bookings.rules': BookingsRulesSetting
+  'bookings.sessions': BookingsSessionsSetting
+  'bookings.tell': BookingsTellSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
