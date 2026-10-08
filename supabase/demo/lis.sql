@@ -64,7 +64,7 @@ begin
 end $$;
 
 -- The Blood bank's day (spec/openCare.md §5.1 rule 9, §5.7, Q35, Q36), the laboratory pack's: Nabila Farag (44, iron deficiency, Hb 6.9 at
--- General Practice) has one unit of red cells asked this morning, its sample received; Soad Mahrous (66, melaena, Hb 6.8 last night) on the
+-- General Practice) has one unit of red cells asked this morning, its sample received; Soad Mahrous (66, melaena, Hb 6.8 this morning) on the
 -- Medical Ward: two units asked urgently, grouped A Rh positive and crossmatched, issued as 26-118437 and 26-118452; the first given with no
 -- reaction; the second started and stopped for hives, mild, not restarted (each unit the bedside record, /transfuse's type extending the base's given: the unit its lot). Times relative to
 -- the load; a reload erases these patients first.
@@ -95,24 +95,24 @@ begin
 
   -- Soad: melaena, admitted last night; two units asked at 07:15, crossmatched and issued; the second stopped for hives
   perform demo.patient(demo.id('lis', 'patient:soad'), array['Soad'], 'Mahrous', 'female', demo.born(66, 300), '+201006671284');
-  stay := demo.admit(demo.arrive('Black stools since yesterday, dizzy', 26 * 60), 4, 25 * 60, 'Upper GI bleeding: melaena, Hb 6.8');
-  perform demo.w(demo.base('doctor'), jsonb_build_array(demo.e('problem', demo.base('ward'), stay, demo.ago(25 * 60), demo.problem('K92.2', 'Melaena · upper GI bleeding'))));
+  stay := demo.admit(demo.arrive('Black stools since yesterday, dizzy', 295), 6, 285, 'Upper GI bleeding: melaena, Hb 6.8');
+  perform demo.w(demo.base('doctor'), jsonb_build_array(demo.e('problem', demo.base('ward'), stay, demo.ago(284), demo.problem('K92.2', 'Melaena · upper GI bleeding'))));
   lab := gen_random_uuid();
-  perform demo.w(demo.base('doctor'), jsonb_build_array(demo.lab_order('cbc', demo.base('ward'), null, demo.ago(14 * 60 + 60), lab)));
-  perform demo.lab(lab, demo.ago(14 * 60 + 50), demo.cbc(true, 6.8, 9.2, 241));
+  perform demo.w(demo.base('doctor'), jsonb_build_array(demo.lab_order('cbc', demo.base('ward'), null, demo.ago(282), lab)));
+  perform demo.lab(lab, demo.ago(280), demo.cbc(true, 6.8, 9.2, 241));
   o := gen_random_uuid(); s1 := gen_random_uuid(); s2 := gen_random_uuid(); s3 := gen_random_uuid();
-  perform demo.w(demo.base('doctor'), pg_temp.bb_blood(demo.base('ward'), 300, o, 'urgent', '{"product":"rbc","needs":[],"units":2,"why":"bleeding","consent":"signed today","sample":"taken here"}', 'melaena, Hb 6.8'));
-  perform demo.w(tech, pg_temp.bb_step(o, null, 290, 'received', s1));
-  perform demo.w(tech, pg_temp.bb_step(o, s1, 280, 'grouped', s2));
-  perform demo.w(tech, pg_temp.bb_step(o, s2, 250, 'crossmatched', s3));
-  perform demo.w(tech, jsonb_build_array(demo.e('result', bb, null, demo.ago(245), jsonb_build_object('status', 'final', 'service', pg_temp.bb_svc('rbc', 'Red cells') - 'code',
+  perform demo.w(demo.base('doctor'), pg_temp.bb_blood(demo.base('ward'), 230, o, 'urgent', '{"product":"rbc","needs":[],"units":2,"why":"bleeding","consent":"signed today","sample":"taken here"}', 'melaena, Hb 6.8'));
+  perform demo.w(tech, pg_temp.bb_step(o, null, 225, 'received', s1));
+  perform demo.w(tech, pg_temp.bb_step(o, s1, 215, 'grouped', s2));
+  perform demo.w(tech, pg_temp.bb_step(o, s2, 195, 'crossmatched', s3));
+  perform demo.w(tech, jsonb_build_array(demo.e('result', bb, null, demo.ago(190), jsonb_build_object('status', 'final', 'service', pg_temp.bb_svc('rbc', 'Red cells') - 'code',
     'conclusion', 'A Rh positive · antibody screen negative · 2 units crossmatched compatible, issued: 26-118437, 26-118452',
     'analytes', jsonb_build_array(jsonb_build_object('key', 'group', 'name', 'ABO and Rh', 'code', jsonb_build_object('system', 'loinc', 'code', '882-1', 'display', 'ABO and Rh group'), 'text', 'A Rh positive'),
       jsonb_build_object('key', 'screen', 'name', 'Antibody screen', 'code', jsonb_build_object('system', 'loinc', 'code', '890-4', 'display', 'Antibody screen'), 'text', 'negative'),
       jsonb_build_object('key', 'crossmatch', 'name', 'Crossmatch', 'text', 'compatible'), jsonb_build_object('key', 'units', 'name', 'Units issued', 'text', '26-118437 · 26-118452'))),
     null, (select x.id from core.entries x where x.item = o order by x.item_version desc limit 1), 'answers')));
   -- at the bedside: unit 1 given with no reaction, unit 2 stopped at 11:51 for hives (the base's given, the unit its lot)
-  perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('lis.transfusion', demo.base('ward'), stay, demo.ago(200), jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells · A Rh+'),
+  perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('lis.transfusion', demo.base('ward'), stay, demo.ago(165), jsonb_build_object('status', 'completed', 'drug', jsonb_build_object('text', 'Red cells · A Rh+'),
     'lot', '26-118437', 'route', 'iv', 'dose', demo.q(290, 'mL', 'mL'), 'note', 'checked by two at the bedside · no reaction',
     'lis', jsonb_build_object('unit', '26-118437', 'product', 'rbc', 'group', 'A Rh+', 'second', 'Marwa Gaber', 'checks', '["Name and birth date: wristband = label","Record number = the label","Unit number on the bag = the label","The unit''s group fits the patient''s","In date · the bag whole, no clots","Started within 30 minutes of issue"]'::jsonb,
       'signs', '[{"when":"before","temp":36.7,"sys":122,"dia":74,"pulse":96,"rr":16,"spo2":97},{"when":"15 min","temp":36.8,"sys":124,"dia":74,"pulse":92,"rr":16,"spo2":97},{"when":"end","temp":36.8,"sys":126,"dia":76,"pulse":88,"rr":16,"spo2":97}]'::jsonb)))));
