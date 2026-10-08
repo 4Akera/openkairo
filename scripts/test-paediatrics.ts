@@ -10,6 +10,8 @@ import { childWords, growthSummary, growthWord } from '../src/packs/paediatrics/
 import { doseLine, doseMg, mgPerMl, ruleFor, type DoseRule } from '../src/packs/paediatrics/dose'
 import { ageMonths, devLine, lateOf, listFor, newCheck, newbornOf, summaryOf, withSummary, type Milestone } from '../src/packs/paediatrics/develop'
 import { lmsAt, zOf, type Lms } from '../src/packs/paediatrics/lms'
+import { rxLine, vLine } from '../src/packs/paediatrics/lines'
+import { cardLinesOf, cardLineDefs, registerCardLine } from '../src/core/screens/visit/lines'
 import type { ServerEntry } from '../src/core/db/types'
 
 let n = 0
@@ -129,5 +131,27 @@ test('the LMS sums the /v line shows are the server\'s: Malek at 11 months, weig
   assert.ok(Math.abs(lmsAt(t, 'wfa', 'm', 11.5)![1] - (9.4122 + 9.6479) / 2) < 1e-9, 'between two rows, in proportion')
   assert.equal(lmsAt(t, 'wfa', 'm', 30), null, 'beyond the loaded table: nothing guessed')
   assert.ok(zOf(30, [0.073, 9.4122, 0.10906]) > 3 && zOf(30, [0.073, 9.4122, 0.10906]) < 20, 'past +3: the restricted way')
+})
+test('the lines under /rx and /v (C1): the picture\'s amoxicillin for Jana, the z-scores for Malek; nothing for an adult', () => {
+  const born = (days: number) => new Date(now.getTime() - days * DAY).toISOString().slice(0, 10)
+  const org = { settings: [{ key: 'paediatrics.doses', thing_id: 'o', owner_id: null, recorded_at: '2026-10-01', data: { doses: RULES } }], settingKeys: [], datatypes: {} }
+  const jana = { patient: { born_on: born(1157), sex: 'female' }, values: [{ key: 'weight', value: 14.2, at: new Date(now.getTime() - 25 * 60_000).toISOString() }] }
+  const ctx = (record: unknown) => ({ record, departmentId: 'pc', packs: ['paediatrics'], org, now }) as never
+  const rx = rxLine({ action: 'start', drug: { name: 'Amoxicillin 250/5' }, dose_number: 7.5, dose_unit: 'ml', route: 'oral', frequency: 'TDS' }, ctx(jana))!
+  assert.match(String((rx.rows[0] as string[])[0]), /= 79 mg\/kg\/day$/); assert.deepEqual(rx.short, [{ text: '79 mg/kg/day', tone: 'ok' }])
+  assert.deepEqual((rx.rows[1] as unknown[])[0], { text: 'in the clinic\'s range', tone: 'ok' })
+  assert.equal(rxLine({ action: 'start', drug: { name: 'Amoxicillin' }, dose_number: 500, dose_unit: 'mg', frequency: 'TDS' }, ctx({ patient: { born_on: '1970-01-01', sex: 'male' }, values: [] })), null, 'an adult: no line')
+  const t = new Map<string, Lms>([['wfa.m.11', [0.073, 9.4122, 0.10906]], ['wfa.m.12', [0.0644, 9.6479, 0.10925]], ['lfa.m.11', [1, 74.5388, 0.03125]], ['lfa.m.12', [1, 75.7488, 0.03137]],
+    ['wfl.m.72.0', [-0.3521, 8.8697, 0.08254]], ['wfl.m.72.5', [-0.3521, 8.9788, 0.08262]]])
+  const malek = { patient: { born_on: born(335), sex: 'male' }, values: [] }
+  const v = vLine({ weight: 7.5, length: 72.4, head: 45.4 }, ctx(malek), t)!
+  assert.deepEqual(v.rows[0], [{ text: 'weight z −2.07 (1.9)', tone: 'warn' }, 'length z −0.92 (17.9)', { text: 'for length z −2.22 (1.3)', tone: 'warn' }].map((w) => typeof w === 'string' ? w.replace(/\((\d+\.\d)\)/, (_, c) => `(${centileText(Number(c))})`) : { ...w, text: w.text.replace(/\((\d+\.\d)\)/, (_, c) => `(${centileText(Number(c))})`) }))
+  assert.match(String(v.rows[1]), /^WHO 2006, boys, 11 months · from the loaded tables, as the record keeps them · beyond the loaded tables: head$/)
+  assert.equal(v.short, 'weight z −2.07'); assert.equal(vLine({ weight: 7.5 }, ctx(malek), null), null, 'the tables not read yet: nothing yet')
+  // through the core's registry, in a department that uses the pack, and nowhere else
+  registerCardLine('paediatrics', 'medication', 'Paediatrics', rxLine)
+  const params = { action: 'start', drug: { name: 'Amoxicillin 250/5' }, dose_number: 7.5, dose_unit: 'ml', route: 'oral', frequency: 'TDS' }
+  assert.equal(cardLinesOf(cardLineDefs(), 'medication', params, ctx(jana)).length, 1)
+  assert.equal(cardLinesOf(cardLineDefs(), 'medication', params, { ...(ctx(jana) as object), packs: [] } as never).length, 0)
 })
 console.log(`paediatrics: ${n} groups passed`)

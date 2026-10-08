@@ -9,12 +9,14 @@ import { lineOf, partialDate, type Ctx, type Parsed } from './parse'
 import { cardFor } from './commands'
 import { FactCard } from './FactCards'
 import { ScoreCard } from './ScoreCard'
+import { cardLineDefs, cardLinesOf, lineCtx } from './lines'
+import { CardLines } from './CardLines'
+import { vitalsFields } from './vitals'
 
 const FREQS = ['OD', 'BD', 'TDS', 'QDS', 'q6h', 'q8h', 'q12h', 'weekly', 'monthly', 'once', 'stat']
 const ROUTES = ['oral', 'sc', 'im', 'iv', 'sl', 'topical', 'inhaled', 'nasal', 'pr', 'pv']
 const DAYS = [3, 5, 7, 14, 30, 90]
 const STOP_REASONS = ['Side effect', 'Not effective', 'Course complete', 'Patient’s choice', 'Changed to another drug', 'No longer needed']
-const VITALS: [string, string, string][] = [['systolic', 'Sys', 'mmHg'], ['diastolic', 'Dia', 'mmHg'], ['pulse', 'Pulse', 'bpm'], ['temperature', 'Temp', '°C'], ['weight', 'Wt', 'kg'], ['spo2', 'SpO₂', '%'], ['respiratory_rate', 'RR', '/min'], ['height', 'Ht', 'cm']]
 
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 const FACTS = new Set(['pregnancy', 'breastfeeding', 'alert'])
@@ -30,12 +32,14 @@ export function CardItem({ item, ctx, onChange, onRemove, onLongNote, warnings, 
     : item.function === 'medication' ? <Rx q={q} set={set} ctx={ctx} />
     : item.function === 'problem' ? <Dx q={q} set={set} />
     : item.function === 'allergy' ? <Al q={q} set={set} />
-    : item.function === 'vitals' ? <Vitals q={q} set={set} />
+    : item.function === 'vitals' ? <Vitals q={q} set={set} ctx={ctx} />
     : item.function === 'order' ? <Req q={q} set={set} ctx={ctx} />
     : item.function === 'note' ? <Note q={q} set={set} onLong={onLongNote} />
     : FACTS.has(item.function) ? <FactCard fn={item.function} q={q} set={set} />
     : item.function === 'score' ? <ScoreCard q={q} set={set} ctx={ctx} />
     : null
+  // the packs' lines under a base card, the /rx and /v cards (core change C1): a notice, never a stop
+  const lines = cardLinesOf(cardLineDefs(), item.function, q, lineCtx(ctx))
   const compact = item.function === 'order' && !!q.service_id || item.function === 'list_review'
   if (compact) return <div className="flex items-center gap-2 px-3 py-1.5 text-13">
     <Badge tone={KIND_TONE[item.kind] ?? 'neutral'} className="w-20 justify-center">{item.kind}</Badge>
@@ -51,8 +55,10 @@ export function CardItem({ item, ctx, onChange, onRemove, onLongNote, warnings, 
     {warnings.length > 0 && <ul className="mb-2 grid gap-1">{warnings.map((w, i) => <WarningItem key={i} w={w} />)}</ul>}
     {extra}
     {editor}
+    <CardLines lines={lines} />
   </div>
 }
+
 
 /** a warning in the card, Callout-style: a block in danger, a caution in warn, always with its icon (colour is never alone) */
 export function WarningItem({ w }: { w: Warning }) {
@@ -130,8 +136,9 @@ function Al({ q, set }: { q: Q; set: (p: Q) => void }) {
   </div>
 }
 
-function Vitals({ q, set }: { q: Q; set: (p: Q) => void }) {
-  return <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">{VITALS.map(([k, l, u]) => <label key={k} className="text-11 text-muted">{l} <span className="text-faint">{u}</span>
+function Vitals({ q, set, ctx }: { q: Q; set: (p: Q) => void; ctx: Ctx }) {
+  const fields = vitalsFields(q, ctx.record?.patient.born_on, ctx.now)
+  return <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">{fields.map(([k, l, u]) => <label key={k} className="text-11 text-muted">{l} <span className="text-faint">{u}</span>
     <NumberInput label={l} value={q[k]} onValue={(n) => set({ [k]: n ?? undefined })} className={cn(small, 'mt-0.5')} /></label>)}</div>
 }
 

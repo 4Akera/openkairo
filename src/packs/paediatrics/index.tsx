@@ -2,11 +2,12 @@
 // Growth section (the WHO z-scores and centiles the server worked out from the base's vitals, the curve), Development (/dev, the
 // clinic's milestones for the age) and the Newborn checks (base entries by its codes); its banner words (the age and the weight, a
 // z-score beyond ±2, a hearing screen to repeat); its line on the children's ward board (the weight and its age, Holliday–Segar's
-// maintenance). The lines under the base's /v and /rx cards (the z-scores, the dose per kg) come with the core's line under a card (C1).
+// maintenance); its lines under the base's /rx and /v cards (the dose per kg, the z-scores: the core's line under a card, C1).
 import { registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerCommand, registerCard } from '@core/screens/visit/commands'
 import { registerTileLine } from '@core/screens/ward/tiles'
+import { registerCardLine } from '@core/screens/visit/lines'
 import { registerRenderer } from '@core/renderers'
 import { Tag } from '@core/ui'
 import { GrowthBody } from './GrowthSection'
@@ -15,6 +16,8 @@ import { DEV, devLine, hearingRefer, newbornOf, recordedOf, summaryOf, type DevD
 import { growthSummary, growthWord, childWords } from './words'
 import { rowsOf } from './growth'
 import { wardLine } from './ward'
+import { rxLine, vLine } from './lines'
+import { whoTables } from './who'
 
 const KEY = 'paediatrics'
 // Growth: under 19 (§5.1 rule 2); its data is the pack's own table, filled from the base's vitals
@@ -43,6 +46,9 @@ registerRenderer(DEV, {
       {(p.plan ?? []).length > 0 && <p className="text-muted">Plan: {p.plan!.join(', ')}</p>}
       <p className="text-12 text-faint">{summaryOf(p.items, p.plan)}</p></div> },
 })
+// under the base's /rx card and its draft: the dose per kg; under /v: the z-scores of the values being typed (C1)
+registerCardLine(KEY, 'medication', 'Paediatrics', rxLine)
+registerCardLine(KEY, 'vitals', 'Paediatrics', (q, ctx) => vLine(q, ctx, whoTables()))
 // the children's ward board: the weight and its age, maintenance by Holliday–Segar (no tile button: Give and Obs are ward nursing's)
 registerTileLine(KEY, (row, ctx) => wardLine(row, ctx))
 export const key = KEY
