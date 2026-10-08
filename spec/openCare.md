@@ -1575,6 +1575,66 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   echo, ECG and spirometer files, a peak-flow diary; blood bank stock and barcodes, MRI T2* trends; AJCC stage tables, the tumour
   board's list; monitor feeds into the anaesthetic record, sterilisation and implant registries, theatre use reports, e-signed consent;
   home visits and the ministry's family planning returns.
+- *Built 2026-10-08 (lane `clinics-medicine`), cardiology* (`cardiology`, migration 28, role block e4): no record type. `/ecg` writes the
+  base's result with no order (LOINC 11524-6; rate 8867-4, PR 8625-6, QRS 8633-0, QTc 8636-3, axis 8632-2 as analytes with their ranges, a
+  woman's QTc to 460; rhythm and ST-T as text; a conclusion written from them unless typed); its card (rhythm and ST-T chips, the five
+  measures, the conclusion, the last ECG beside it). `/echo`, its order word, offered wherever the Echo room works for the department; the
+  Echo room is a bench department from the starter setup `cardiology.echo_room` (the echo with nine measures and their ranges by sex, EF LOINC
+  10230-1, wall motion and the valves as choices, the rhythm), answered on the base's bench by the base's result. `/hf` writes NYHA (the base's
+  observation in the pack's terms, `cardiology.terms`, the oedema and lying flat in its note), the weight (vitals) and "dry 70" (an
+  observation that stands until the next); under its card the weight against the dry weight and, beside the four groups, BP, pulse, K,
+  creatinine, eGFR. The setting `cardiology.hf_targets` (the clinic's, ESC 2021: sixteen medicines by ATC with their target mg a day) gives
+  each group on the list "not on", "low", "half" or "at target". CHA₂DS₂-VASc as a declared score (`cardiology.chadsvasc`, 2010, `/chadsvasc`).
+  Sections Heart (the ECGs as a table, the last echo, Holter) and Heart failure (EF, NYHA, the weight with its trend, the four medicines
+  against their targets, K/creatinine/eGFR, the diuretic, CHA₂DS₂-VASc and the anticoagulant); banner words (over the dry weight, NYHA, no
+  echo yet). Starter setups `cardiology.clinic` and `cardiology.echo_room`; roles Cardiologist (`e401`, on Doctor) and Echo doctor (`e402`,
+  on Doctor plus the bench's step). Demo: Kamal Abdelrahman (in consult, his ECG seven months ago, his echo started at the Echo room),
+  Zeinab Abou Zeid (heart failure, EF 30 %), Heba Abdelwahab (an echo asked by General Practice); Dr. Wael Ghoneim (cardiology@demo.com),
+  Dr. Rasha Nabil (echo@demo.com). Tests: `supabase/tests/cardiology.sql`, `npm run test:cardiology`. *Differences from the pictures, and
+  why:* Heart failure is its own section beside Heart, so in the Cardiology clinic it shows on every chart (rule 2 has no fit by condition)
+  and says "Heart failure is not on the problem list" where it is not; no tracing or printout is attached (openCare uploads no files yet);
+  the Echo room's report is the base bench's value grid with the service's choices, not the drawn chips.
+- *Built 2026-10-08 (lane `clinics-medicine`), nephrology* (`nephrology`, migration 29, role block e5): no record type. The Kidneys section
+  works out the KDIGO 2012 square from the latest eGFR (the laboratory's, else CKD-EPI 2021 from an adult's creatinine) and urine ACR, and the
+  square a year before (drawn as the picture's grid), eGFR over time (the kit's chart), ACR, BP against 130/80, the CKD panel with what stands
+  beside each test on the list (iron, ESA, binder, vitamin D, bicarbonate, ACEi/ARB/MRA) and where dialysis stands; its chip and banner say
+  the square ("CKD G4 A3", danger for very high) and a fall of 5 or more a year. The renal list is the setting `nephrology.renal_list` (the
+  clinic's: a medicine by name or ATC class, the eGFR under which it speaks, its words; twelve starter rows for the clinic's nephrologist to
+  confirm), and its line under `/rx` is core change C1 (`rxline.ts`, wired when `clinics-core-ready` is merged). Starter setup
+  `nephrology.clinic`; Nephrologist (`e501`, on Doctor). Demo: Saeed El-Gammal (G4 A3, eGFR 48 → 28 over two years, the panel, still on
+  metformin), Hoda Fathy (G3a A2); Dr. Medhat Sorour (nephrology@demo.com). Three LOINC codes added (TSAT 2502-3, phosphate 2777-1, PTH 2731-8).
+  Tests: `supabase/tests/nephrology.sql`, `npm run test:nephrology`.
+- *Built 2026-10-08 (lane `clinics-medicine`), respiratory* (`respiratory`, migration 30, role block e6): no record type. `/spiro` writes the
+  base's result with no order (FEV1 20150-9, FVC 19870-5, FEV1/FVC 19926-5 before; the three after; the LLN as each one's range, % predicted
+  and z after, the quality, the reading as the conclusion: obstruction under the LLN, reversible at 200 mL and 12 %, the GOLD grade); its
+  card asks the server for the predicted values as it fills (`respiratory.predicted` through `public.pack_op`: the cell of the loaded
+  GLI-2012 list nearest in age and height; LLN and z worked out from its LMS), and says when a cell is not loaded, never guessing. GLI-2012
+  is the code system `respiratory.gli2012` with a **demo sample, marked so** (the cells of the demo's two patients; the full tables come by
+  import script). CAT (2009), mMRC (1999), ACT (2004) and the GOLD group (ABE, 2023) are declared scores (`/cat /mmrc /act /gold`). `/technique`,
+  `/flare` and `/plan` write the base's observations in the pack's terms; the action plan is three zones in Arabic, edited on its card. The
+  Chest section: smoking, the GOLD group with CAT, mMRC and the flares (ACT for asthma), the flares of the year, the last spirometry, the
+  inhalers, the technique (amber when wrong), the eosinophils, flu and pneumococcal, the plan. Starter setup `respiratory.clinic` (Chest
+  clinic); Chest physician (`e601`, on Doctor). Demo: Abdelhamid Mansy (COPD, GOLD E), Nermeen Saleh (asthma, ACT 17); Dr. Dalia Mostafa
+  (chest@demo.com). Tests: `supabase/tests/respiratory.sql`, `npm run test:respiratory`. *Differences:* the plan is shown, not printed
+  (printing is not in core-v3); no printout is attached (no uploads).
+- *Built 2026-10-08 (lane `clinics-medicine`), haematology and the Blood bank* (`haematology`, migration 31, role block e7; the Blood bank on
+  `lis`, migration 32). Haematology's own types: `haematology.plan` (the INR clinic's reason, target, medicine, tablet), `haematology.week`
+  (the seven days' doses, what changed, the next INR) and `haematology.programme` (every how many weeks, the Hb before, what the red cells
+  need), each written with its own everyday action. `/inr` writes today's INR as the base's result with no order (6301-6, against her target)
+  and the week: the card reads her week and the clinic's dosing table (`haematology.inr`, with the targets by reason) and offers its
+  suggestion as *Use · 32.5 mg* (spread a half tablet at a time; shown, never applied), the next INR, and under it her medicines that change
+  the INR and her table in Arabic (shown; it prints when printing comes). `/inrplan`, `/programme`. Sections Transfusions (group and screen,
+  reactions, the programme, the last four with the Hb before and mL/kg, the units by number, ferritin, chelation at mg/kg, its checks, the
+  next due) and Anticoagulation (reason, target, medicine, time in range by Rosendaal, the INRs in their band, the week now, the last change).
+  The Blood bank (`lis.blood_bank`): red cells, platelets, plasma and cryoprecipitate, each walked through received, grouped, crossmatched on
+  the base's bench, then answered by the base's result that issues the units (the group 882-1, the screen 890-4, the crossmatch, the units'
+  numbers). `/blood` (its order type `lis.blood`: the product, the needs, the units, why, the consent, the sample) is offered wherever the Blood
+  bank works for the department; under its card the Hb, platelets, the volume at her weight, allergies, the consent and the tube. `/transfuse`
+  (`lis.transfusion`, extending the base's given: the unit its lot, the volume its dose, what happened in its note; beside it the two who
+  checked, the six checks, the signs before, at 15 minutes and at the end, a reaction with the doctor's word). Demo: Mariam Tawfik
+  (thalassaemia programme), Ensaf Rizk (INR clinic), Dr. Ola Kandil (haematology@demo.com); the Blood bank's Nabila Farag and Soad Mahrous
+  (two units on the ward, the second stopped for hives), Mahmoud Fekry (bloodbank@demo.com). Tests: `supabase/tests/haematology.sql`,
+  `npm run test:haematology`, `npm run test:lis`.
 
 ---
 

@@ -15,6 +15,14 @@
 -- include: supabase/demo/billing.sql
 -- include: supabase/seeds/radiology.sql
 -- include: supabase/demo/radiology.sql
+-- include: supabase/seeds/cardiology.sql
+-- include: supabase/demo/cardiology.sql
+-- include: supabase/seeds/nephrology.sql
+-- include: supabase/demo/nephrology.sql
+-- include: supabase/seeds/respiratory.sql
+-- include: supabase/demo/respiratory.sql
+-- include: supabase/seeds/haematology.sql
+-- include: supabase/demo/haematology.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql

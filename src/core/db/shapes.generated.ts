@@ -172,6 +172,43 @@ export type Given = {
   site?: string
   status: 'completed' | 'not-done'
 } & ({ medication: string } | { drug: Concept })
+/** haematology.plan v1 (haematology) */
+export interface HaematologyPlan {
+  medicine?: string
+  note?: string
+  reason: string
+  status?: 'active' | 'stopped'
+  tablet_mg?: number
+  target: {
+    high: number
+    low: number
+  }
+}
+/** haematology.programme v1 (haematology) */
+export interface HaematologyProgramme {
+  condition?: string
+  every_weeks: number
+  hb: {
+    high: number
+    low: number
+  }
+  needs?: ('leucodepleted' | 'Rh and Kell matched' | 'irradiated' | 'washed')[]
+  note?: string
+  status?: 'active' | 'stopped'
+}
+/** haematology.week v1 (haematology) */
+export interface HaematologyWeek {
+  bleeding?: 'none' | 'minor' | 'major'
+  days: number[]
+  food?: 'as usual' | 'more greens' | 'fewer greens'
+  inr?: number
+  missed?: 'none' | 'one' | 'two or more'
+  next_inr?: string
+  note?: string
+  suggested?: number
+  used_suggestion?: boolean
+  was?: number
+}
 /** here v1 (base) */
 export interface Here {
   note?: string
@@ -180,6 +217,72 @@ export interface Here {
 export interface Left {
   reason?: string
 }
+/** lis.blood v1 (lis) */
+export interface LisBlood {
+  answers?: Record<string, unknown>
+  asked_by?: string
+  department_id: string
+  details?: Record<string, unknown>
+  due?: Datetime
+  lis?: {
+    consent?: 'on file' | 'signed today' | 'emergency, no time'
+    needs?: ('leucodepleted' | 'Rh and Kell matched' | 'irradiated' | 'washed')[]
+    product?: 'rbc' | 'plt' | 'ffp' | 'cryo'
+    sample?: 'taken here' | 'the lab collects'
+    units?: number
+    why?: string
+  }
+  priority: 'routine' | 'urgent' | 'asap' | 'stat'
+  question?: string
+  reason?: string
+  reasons?: Reference[]
+  service: {
+    answer?: string
+    code?: string
+    coding?: Coding
+    id?: string
+    name: string
+  }
+  status: 'active' | 'on-hold' | 'revoked' | 'completed'
+}
+/** lis.transfusion v1 (lis) */
+export type LisTransfusion = {
+  dose?: Quantity
+  drug?: Concept
+  expiry?: string
+  lis?: {
+    checked_by: string[]
+    checks?: string[]
+    ended?: string
+    group?: string
+    product?: 'rbc' | 'plt' | 'ffp' | 'cryo'
+    reaction?: {
+      doctor?: 'restart slowly when settled' | 'do not restart · return the unit'
+      severity?: 'mild' | 'moderate' | 'severe'
+      told?: string
+      what?: ('hives, itch' | 'fever, rigors' | 'breathless' | 'BP fell' | 'back pain, dark urine')[]
+    }
+    signs?: {
+      at?: string
+      dia?: number
+      pulse?: number
+      rr?: number
+      spo2?: number
+      sys?: number
+      temp?: number
+      when: 'before' | '15 min' | 'end' | 'reaction'
+    }[]
+    started?: string
+    unit: string
+  }
+  lot?: string
+  medication?: string
+  note?: string
+  reason?: string
+  route?: string
+  site?: string
+  status: 'completed' | 'not-done'
+} & ({ medication: string } | { drug: Concept })
 /** list_review v1 (base) */
 export interface ListReview {
   list: 'problems' | 'medications' | 'allergies'
@@ -468,6 +571,15 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
+/** setting cardiology.hf_targets (cardiology; owner organization) */
+export interface CardiologyHfTargetsSetting {
+  targets: {
+    atc: string
+    group: 'ras' | 'bb' | 'mra' | 'sglt2'
+    mg_a_day: number
+    name: string
+  }[]
+}
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
   after: 'next' | 'queue'
@@ -507,6 +619,21 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
+/** setting haematology.inr (haematology; owner organization) */
+export interface HaematologyInrSetting {
+  table: {
+    change: number
+    from: number
+    next_days: number
+    says: string
+    to: number
+  }[]
+  targets: {
+    high: number
+    low: number
+    reason: string
+  }[]
+}
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
   analysers: false
@@ -524,6 +651,15 @@ export interface LisLargeSetting {
     urine_stool: number
   }
   turnaround: boolean
+}
+/** setting nephrology.renal_list (nephrology; owner organization) */
+export interface NephrologyRenalListSetting {
+  rules: {
+    atc?: string
+    medicine: string
+    says: string
+    under: number
+  }[]
 }
 /** setting organization.packs_used (core; owner organization) */
 export interface OrganizationPacksUsedSetting {
@@ -656,8 +792,13 @@ export interface EntryData {
   'discharged': Discharged
   'done': Done
   'given': Given
+  'haematology.plan': HaematologyPlan
+  'haematology.programme': HaematologyProgramme
+  'haematology.week': HaematologyWeek
   'here': Here
   'left': Left
+  'lis.blood': LisBlood
+  'lis.transfusion': LisTransfusion
   'list_review': ListReview
   'medication': Medication
   'moved': Moved
@@ -690,6 +831,7 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
+  'cardiology.hf_targets': CardiologyHfTargetsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
@@ -699,7 +841,9 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
+  'haematology.inr': HaematologyInrSetting
   'lis.large': LisLargeSetting
+  'nephrology.renal_list': NephrologyRenalListSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting

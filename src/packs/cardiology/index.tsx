@@ -29,7 +29,9 @@ registerSection({ key: 'cardiology.heart', title: 'Heart', types: ['result'], fi
   summary: (x) => { const [last] = ecgsOf(x.own.shown); const e = echoOf(valuesOf(x), x.own.shown)
     return [last && `ECG ${last.rhythm ?? ''} ${last.rate ?? ''}`.trim(), e && `EF ${e.ef} %`].filter(Boolean).join(' · ') || null } })
 const hf = (x: SectionInput) => hasHf(problemsOf(x.rec, x.ctx).active)
-registerSection({ key: 'cardiology.hf', title: 'Heart failure', types: ['observation', 'score'], fit: ANYONE, Body: HeartFailure, has: hf,
+/** its own data: NYHA, a dry weight, CHA₂DS₂-VASc written here (elsewhere it shows by them; in a department ticking the pack, always) */
+const hfData = (x: SectionInput) => nyhasOf(x.own.shown).length > 0 || x.own.shown.some((e) => e.type === 'score' && e.data?.score === 'cardiology.chadsvasc')
+registerSection({ key: 'cardiology.hf', title: 'Heart failure', types: ['observation', 'score'], fit: ANYONE, Body: HeartFailure, has: hfData,
   word: (x) => { if (!hf(x)) return null; const [n] = nyhasOf(x.own.shown); return n ? { word: `NYHA ${nyhaWord(n.cls)}` } : { word: 'NYHA not written' } } })
 
 // ── its banner words: over the dry weight, NYHA; no echo yet for a patient with none ──

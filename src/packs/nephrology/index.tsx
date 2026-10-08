@@ -11,7 +11,7 @@ const stage = (x: Pick<SectionInput, 'rec' | 'identity'>) => {
   const egfrs = egfrSeries(values, x.identity.birth_date ?? null, x.identity.gender === 'female'); return { egfrs, ...squaresOf(egfrs, values) }
 }
 const TONE = [undefined, undefined, 'warn', 'danger'] as const
-registerSection({ key: 'nephrology.kidneys', title: 'Kidneys', types: [], fit: ANYONE, Body: Kidneys, has: (x) => { const s = stage(x); return !!s.now && s.now.g >= 2 },
+registerSection({ key: 'nephrology.kidneys', title: 'Kidneys', types: [], fit: ANYONE, Body: Kidneys, has: () => false,   // its data are the base's: it shows where the pack is ticked
   word: (x) => { const { now } = stage(x); if (!now) return null; const r = riskOf(now); const tone = r != null ? TONE[r] : undefined
     return { word: squareWord(now), ...(tone ? { tone } : {}) } },
   summary: (x) => { const { now, before } = stage(x); if (!now) return null; const f = fallOf(now, before)
