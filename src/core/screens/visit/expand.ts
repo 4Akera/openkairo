@@ -125,7 +125,7 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
     const hits = pool.map((s) => ({ s, r: rank(s) })).filter((x) => x.r < 9).sort((a, b) => a.r - b.r).slice(0, 7).map((x) => x.s)
     // a preset by its name or shortcut, for what it orders here
     const sets = p.length >= 2 ? ctx.templates.filter((x) => (x.shortcut?.startsWith(p) || x.name.toLowerCase().startsWith(p)) && x.items.some((i) => pool.some((s) => s.id === i.service_id))).slice(0, 2) : []
-    // a department is asked with a question: "/order cardiology: …" (only as the first thing ordered; not from a pack's command)
+    // a department is asked with a question: "/order dermatology: …" (only as the first thing ordered; not from a pack's command)
     const depts = !from && !/[,:]/.test(rest) ? ctx.departments.filter((d) => d.id !== ctx.departmentId && d.name.toLowerCase().startsWith(p)).slice(0, 3) : []
     const where = (s: Ctx['services'][number]) => from ? s.section_name ?? ctx.departments.find((d) => d.id === s.department_id)?.name ?? '' : ctx.departments.find((d) => d.id === s.department_id)?.name ?? ''
     const items = [...sets.map((x) => ({ key: `t${x.id}`, label: x.name, detail: `preset · ${x.items.filter((i) => pool.some((s) => s.id === i.service_id)).length} tests`, insert: `${t.slice(0, t.length - partial.length)}${x.name.toLowerCase()}, ` })),

@@ -8,15 +8,18 @@ export interface Tube { cap: Cap; word: string }
 const TUBES: Record<Cap, Tube> = { purple: { cap: 'purple', word: 'Purple · EDTA' }, yellow: { cap: 'yellow', word: 'Yellow · gel' }, grey: { cap: 'grey', word: 'Grey · fluoride' },
   blue: { cap: 'blue', word: 'Blue · citrate' }, red: { cap: 'red', word: 'Red · plain' }, cup: { cap: 'cup', word: 'Cup · urine or stool' } }
 const BY_CODE: Record<string, Cap> = { cbc: 'purple', esr: 'purple', hba1c: 'purple', bloodgroup: 'purple', fbs: 'grey', rbs: 'grey', pt: 'blue', aptt: 'blue', urine: 'cup', stool: 'cup' }
-const BY_SECTION: Record<string, Cap> = { Haematology: 'purple', Coagulation: 'blue', 'Urine & stool': 'cup' }
+// the blood count's section, spelled either way (British or American): a purple tube
+const BLOOD_COUNT = /^ha?ematology$/i
+const BY_SECTION: Record<string, Cap> = { Coagulation: 'blue', 'Urine & stool': 'cup' }
+const sectionCap = (s: string) => BLOOD_COUNT.test(s) ? 'purple' as Cap : BY_SECTION[s]
 type Test = { code: string; name: string; section_name?: string | null }
 
 // the sections whose tests are a specimen (a lab may hold others, an imaging section: no tube)
-const SPECIMEN = new Set(['Haematology', 'Coagulation', 'Chemistry', 'Hormones', 'Serology', 'Urine & stool'])
+const SPECIMEN = new Set(['Coagulation', 'Chemistry', 'Hormones', 'Serology', 'Urine & stool'])
 /** does the test take a specimen (a tube or a cup): a known test, or one of a specimen section */
-export const takesSpecimen = (t: Pick<Test, 'code' | 'section_name'>) => t.code in BY_CODE || SPECIMEN.has(t.section_name ?? '')
+export const takesSpecimen = (t: Pick<Test, 'code' | 'section_name'>) => t.code in BY_CODE || (SPECIMEN.has(t.section_name ?? '') || BLOOD_COUNT.test(t.section_name ?? ''))
 /** the tube a test is drawn into: by the test, else by its section, else a yellow gel tube (chemistry, hormones, serology) */
-export const tubeOf = (t: Pick<Test, 'code' | 'section_name'>): Tube => TUBES[BY_CODE[t.code] ?? BY_SECTION[t.section_name ?? ''] ?? 'yellow']
+export const tubeOf = (t: Pick<Test, 'code' | 'section_name'>): Tube => TUBES[BY_CODE[t.code] ?? sectionCap(t.section_name ?? '') ?? 'yellow']
 /** the tubes a patient needs: each with the tests drawn into it, in a fixed order (purple, yellow, grey, blue, red, cup) */
 export function tubesFor<T extends Pick<Test, 'code' | 'section_name'>>(tests: T[]): { tube: Tube; tests: T[] }[] {
   const order: Cap[] = ['purple', 'yellow', 'grey', 'blue', 'red', 'cup']
