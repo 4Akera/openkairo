@@ -9,14 +9,19 @@ haemonc,surgery,family}.tsx`, shots in `spec/shots/2026-10-08/clinics/`) are the
 
 | lane | branch / session | builds, in this order | pack keys | migrations | role blocks | ports |
 |---|---|---|---|---|---|---|
-| L1 | `clinics-shared` | the approved core changes (C1–C5 below, first, then tag `clinics-core-ready`) · Vaccines · Chronic care · Family | `vaccines`, `chronic`, `family` | 22 core (only if SQL is needed), 23, 24, 25 | e0, e1, e2 | db/api prefix 59 · vite 3050–3054 |
-| L2 | `clinics-mother-child` | Paediatrics (with the children's ward) · ObGyn's clinic part | `paediatrics` (+ `obgyn`) | 26, 27 | e3 (+ obgyn's own) | 60 · 3060–3064 |
-| L3 | `clinics-medicine` | Cardiology (+ the Echo room) · Nephrology · Respiratory · Haematology · the Blood bank on the laboratory pack | `cardiology`, `nephrology`, `respiratory`, `haematology` (+ `lis`) | 28, 29, 30, 31, 32 (lis) | e4, e5, e6, e7 | 61 · 3070–3074 |
-| L4 | `clinics-theatre` | Oncology (+ the day unit) · Surgery · Theatre · Anaesthesia (+ Recovery) | `oncology`, `surgery`, `theatre`, `anaesthesia` | 33, 34, 35, 36 | e8, e9, ea, eb | 62 · 3080–3084 |
+| L1 | `clinics-shared` | the approved core changes (C1–C5 below, first, then tag `clinics-core-ready`) · Vaccines · Chronic care · Family | `vaccines`, `chroniccare`, `familycare` | 22 core (only if SQL is needed), 23, 24, 25 | e0, e1, e2 | db/api prefix 59 · vite 3050–3054 |
+| L2 | `clinics-mother-child` | Paediatrics (with the children's ward) · ObGyn's clinic part | `paeds` (+ `obgyn`, created here: role block d3) | 26, 27 | e3 (+ obgyn's own) | 60 · 3060–3064 |
+| L3 | `clinics-medicine` | Cardiology (+ the Echo room) · Nephrology · Respiratory · Haematology · the Blood bank on the laboratory pack | `cardio`, `nephrology`, `lungs`, `haemato` (+ `lis`) | 28, 29, 30, 31, 32 (lis) | e4, e5, e6, e7 | 61 · 3070–3074 |
+| L4 | `clinics-theatre` | Oncology (+ the day unit) · Surgery · Theatre · Anaesthesia (+ Recovery) | `oncology`, `surgical`, `theatre`, `anaesthesia` | 33, 34, 35, 36 | e8, e9, ea, eb | 62 · 3080–3084 |
 
 Migrations are `supabase/migrations/202609260000NN_<key>.sql`. The privileges migration must stay last: every lane renames it to
 `20260926000099_privileges.sql` (same name in every lane, so merges agree) and adds its packs' two lines there. The beds lane
 (another session, branch `beds`) owns 17–21 and role blocks d0–d4 (`bedside`, `casualty`, `intensive`, `obgyn`, `haemodialysis`).
+
+**Pack keys never collide with a word in core or another pack** (the guardrail `eslint/no-pack-names.js` matches a key as a word in
+any case, in code, strings and comments; it stays as it is). Hence `chroniccare`, `familycare`, `paeds`, `cardio`, `lungs`, `haemato`,
+`surgical` — the labels the user reads stay as drawn (Chronic care, Family, Paediatrics, Cardiology, Respiratory, Haematology,
+Surgery). Before choosing any other machine word, `grep -rniw <word> src/core src/packs` must find nothing.
 
 ## The approved core and base changes (L1 builds them first; everyone else uses them)
 - **C1 · a pack's line under a base card**: a pack the department uses may add one line (words, a state tone) under the base's `/rx`
