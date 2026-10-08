@@ -323,8 +323,11 @@ begin
   on conflict (key) do update set labels = excluded.labels, role_block = coalesce(core.layers.role_block, excluded.role_block);
 end $$;
 
--- a pack: its requires (no loop) and its block of role ids (§5.2), the one named or the next free from ca; a pack keeps the block it has
-create function core.declare_pack(key text, version int, requires text[] default '{}', labels jsonb default '{}', role_block text default null)
+-- a pack: its requires (no loop) and its block of role ids (§5.2), the one named or the next free from ca; a pack keeps the block it has.
+-- charges: the pack charges for work (core change (d), owner 2026-10-08), so a department using it may show the prices other packs keep
+-- (the pharmacy's per box), asked of the department without naming the pack; declared again, it says so again
+create function core.declare_pack(key text, version int, requires text[] default '{}', labels jsonb default '{}', role_block text default null,
+  charges boolean default false)
 returns void language plpgsql as $$
 #variable_conflict use_variable
 declare r text; loop_found boolean; v_block text;
@@ -335,9 +338,10 @@ begin
   v_block := coalesce((select l.role_block from core.layers l where l.key = declare_pack.key), role_block,
     (select to_hex(n) from generate_series(202, 255) n where not exists (select 1 from core.layers l where l.role_block = to_hex(n)) order by n limit 1));
   if exists (select 1 from core.layers l where l.role_block = v_block and l.key <> declare_pack.key) then perform core.refuse('block_taken', v_block); end if;
-  insert into core.layers (key, role_name, schema_name, version, requires, labels, is_pack, role_block)
-  values (declare_pack.key, 'pack_' || declare_pack.key, declare_pack.key, declare_pack.version, declare_pack.requires, declare_pack.labels, true, v_block)
-  on conflict on constraint layers_pkey do update set version = excluded.version, requires = excluded.requires, labels = excluded.labels;
+  insert into core.layers (key, role_name, schema_name, version, requires, labels, is_pack, role_block, charges)
+  values (declare_pack.key, 'pack_' || declare_pack.key, declare_pack.key, declare_pack.version, declare_pack.requires, declare_pack.labels, true, v_block,
+          coalesce(declare_pack.charges, false))
+  on conflict on constraint layers_pkey do update set version = excluded.version, requires = excluded.requires, labels = excluded.labels, charges = excluded.charges;
   -- requires may not loop
   with recursive dep(k, path) as (
     select declare_pack.key, array[declare_pack.key]

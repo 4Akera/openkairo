@@ -8,9 +8,12 @@ import { oneSet, resultEntry, stepEntry } from '../db/entries'
 import { ageOf } from '../db/views'
 import type { Entry, ServiceField } from '../db/types'
 import type { EntryData } from '../db/shapes.generated'
-import { Button, Centered, Input, Kbd, Spinner, Select, Textarea, flagClass, dateTime } from '../ui'
+import { Button, Centered, Input, Kbd, Spinner, Select, Tag, Textarea, flagClass, dateTime } from '../ui'
 import { FallbackFull } from '../renderers'
 import { fieldTone } from './bench/shared'
+import { benchMarkRow } from './marks'
+import { packRowOf } from './rows'
+import { usePackRows } from './useRows'
 
 /** One order (spec/openCare.md §4.6): the value grid from the service's fields, a report, not done, steps; release → next. */
 export function RequestScreen() { const { requestId } = useParams(); return <RequestBody key={requestId} requestId={requestId} /> }
@@ -20,6 +23,11 @@ function RequestBody({ requestId }: { requestId?: string }) {
   const queue = useRequestQueue(dept?.id ?? null)
   // an order this department answers is on its worklist; the worklist row is what an answer is built from
   const row = queue.data?.requests.find((r) => r.id === requestId) ?? null
+  // a pack may hold this order waiting (spec §5.4, a soft check): its word shows, Release and Start are greyed (not done, a stop, and
+  // declining still work), and whoever may answer may Answer anyway… with a reason the pack records
+  const prow = useMemo(() => row ? packRowOf(row.id, benchMarkRow({ patient: row.patient, rows: [row] })) : null, [row])
+  const packs = usePackRows('request', useMemo(() => prow ? [prow] : [], [prow]))
+  const wait = row && !packs.isFree(row.order.item) ? packs.waits.get(row.order.item) ?? null : null
   // technicians see the order, not the record: the full entry is read only by those who may read the record
   const full = useEntry(can('read:record') ? requestId ?? null : null)
   const e = useMemo(() => full.data ? { data: full.data, isLoading: false, error: full.error } : row ? { data: { ...row, data: { question: row.question_text } as Record<string, unknown>, patient_id: row.patient.id, patient: { ...row.patient, age: ageOf(row.patient.born_on) }, replies: [], files: [], steps: [], versions: [], related: [] } as Entry, isLoading: false, error: null } : { data: null, isLoading: queue.isLoading || full.isLoading, error: full.error ?? queue.error }, [full.data, full.error, full.isLoading, row, queue.isLoading, queue.error])
@@ -33,7 +41,7 @@ function RequestBody({ requestId }: { requestId?: string }) {
   const next = queue.data?.requests.find((r) => r.id !== requestId) ?? null
   const step = (status: EntryData['step']['status'], why?: string) => row && dept && w.mutate(oneSet([stepEntry(row, dept.id, status, why)]), { onError: (x) => setErr(x.message) })
   async function release(andNext: boolean) {
-    if (!row || !dept) return; setErr(null)
+    if (!row || !dept || (wait && !notDone)) return; setErr(null)
     try {
       await w.mutateAsync(oneSet([notDone ? stepEntry(row, dept.id, 'failed', reason.trim()) : resultEntry(row, dept.id, fields, vals, text, final)]))
       if (andNext && next) navigate(`/request/${next.id}`, { replace: true }); else navigate('/')
@@ -55,6 +63,7 @@ function RequestBody({ requestId }: { requestId?: string }) {
       <span className="font-medium">{patient?.given_name} {patient?.family_name}</span>
       <span className="text-14">{e.data.display_line}</span>
       <span className="text-12 text-faint">from {e.data.department_name} · {e.data.author_name} · {dateTime(e.data.occurred_at)}</span>
+      {wait && <Tag tone={wait.tone ?? 'warn'}>{wait.word}</Tag>}
       {req && <span className={`ms-auto text-12 ${open ? 'text-warn' : 'text-faint'}`}>{req.step}{req.priority !== 'routine' && <b className="ms-1.5 text-danger">{req.priority.toUpperCase()}</b>}</span>}
     </div>
     {question && <p className="rounded-md bg-sunken px-3 py-2 text-14">“{question}”</p>}
@@ -68,14 +77,16 @@ function RequestBody({ requestId }: { requestId?: string }) {
         {notDone && <Input value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder="Why not (required)" className="w-64" />}
         <div className="flex-1" />
         {err && <span className="text-danger">{err}</span>}
-        <Button onClick={() => release(true)} disabled={w.isPending || (notDone && !reason.trim())}>Release{next ? ' → next' : ''} <Kbd className="ms-1">⌘⏎</Kbd></Button>
-        <Button variant="outline" onClick={() => release(false)} disabled={w.isPending || (notDone && !reason.trim())}>Release</Button>
+        {wait && !notDone && prow && packs.anyway(prow, [row!.order.item], 'Answer')}
+        <Button onClick={() => release(true)} disabled={w.isPending || (notDone && !reason.trim()) || (!!wait && !notDone)} title={wait && !notDone ? wait.word : undefined}>Release{next ? ' → next' : ''} <Kbd className="ms-1">⌘⏎</Kbd></Button>
+        <Button variant="outline" onClick={() => release(false)} disabled={w.isPending || (notDone && !reason.trim()) || (!!wait && !notDone)}>Release</Button>
       </div>
+      {prow && packs.below(prow)}
     </section>}
     {canStep && req && <div className="flex flex-wrap items-center gap-2 text-12">
-      {req.order?.status === 'active' && <Button size="sm" variant="outline" onClick={() => step('in-progress')}>Start</Button>}
+      {req.order?.status === 'active' && <Button size="sm" variant="outline" disabled={!!wait} title={wait?.word} onClick={() => step('in-progress')}>Start</Button>}
       {!held && <Button size="sm" variant="ghost" onClick={() => step('on-hold', 'held')}>Hold</Button>}
-      {held && <Button size="sm" variant="outline" onClick={() => step('in-progress')}>Resume</Button>}
+      {held && <Button size="sm" variant="outline" disabled={!!wait} title={wait?.word} onClick={() => step('in-progress')}>Resume</Button>}
       <CancelButton onCancel={(why) => step('rejected', why)} />
       {!canReply && err && <span className="text-danger">{err}</span>}
     </div>}

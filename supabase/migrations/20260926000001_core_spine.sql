@@ -225,6 +225,8 @@ create table core.layers (
   is_pack     boolean not null default false,
   -- its reserved block of built-in role ids (§5.2): 00000000-0000-0000-0000-00000000<block><nn>; the base's c0, pharmacy's ca
   role_block  text unique check (role_block ~ '^[0-9a-f]{2}$'),
+  -- a pack that charges for work (core change (d), owner 2026-10-08): declared with the pack, read with each department that uses it
+  charges     boolean not null default false,
   declared_at timestamptz not null default now()
 );
 create table core.types (

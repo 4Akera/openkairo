@@ -17,6 +17,8 @@ import { sameMedicine } from './substitutes'
 import { inBoxes, pickProduct, productsFor } from './shelf'
 import { keepStock } from './settings'
 import { useStock } from './Stock'
+import { chargesHere } from '@core/screens/rows'
+import { linesFor, priceWords, productFor, productsOf } from './pricing'
 
 export interface Dispense { given: boolean; reason: string; drug?: string; quantity?: string; anyway?: string; to?: string
   product_id?: string; batch?: string }   // with stock kept: the product and the batch it is given from (first to expire)
@@ -78,6 +80,10 @@ export function Check({ request, value, onChange }: { request: RequestQueueRow; 
   const product = keep ? pickProduct(stock.data?.products ?? [], v.drug || d.drug?.name || '') : null; const short = !!product && product.on_hand < now
   const others = keep ? [...(match?.same ?? []).filter((p) => p.on_hand > 0).map((p) => ({ name: p.brand, words: `${p.brand} · ${inBoxes(p.on_hand, p.pack_size)}` })),
     ...(same?.others ?? []).filter((b) => !(match?.same ?? []).some((p) => p.brand === b)).map((b) => ({ name: b, words: b }))] : (same?.others ?? []).map((b) => ({ name: b, words: b }))
+  // where a pack the pharmacy uses charges (spec §5.4): what this medicine comes to, counted in its product's own units
+  const charges = chargesHere(org?.allDepartments.find((x) => x.id === pharmacyId))
+  const priced = charges ? productFor(productsOf(org), v.drug || d.drug?.name || '', v.product_id ?? product?.id) : null
+  const price = priced && v.given && now > 0 ? linesFor(priced, now) : []
   const set = (x: Partial<Dispense>) => onChange({ ...v, ...x })
   const link = (k: 'brand' | 'part' | 'not', words: string) => <button type="button" aria-expanded={open === k} onClick={() => setOpen(open === k ? null : k)}
     className={cn('rounded-sm text-12 hover:underline focus-ring', open === k ? 'font-medium text-fg' : 'text-accent')}>{words}</button>
@@ -96,6 +102,8 @@ export function Check({ request, value, onChange }: { request: RequestQueueRow; 
           In stock: <b className={cn('font-medium', short ? 'text-warn' : 'text-fg')}>{inBoxes(product.on_hand, product.pack_size)}</b>{now > 0 && <span>· giving {inBoxes(now, product.pack_size)}</span>}
           {short && <Tag tone={product.on_hand > 0 ? 'warn' : 'danger'}>{product.on_hand > 0 ? 'not enough' : 'out of stock'}</Tag>}</>
       : <><Tag tone="warn">not on this pharmacy's stock list</Tag>{(match?.same ?? []).some((p) => p.on_hand > 0) && <span>— another brand is (Another brand…)</span>}</>}</p>}
+    {charges && v.given && <p className="text-12 text-muted tnum">{price.length ? <>Price: <b className="font-medium text-fg">{priceWords(price)}</b></>
+      : priced ? 'No price on this product: free' : 'Not on the clinic\'s product list: no price'}</p>}
     {v.given && now < full.value && now > 0 && <p className="text-12 text-warn">Given in part: {full.value - now} {full.unit} owed — the patient comes back for the rest (Owed).</p>}
     {v.given && warnings.map((w) => <Callout key={w.code} tone={w.code === 'allergy_clash' ? 'danger' : 'warn'} title={warningWord(w)}>
       {w.confirmed ? 'The doctor was warned and signed anyway. ' : ''}Give it only with a reason, or not at all.</Callout>)}

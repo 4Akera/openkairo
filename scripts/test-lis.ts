@@ -9,6 +9,9 @@ import '../src/packs/lis/order'
 import { lineOf, parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
 import { suggest } from '../src/core/screens/visit/expand'
 import { commandsFor } from '../src/core/screens/visit/commands'
+import { byWord, freeRows, packRowOf, waitsOf, type SoftCheckDef } from '../src/core/screens/rows'
+import { groupByPatient } from '../src/core/screens/bench/shared'
+import { benchMarkRow } from '../src/core/screens/marks'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -65,6 +68,24 @@ test("chairs: numbered as they came; my chair's patient is the last it called st
   assert.equal(nextUp([a, b, c, d], ts)?.ticket.number, 4, 'the stat one jumps the line')
   assert.equal(nextUp([a, b, d], ts)?.ticket.number, 2, 'then the lowest number no chair called')
   assert.equal(nextUp([b, d], ts), null, 'everyone called')
+})
+test('Collect with a pack holding tests waiting (spec §5.4): per test — free ones to collect, a chair calls a patient with one; the rest in their word\'s view', () => {
+  const R = (patient: string, item: string, at: string) => ({ item, id: item, occurred_at: at, patient: { id: patient, given_name: patient, family_name: 'X', record_number: 1, sex: 'female', born_on: '1990-01-01' },
+    request: { priority: 'routine' }, order: { item, status: 'active', step_key: null } }) as unknown as RequestQueueRow
+  const today = new Date().toISOString().slice(0, 10)
+  const rows = [R('amal', 'a-cbc', `${today}T08:00:00Z`), R('amal', 'a-lip', `${today}T08:00:00Z`), R('basma', 'b-cbc', `${today}T07:00:00Z`), R('basma', 'b-hba', `${today}T07:00:00Z`)]
+  const hold: SoftCheckDef = { pack: 'till', waiting: () => [{ order: 'a-cbc', word: 'Waiting for payment', tone: 'warn' }, { order: 'a-lip', word: 'Waiting for payment', tone: 'warn' }, { order: 'b-hba', word: 'Waiting for payment', tone: 'warn' }], anyway: () => {} }
+  const ctx = { list: 'screen' as const, dept: { id: 'lab', name: 'Laboratory', packs: ['till'] }, can: () => true }
+  const waits = new Map(groupByPatient(rows).flatMap((g) => [...waitsOf([hold], packRowOf(g.patient.id, benchMarkRow(g)), ctx, {})]))
+  const toCollect = groupByPatient(freeRows(rows, waits, new Set()))
+  assert.deepEqual(toCollect.map((g) => [g.patient.id, g.rows.map((r) => r.item)]), [['basma', ['b-cbc']]], 'Basma\'s free test only; Amal has none free')
+  const T = (number: number, items: string[]): Ticket => ({ number, items, chair: null, called_at: null })
+  assert.equal(nextUp(toCollect, [T(1, ['b-cbc'])])?.group.patient.id, 'basma', 'a chair calls a patient with one free test')
+  assert.equal(nextUp(groupByPatient(freeRows(rows.slice(0, 2), waits, new Set())), [T(2, ['a-cbc', 'a-lip'])]), null, 'never one whose every test waits')
+  const view = byWord(rows, waits, new Set())
+  assert.deepEqual(view.map((v) => [v.word, groupByPatient(v.rows).map((g) => [g.patient.id, g.rows.map((r) => r.item)])]),
+    [['Waiting for payment', [['basma', ['b-hba']], ['amal', ['a-cbc', 'a-lip']]]]], 'one view named by its word (who came first, first): Basma there too, for her waiting test')
+  assert.deepEqual(groupByPatient(freeRows(rows, waits, new Set(['a-lip']))).map((g) => g.patient.id).sort(), ['amal', 'basma'], 'collected anyway: Amal\'s lipids join To collect')
 })
 test('receive: a scan names the samples collected under its number, whatever its case; one in already says so', () => {
   const R = (item: string, specimen: string, step_key: string, status = 'in-progress') => ({ item, step_data: { specimen }, reply: null, order: { step_key, status } }) as unknown as RequestQueueRow

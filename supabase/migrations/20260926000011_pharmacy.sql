@@ -456,6 +456,15 @@ create function pharmacy.counselling_check(p_where jsonb, p_data jsonb) returns 
     then jsonb_build_array(jsonb_build_object('code', 'note_missing', 'level', 'refuse', 'field', 'note')) else '[]'::jsonb end
 $$;
 
+-- a product's prices (spec §5.4, owner 2026-10-08: the pharmacy's own, per box and per strip): a strip price needs the strip's size, and a
+-- strip is smaller than the box it comes in (the form shows each refusal under its field)
+create function pharmacy.product_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(f), '[]'::jsonb) from (
+    select jsonb_build_object('code', 'strip_size_missing', 'level', 'refuse', 'field', 'strip_size') f where p_data ? 'price_strip' and not p_data ? 'strip_size'
+    union all
+    select jsonb_build_object('code', 'strip_not_smaller', 'level', 'refuse', 'field', 'strip_size') where (p_data ->> 'strip_size')::int >= (p_data ->> 'pack_size')::int) x
+$$;
+
 reset role;
 
 grant select, delete on pharmacy.queue, pharmacy.given to core_eraser;
@@ -506,13 +515,17 @@ select core.declare_setting('pharmacy.keep_stock', 'pharmacy', 'department',
   fields => '[{"key":"keep","labels":{"en":"Keep stock"},
     "help":{"en":"Products, deliveries, counts and the Stock screen. Each Give takes from the stock, first to expire first."}}]');
 -- a product (one per brand, strength and pack): the clinic's one list, so a box sent from the store is the same product where it
--- arrives; written by whoever receives and counts stock somewhere. Each place keeps its own minimums (in boxes), one table a place
+-- arrives; written by whoever receives and counts stock somewhere. Each place keeps its own minimums (in boxes), one table a place.
+-- Its prices are the pharmacy's own (spec §5.4, owner 2026-10-08): per box, and per strip where it is sold in strips (the strip's size
+-- in units); plain numbers, shown only where a pack the department uses charges, and never in an entry
 select core.declare_setting('pharmacy.product', 'pharmacy', 'organization',
   '{"type":"object","additionalProperties":false,"required":["brand","pack_size"],"properties":{"brand":{"type":"string","minLength":1},
     "generic":{"type":"string"},"atc":{"type":"string"},"strength":{"type":"string"},
     "form":{"enum":["tablet","capsule","syrup","suspension","injection","cream","drops","inhaler","sachet","other"]},
-    "pack_size":{"type":"integer","minimum":1},"unit":{"type":"string"},"eda_code":{"type":"string"},"barcode":{"type":"string"}}}',
-  many => true, labels => '{"en":"Product"}', action => 'write:pharmacy.stock');
+    "pack_size":{"type":"integer","minimum":1},"unit":{"type":"string"},"eda_code":{"type":"string"},"barcode":{"type":"string"},
+    "price_box":{"type":"number","minimum":0,"maximum":10000000},"strip_size":{"type":"integer","minimum":1},
+    "price_strip":{"type":"number","minimum":0,"maximum":10000000}}}',
+  'pharmacy.product_check(jsonb,jsonb)', many => true, labels => '{"en":"Product"}', action => 'write:pharmacy.stock');
 select core.declare_setting('pharmacy.minimums', 'pharmacy', 'department',
   '{"type":"object","additionalProperties":false,"required":["minimums"],"properties":{"minimums":{"type":"object","default":{},
     "additionalProperties":{"type":"integer","minimum":0}}}}',

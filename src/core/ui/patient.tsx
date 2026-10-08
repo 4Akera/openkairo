@@ -73,9 +73,11 @@ const waitWords = (m: number) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` $
 // The mouse never moves the selection: hover only shades the row under it, and not while the keys are in use (typing
 // shifts the list under a still mouse, and a shaded row would read as a second selection).
 // marks: the packs' words for this row (§5.1 rule 4), drawn in one place, after what is happening.
-export function ListRow({ number, name, age, status, who, minutes, next, selected, enter, muted, onOpen, actions, marks, className, hover = true }: {
+export function ListRow({ number, name, age, status, who, minutes, next, selected, enter, muted, onOpen, actions, marks, extra, below, className, hover = true }: {
   number: ReactNode; name: ReactNode; age: ReactNode; status?: ReactNode; who?: ReactNode; minutes?: number | null
   next?: boolean; selected?: boolean; enter?: boolean; muted?: boolean; onOpen?: () => void; actions?: ReactNode; marks?: RowMark[]; className?: string; hover?: boolean
+  extra?: ReactNode   // the packs' row buttons: after the row's own actions (or who), never in their place
+  below?: ReactNode   // a card folded out inline under the row
 }) {
   return <li aria-selected={selected || undefined} className={cn('group border-t border-line first:rounded-t-xl first:border-t-0 last:rounded-b-xl', next && 'bg-accent-soft/70', selected && 'rail', selected && !next && 'bg-hover', className)}>
     <div role={onOpen ? 'button' : undefined} tabIndex={onOpen ? -1 : undefined} onClick={onOpen}
@@ -84,9 +86,10 @@ export function ListRow({ number, name, age, status, who, minutes, next, selecte
       <span className={cn('truncate max-sm:min-w-0 max-sm:flex-1', next ? 'font-semibold text-fg' : 'font-medium')}>{name}{enter && <Kbd className="ms-1.5 align-[1px] text-accent">↵</Kbd>}</span>
       <span className="text-12 text-muted tnum">{age}</span>
       <span className={cn('flex min-w-0 items-center gap-1.5 truncate text-13 max-sm:order-last max-sm:basis-full max-sm:ps-[3.5rem]', muted ? 'text-faint' : 'text-fg')}>{status}<RowMarks marks={marks} /></span>
-      <span className="flex items-center justify-end gap-2 text-12 text-faint" onClick={(e) => actions && e.stopPropagation()}>{actions ?? who}</span>
+      <span className="flex items-center justify-end gap-2 text-12 text-faint" onClick={(e) => actions && e.stopPropagation()}>{actions ?? who}{extra}</span>
       <span className={cn('text-end text-12 tnum', minutes == null ? '' : minutes >= 60 ? 'font-medium text-danger' : minutes >= 30 ? 'text-warn' : 'text-faint')}>{minutes == null ? '' : waitWords(minutes)}</span>
     </div>
+    {below}
   </li>
 }
 

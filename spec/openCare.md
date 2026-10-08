@@ -210,7 +210,8 @@ select core.declare_screen  (key => 'pharmacy.dispensing', layer => 'pharmacy', 
                              action => 'read:pharmacy.queue',  -- what a user needs in the department to see its tab; null: anyone working there
                              replaces => array['base.bench']); -- a pack screen: the base screens of its work it stands in for
 select core.declare_listener(layer => 'pharmacy', types => array['medication','order'], refresh => 'pharmacy.queue_refresh(uuid,uuid[])');
-select core.declare_pack    (key => 'pharmacy', version => 1, requires => '{}', labels => '{…}');
+select core.declare_pack    (key => 'pharmacy', version => 1, requires => '{}', labels => '{…}',
+                             charges => false);        -- the pack charges for work (§5.4 core change (d)); read with each department using it
 select core.declare_role    (id, key, layer, name, actions, labels, every_action, built_on, everyday);   -- a built-in role (read-only
                              -- to organizations): built_on a base role; everyday the base's only. Its actions are added, never replaced;
                              -- its key in the layer's prefix (pharmacy.pharmacist), its id in the layer's block (…ca01)
@@ -315,7 +316,7 @@ Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not
 
 | shape | returns | needs |
 |---|---|---|
-| `me` | the login's users, the chosen user, the organization, departments (each with the packs it uses and its Screens line: the one set, else its work's screens of the base and of the packs it uses, the base's first, without a base screen one of those stands in for), sites, places, users, roles, actions, current settings, the registry the client needs (every screen with its action and what it replaces; every score table, each version), stale counts | a live user |
+| `me` | the login's users, the chosen user, the organization, departments (each with the packs it uses, what each of those declares (`declared`: `{"<pack>":{"charges":…}}`, §5.4 core change (d)) and its Screens line: the one set, else its work's screens of the base and of the packs it uses, the base's first, without a base screen one of those stands in for), sites, places, users, roles, actions, current settings, the registry the client needs (every screen with its action and what it replaces; every score table, each version), stale counts | a live user |
 | `patients` | search hits: identity and open visits | `read:patients` somewhere |
 | `patient` | one patient's identity (the banner) | `read:patients` somewhere |
 | `record` | banner, lists, visits, a page of entries (filters: types, visits, departments, before), key values, hidden counts | `read:record` in the department |
@@ -886,7 +887,8 @@ it works ("/x is used in: …").
   with relative times, logins per role and ids per pack; the pregnant and breastfeeding facts. The core client stops naming pharmacy
   (eight places today); pharmacy goes behind the same registries every pack uses. *Built 2026-10-06:* no core file names a pack
   (ESLint `opencare/no-pack-names`: a pack's key, each folder under `src/packs`, never appears in `src/core` outside generated
-  files). A pack that answers prescriptions registers where they go and its words on a medicine (`registerSend`, `visit/send.ts`:
+  files); *from 2026-10-08, chosen in the build:* nor another pack's key in a pack's own files (the same rule given its own key), and
+  `test:registries` scans both and every pack's imports (only `@core`, a library or its own folder). A pack that answers prescriptions registers where they go and its words on a medicine (`registerSend`, `visit/send.ts`:
   the composer's chip, the list's Send, the prescription's and the list's state words); its reply form says its last step (`done`)
   and what its requests carry from its own table (`details`); its refusals' words come from it (`registerWords`, `db/words.ts`).
 
@@ -1035,7 +1037,13 @@ says "held", read "waiting" (the soft check, below).
   - **A department's own work**: in its own pack's settings, never in billing's (owner, 2026-10-08). The pharmacy's medicines: a
     price on each product in the pharmacy's own product list, per box, and per strip where it is sold in strips; it needs no *Keep
     stock* (bill-settings, rx-payfirst, owner, 2026-10-07). A department shows these prices only where it uses a pack that declares
-    that it charges (core change (d)), and names no such pack (owner, 2026-10-08, D8). *To build.*
+    that it charges (core change (d)), and names no such pack (owner, 2026-10-08, D8). *Built 2026-10-08 (the pharmacy's):* `pharmacy.product`
+    takes `price_box`, `strip_size` (units a strip) and `price_strip`, plain numbers from 0 to 10,000,000 (`pharmacy.product_check`: a
+    strip price needs its size, `strip_size_missing`; a strip smaller than its box, `strip_not_smaller`); asked through `chargesHere`,
+    never a pack's name, the prices show in the new-product card (Stock) and in **Prices**, a card above Dispensing's list from its
+    toolbar for whoever holds `write:pharmacy.stock` (each product of the clinic's one list, box and strip, Save per row through the
+    settings door). *Chosen in the build, awaiting the owner:* Prices sits on Dispensing's toolbar (so a pharmacy that keeps no stock
+    can price), and no currency word is shown, the currency being the charging pack's to say.
   - The reasons a charge may be waived (Staff, Charity, Follow-up within 7 days): the clinic's own list on the pack's page
     (bill-settings, owner, 2026-10-07); a discount takes its reason from that list only, never free text (owner, 2026-10-08, D35).
     *To build.*
@@ -1057,7 +1065,17 @@ says "held", read "waiting" (the soft check, below).
 - **A department's own priced lines** (owner, 2026-10-08):
   - Any department that prices its own work (the pharmacy first; later any other pack) hands its priced lines (a name, a quantity,
     an amount) on its own list rows, through the core's generic *lines due* row field (core change (b)). Billing does not know these
-    prices before they are handed. *To build.*
+    prices before they are handed. *Built 2026-10-08 (the core's field and the
+    pharmacy's lines; the button is billing's):* a row carries `lines: {name, quantity, amount, order?}[]` (`screens/rows.ts`
+    `DueLine`, `dueLines` drops a line with no words, a quantity not above nothing or an amount below nothing, and rounds to the
+    hundredth). The pharmacy hands, on each Dispensing row of work (To give, Prepared, Owed, and a waiting word's view), each medicine
+    to give as written, or as checked in the open fold (another brand, part, not given), counted in its product's own units
+    (`packs/pharmacy/pricing.ts`): whole boxes, then strips for the rest where it is sold in strips, else a box more; one box where it
+    cannot be counted in them (a syrup, a cream, an amount not known); the fold shows each medicine's price ("1 box + 1 strip · 220")
+    and the total beside Give, only where a pack it uses charges. A medicine with no price on its box, or not on the list, hands no
+    line (free). Nothing of it reaches an entry. *Chosen in the build, awaiting the owner:* a line's name is the brand and its unit
+    ("Augmentin 1 g · box", "· strip"; a product of one unit, its brand alone); strips that would fill a box are a box; Given today
+    hands no lines (what is paid or sent is taken before Give).
   - Billing's button on that row (core change (a)) reads **Pay** where the department takes payment here: the money is taken at that
     counter, on billing's payment card folded out under the row. It reads **Send to cashier** where the department does not: billing
     saves the lines as an **open bill** in its own insert-only table, and the main cashier takes them with the rest of the visit.
@@ -1112,15 +1130,27 @@ says "held", read "waiting" (the soft check, below).
   - **Per order** (owner, 2026-10-08, D6; "Build now no pics"): only the waiting order's buttons are greyed; the patient's other
     orders on the same row stay workable; a stop (couldn't collect) is never greyed; a row opens with one free order; a collection
     chair calls a patient with one free test; a patient with free and waiting tests is in *To collect* for the free ones and in
-    *Waiting for payment* for the others, a view named by its word, with its count (D9). *To build.*
+    *Waiting for payment* for the others, a view named by its word, with its count (D9). *Built 2026-10-08, the core's part:* the base bench,
+    lab Collect and pharmacy Dispensing keep only free orders in To do / To collect / To give, and add one counted view a word for the
+    orders a pack holds there (named by the word, D9); a waiting row's buttons are greyed with the word as their title, a stop stays
+    (Couldn't collect, Not given, not done); a bench row opens while one of the patient's orders is free; the chairs number and call
+    only free tests; the bench's patient page greys a waiting order's card (not done still works) and Request.tsx greys Start, Resume
+    and Release (not done and Decline work).
   - **…anyway** (owner, 2026-10-08): **Collect anyway…**, **Give anyway…**, and **Answer anyway…** for a doctor of the performing
     department on the page that answers consults and reports (D4), are always possible, with a one-line reason (an emergency, or a
     patient who will pay after: bill-held), on an inline card under the row or the answer. Whoever may do the work may do it anyway;
     there is no right of its own. Billing records the reason in its own insert-only table, with who and when. The base bench and its
-    patient page go ahead as Collect and Dispensing do (D7). *To build.*
+    patient page go ahead as Collect and Dispensing do (D7). *Built 2026-10-08, the core's part:* **Collect anyway…** (Collect), **Give
+    anyway…** (Dispensing), **Answer anyway…** (Request.tsx) and, *chosen in the build, awaiting the owner,* **Go ahead anyway…** on the
+    base bench and its patient page, offered only to whoever may do that work; the card (`screens/RowCards.tsx`) asks one line of
+    reason (required, at most 200 letters) and hands it to each pack holding the orders, its own orders only (`anyway`); once recorded,
+    those orders are free in this app. Recording it in billing's table is billing's.
   - **The doctor's chart shows only the word** (owner, 2026-10-08), where the ordering department uses billing (the rule above):
     never the reason, an amount or a price. *Awaiting the owner:* core change (c) as approved reaches the lists and the page that
-    answers consults and reports, not the chart's order card; how the word reaches the chart is not decided. *To build.*
+    answers consults and reports, not the chart's order card; how the word reaches the chart is not decided. *Built 2026-10-08, chosen in the build, awaiting the owner:*
+    the chart's order line (`chart/blocks/Orders.tsx`) asks the same soft check (list `chart`, the record's open orders) and shows the
+    word only, never greyed nor with "…anyway", from the packs the chart's department uses; this draws hook (c) in one place more than
+    the owner approved and is his to keep or take away.
   - The word shows only where the performing department uses billing (D3) and has Pay first on, as its settings stand now: unticking
     billing or switching Pay first off takes the words away at once; the settings history keeps the change, as for every setting.
     *To build.*
@@ -1177,7 +1207,7 @@ says "held", read "waiting" (the soft check, below).
   word, insurer prices and approvals, and the charge then keeps the pack (D31). The base declaring which of its types are work on an
   order and which statuses are stops, for the core's hold check (D29), went with the hold: replaced by the owner, 2026-10-08.
 - **Open, awaiting the owner** (found in writing this section down): how the waiting word reaches the doctor's chart (*Pay first*,
-  above); and a service of a department that hands its own lines (the pharmacy's dispensing) could also be priced in Billing →
+  above; built on the chart's order line with hook (c), awaiting his yes); and a service of a department that hands its own lines (the pharmacy's dispensing) could also be priced in Billing →
   Prices and so be paid twice, and billing cannot tell such a service apart without naming its pack.
 
 #### Core and base changes the owner approved
@@ -1186,15 +1216,31 @@ for billing. Each is **to build**, in the core's own files, never a pack's (owne
 - **(a) A row action** (with the billing pictures, owner, 2026-10-07; its places, owner, 2026-10-08): a client hook through which a
   pack the department uses may put one button of its own on a list row (billing's Pay or Send to cashier) and fold its own card out
   inline under the row; drawn on the desk, the clinic queue, the base bench and the bench patient page, and on any pack list built on
-  the core `ListRow`. *To build.*
+  the core `ListRow`. *Built 2026-10-08:* `registerRowAction(pack, {load?, button,
+  Card})` (`screens/rows.ts`, drawn by `useRows.tsx`): one a pack (a second, the core's or the base's refused); `load(rows, ctx)` reads
+  the pack's own data once a list (live: the clinic's hints and every 15 s); `button(row, ctx, data)` gives its word or none; only
+  the packs the department uses, in its pack order; a pack that fails, or whose data is loading or failed, says nothing; one card is
+  open a list, folded out under the row (`ListRow`'s `below`; the button in `extra`, after the row's own actions or its who, never in
+  their place — a Back row keeps its doctor); a card that fails says nothing; `close(true)` reads the packs' data again. Drawn on the
+  desk's lines, the clinic queue and its requests, the base bench (and Done today), the bench's patient page (in its header, the card
+  under it), Dispensing and Collect.
 - **(b) Lines due**: a generic field a screen may attach to its rows, the lines it prices itself (a name, a quantity, an amount),
-  for row actions to read. *To build.*
+  for row actions to read. *Built 2026-10-08:* `PackRow.lines` (`DueLine`: name, quantity, amount, and the
+  order it belongs to, *chosen in the build, awaiting the owner*); `dueLines`, `dueTotal`.
 - **(c) A soft check**: a client hook through which a pack may mark a single order on a row as waiting, with a word and a tone
   (never an amount, a price or a number; the word may name an insurer, D22); the core greys that order's buttons, leaves the row's
   other orders workable, and offers an inline *…anyway* card whose reason the pack records; on the lists of (a) and on the page that
-  answers consults and reports (`Request.tsx`). No writer refusal, no override right, no hold table in core. *To build.*
+  answers consults and reports (`Request.tsx`). No writer refusal, no override right, no hold table in core. *Built 2026-10-08:* `registerSoftCheck(pack, {load?,
+  waiting, anyway})`: `waiting(row, ctx, data)` names orders on the row with a word and a tone; only orders on the row, from the packs
+  used there, in pack order (the first word; every pack holding an order is asked to record); a state tone only; a word with a digit
+  is dropped (never an amount, a price or a number); a failing pack says nothing; the row shows the word with the packs' marks;
+  `anyway({row, orders, reason, ctx})` records going ahead. *Chosen in the build, awaiting the owner:* also drawn as a word on the
+  doctor's chart (*Pay first*, above).
 - **(d) A pack declares that it charges** (D8): an option of `core.declare_pack`; the department read carries the packs each
-  department uses with what they declare. *To build.*
+  department uses with what they declare. *Built 2026-10-08:* `core.declare_pack(…, charges => true)`
+  (`core.layers.charges`; declared again, it says so again); read `me` gives each department `declared`, each pack it uses with what
+  it declares; the client asks `chargesHere(dept)` (`screens/rows.ts`), never naming a pack. The pharmacy and the laboratory declare
+  no charging. Not added to `core.pack_department` (a pack on the server has not needed it).
 - **(e) "Sends no record entries"** (F08): a per-table flag of `core.declare_table`; a table so declared never sends its rows'
   source entries, whoever asks; billing's charges table is declared so. *To build.*
 - **(f) Read-logging pack actions** (F28): a pack operation that returns patient ids declares so, and the core writes one read-log row
@@ -1746,4 +1792,16 @@ types, parked pack calls with per-call Retry, Postgres enums.
 - 2026-10-07: **the bench speaks generally** (the owner): the base bench's views are To do · In progress · Done today and its older work
   "Not started, older days"; a pack the department uses may give its own words (the lab's "To collect"), registered by pack, never by
   a department type. `test:registries` 8 groups.
+- 2026-10-08: **core screen hooks for §5.4** (the owner's approved changes (a)–(d); billing itself is built beside it): row actions
+  (`registerRowAction`), lines due (`PackRow.lines`), soft checks (`registerSoftCheck`, the "…anyway" card) in `screens/rows.ts`,
+  `useRows.tsx` and `RowCards.tsx`, drawn on the desk, the queue and its requests, the base bench and its patient page, Request.tsx,
+  Dispensing and Collect (and, awaiting the owner, the word on the chart's order line); `ListRow` takes `extra` (after its own actions
+  or who) and `below` (a card under the row); `core.declare_pack(…, charges)` with each department's `declared` in read `me` and
+  `chargesHere`; the pharmacy's prices per box and per strip (`pharmacy.product`, `pharmacy.product_check`, Prices on Dispensing, the
+  new-product card), its priced lines on Dispensing's rows and the price and total in the fold; the demo's products priced; a pack
+  names no other pack (lint and `test:registries`). Seen in the browser with a stand-in pack (not committed): a Back row keeps its
+  doctor beside Pay; Collect's waiting tests in their own view, Collect anyway with its reason, the free ones still to collect; the
+  bench patient page's waiting card greyed; Dispensing's lines and Prices; the word on the chart's order. Tests: `declares` (new, 15)
+  and `stock` 40 (+6: prices, the strip refusals); 30 suites, 1236 checks; `test:board` 22 (+10), `test:pharmacy` 9 (+4), `test:lis`
+  11 (+1), `test:registries` 9 (+1); every `test:*` script, typecheck, eslint and the build clean.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

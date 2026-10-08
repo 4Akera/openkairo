@@ -47,7 +47,7 @@ export function directory(m: ServerMe): Organization {
       is_outside: d.work === 'outside', site_id: d.site_id, site_name: site(d.site_id), position: d.position, serves: ids(s.one('department.works_for', d.id)), checks_in_for: ids(s.one('department.checks_in_for', d.id)),
       review_results: s.one('department.review_results', d.id)?.level ?? 'critical',
       is_private: !!s.one('department.private', d.id)?.private, after_done: s.one('department.after_done', d.id)?.after ?? 'next', pack_cards: true,
-      screens: d.screens ?? [], opens: d.opens ?? d.screens?.[0] ?? null, packs: d.packs ?? [], encounter_class: s.one('department.encounter_class', d.id)?.class ?? null,
+      screens: d.screens ?? [], opens: d.opens ?? d.screens?.[0] ?? null, packs: d.packs ?? [], declared: d.declared ?? {}, encounter_class: s.one('department.encounter_class', d.id)?.class ?? null,
       setup: s.one('department.setup', d.id)?.setup ?? null }
   })
   const live = all.filter((d) => !m.departments.find((x) => x.id === d.id)?.retired_at)
