@@ -1399,10 +1399,50 @@ their questions on 2026-10-08 ("1 two tabs, 2-6 ok, 7 yours"). What the owner de
 - *Proposed by Claude, awaiting the owner:* contrast with or without is two exams (two services, two prices), so no field is needed
   for it; the report is the base's `result` with the findings (LOINC 18782-3) and the impression (19005-8) as text analytes, a
   critical one marked AA so the base's loop raises it as critical; the list's row says "contrast" and the numbers show when the row
-  opens (a mark sees only the row, and an eGFR may be private). Three core changes, each needing the owner's yes: (a) an order may
-  carry a pack's own words (a pack type extending `order`: the side, portable, report asked); (b) a pack's order card is handed what
-  the chart already shows (latest values, current medicines, allergies); (c) an order finished with no answer to come (an X-ray not
-  reported) puts a row on the requester's To review for their own reading.
+  opens (a mark sees only the row, and an eGFR may be private). Three core changes, **approved by the owner 2026-10-08 ("a b c yes,
+  go")**: (a) an order may carry a pack's own words (a pack type extending `order`: the side, portable, report asked); (b) a pack's
+  order card is handed what the chart already shows (latest values, current medicines, allergies); (c) an order finished with no
+  answer to come (an X-ray not reported) puts a row on the requester's To review for their own reading.
+- *Built 2026-10-08 (lane `radiology`), the core's part:* (a) `core.write_action(type)`: a pack's type whose base is `order` is
+  written with the base's `write:order` wherever its writer orders from (the writer and the base's correction and cross-out checks
+  ask it; a pack off still refuses new entries, `pack_off`); the client's order draft and a walk-in may carry `as` (`PackOrder`,
+  `db/entries.ts`: the type and the pack's words, kept under `data.<pack>`); Done counts such an order as an order. (b) the composer's
+  `Ctx.record` (the patient, latest values, current medicines, allergies and their review, as the chart holds them). (c) the review
+  loop: a `step` completing an order whose service answers with a result or a note raises a row for the order's author, why
+  `no_answer`; To review says "no report", names the exam (from the order) and offers *Your reading*, a line under the row kept as
+  the `reviewed` entry's note. With them, an order word may name its `section` (an order command searching only one section of its
+  pack's services, as rule 1 said: "each its section").
+- *Built 2026-10-08, the pack* (`radiology`, migration 14, privileges moved to 15; role block cc): its order type
+  `radiology.request` (the base's order's shape plus `radiology` {side left · right · both, portable, report}; its line says the side)
+  and its table `radiology.requests` (those words, for its screens, `read:bench`); `report:radiology.studies` (the Report tab);
+  Radiologist (`radiology.radiologist`, built on Doctor) and Radiographer (`radiology.radiographer`, a plain role: the bench, the
+  record, the step, pregnant, the contrast given, an allergy, walk-ins); screens `radiology.scan` (in place of the bench) and
+  `radiology.report`; settings `radiology.exams` (by service code: a side asked, with contrast, what to tell the patient and in
+  Arabic, reported always or if the doctor asks) and `radiology.options` (ask pregnant at the door, on); the starter setup
+  `radiology.department` (38 exams: 14 X-ray, 8 ultrasound, 9 CT, 7 MRI — with and without contrast two exams — each a result with
+  Findings and Impression after one step, *scanned*; 7 report templates as its presets; works for all; chest, abdomen and sinus
+  X-rays reported only when asked). Client (`src/packs/radiology/`): `/xr /us /ct /mri` (`line.ts`, `order.tsx`: the exam by code or
+  the start of its words, left/right/both, +c/−c, portable, report, urgent/stat, ? the question; +c takes the exam with contrast and
+  nothing the one without, then the one whose every word was typed, else asked; under the card what to tell the patient and, before
+  contrast or an X-ray, the facts: eGFR and its age — worked out from creatinine by CKD-EPI 2021 when that is the newer —, metformin,
+  allergies, pregnant); the walk-in step (`Step.tsx`: the line and the six asked for most); Scan (`Scan.tsx`: To scan · Scanned today ·
+  Couldn't scan, a kind chip each, stat first; a row per exam with its side, portable, walk-in and who asked, *side not said*, *ask
+  pregnant*, *contrast*, the packs' marks and buttons; the scan card: the name and birth date to say, the side big, the question;
+  before contrast the facts from the record, under 30 *Contrast agreed* or *Without contrast*, fasting where its prep says so, the
+  contrast given (agent, mL, lot) and any reaction; pregnant asked for a woman of 12–50 before an X-ray or a CT; one set: the step —
+  `completed` when no report is asked, else `in-progress` —, the base's `pregnancy` changing the one standing, `given`, and a reaction
+  as an `allergy`; Couldn't scan with a reason); Report (`Report.tsx`: To report · Drafts · Signed today; the list beside the report;
+  *Before*: the last report of the same kind and its impression, *Compared* writes it into the findings; the kind's templates first;
+  Findings and Impression; *Critical…*: "Critical: tell Dr. X now", then *Sign · critical*; drafts kept in the browser; Sign writes the
+  base's result, final, the impression first among the analytes and as the conclusion). Demo (`seeds/radiology.sql`,
+  `demo/radiology.sql`): Radiology, Dr. Mai Farouk (radiology@demo.com) and Ahmed Saber (xray@demo.com); Samia (CT with contrast,
+  urgent, metformin, creatinine 2.6), Nour (a walk-in knee X-ray, left), Mona (a walk-in ultrasound), Tamer (MRI), Adel (CT brain, stat,
+  scanned), Wael (an ultrasound scanned, his earlier one reported), Laila (a chest X-ray, film only, on Dr. Ali's To review). Tests:
+  `supabase/tests/radiology.sql`, `npm run test:radiology`.
+  *Not yet:* the *Report in two steps* switch (Q3: off by default; built when a clinic needs it); the chart shows the report through
+  the base's result block (its Findings and Impression as rows, then the impression), not a radiology block of its own — that would need
+  a renderer per pack for a base type (a core question); the Booked mark and To book come with bookings; the images viewer, dose, MRI
+  screening, priors section and protocols are later (Q6).
 
 ---
 

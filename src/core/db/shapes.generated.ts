@@ -334,6 +334,31 @@ export interface Procedure {
 export interface Question {
   text: string
 }
+/** radiology.request v1 (radiology) */
+export interface RadiologyRequest {
+  answers?: Record<string, unknown>
+  asked_by?: string
+  department_id: string
+  details?: Record<string, unknown>
+  due?: Datetime
+  priority: 'routine' | 'urgent' | 'asap' | 'stat'
+  question?: string
+  radiology?: {
+    portable?: boolean
+    report?: boolean
+    side?: 'left' | 'right' | 'both'
+  }
+  reason?: string
+  reasons?: Reference[]
+  service: {
+    answer?: string
+    code?: string
+    coding?: Coding
+    id?: string
+    name: string
+  }
+  status: 'active' | 'on-hold' | 'revoked' | 'completed'
+}
 /** result v1 (base) */
 export type Result = {
   analytes?: {
@@ -561,6 +586,21 @@ export interface PresetSetting {
   services?: string[]
   shortcut?: string | null
 }
+/** setting radiology.exams (radiology; owner department) */
+export interface RadiologyExamsSetting {
+  exams: {
+    code: string
+    contrast?: boolean
+    prep?: string
+    prep_ar?: string
+    report?: 'always' | 'asked'
+    side?: boolean
+  }[]
+}
+/** setting radiology.options (radiology; owner department) */
+export interface RadiologyOptionsSetting {
+  ask_pregnant: boolean
+}
 /** setting score.signed_off (core; owner organization, many) */
 export interface ScoreSignedOffSetting {
   note?: string
@@ -633,6 +673,7 @@ export interface EntryData {
   'problem': Problem
   'procedure': Procedure
   'question': Question
+  'radiology.request': RadiologyRequest
   'result': Result
   'reviewed': Reviewed
   'score': Score
@@ -670,6 +711,8 @@ export interface SettingData {
   'pharmacy.product': PharmacyProductSetting
   'place.closed': PlaceClosedSetting
   'preset': PresetSetting
+  'radiology.exams': RadiologyExamsSetting
+  'radiology.options': RadiologyOptionsSetting
   'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
 }

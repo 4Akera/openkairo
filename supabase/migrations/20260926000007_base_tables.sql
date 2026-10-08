@@ -262,7 +262,7 @@ create table base.review (
   organization_id uuid not null,
   item          uuid not null,             -- the result, step or flagged item
   patient_id    uuid not null,
-  why           text not null,             -- result · abnormal · critical · not_seen · corrected · rejected · flag · question
+  why           text not null,             -- result · abnormal · critical · not_seen · corrected · rejected · no_answer · flag · question
   level         text,                      -- normal · abnormal · critical
   critical      boolean not null default false,
   for_user      uuid,
@@ -298,7 +298,12 @@ begin
       if v_o.item is not null then
         v_why := null; v_level := null;
         if b = 'step' then
-          if l.data ->> 'status' in ('rejected', 'cancelled', 'failed') then v_why := 'rejected'; end if;
+          if l.data ->> 'status' in ('rejected', 'cancelled', 'failed') then v_why := 'rejected';
+          -- done with no answer to come (an X-ray nobody reports): the order's author reads it themselves (spec §5.5, core change (c))
+          elsif l.data ->> 'status' = 'completed' and (select coalesce(t.data -> 'service' ->> 'answer', (select s.data ->> 'answer' from core.settings_at(p_org, 'service') s
+                  where s.thing_id = (t.data -> 'service' ->> 'id')::uuid), 'result') from core.entries t where t.organization_id = p_org and t.id = f.refers_to) in ('result', 'note') then
+            v_why := 'no_answer';
+          end if;
         elsif b in ('result', 'note') and (b = 'note' or coalesce(l.data ->> 'status', 'final') in ('final', 'corrected', 'amended', 'preliminary')) then
           v_level := case when b = 'result' then base.result_level(l.data) else 'normal' end;
           select x.* into v_p from base.presence x where x.organization_id = p_org and x.item = v_o.visit_id;
