@@ -25,12 +25,15 @@ create function pg_temp.cancer(p_stage text, p_intent text default 'curative') r
     'category', 'problem-list-item', 'clinical_status', 'active', 'verification', 'confirmed', 'oncology', jsonb_build_object('site', 'breast', 'side', 'left', 'stage', p_stage,
     'tnm', '{"t":"pT2","n":"pN1a","m":"M0","edition":"AJCC 8th"}'::jsonb, 'intent', p_intent, 'regimen', 'AC → paclitaxel weekly')), '00000000-0000-0000-0000-0000000000ca')
 $$;
+create temp table svc as select core.setup_id(:'unit', 'service', 'chemo') id;
+grant select on svc to authenticated;
 create function pg_temp.cycle(p_id uuid, p_decision text default 'give', p_from uuid default '00000000-0000-0000-0000-0000000000e1') returns jsonb language sql as $$
-  select t.e('oncology.cycle', '00000000-0000-0000-0000-0000000000f1', p_from, jsonb_build_object('service', jsonb_build_object('id', core.setup_id('00000000-0000-0000-0000-0000000000e2', 'service', 'chemo'),
+  select t.e('oncology.cycle', '00000000-0000-0000-0000-0000000000f1', p_from, jsonb_build_object('service', jsonb_build_object('id', (select id from svc),
     'code', 'chemo', 'name', 'Chemotherapy cycle'), 'department_id', '00000000-0000-0000-0000-0000000000e2', 'priority', 'routine', 'status', 'active',
     'oncology', jsonb_build_object('regimen', 'ac', 'name', 'AC', 'cycle', 3, 'of', 4, 'day', 1, 'height', 158, 'weight', 72, 'bsa', 1.78, 'percent', 100, 'decision', p_decision,
       'doses', '[{"drug":"Doxorubicin","per":60,"basis":"m2","worked":106.8,"dose":107,"unit":"mg"}]'::jsonb)), p_id)
 $$;
+select core.setup_id(:'unit', 'place', 'chair_1') as chair1 \gset
 set role authenticated;
 
 \echo '── the cancer: the oncologist writes it; its shape is checked; a doctor without the pack''s action does not'
@@ -54,7 +57,7 @@ select t.ok(exists (select 1 from t.rows('base.orders', :'unit', jsonb_build_obj
 select t.ok(exists (select 1 from t.rows('oncology.cycles', :'unit', jsonb_build_object('to_department_id', :'unit', 'due', current_date)) r), 'the unit''s nurse reads today''s cycles');
 
 \echo '── the chair: the nurse starts the day (the base''s Admit here) and ends it; the cycle answered by the unit''s note'
-select t.landed(t.w(t.e('admitted', :'pt', :'unit', jsonb_build_object('department_id', :'unit', 'admit_source', 'outp', 'place_id', core.setup_id(:'unit', 'place', 'chair_1')),
+select t.landed(t.w(t.e('admitted', :'pt', :'unit', jsonb_build_object('department_id', :'unit', 'admit_source', 'outp', 'place_id', :'chair1'),
   '00000000-0000-0000-0000-00000000c311', '00000000-0000-0000-0000-00000000c311')), 'into Chair 1');
 select t.landed(t.w(t.e('note', :'pt', :'unit', '{"kind":"nursing","text":"AC 3 given: doxorubicin 107 mg, cyclophosphamide 1 070 mg; no reaction."}', null, null,
   (select t.latest('00000000-0000-0000-0000-00000000c301')), 'answers')), 'given: the note answers the cycle');
@@ -72,8 +75,8 @@ select t.ok((select count(*) from bundle, jsonb_array_elements(b -> 'entry') e, 
 
 \echo '── the regimens: any oncologist changes them (Q39); the unit''s nurse does not'
 reset role;
-select t.ok(core.may('00000000-0000-0000-0000-0000000000e1', 'edit:oncology.regimens', null), 'the oncologist may change the regimens');
-select t.ok(not core.may('00000000-0000-0000-0000-0000000000e2', 'edit:oncology.regimens', null), 'the nurse may not');
+select t.ok(core.may_somewhere('00000000-0000-0000-0000-0000000000e1', 'edit:oncology.regimens'), 'the oncologist may change the regimens (a clinic key: held in a department that uses the pack)');
+select t.ok(not core.may_somewhere('00000000-0000-0000-0000-0000000000e2', 'edit:oncology.regimens'), 'the nurse may not');
 select t.ok(core.may('00000000-0000-0000-0000-0000000000e2', 'write:admitted', :'unit') and core.may('00000000-0000-0000-0000-0000000000e2', 'write:discharged', :'unit'),
   'the nurse admits into a chair and discharges');
 set role authenticated;

@@ -15,9 +15,11 @@ select public.write_setting(jsonb_build_object('key', 'organization.packs_used',
 select public.setup(jsonb_build_object('setup', 'theatre.department', 'department_id', :'th', 'name', 'Theatre', 'apply', true)) is not null as made;
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000e3', 'name', 'Iman', 'login_id', :'tn', 'holdings', jsonb_build_array(
   jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000ea01', 'department_id', :'th')))) ->> 'id' as nurse;
+create temp table svc as select core.setup_id(:'th', 'service', 'ihr_mesh') id;
+grant select on svc to authenticated;
 create function pg_temp.op(p_id uuid, p_words jsonb, p_priority text default 'routine') returns jsonb language sql as $$
   select t.e('theatre.op', '00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000d1', jsonb_build_object('service', jsonb_build_object(
-    'id', core.setup_id('00000000-0000-0000-0000-0000000000e3', 'service', 'ihr_mesh'), 'code', 'ihr_mesh', 'name', 'Inguinal hernia repair, open mesh (Lichtenstein)'),
+    'id', (select id from svc), 'code', 'ihr_mesh', 'name', 'Inguinal hernia repair, open mesh (Lichtenstein)'),
     'department_id', '00000000-0000-0000-0000-0000000000e3', 'priority', p_priority, 'status', 'active', 'theatre', p_words), p_id)
 $$;
 create function pg_temp.step(p_key text, p_after uuid, p_rel text, p_id uuid, p_status text default 'in-progress') returns jsonb language sql as $$

@@ -18,6 +18,7 @@ select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-000
   jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb01', 'department_id', :'pre'), jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb01', 'department_id', :'rec')))) ->> 'id' as anaesthetist;
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000e6', 'name', 'Rehab', 'login_id', :'rn', 'holdings', jsonb_build_array(
   jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb02', 'department_id', :'rec')))) ->> 'id' as nurse;
+select core.setup_id(:'rec', 'place', 'bay_1') as bay1 \gset
 set role authenticated;
 
 \echo '── the pre-op: the anaesthetist''s; ASA a class from I to VI'
@@ -28,19 +29,21 @@ select t.refused(t.w(t.e('anaesthesia.preop', :'pt', :'pre', '{"asa":"VII","verd
 
 \echo '── the scores (rule 8): the server adds them up'
 reset role;
-select t.ok((core.score('anaesthesia.rcri', '1999', '{"high_risk":"no","ihd":"yes","hf":"no","cvd":"no","insulin":"no","creat":"no"}') ->> 'total')::int = 1, 'RCRI 1 (class II)');
-select t.ok(core.score('anaesthesia.stopbang', '2008', '{"snore":"yes","tired":"no","observed":"no","pressure":"yes","bmi":"no","age":"yes","neck":"yes","male":"yes"}') -> 'band' ->> 'key' = 'high', 'STOP-BANG 5: high risk');
+select t.ok((core.score('anaesthesia.rcri', '1999', '{"high_risk":false,"ihd":true,"hf":false,"cvd":false,"insulin":false,"creat":false}') ->> 'total')::int = 1, 'RCRI 1 (class II)');
+select t.ok(core.score('anaesthesia.stopbang', '2008', '{"snore":true,"tired":false,"observed":false,"pressure":true,"bmi":false,"age":true,"neck":true,"male":true}') -> 'band' ->> 'key' = 'high', 'STOP-BANG 5: high risk');
 select t.ok(core.score('anaesthesia.aldrete', '1995', '{"activity":"2","breathing":"2","circulation":"2","conscious":"2","spo2":"1"}') -> 'band' ->> 'key' = 'ready', 'Aldrete 9: ready for the ward');
 set role authenticated;
 
 \echo '── recovery: into a bay, Aldrete and pain kept for the bay''s line (a listener on the base''s score and vitals)'
 select t.as(:'rn');
-select t.landed(t.w(t.e('admitted', :'pt', :'rec', jsonb_build_object('department_id', :'rec', 'admit_source', 'other', 'place_id', core.setup_id(:'rec', 'place', 'bay_1')),
+select t.landed(t.w(t.e('admitted', :'pt', :'rec', jsonb_build_object('department_id', :'rec', 'admit_source', 'other', 'place_id', :'bay1'),
   '00000000-0000-0000-0000-00000000b611', '00000000-0000-0000-0000-00000000b611')), 'into Bay 1');
 select t.landed(t.w(jsonb_build_array(t.e('score', :'pt', :'rec', jsonb_build_object('score', 'anaesthesia.aldrete', 'version', '1995',
   'inputs', '{"activity":"2","breathing":"2","circulation":"2","conscious":"1","spo2":"1"}'::jsonb, 'total', 8, 'band', 'not_yet'), null, '00000000-0000-0000-0000-00000000b611'),
   t.e('vitals', :'pt', :'rec', '{"pain":{"value":"2","unit":"/10","ucum":"{score}"}}', null, '00000000-0000-0000-0000-00000000b611'))), 'Aldrete 8, pain 2');
+reset role;
 select core.drain() as drained;
+set role authenticated;
 select t.ok((select string_agg(r ->> 'kind' || ' ' || (r ->> 'value')::numeric::int, ', ' order by r ->> 'kind') from t.rows('anaesthesia.recovery', :'rec', jsonb_build_object('patient_id', :'pt')) r) = 'aldrete 8, pain 2',
   'recovery''s table: Aldrete 8, pain 2');
 select t.landed(t.w(t.move('discharged', '00000000-0000-0000-0000-00000000b611', :'rec', '{"disposition":"home"}')), 'home from recovery (a day case)');
