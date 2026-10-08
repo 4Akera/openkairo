@@ -1,6 +1,7 @@
 // The laboratory (spec/openCare.md §5.3), as pure decisions: tubes, fasting, the tests a typed line names; the large lab's switches
 // (late by section, tickets and chairs, a scan's samples); its order word, /lab (§5.1 rule 1, added).   npm run test:lis
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { MOST_ASKED, needsFasting, testsIn, tubeOf, tubesFor } from '../src/packs/lis/tubes'
 import { changeOf, columnsOf, workedOut } from '../src/packs/lis/grid'
 import { byArrival, lateBy, nextUp, notFound, nowAt, sampleKey, scanned, sectionKey, targetOf, ticketOf, type Large, type Ticket } from '../src/packs/lis/large'
@@ -94,6 +95,18 @@ test('receive: a scan names the samples collected under its number, whatever its
   assert.deepEqual(scanned(rows, 's-1007-0002').toReceive.map((r) => r.item), ['1', '2'])
   assert.deepEqual(scanned(rows, 'S-1007-0003').already.map((r) => r.item), ['3']); assert.equal(scanned(rows, 'S-1007-0003').toReceive.length, 0)
   assert.equal(scanned(rows, 'S-1007-0004').toReceive.length, 0, 'sent back: no longer waiting under its number')
+})
+test('receive with a pack holding tests waiting (spec §5.4, any pack list on the core ListRow): a scan takes only the free tests; the row draws the pack\'s word, button and anyway', () => {
+  const R = (item: string) => ({ item, id: item, occurred_at: new Date().toISOString(), patient: { id: 'amal', given_name: 'Amal', family_name: 'X', record_number: 1, sex: 'female', born_on: '1990-01-01' },
+    request: { priority: 'routine' }, step_data: { specimen: 'S-1007-0002' }, reply: null, order: { item, step_key: 'collected', status: 'in-progress' } }) as unknown as RequestQueueRow
+  const rows = [R('a-cbc'), R('a-lip')]
+  const hold: SoftCheckDef = { pack: 'till', waiting: () => [{ order: 'a-lip', word: 'Waiting for payment', tone: 'warn' }], anyway: () => {} }
+  const ctx = { list: 'screen' as const, dept: { id: 'lab', name: 'Laboratory', packs: ['till'] }, can: () => true }
+  const waits = waitsOf([hold], packRowOf('amal', benchMarkRow(groupByPatient(rows)[0])), ctx, {})
+  assert.deepEqual(freeRows(scanned(rows, 'S-1007-0002').toReceive, waits, new Set()).map((r) => r.item), ['a-cbc'], 'the scan receives the CBC; the lipids wait')
+  const src = readFileSync(new URL('../src/packs/lis/Receive.tsx', import.meta.url), 'utf8')
+  assert.match(src, /usePackRows\('screen'/); assert.match(src, /marks=\{packs\.marks\(pr\)\} extra=\{packs\.buttons\(pr\)\} below=\{packs\.below\(pr\)\}/)
+  assert.match(src, /toReceive\.filter\(free\)/, 'a scan takes the free ones'); assert.match(src, /packs\.anyway\(pr, hold\.map\(\(r\) => r\.order\.item\), 'Receive'\)/, 'Receive anyway…')
 })
 test('receive: a number that finds nothing says why, from the orders it was given to', () => {
   const R = (item: string, step_key: string | null, specimen?: string) => ({ item, patient: { given_name: 'Adam', family_name: 'Fouda' }, step_data: specimen ? { specimen } : null, reply: null,

@@ -1,5 +1,7 @@
 // The packs on a list's rows, drawn (rows.ts holds the rules): each row's pack buttons (a), the lines it hands (b) and its waiting orders
-// (c). A pack's data is read once a list, through its own load, live (the clinic's hints and every 15 s); a failing pack says nothing.
+// (c). A pack's data is read once a list, through its own load, again on the clinic's hints, when the list's patients or orders change,
+// and when a card closes having changed something — never on a timer, so a list left open reads (and logs) nothing on its own; a
+// failing pack says nothing.
 // One card is open under a row at a time in a list: a pack's own (Pay) or the core's "…anyway" card, whose reason the packs holding the
 // orders record. Whoever goes ahead anyway may then do the work: those orders are free on every screen of this app from then on.
 import { useMemo, useState, type ReactNode } from 'react'
@@ -38,8 +40,8 @@ export interface PackRows {
   views: (rows: readonly PackRow[]) => { pack: string; label: string; groups: Map<string, string>; order: string[]; counts: string[] | null }[]
 }
 
-/** what the packs the list's department uses read for its rows, and the orders waiting (live: the clinic's hints too; checks: the soft
- *  checks only, for a page that only shows their words) */
+/** what the packs the list's department uses read for its rows, and the orders waiting (live: the clinic's hints; placesOnly: the
+ *  rows' places alone; checksOnly: no row actions, places or views, for a page that only shows words) */
 function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | undefined, { live = true, checksOnly = false, placesOnly = false } = {}) {
   const { org, dept: here } = useDepartment(); const d = dept ?? here
   const ctx = useMemo<RowCtx | null>(() => d ? { list, dept: { id: d.id, name: d.name, packs: d.packs, declared: d.declared ?? {} }, org, can: (a) => mayIn(org, a, d.id) } : null, [list, d, org])
@@ -53,7 +55,7 @@ function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | unde
   const loads = [...actions.map((a) => ['action', a] as const), ...checks.map((c) => ['check', c] as const), ...places.map((c) => ['place', c] as const),
     ...words.map((c) => ['words', c] as const), ...views.map((c) => ['view', c] as const)].filter(([, x]) => x.load)
   const results = useQueries({ queries: loads.map(([kind, x]) => ({ queryKey: ['pack-rows', kind, x.pack, list, d?.id ?? null, key],
-    queryFn: () => x.load!(rows, ctx!), enabled: !!ctx && rows.length > 0, placeholderData: keepPreviousData, refetchInterval: 15_000, retry: false })) })
+    queryFn: () => x.load!(rows, ctx!), enabled: !!ctx && rows.length > 0, placeholderData: keepPreviousData, retry: false })) })
   const dataOf = (kind: 'action' | 'check' | 'place' | 'words' | 'view'): PackData => Object.fromEntries(loads.flatMap(([k, x], i) => {
     const r = results[i]; return k === kind && !r.isError && r.data !== undefined ? [[x.pack, r.data]] : [] }))
   const actionData = dataOf('action'); const checkData = dataOf('check'); const placeData = dataOf('place'); const wordData = dataOf('words'); const viewData = dataOf('view')
@@ -68,11 +70,6 @@ function usePackData(list: RowList, rows: PackRow[], dept: RowDept | null | unde
   return { ctx, actions, checks, actionData, waits, ahead, places, placeData, words, wordData, views, viewData }
 }
 
-/** the words of the orders waiting, for a page that shows them and nothing else (the doctor's chart): by order */
-export function useOrderWaits(list: RowList, rows: PackRow[]) {
-  const { waits, ahead } = usePackData(list, rows, null, { live: false, checksOnly: true })
-  return (item: string) => isFree(item, waits, ahead) ? null : waits.get(item) ?? null
-}
 /** (h) the rows' places alone, for a page that only follows the list's order (the chart's Done → next): a row's place, a time (ms) */
 export function usePlaces(list: RowList, rows: PackRow[]) {
   const { ctx, places, placeData } = usePackData(list, rows, null, { placesOnly: true })

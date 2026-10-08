@@ -5,10 +5,11 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { blankCard, cardLines, cardSum, cents, drawerWords, egp, owedMarks, owedWords, payArgs, receiptLines, signed, wire, type Card, type Lines, type Payment } from '../src/packs/billing/money'
 import { REFUSALS } from '../src/packs/billing/words'
-import { WORD, anywayLines, asHanded, asSent, centsOf, handedDue, noData, ordersOf, rowButton, rowData, rowWaits } from '../src/packs/billing/rows'
+import { WORD, anywayDue, asHanded, asSent, centsOf, dueOf, handedDue, noData, ordersOf, restOf, rowButton, rowData, rowWaits, type RowData } from '../src/packs/billing/rows'
+import { REFUSALS as PHARMACY_WORDS } from '../src/packs/pharmacy/answers'
 import type { OrderRow } from '../src/core/db/types'
 import type { PackRow } from '../src/core/screens/rows'
-import { words } from '../src/core/db/words'
+import { registerWords, words } from '../src/core/db/words'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -61,9 +62,10 @@ test('the card\'s sums: only what is ticked; a typed open price; a discount at m
 test('what the pay operation takes: the ticked charges (a typed price on the open one), the sent lines, the handed ones, the discount, the total shown', () => {
   const c = cardLines(lines, nameOf, hm, [{ name: 'Nexium 40', quantity: 1, amount: 75, order_item: 'rx2' }], 'ph'); const k = (i: number) => c[i].key
   const card: Card = { ...blankCard(), typed: { [k(2)]: '300' }, ticked: { [k(1)]: false }, discount: { amount: '20', reason: 'Charity' }, received: '700' }
-  assert.deepEqual(payArgs('pt', c, card), { patient_id: 'pt', method: 'cash', total: '631.50', received: '700.00',
+  assert.deepEqual(payArgs('pt', c, card, { rx2: '0.00', rx9: '10.00' }), { patient_id: 'pt', method: 'cash', total: '631.50', received: '700.00',
     charges: [{ item: 'v1', department_id: 'im' }, { item: 'o2', department_id: 'lab', price: '300.00' }], sent: ['s1', 's2'],
-    handed: [{ name: 'Nexium 40', quantity: 1, amount: '75.00', order_item: 'rx2' }], discount: { amount: '20.00', reason: 'Charity' } })
+    handed: [{ name: 'Nexium 40', quantity: 1, amount: '75.00', order_item: 'rx2' }], basis: { rx2: '0.00' }, discount: { amount: '20.00', reason: 'Charity' } })
+  assert.ok(!('basis' in payArgs('pt', c, { ...card, ticked: { ...card.ticked, [k(4)]: false } }, { rx2: '0.00' })), 'the handed line unticked: no basis sent')
   const byCard = payArgs('pt', c, { ...card, method: 'card', discount: null })
   assert.equal(byCard.method, 'card'); assert.ok(!('received' in byCard) && !('discount' in byCard))
 })
@@ -74,6 +76,8 @@ test('a row of who owes in words, and its marks: a department waiting (Pay first
   assert.equal(owedWords({ visits: 2, names: [], sent: ['zz'], unpriced: 0 }, nameOf).what, '2 visits · A department')
   assert.deepEqual(owedMarks({ waiting: ['lab'], before_payment: true }, nameOf), [{ key: 'w:lab', word: 'Laboratory is waiting', tone: 'warn' }, { key: 'before', word: 'done before payment', tone: 'info' }])
   assert.deepEqual(owedMarks({ waiting: [], before_payment: false }, nameOf), [])
+  assert.deepEqual(owedMarks({ waiting: [], before_payment: false, back: 1 }, nameOf), [{ key: 'back', word: 'to give back', tone: 'warn' }],
+    'paid for work not done: listed, so the cashier is told')
 })
 test('the receipt\'s lines: each charge, a department\'s sent or handed lines as one with their sum; a refund below nothing', () => {
   const p: Pick<Payment, 'lines'> = { lines: [
@@ -96,25 +100,79 @@ const physio = (lines: PackRow['lines'], items = ['s1', 's2']): PackRow => ({ ke
 const sessions = [{ name: 'Session · 45 min', quantity: 1, amount: 250, order: 's1' }, { name: 'Session · 45 min', quantity: 1, amount: 250, order: 's2' },
   { name: 'Elastic band', quantity: 2, amount: 60 }]
 const may = (...as: string[]) => (a: string) => as.includes(a)
+/** what billing holds of an order of the department's own lines: paid lines, and lines owed on its open bill (amounts in units) */
+const held = (lines: { name: string; quantity: number; amount: number; paid: boolean }[]) => ({ paid: lines.filter((l) => l.paid).reduce((n, l) => n + Math.round(l.amount * 100), 0),
+  sent: lines.filter((l) => !l.paid).reduce((n, l) => n + Math.round(l.amount * 100), 0), lines: lines.map((l) => ({ ...l, amount: Math.round(l.amount * 100) })) })
+const own = (desk: RowData['desk'], m: Record<string, { name: string; quantity: number; amount: number; paid: boolean }[]>, payFirst = false): RowData =>
+  ({ ...noData(desk), payFirst, own: new Map(Object.entries(m).map(([k, v]) => [k, held(v)])) })
 test('billing\'s reading of a list: the waiting read and who owes here, put together; orders asked about once, 500 a read', () => {
-  const d = rowData('none', { waiting: ['s1'], paid: ['s2'], ahead: [], pay_first: true, desk: 'own', sent: { s1: '250.00' } }, [{ patient_id: 'pt', total: '150.00', unpriced: 1 }])
-  assert.equal(d.desk, 'own', 'the server\'s desk over the screen\'s settings'); assert.ok(d.payFirst); assert.deepEqual([...d.waiting], ['s1']); assert.equal(d.sent.get('s1'), 25000)
+  const d = rowData('none', { waiting: ['s1'], ahead: [], pay_first: true, desk: 'own', own: { s1: { paid: '0.00', sent: '250.00', lines: [{ name: 'Session', quantity: '1.00', amount: '250.00', paid: false }] } } },
+    [{ patient_id: 'pt', total: '150.00', unpriced: 1 }])
+  assert.equal(d.desk, 'own', 'the server\'s desk over the screen\'s settings'); assert.ok(d.payFirst); assert.deepEqual([...d.waiting], ['s1'])
+  assert.deepEqual(d.own.get('s1'), { paid: 0, sent: 25000, lines: [{ name: 'Session', quantity: 1, amount: 25000, paid: false }] })
   assert.deepEqual(d.owes.get('pt'), { total: 15000, unpriced: 1 })
   assert.equal(rowData('everyone', null, null).desk, 'everyone', 'no read allowed: the settings\' desk, nothing waiting'); assert.equal(rowData('everyone', null, null).waiting.size, 0)
   const many = Array.from({ length: 1201 }, (_, i) => ({ key: `${i}`, patient_id: 'p', visit_id: null, orders: [order(`o${String(i).padStart(4, '0')}`), order('o0000')] }))
   assert.deepEqual(ordersOf(many).map((x) => x.length), [500, 500, 201])
 })
-test('the lines a row still hands: priced, not paid; to pay here none already sent; to send again only an order whose lines changed', () => {
-  const d = { ...noData('none'), paid: new Set(['s2']), sent: new Map([['s1', 25000]]) }
-  assert.deepEqual(handedDue(physio(sessions), d, 'pay').map((l) => l.name), ['Elastic band'], 's1 sent, s2 paid: the band (no order) is always handed')
-  assert.deepEqual(handedDue(physio(sessions), d, 'send').map((l) => l.order ?? '-'), ['-'], 'sent as it stands: not again')
+test('the lines a row still hands: priced, beyond what billing holds of each order; to pay here past its open bill too; to send only what changed', () => {
+  const d = own('none', { s1: [{ name: 'Session · 45 min', quantity: 1, amount: 250, paid: false }], s2: [{ name: 'Session · 45 min', quantity: 1, amount: 250, paid: true }] })
+  assert.deepEqual(handedDue(physio(sessions), d, 'pay').map((l) => l.name), ['Elastic band'], 's1 on its open bill, s2 paid: the band (no order) is always handed')
+  assert.deepEqual(handedDue(physio(sessions), d, 'send').map((l) => l.order ?? '-'), ['-'], 's1 sent as it stands: not again')
   const dearer = [{ ...sessions[0], amount: 300 }, sessions[2]]
-  assert.deepEqual(handedDue(physio(dearer), d, 'send').map((l) => l.order ?? '-'), ['s1', '-'], 'changed since it was sent: sent again (it replaces what is not paid)')
+  assert.deepEqual(dueOf(physio(dearer), d, 'send'), { lines: [{ ...sessions[0], amount: 300 }, sessions[2]], basis: { s1: '0.00' } },
+    'changed since it was sent: sent again (it replaces what is not paid), with what was paid of it (nothing)')
   assert.deepEqual(handedDue(physio([{ name: 'Free', quantity: 1, amount: 0, order: 's1' }, { name: ' ', quantity: 1, amount: 5 }, { name: 'x', quantity: 0, amount: 5 }]), noData(), 'pay'), [],
     'nothing at nothing, no words, no quantity: not a line')
   assert.equal(centsOf(sessions), 56000)
   assert.deepEqual(asHanded([sessions[0]]), [{ name: 'Session · 45 min', quantity: 1, amount: '250.00', order_item: 's1' }])
   assert.deepEqual(asSent([sessions[2]]), [{ name: 'Elastic band', quantity: 2, amount: '60.00' }])
+})
+// a medicine given in part (old audit F38): 28 tablets prescribed, a box of 14 at 145, a strip of 7 at 75; the row hands what the order
+// comes to so far (the part given and the rest to give), billing hands on only the rest
+const aug = (box: number, strip = 0, o = 'rx') => [{ name: 'Augmentin 1 g · box', quantity: box, amount: 145 * box, order: o },
+  ...(strip ? [{ name: 'Augmentin 1 g · strip', quantity: strip, amount: 75 * strip, order: o }] : [])]
+const rx = (lines: PackRow['lines']): PackRow => ({ key: 'r', patient_id: 'pt', visit_id: null, orders: [order('rx')], lines })
+const box1 = { name: 'Augmentin 1 g · box', quantity: 1, amount: 145 }
+test('given in part: the rest is charged in addition — never dropped as paid, never left as "sent" for costing the same, never replacing the part', () => {
+  // (a) 14 given and its box sent; the Owed row hands both boxes: the rest goes, with what was paid (nothing)
+  assert.deepEqual(dueOf(rx(aug(2)), own('none', { rx: [{ ...box1, paid: false }] }), 'send'), { lines: aug(2), basis: { rx: '0.00' } },
+    'sent 145 for the part; the order now comes to 290: the open bill becomes 290, never "Sent to cashier" for the same 145')
+  assert.equal(rowButton(rx(aug(2)), may('read:bench'), own('none', { rx: [{ ...box1, paid: false }] })), 'Send to cashier')
+  // (b) the part paid: only the rest is handed, and under Pay first the order waits until it is paid
+  const paidPart = own('none', { rx: [{ ...box1, paid: true }] }, true)
+  assert.deepEqual(dueOf(rx(aug(2)), paidPart, 'send'), { lines: aug(1), basis: { rx: '145.00' } }, 'paid 145: the second box, 145, goes; the basis says 145 was paid')
+  assert.deepEqual(dueOf(rx(aug(2)), { ...paidPart, desk: 'own' }, 'pay'), { lines: aug(1), basis: { rx: '145.00' } }, 'and at a counter that takes payment: the rest to pay')
+  assert.deepEqual(rowWaits(rx(aug(2)), paidPart).map((w) => w.order), ['rx'], 'Pay first: the rest unpaid, the order still waits')
+  assert.deepEqual(rowWaits(rx(aug(1)), paidPart), [], 'all of it paid: free')
+  // (c) 21 given (a box and a strip, sent, not paid), the rest 7 (a strip): the bill becomes 295, it never drops to 75
+  const sent21 = own('none', { rx: [{ ...box1, paid: false }, { name: 'Augmentin 1 g · strip', quantity: 1, amount: 75, paid: false }] })
+  assert.deepEqual(dueOf(rx(aug(1, 2)), sent21, 'send').lines.map((l) => `${l.name} × ${l.quantity} ${l.amount}`), ['Augmentin 1 g · box × 1 145', 'Augmentin 1 g · strip × 2 150'])
+  assert.deepEqual(dueOf(rx(aug(1, 2)), { ...sent21, desk: 'own' }, 'pay').lines.map((l) => `${l.name} × ${l.quantity} ${l.amount}`), ['Augmentin 1 g · strip × 1 75'],
+    'to pay here: the open bill (220) is paid as itself, the strip given since is handed')
+  // the rest given as another brand, the part paid: the other brand's line alone
+  assert.deepEqual(dueOf(rx([aug(1)[0], { name: 'Megamox 1 g · box', quantity: 1, amount: 110, order: 'rx' }]), paidPart, 'send').lines.map((l) => l.name), ['Megamox 1 g · box'])
+  // what is held is not told by name (sent as written under another brand): the difference of the sums, as one line
+  assert.deepEqual(restOf([{ name: 'Megamox 1 g · box', quantity: 2, amount: 220, order: 'rx' }], [{ ...box1 }]),
+    [{ name: 'Megamox 1 g · box · rest', quantity: 1, amount: 75, order: 'rx' }])
+  assert.deepEqual(restOf(aug(1), [{ ...box1, quantity: 2, amount: 290 }]), [], 'more held than handed: nothing more (never below nothing)')
+})
+test('a line left unticked stays owed: paying one line of an order hands the rest again, and the order waits until all of it is paid', () => {
+  const paidBox = own('own', { rx: [{ ...box1, paid: true }] }, true)
+  assert.deepEqual(handedDue(rx(aug(1, 1)), paidBox, 'pay').map((l) => `${l.name} ${l.amount}`), ['Augmentin 1 g · strip 75'], 'the strip, unticked when the box was paid')
+  assert.deepEqual(rowWaits(rx(aug(1, 1)), paidBox).map((w) => w.order), ['rx'], 'still waiting for the strip')
+  assert.equal(rowButton(rx(aug(1, 1)), may('write:billing.payment', 'read:bench'), paidBox), 'Pay')
+})
+test('given before it was paid or sent: Given today\'s row hands what was given, so the medicine still reaches the cashier', () => {
+  assert.equal(rowButton(rx(aug(1)), may('read:bench'), noData('none')), 'Send to cashier', 'nothing held of it: send it')
+  assert.equal(rowButton(rx(aug(1)), may('write:billing.payment'), noData('own')), 'Pay', 'or pay at the counter')
+  assert.equal(rowButton(rx(aug(1)), may('read:bench'), own('none', { rx: [{ ...box1, paid: false }] })), 'Sent to cashier', 'sent before Give: nothing more')
+  assert.equal(rowButton(rx(aug(1)), may('read:bench'), own('none', { rx: [{ ...box1, paid: true }] })), null, 'paid before Give: no button')
+})
+test('a service charge paid for the same order never counts as the lines it hands (only the department\'s own handed or sent lines do)', () => {
+  // billing.waiting answers own from payment lines of kind handed or sent only: a paid Dispensing charge leaves own empty
+  assert.deepEqual(handedDue(rx(aug(1)), { ...noData('own'), waiting: new Set() }, 'pay'), aug(1))
+  assert.deepEqual(rowWaits(rx(aug(1)), { ...noData(), payFirst: true }).map((w) => w.order), ['rx'])
 })
 test('billing\'s one button on any department\'s row: Pay where it takes payment here, Send to cashier where it does not, for whoever may', () => {
   const pays = may('write:billing.payment', 'read:bench')
@@ -124,25 +182,37 @@ test('billing\'s one button on any department\'s row: Pay where it takes payment
   assert.equal(rowButton(physio(sessions), may('read:bench'), noData('own')), null, 'not for whoever does not take payment')
   assert.equal(rowButton(physio(sessions), may('read:bench'), noData('none')), 'Send to cashier')
   assert.equal(rowButton(physio(sessions), may(), noData('none')), null, 'nor for whoever does not work the list')
-  const sent = { ...noData('none'), sent: new Map([['s1', 25000], ['s2', 25000]]) }
+  const s = { name: 'Session · 45 min', quantity: 1, amount: 250, paid: false }
+  const sent = own('none', { s1: [s], s2: [s] })
   assert.equal(rowButton(physio(sessions.slice(0, 2)), may('read:bench'), sent), 'Sent to cashier', 'sent as it stands: the card says so')
   assert.equal(rowButton(physio([{ ...sessions[0], amount: 300 }, sessions[1]]), may('read:bench'), sent), 'Send to cashier', 'changed: send it again')
-  assert.equal(rowButton(physio(sessions.slice(0, 2)), pays, { ...noData('own'), sent: new Map([['s1', 25000], ['s2', 25000]]), owes: new Map([['pt', { total: 50000, unpriced: 0 }]]) }), 'Pay',
+  assert.equal(rowButton(physio(sessions.slice(0, 2)), pays, { ...own('own', { s1: [s], s2: [s] }), owes: new Map([['pt', { total: 50000, unpriced: 0 }]]) }), 'Pay',
     'sent before the counter took payment: its open bill is paid here')
+  assert.deepEqual(handedDue(physio(sessions.slice(0, 2)), own('own', { s1: [s], s2: [s] }), 'pay'), [], 'and never handed besides')
 })
 test('Pay first, per order: what billing holds unpaid, and under the department\'s own Pay first what its row prices and nobody paid; gone ahead, never again', () => {
   const row = physio(sessions, ['s1', 's2', 'lab1'])
-  assert.deepEqual(rowWaits(row, 'screen', { ...noData(), waiting: new Set(['lab1']) }).map((w) => w.order), ['lab1'], 'Pay first off here: only what billing holds')
-  const on = { ...noData(), payFirst: true, paid: new Set(['s2']), ahead: new Set(['lab1']), waiting: new Set(['lab1']) }
-  assert.deepEqual(rowWaits(row, 'screen', on), [{ order: 's1', word: WORD, tone: 'warn' }], 's2 paid, lab1 gone ahead, the band has no order: s1 waits')
-  assert.deepEqual(rowWaits(physio([{ name: 'Free', quantity: 1, amount: 0, order: 's1' }]), 'bench', { ...noData(), payFirst: true }), [], 'free never waits')
-  assert.deepEqual(rowWaits(physio(sessions, ['s2']), 'bench', { ...noData(), payFirst: true }).map((w) => w.order), ['s2'], 'only orders on the row')
-  assert.deepEqual(rowWaits(row, 'chart', { ...noData(), payFirst: true, waiting: new Set(['s2']) }).map((w) => w.order), ['s2'], 'the chart: billing\'s own words only')
-  assert.ok(rowWaits(row, 'screen', on).every((w) => !/\d/.test(w.word)), 'a word, never a number')
-  assert.deepEqual(anywayLines(physio(sessions), ['s2']).map((l) => l.order), ['s2'], 'going ahead: the lines of those orders go to the cashier first')
+  assert.deepEqual(rowWaits(row, { ...noData(), waiting: new Set(['lab1']) }).map((w) => w.order), ['lab1'], 'Pay first off here: only what billing holds')
+  const on = { ...own('none', { s2: [{ name: 'Session · 45 min', quantity: 1, amount: 250, paid: true }] }, true), ahead: new Set(['lab1']), waiting: new Set(['lab1']) }
+  assert.deepEqual(rowWaits(row, on), [{ order: 's1', word: WORD, tone: 'warn' }], 's2 paid, lab1 gone ahead, the band has no order: s1 waits')
+  assert.deepEqual(rowWaits(row, own('none', { s1: [{ name: 'Session · 45 min', quantity: 1, amount: 250, paid: false }] }, true)).map((w) => w.order), ['s1', 's2'],
+    'sent is not paid: s1 still waits')
+  assert.deepEqual(rowWaits(physio([{ name: 'Free', quantity: 1, amount: 0, order: 's1' }]), { ...noData(), payFirst: true }), [], 'free never waits')
+  assert.deepEqual(rowWaits(physio(sessions, ['s2']), { ...noData(), payFirst: true }).map((w) => w.order), ['s2'], 'only orders on the row')
+  assert.ok(rowWaits(row, on).every((w) => !/\d/.test(w.word)), 'a word, never a number')
+  assert.deepEqual(anywayDue(physio(sessions), ['s2'], noData()), { lines: [sessions[1]], basis: { s2: '0.00' } }, 'going ahead: the lines of those orders go to the cashier first')
+  assert.deepEqual(anywayDue(physio(sessions), ['s2'], own('none', { s2: [{ name: 'Session · 45 min', quantity: 1, amount: 250, paid: false }] })).lines, [],
+    'already on an open bill as they stand: nothing goes twice')
 })
 const sql = read('supabase/migrations/20260926000013_billing.sql')
 const code = (t: string) => t.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+test('billing\'s own words answer its own codes: none is the core\'s or another pack\'s (the first to register a code keeps it)', () => {
+  const lis = [...read('src/packs/lis/index.tsx').matchAll(/registerWords\(\{([^}]*)\}/g)].flatMap((m) => [...m[1].matchAll(/([a-z_]+):\s*'/g)].map((x) => x[1]))
+  assert.ok(lis.length >= 3, lis.join(', '))
+  registerWords(PHARMACY_WORDS); registerWords(Object.fromEntries(lis.map((c) => [c, `lis ${c}`]))); registerWords(REFUSALS)
+  for (const [c, w] of Object.entries(REFUSALS)) assert.equal(words(c), w, `${c}: billing's words`)
+  assert.equal(words('drawer_count'), 'Count the drawer in pounds and piastres', 'the drawer\'s count is not a stock count')
+})
 test('every refusal billing raises has its words (its own, or the core\'s)', () => {
   const codes = [...new Set([...code(sql).matchAll(/core\.refuse\('([a-z_]+)'/g)].map((m) => m[1]))]
   assert.ok(codes.length >= 20, `${codes.length} codes`)

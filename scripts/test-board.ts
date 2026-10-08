@@ -11,7 +11,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PackLine } from '../src/core/screens/ward/Tile'
 import { ListRow } from '../src/core/ui/patient'
-import { anywayCalls, byWord, chargesHere, dueLines, dueTotal, freeRows, goAhead, packRowOf, reasonReady, registerRowAction, registerSoftCheck, rowActionDefs, rowButtonsOf,
+import { readFileSync } from 'node:fs'
+import { anywayCalls, byWord, chargesHere, dueLines, dueTotal, freeRows, goAhead, isStop, packRowOf, reasonReady, registerRowAction, registerSoftCheck, rowActionDefs, rowButtonsOf,
   rowsKey, softCheckDefs, waitsOf, waitWords, type Anyway, type DueLine, type RowActionDef, type RowCtx, type SoftCheckDef } from '../src/core/screens/rows'
 
 let n = 0
@@ -233,6 +234,28 @@ await testAsync('…anyway: a reason is required, one line; each pack holding an
   assert.equal(recorded.length, 0)
   assert.deepEqual(await goAhead(defs, prow(), ['o1', 'o2'], '  patient will pay   after ', w, rctx(['probe', 'cover'])), ['o1', 'o2'])
   assert.deepEqual(recorded.map((a) => [a.orders, a.reason]), [[['o1'], 'cover: patient will pay after'], [['o2'], 'patient will pay after']])
+})
+const src = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
+test('a stop is never greyed: what a form writes on a waiting order counts only when it is a stop (not done, not given, declined)', () => {
+  assert.equal(isStop({ type: 'pharmacy.dispense', data: { status: 'cancelled', reason: 'Patient declined' } }), true)
+  assert.equal(isStop({ type: 'step', data: { status: 'failed', reason: 'haemolysed' } }), true); assert.equal(isStop({ data: { status: 'rejected' } }), true)
+  assert.equal(isStop({ type: 'pharmacy.dispense', data: { status: 'completed' } }), false, 'given: waits'); assert.equal(isStop({ data: { status: 'in-progress' } }), false)
+  assert.equal(isStop(null), false); assert.equal(isStop({}), false)
+})
+test('the wait wiring on the pages (spec §5.4, core change (c)): the bench\'s patient page and the page that answers one request', () => {
+  const bp = src('src/core/screens/bench/BenchPatient.tsx')
+  assert.match(bp, /return !!w && \(free\(r\) \|\| isStop\(w\)\)/, 'a pack\'s form on a waiting order is ready only with a stop')
+  assert.match(bp, /disabled=\{held && !x\.notDone && !formOf\(r\)\}/, 'its form stays open (Not given can be chosen); the base\'s grid is greyed until not done')
+  assert.match(bp, /x\.notDone \? !!x\.reason\.trim\(\) : free\(r\)/, 'not done works on a waiting order; a result does not')
+  assert.match(bp, /packs\.anyway\(or, \[r\.order\.item\], 'Go ahead'\)/, 'Go ahead anyway… on the order, for whoever may do the work')
+  const rq = src('src/core/screens/Request.tsx')
+  assert.match(rq, /disabled=\{w\.isPending \|\| \(notDone && !reason\.trim\(\)\) \|\| \(!!wait && !notDone\)\}/, 'Release greyed while it waits, unless not done')
+  assert.match(rq, /disabled=\{!!wait\} title=\{wait\?\.word\} onClick=\{\(\) => step\('in-progress'\)\}>Start/, 'Start greyed with the word')
+  assert.match(rq, /packs\.anyway\(prow, \[row!\.order\.item\], 'Answer'\)/, 'Answer anyway…, for whoever may answer')
+  assert.match(rq, /<CancelButton onCancel=\{\(why\) => step\('rejected', why\)\} \/>/, 'Decline (a stop) is never greyed')
+  assert.doesNotMatch(src('src/core/screens/chart/blocks/Orders.tsx'), /softCheck|useOrderWaits|useRowWaits/, 'the chart draws no soft check: (c) is approved for the lists and Request.tsx only')
+  assert.match(src('src/core/screens/chart/blocks/Orders.tsx'), /useOrderWords\('chart'/, 'only a pack\'s words on an order\'s line: core change (l), approved for the chart (§5.7)')
+  assert.doesNotMatch(src('src/core/screens/useRows.tsx'), /refetchInterval/, 'the packs\' data is read on hints and changes, never on a timer (a list left open logs no reads)')
 })
 test('a pack that charges (core change (d)): asked of the department without naming the pack; only a pack used there counts', () => {
   assert.equal(chargesHere({ packs: ['pharmacy', 'till'], declared: { pharmacy: { charges: false }, till: { charges: true } } }), true)

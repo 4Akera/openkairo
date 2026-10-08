@@ -10,25 +10,26 @@ import { App, Label, Tube, type TubeColour } from './kit'
 const noop = () => undefined
 
 /** the chart around the composer: the patient's line, then the right column as the chart draws it */
-function Chart({ dept = 'General Practice', children }: { dept?: string; children: ReactNode }) {
+export function Chart({ dept = 'General Practice', who = ['Youssef Nabil', '34 y · M · #30'], safety = <span className="text-warn">Allergies not asked</span>, children }: {
+  dept?: string; who?: [string, string]; safety?: ReactNode; children: ReactNode }) {
   return <App dept={dept} user="Dr. Ali Hassan">
     <div className="flex h-14 items-center gap-3 border-b border-line bg-surface px-6 text-14">
-      <span className="text-18 font-semibold text-fg">Youssef Nabil</span><span className="text-muted">34 y · M · #30</span>
-      <span className="text-accent">in consult · 6 min</span><span className="text-faint">|</span><span className="text-warn">Allergies not asked</span>
+      <span className="text-18 font-semibold text-fg">{who[0]}</span><span className="text-muted">{who[1]}</span>
+      <span className="text-accent">in consult · 6 min</span><span className="text-faint">|</span>{safety}
     </div>
     <div className="mx-auto grid w-full max-w-3xl gap-3 px-4 py-4"><Card className="grid gap-2 p-3">{children}</Card></div>
   </App>
 }
 /** the line, as typed */
-const Line = ({ children }: { children: ReactNode }) =>
+export const Line = ({ children }: { children: ReactNode }) =>
   <div className="flex h-12 items-center rounded-lg border border-line-strong bg-sunken px-4 font-mono text-16 text-fg">{children}<span className="ms-0.5 h-5 w-px animate-pulse bg-fg" />
     <span className="ms-auto flex items-center gap-2 font-sans text-12 text-faint">?<Kbd>/</Kbd></span></div>
 /** the card under the line (never over the record) */
-const Under = ({ children, tone }: { children: ReactNode; tone?: 'warn' | 'danger' }) =>
+export const Under = ({ children, tone }: { children: ReactNode; tone?: 'warn' | 'danger' }) =>
   <div className={cn('grid gap-2 rounded-lg border bg-sunken p-2', tone === 'warn' ? 'border-warn-line' : tone === 'danger' ? 'border-danger-line' : 'border-line')}>{children}</div>
-const Keys = ({ children }: { children: ReactNode }) => <p className="flex flex-wrap items-center gap-1.5 px-1 text-12 text-muted">{children}</p>
+export const Keys = ({ children }: { children: ReactNode }) => <p className="flex flex-wrap items-center gap-1.5 px-1 text-12 text-muted">{children}</p>
 /** one suggestion: the test, its code, its section and tube */
-function Pick({ name, code, section, tube, also, first }: { name: string; code: string; section: string; tube?: TubeColour | 'cup'; also?: string; first?: boolean }) {
+export function Pick({ name, code, section, tube, also, first }: { name: string; code: string; section: string; tube?: TubeColour | 'cup'; also?: string; first?: boolean }) {
   return <div className={cn('flex items-center gap-3 rounded-md px-3 py-2', first ? 'bg-surface ring-1 ring-accent-line' : '')}>
     <span className="grid min-w-0 flex-1"><span className="text-14 text-fg">{name}</span>
       <span className="truncate text-12 text-muted"><span className="font-mono">{code}</span> · {section}{also ? ` · ${also}` : ''}</span></span>
@@ -37,14 +38,14 @@ function Pick({ name, code, section, tube, also, first }: { name: string; code: 
   </div>
 }
 /** the drafts, as the chart draws them before Sign */
-function Drafts({ n, to = 'Laboratory', children }: { n: number; to?: string; children: ReactNode }) {
+export function Drafts({ n, to = 'Laboratory', children }: { n: number; to?: string; children: ReactNode }) {
   return <div className="grid gap-0 overflow-hidden rounded-lg border border-line">
     <p className="flex items-center gap-2 bg-surface px-3 py-2 text-13"><Tag tone="accent">Not signed yet</Tag><span className="text-muted">{n} {n === 1 ? 'draft' : 'drafts'} · Sign writes {n === 1 ? 'it' : 'them'}</span></p>
     <div className="grid gap-2 border-t border-dashed border-accent-line bg-accent-soft/40 px-3 py-3">
       <p className="flex items-center gap-2 text-13 text-muted"><Send className="size-4" />Orders · {to}</p>{children}</div>
   </div>
 }
-const Test = ({ name, extra, x }: { name: string; extra?: ReactNode; x?: boolean }) =>
+export const Test = ({ name, extra, x }: { name: string; extra?: ReactNode; x?: boolean }) =>
   <div className="flex items-center gap-2 text-14"><span className="text-fg">{name}</span>{extra}
     {x && <button type="button" aria-label={`Remove ${name}`} className="ms-auto rounded-sm p-0.5 text-faint hover:text-danger"><X className="size-3.5" /></button>}</div>
 

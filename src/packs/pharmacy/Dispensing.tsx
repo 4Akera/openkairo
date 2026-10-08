@@ -8,18 +8,20 @@
 // bench: / or typing goes to the box, ↑↓ move, ↵ folds the row out under itself, Esc folds it, then clears the box. Its settings
 // (settings.ts): Prepare first; a prepared row waiting past the pharmacy's limit reads late; the clinic's counselling note.
 // What a pack that charges reads (spec §5.4), never named here: each row hands its priced lines (pricing.ts: the product's price per box
-// and per strip, what is to give counted in its units) for a pack's row action (Pay, Send to cashier) folded out under the row; where a
-// pack used here charges, the fold shows each medicine's price and the total, and Prices sets them. A pack may hold an order waiting (a soft check):
-// it leaves To give for its word's view, where Give is greyed (Not given, a stop, still works) and Give anyway… asks why.
+// and per strip) — what each order comes to so far: what was given of it already, each dispense counted apart, and what is to give now
+// (as written, or as checked in the open fold) — for a pack's row action (Pay, Send to cashier) folded out under the row; Given today's
+// rows hand what was given, so a medicine given before it was paid or sent is still handed there; where a pack used here charges, the
+// fold shows each medicine's price and the total, and Prices sets them. A pack may hold an order waiting (a soft check): it leaves To
+// give for its word's view, where Give is greyed (Not given, a stop, still works) and Give anyway… asks why.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDepartment } from '@core/hooks/organization'
 import { useRequestQueue } from '@core/hooks/reads'
 import { refresh } from '@core/hooks/writes'
 import { answerEntry, oneSet, stepEntry } from '@core/db/entries'
-import { write, type EntryIn } from '@core/db/rpc'
-import type { RequestQueueRow } from '@core/db/types'
+import { read, write, type EntryIn } from '@core/db/rpc'
+import type { RecentRow, RequestQueueRow, TableRead } from '@core/db/types'
 import { replyFormFor } from '@core/renderers'
 import type { ScreenProps } from '@core/screens/registry'
 import { ageOf, ageSex, groupByPatient, matches, nextSteps, phaseOf, stepName, testsLine, type PatientGroup } from '@core/screens/bench/shared'
@@ -27,7 +29,7 @@ import { Button, Callout, Card, Chip, Empty, Input, ListRow, NotForRole, ScreenF
 import { benchMarkRow } from '@core/screens/marks'
 import { byWord, chargesHere, dueTotal, packRowOf, type DueLine } from '@core/screens/rows'
 import { usePackRows } from '@core/screens/useRows'
-import { linesFor, productFor, productsOf } from './pricing'
+import { orderLines, productsOf, type Given } from './pricing'
 import { Prices } from './Prices'
 import { counselling, keepStock, lateAfter, lateBy, prepareFirst, preparedSince } from './settings'
 import { detailsOf, fullAmount, type Dispense } from './Check'
@@ -71,22 +73,31 @@ export function Dispensing({ dept }: ScreenProps) {
   }
   // every request sent here, the bench's whole work: the pack's form answers its own, the bench's page the rest
   const rows = useMemo(() => q.data?.requests ?? [], [q.data])
-  // the priced lines of what is to give (as written, or as checked in the open fold), each in its product's own units
+  // the priced lines of each order so far: what was given of it already (each dispense apart), and what is to give now (as written, or
+  // as checked in the open fold), each in its product's own units
   const charges = chargesHere(dept); const priced = productsOf(org)
   const linesOf = (rs: RequestQueueRow[], checked: boolean): DueLine[] => rs.flatMap((r) => {
     if (!replyFormFor(r.reply_type)) return []
     const v: Dispense = (checked ? values[r.order.item] : undefined) ?? { given: true, reason: '' }; const drug = v.drug || detailsOf(r).drug?.name
-    const p = v.given && drug ? productFor(priced, drug, v.product_id ?? fromStock(r, v).product_id) : null
-    return p ? linesFor(p, v.quantity === undefined ? fullAmount(detailsOf(r)).value : Number(v.quantity), r.order.item) : [] })
+    return orderLines(priced, detailsOf(r).given ?? [], v.given && drug ? { drug, units: v.quantity === undefined ? fullAmount(detailsOf(r)).value : Number(v.quantity),
+      product: v.product_id ?? fromStock(r, v).product_id } : null, r.order.item) })
+  // Given today's rows: what was given (the pack's own table; read only where a pack used here charges)
+  const done = (q.data?.recent ?? []).filter((r) => matches(r.patient, f))
+  const recent = (q.data?.recent ?? []).filter((r) => !!replyFormFor(r.reply_type)).map((r) => r.order.item).sort()
+  const gave = useQuery({ queryKey: ['pharmacy.given', dept.id, recent], enabled: charges && recent.length > 0 && can('read:pharmacy.queue'), placeholderData: (p) => p,
+    queryFn: async () => new Map((await read<TableRead<{ item: string; given?: Given[] }>>({ shape: 'table', table: 'pharmacy.queue', department_id: dept.id,
+      where: { item: recent }, entries: false })).rows.map((x) => [x.item, x.given ?? []])) })
+  const doneRow = (r: RecentRow) => packRowOf(`done ${r.id}`, benchMarkRow({ patient: r.patient, rows: [r] }),
+    replyFormFor(r.reply_type) ? orderLines(priced, gave.data?.get(r.order.item) ?? [], null, r.order.item) : undefined)
   // the list's rows hand their lines as written too, so a soft check may hold an order on the lines it hands (Pay first on the pharmacy's
-  // own priced work, spec §5.4)
-  const packs = usePackRows('screen', groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g), linesOf(g.rows, false))), dept)
+  // own priced work, spec §5.4); Given today's rows are read with them, so what a pack that charges holds of their orders is known
+  const packs = usePackRows('screen', [...groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g), linesOf(g.rows, false))),
+    ...(q.data?.recent ?? []).map(doneRow)], dept)
   const free = (r: RequestQueueRow) => packs.isFree(r.order.item)
   const of = (states: State[]) => groupByPatient(rows.filter((r) => free(r) && states.includes(stateOf(r)))).filter((g) => matches(g.patient, f))
   const held = byWord(rows, packs.waits, packs.ahead).map((w) => ({ id: `wait:${w.word}` as const, word: w.word, groups: groupByPatient(w.rows).filter((g) => matches(g.patient, f)) }))
   const view: View = chosen.startsWith('wait:') && !held.some((h) => h.id === chosen) ? 'give' : chosen   // a word's view goes once nothing waits with it
   const give = of(prep ? ['to_prepare'] : ['to_prepare', 'prepared']); const prepared = prep ? of(['prepared']) : []; const owed = of(['owed'])
-  const done = (q.data?.recent ?? []).filter((r) => matches(r.patient, f))
   // waiting past this pharmacy's limit: late (Prepared counts in warn while any is)
   const limit = lateAfter(org, dept.id); const note = counselling(org)
   const late = (g: PatientGroup) => lateBy(preparedSince(g.rows), limit)
@@ -190,7 +201,7 @@ export function Dispensing({ dept }: ScreenProps) {
     {pricing && charges && <Prices org={org} onClose={() => setPricing(false)} />}
     {q.isLoading ? <Spinner label="Loading prescriptions" /> : <Card><ul ref={list}>
       {view !== 'done' ? (groups.length ? groups.flatMap(row) : <li><Empty>{f ? 'No match here.' : view === 'give' ? 'Nothing to give.' : view === 'owed' ? 'Nobody is owed anything.' : 'Nothing prepared.'}</Empty></li>)
-        : done.length ? done.map((r, i) => { const pr = packRowOf(`done ${r.id}`, benchMarkRow({ patient: r.patient, rows: [r] }))
+        : done.length ? done.map((r, i) => { const pr = doneRow(r)
           return <ListRow key={r.id} number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(r.patient)}
             selected={i === c && arrows} className={i === c ? 'dispense-cursor' : undefined} extra={packs.buttons(pr)} below={packs.below(pr)}
             status={<>{r.request?.status === 'cancelled' && <Tag tone="warn">{r.reply_type === 'pharmacy.dispense' ? 'not given' : 'not done'}</Tag>}<span className="truncate">{r.request?.reply_line ?? r.service_name}</span></>}

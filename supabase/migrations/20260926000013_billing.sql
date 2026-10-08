@@ -201,11 +201,52 @@ $$;
 create function billing.paid_sent(p_org uuid, p_line uuid) returns uuid language sql stable security definer set search_path = '' as $$
   select l.payment_id from billing.payment_lines l where l.organization_id = p_org and l.sent_id = p_line and billing.stands(p_org, l.payment_id) limit 1
 $$;
--- a sent line still owed: unpaid, and no later bill from its department for its order (a resend replaces what was not paid)
+-- the moment an order was closed undone or crossed out, read from its entries as the base reads an order's status: crossed out or revoked
+-- (its latest version), or its latest step rejected, cancelled or failed; none while it stands (chosen in the build, awaiting the owner,
+-- as for a charge)
+create function billing.stopped(p_org uuid, p_order uuid) returns timestamptz language plpgsql stable security definer set search_path = '' as $$
+declare ol record; st record;
+begin
+  if p_order is null then return null; end if;
+  select x.* into ol from core.pack_entries(p_org, array[p_order]) x where x.item = p_order order by x.item_version desc limit 1;
+  if ol.id is null then return null; end if;
+  if ol.type = 'crossed_out' or ol.data ->> 'status' = 'revoked' then return ol.recorded_at; end if;
+  select l.* into st from core.pack_entries(p_org, array[p_order]) a,
+         lateral (select y.* from core.pack_entries(p_org, array[a.item]) y where y.item = a.item order by y.item_version desc limit 1) l
+   where a.relation = 'answers' and a.item_version = 1 and a.type = any (core.kinds('step')) and l.type <> 'crossed_out'
+     and a.refers_to in (select z.id from core.pack_entries(p_org, array[p_order]) z where z.item = p_order)
+   order by l.recorded_at desc limit 1;
+  return case when st.data ->> 'status' in ('rejected', 'cancelled', 'failed') then st.recorded_at end;
+end $$;
+-- a line sent before its order was closed undone or crossed out is void: nothing more is owed for it (one paid is given back from its
+-- receipt); a line its department sends after that, for what was given before the stop, stands (chosen in the build, awaiting the owner)
+create function billing.sent_void(p_org uuid, p_order uuid, p_at timestamptz) returns boolean language sql stable security definer set search_path = '' as $$
+  select p_order is not null and coalesce(billing.stopped(p_org, p_order) >= p_at, false)
+$$;
+-- a sent line still owed: unpaid, not void, and no later bill from its department for its order (a resend replaces what was not paid)
 create function billing.sent_owed(p_org uuid, p_line uuid) returns boolean language sql stable security definer set search_path = '' as $$
   select billing.paid_sent(p_org, s.id) is null and not exists (select 1 from billing.sent x where x.organization_id = p_org and s.order_item is not null
       and x.order_item = s.order_item and x.department_id = s.department_id and x.bill_id <> s.bill_id and (x.at, x.bill_id) > (s.at, s.bill_id))
+      and not billing.sent_void(p_org, s.order_item, s.at)
     from billing.sent s where s.organization_id = p_org and s.id = p_line and s.patient_id is not null
+$$;
+-- what billing already holds of a department's own lines for one order: paid (lines handed or sent, on a payment that stands) and, asked,
+-- still owed on its open bill. A row hands what its order comes to so far; only the rest beyond this is handed again (the rest of a
+-- medicine given in part, a line left unticked), never the whole order twice (chosen in the build, awaiting the owner)
+create function billing.accounted(p_org uuid, p_order uuid, p_department uuid, p_sent boolean) returns numeric language sql stable security definer set search_path = '' as $$
+  select coalesce((select sum(l.amount) from billing.payment_lines l where l.organization_id = p_org and l.order_item = p_order and l.department_id = p_department
+                     and l.kind in ('handed', 'sent') and billing.stands(p_org, l.payment_id)), 0)
+       + case when p_sent then coalesce((select sum(s.amount) from billing.sent s where s.organization_id = p_org and s.order_item = p_order and s.department_id = p_department
+                     and billing.sent_owed(p_org, s.id)), 0) else 0 end
+$$;
+-- an order the charges have not heard yet (billing listens after commit; a parked listener never): priced, or At the order, as the
+-- price stood when it was written, where the department performing it used billing then — what the charge will be (§5.4 Pay first)
+create function billing.priced_order(p_org uuid, p_order uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((select billing.used(p_org, d.dep, o1.recorded_at) and billing.price(p_org, 'service', d.svc, d.dep, o1.recorded_at) is not null
+    from (select x.* from core.pack_entries(p_org, array[p_order]) x where x.item = p_order and x.item_version = 1) o1,
+         lateral (select (lv.data -> 'service' ->> 'id')::uuid svc, coalesce(lv.data ->> 'department_id', o1.data ->> 'department_id')::uuid dep
+                    from core.pack_entries(p_org, array[p_order]) lv where lv.item = p_order and lv.type = any (core.kinds('order')) order by lv.item_version desc limit 1) d
+   where d.svc is not null and d.dep is not null), false)
 $$;
 -- the kinds a clinician writes in a visit that count as seeing the patient there once called, as the base's presence counts it
 create function billing.clinical(p_type text) returns boolean language sql stable security definer set search_path = '' as $$
@@ -305,7 +346,7 @@ create function billing.price_check(p_where jsonb, p_data jsonb) returns jsonb l
 declare v_org uuid := (p_where ->> 'organization_id')::uuid;
 begin
   if not exists (select 1 from core.settings_at(v_org, 'service') s where s.thing_id::text = p_data ->> 'service_id' and s.owner_id = (p_where ->> 'owner_id')::uuid) then
-    return jsonb_build_array(jsonb_build_object('code', 'unknown_service', 'level', 'refuse', 'field', 'service_id'));
+    return jsonb_build_array(jsonb_build_object('code', 'not_its_service', 'level', 'refuse', 'field', 'service_id'));
   end if;
   if (p_data ? 'price') = coalesce((p_data ->> 'at_order')::boolean, false) then
     return jsonb_build_array(jsonb_build_object('code', 'price_or_order', 'level', 'refuse', 'field', 'price'));
@@ -329,9 +370,9 @@ end $$;
 
 -- ── its operations: the reads (who owes, a patient's lines, receipts, the day) ──
 -- a patient's payable lines at this desk: open unpaid charges (a price, or none yet for one priced At the order), the lines sent to the
--- cashier still owed, void charges that still have money on them (to give back), the departments waiting for payment (Pay first: an
--- order of theirs not paid, and nobody went ahead with it anyway) and whether work was done before payment. A desk that does not take
--- payment has none
+-- cashier still owed, void charges and void sent lines that still have money on them (to give back), the departments waiting for
+-- payment (Pay first: an order of theirs not paid, and nobody went ahead with it anyway) and whether work was done before payment. A
+-- desk that does not take payment has none
 create function billing.lines(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_pt uuid := core.survivor(p_org, (p_args ->> 'patient_id')::uuid); v_desk text := billing.desk(p_org, p_department); v_fam uuid[]; ch jsonb; sl jsonb; bk jsonb;
 begin
@@ -346,12 +387,18 @@ begin
       'quantity', s.quantity, 'amount', s.amount, 'at', s.at) order by s.at, s.id), '[]') into sl
     from billing.sent s where s.organization_id = p_org and s.patient_id = any (v_fam) and v_desk <> 'none' and (v_desk = 'everyone' or s.department_id = p_department)
      and billing.sent_owed(p_org, s.id);
-  select coalesce(jsonb_agg(jsonb_build_object('item', c.item, 'department_id', c.department_id, 'kind', c.kind, 'name', c.name, 'payment_id', p.id, 'receipt', p.receipt)
-      order by c.at), '[]') into bk
-    from billing.charges c join billing.payment_lines l on l.organization_id = c.organization_id and l.charge_item = c.item and l.charge_department = c.department_id
-      join billing.payments p on p.organization_id = l.organization_id and p.id = l.payment_id
-   where c.organization_id = p_org and c.patient_id = any (v_fam) and not c.open and v_desk <> 'none' and (v_desk = 'everyone' or p.department_id = p_department)
-     and billing.stands(p_org, p.id);
+  select coalesce(jsonb_agg(b.x order by b.at), '[]') into bk from (
+    select jsonb_build_object('item', c.item, 'department_id', c.department_id, 'kind', c.kind, 'name', c.name, 'payment_id', p.id, 'receipt', p.receipt) x, c.at
+      from billing.charges c join billing.payment_lines l on l.organization_id = c.organization_id and l.charge_item = c.item and l.charge_department = c.department_id
+        join billing.payments p on p.organization_id = l.organization_id and p.id = l.payment_id
+     where c.organization_id = p_org and c.patient_id = any (v_fam) and not c.open and v_desk <> 'none' and (v_desk = 'everyone' or p.department_id = p_department)
+       and billing.stands(p_org, p.id)
+    union all
+    select jsonb_build_object('item', s.order_item, 'department_id', s.department_id, 'kind', 'sent', 'name', s.name, 'payment_id', p.id, 'receipt', p.receipt), s.at
+      from billing.sent s join billing.payment_lines l on l.organization_id = s.organization_id and l.sent_id = s.id
+        join billing.payments p on p.organization_id = l.organization_id and p.id = l.payment_id
+     where s.organization_id = p_org and s.patient_id = any (v_fam) and v_desk <> 'none' and (v_desk = 'everyone' or p.department_id = p_department)
+       and billing.stands(p_org, p.id) and billing.sent_void(p_org, s.order_item, s.at)) b;
   return jsonb_build_object('desk', v_desk, 'patient_id', v_pt, 'patient_ids', jsonb_build_array(v_pt), 'charges', ch, 'sent', sl, 'back', bk,
     'waiting', (select coalesce(jsonb_agg(distinct x), '[]') from (select (y ->> 'department_id')::uuid x, coalesce(y ->> 'order_item', case when y ->> 'kind' = 'service' then y ->> 'item' end)::uuid o
         from jsonb_array_elements(ch || sl) y) q
@@ -360,10 +407,12 @@ begin
       and a.order_item in (select (y ->> 'item')::uuid from jsonb_array_elements(ch) y union select (y ->> 'order_item')::uuid from jsonb_array_elements(sl) y)));
 end $$;
 
--- who owes, one row a patient, grouped and paged here so nobody drops out (newest first; after: the last row's {at, patient_id}; the
--- search's patients when given): what for (visits, the services by name, each sending department), the sum of what is priced, how many lines
--- wait for a price, the departments waiting (Pay first) and work done before payment. With the counts of the desk's three views: to pay,
--- paid today, nothing to pay (seen today in a department of this desk that uses billing, owing nothing)
+-- who owes, one row a patient, grouped and paged here so nobody drops out (newest first, then by patient, in the order the cursor reads;
+-- after: the last row's {at, patient_id}; the search's patients when given): what for (visits, the services by name, each sending
+-- department), the sum of what is priced, how many lines wait for a price, the departments waiting (Pay first), work done before payment,
+-- and how many paid lines there are to give back (a void charge or sent line still holding money: the patient is listed for it, so the
+-- cashier is told). With the counts of the desk's three views: to pay, paid today, nothing to pay (seen today in a department of this
+-- desk that uses billing, owing nothing)
 create function billing.owed(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_desk text := billing.desk(p_org, p_department); v_lim int := greatest(1, least(coalesce((p_args ->> 'limit')::int, 40), 200));
         v_pts uuid[] := (select array_agg(distinct core.survivor(p_org, x::uuid)) from jsonb_array_elements_text(p_args -> 'patients') x);
@@ -380,13 +429,26 @@ begin
     insert into billing_owed
     select core.survivor(p_org, s.patient_id), s.department_id, 'sent', s.at, s.amount, false, s.order_item, s.name
       from billing.sent s where s.organization_id = p_org and s.patient_id is not null and (v_desk = 'everyone' or s.department_id = p_department) and billing.sent_owed(p_org, s.id);
+    -- money to give back: a paid charge gone void, a paid line sent for an order since closed undone (taken at this desk, or any for everyone's)
+    insert into billing_owed
+    select core.survivor(p_org, c.patient_id), c.department_id, 'back', p.at, null::numeric, false, null::uuid, c.name
+      from billing.charges c join billing.payment_lines l on l.organization_id = c.organization_id and l.charge_item = c.item and l.charge_department = c.department_id
+        join billing.payments p on p.organization_id = l.organization_id and p.id = l.payment_id
+     where c.organization_id = p_org and not c.open and (v_desk = 'everyone' or p.department_id = p_department) and billing.stands(p_org, p.id)
+    union all
+    select core.survivor(p_org, s.patient_id), s.department_id, 'back', p.at, null::numeric, false, null::uuid, s.name
+      from billing.sent s join billing.payment_lines l on l.organization_id = s.organization_id and l.sent_id = s.id
+        join billing.payments p on p.organization_id = l.organization_id and p.id = l.payment_id
+     where s.organization_id = p_org and s.patient_id is not null and (v_desk = 'everyone' or p.department_id = p_department) and billing.stands(p_org, p.id)
+       and billing.sent_void(p_org, s.order_item, s.at);
   end if;
   select count(distinct pt) into v_count from billing_owed;
   select coalesce(jsonb_agg(jsonb_build_object('patient_id', g.pt, 'last_at', g.last_at, 'total', g.total, 'unpriced', g.unpriced, 'lines', g.lines,
-      'visits', g.visits, 'services', g.services, 'names', g.names, 'sent', g.sent, 'waiting', g.waiting,
+      'visits', g.visits, 'services', g.services, 'names', g.names, 'sent', g.sent, 'waiting', g.waiting, 'back', g.back,
       'before_payment', exists (select 1 from billing.anyway a where a.organization_id = p_org and a.patient_id = any (core.family(p_org, g.pt)) and a.order_item = any (g.orders)))
-      order by g.last_at desc, g.pt), '[]') into v_rows
-    from (select o.pt, max(o.at) last_at, coalesce(sum(o.amount), 0) total, count(*) filter (where o.unpriced) unpriced, count(*) lines,
+      order by g.last_at desc, g.pt desc), '[]') into v_rows
+    from (select o.pt, max(o.at) last_at, coalesce(sum(o.amount), 0) total, count(*) filter (where o.unpriced) unpriced, count(*) filter (where o.kind <> 'back') lines,
+            count(*) filter (where o.kind = 'back') back,
             count(*) filter (where o.kind = 'visit') visits, count(*) filter (where o.kind = 'service') services,
             coalesce(jsonb_agg(o.name order by o.at) filter (where o.kind = 'service'), '[]') names,
             coalesce(jsonb_agg(distinct o.department_id) filter (where o.kind = 'sent'), '[]') sent,
@@ -395,7 +457,7 @@ begin
             array_agg(o.order_item) filter (where o.order_item is not null) orders
           from billing_owed o where v_pts is null or o.pt = any (v_pts) group by o.pt
           having v_after_at is null or (max(o.at), o.pt) < (v_after_at, v_after_pt)
-          order by max(o.at) desc, o.pt limit v_lim + 1) g;
+          order by max(o.at) desc, o.pt desc limit v_lim + 1) g;
   select count(*) into v_paid from billing.payments p where p.organization_id = p_org and p.day = v_day and p.department_id = p_department and p.refund_of is null;
   -- nothing to pay: here today (a visit today in a department of this desk's that uses billing, or a charge of today's), owing nothing at
   -- this desk
@@ -441,29 +503,39 @@ begin
 end $$;
 
 -- the day at this desk (or, for whoever reads every desk's accounts, the clinic's): taken and its receipts, cash (given back included) and
--- card, waived with its reasons, given back; a row a cashier and a row a department whose work was paid; the drawers closed; my drawer
+-- card, waived with its reasons, given back; a row a cashier and a row a department whose work was paid; the drawers closed; my drawer.
+-- Each counts what happened that day and nothing later changes it: a discount is waived on the day it was given, as what is taken is
+-- taken, and a refund's day carries its reversal (the discount of the payment it undoes, below nothing). Whose work was paid shares each
+-- payment's total (its discount taken off) among its lines by their amounts, the last line taking the piastres left, so the rows add up
+-- to what was taken less what was given back
 create function billing.totals(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_day date := coalesce((p_args ->> 'day')::date, billing.today(p_org)); v_all boolean := coalesce((p_args ->> 'all')::boolean, false); v jsonb;
 begin
   if v_all and not core.may(p_user, 'read:billing.accounts', p_department) then perform core.refuse('not_allowed', 'read:billing.accounts'); end if;
-  with p as (select x.*, x.refund_of is null and billing.stands(p_org, x.id) standing from billing.payments x
-              where x.organization_id = p_org and x.day = v_day and (v_all or x.department_id = p_department))
+  with p as (select x.*, case when x.refund_of is null then x.discount else -o.discount end waived, coalesce(x.discount_reason, o.discount_reason) why
+               from billing.payments x left join billing.payments o on o.organization_id = x.organization_id and o.id = x.refund_of
+              where x.organization_id = p_org and x.day = v_day and (v_all or x.department_id = p_department)),
+  ln as (select z.department_id, z.payment_id, z.amount, y.total, sum(z.amount) over (partition by z.payment_id) gross,
+                row_number() over (partition by z.payment_id order by z.n desc) k
+           from billing.payment_lines z join p y on y.id = z.payment_id where z.organization_id = p_org),
+  sh as (select ln.*, case when ln.gross = 0 then 0 else round(ln.total * ln.amount / ln.gross, 2) end share from ln),
+  net as (select sh.department_id, case when sh.k = 1 then sh.total - (sum(sh.share) over (partition by sh.payment_id) - sh.share) else sh.share end amount from sh)
   select jsonb_build_object('day', v_day, 'all', v_all,
       'taken', coalesce(sum(p.total) filter (where p.refund_of is null), 0), 'receipts', count(*) filter (where p.refund_of is null),
       'cash', coalesce(sum(p.total) filter (where p.method = 'cash'), 0), 'card', coalesce(sum(p.total) filter (where p.method = 'card'), 0),
       'cards', count(*) filter (where p.method = 'card' and p.refund_of is null),
       'given_back', coalesce(sum(p.total) filter (where p.refund_of is not null), 0), 'refunds', count(*) filter (where p.refund_of is not null),
-      'waived', coalesce(sum(p.discount) filter (where p.standing), 0), 'discounts', count(*) filter (where p.standing and p.discount > 0),
-      'reasons', coalesce((select jsonb_agg(jsonb_build_object('reason', r.discount_reason, 'count', r.n, 'amount', r.a) order by r.a desc)
-          from (select y.discount_reason, count(*) n, sum(y.discount) a from p y where y.standing and y.discount > 0 group by y.discount_reason) r), '[]'),
+      'waived', coalesce(sum(p.waived), 0), 'discounts', count(*) filter (where p.waived > 0) - count(*) filter (where p.waived < 0),
+      'reasons', coalesce((select jsonb_agg(jsonb_build_object('reason', r.why, 'count', r.n, 'amount', r.a) order by r.a desc)
+          from (select y.why, count(*) filter (where y.waived > 0) - count(*) filter (where y.waived < 0) n, sum(y.waived) a from p y where y.waived <> 0
+                 group by y.why having sum(y.waived) <> 0) r), '[]'),
       'cashiers', coalesce((select jsonb_agg(jsonb_build_object('user_id', c.author_id, 'by', (select s.name from core.pack_staff(p_org, array[c.author_id]) s), 'receipts', c.receipts,
           'cash', c.cash, 'card', c.card, 'waived', c.waived, 'given_back', c.back) order by c.cash + c.card desc)
           from (select y.author_id, count(*) filter (where y.refund_of is null) receipts, coalesce(sum(y.total) filter (where y.method = 'cash'), 0) cash,
-                       coalesce(sum(y.total) filter (where y.method = 'card'), 0) card, coalesce(sum(y.discount) filter (where y.standing), 0) waived,
+                       coalesce(sum(y.total) filter (where y.method = 'card'), 0) card, coalesce(sum(y.waived), 0) waived,
                        coalesce(sum(y.total) filter (where y.refund_of is not null), 0) back from p y group by y.author_id) c), '[]'),
       'departments', coalesce((select jsonb_agg(jsonb_build_object('department_id', l.department_id, 'amount', l.a, 'lines', l.n) order by l.a desc)
-          from (select z.department_id, sum(z.amount) a, count(*) n from billing.payment_lines z join p y on y.id = z.payment_id where z.organization_id = p_org
-                group by z.department_id) l), '[]'))
+          from (select t.department_id, sum(t.amount) a, count(*) n from net t group by t.department_id) l), '[]'))
     into v from p;
   return v || jsonb_build_object(
     'closings', (select coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'department_id', d.department_id, 'user_id', d.user_id, 'by', (select s.name from core.pack_staff(p_org, array[d.user_id]) s),
@@ -476,7 +548,9 @@ end $$;
 -- ── its operations: what is written ──
 -- take payment at this desk: the charges ticked (an open price typed for one priced At the order), the sent lines ticked, the lines a
 -- row of this department hands (paid at its counter); a discount from the clinic's reasons; cash (received, change) or card. The total
--- the card showed must be the server's. Each charge and line is locked in one order and paid once
+-- the card showed must be the server's. Each charge, line and order is locked in one order and paid once: the lines handed for an order
+-- come with what the row knew billing held of it already (basis: paid, and owed on its open bill), and a payment or a bill sent since
+-- (another counter, a resend) refuses it, so an order is never handed twice
 create function billing.pay(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_desk text := billing.desk(p_org, p_department); v_pt uuid := core.survivor(p_org, (p_args ->> 'patient_id')::uuid); v_fam uuid[]; v_method text := coalesce(p_args ->> 'method', 'cash');
         v_lines jsonb := '[]'; x jsonb; v_line text; c billing.charges; s billing.sent; v_pr jsonb; v_amount numeric; v_qty numeric; v_sum numeric := 0; n int := 0;
@@ -487,7 +561,10 @@ begin
   if v_method not in ('cash', 'card') then perform core.refuse('bad_method', v_method); end if;
   v_fam := core.family(p_org, v_pt);
   perform billing.lock(array(select 'charge ' || (y ->> 'item') || ' ' || (y ->> 'department_id') from jsonb_array_elements(coalesce(p_args -> 'charges', '[]')) y
-                             union select 'sent ' || y from jsonb_array_elements_text(coalesce(p_args -> 'sent', '[]')) y));
+                             union select 'sent ' || y from jsonb_array_elements_text(coalesce(p_args -> 'sent', '[]')) y
+                             union select 'order ' || z.order_item from billing.sent z where z.organization_id = p_org and z.order_item is not null
+                                and z.id::text in (select y from jsonb_array_elements_text(coalesce(p_args -> 'sent', '[]')) y)
+                             union select 'order ' || (y ->> 'order_item') from jsonb_array_elements(coalesce(p_args -> 'handed', '[]')) y where y ->> 'order_item' is not null));
   for x in select y from jsonb_array_elements(coalesce(p_args -> 'charges', '[]')) y loop
     select z.* into c from billing.charges z where z.organization_id = p_org and z.item = (x ->> 'item')::uuid and z.department_id = (x ->> 'department_id')::uuid;
     if c.item is null or not (c.patient_id = any (v_fam)) then perform core.refuse('not_found', 'charge'); end if;
@@ -512,7 +589,8 @@ begin
     select z.* into s from billing.sent z where z.organization_id = p_org and z.id = v_line::uuid;
     if s.id is null or not (s.patient_id = any (v_fam)) then perform core.refuse('not_found', 'line'); end if;
     if v_desk = 'own' and s.department_id <> p_department then perform core.refuse('not_this_desk', s.name); end if;
-    if not billing.sent_owed(p_org, s.id) then perform core.refuse('already_paid', s.name); end if;
+    -- paid already; or replaced by a later bill, or void, since the card opened
+    if not billing.sent_owed(p_org, s.id) then perform core.refuse(case when billing.paid_sent(p_org, s.id) is not null then 'already_paid' else 'total_changed' end, s.name); end if;
     n := n + 1; v_sum := v_sum + s.amount;
     v_lines := v_lines || jsonb_build_object('n', n, 'kind', 'sent', 'sent_id', s.id, 'order_item', s.order_item, 'department_id', s.department_id, 'name', s.name,
       'quantity', s.quantity, 'amount', s.amount);
@@ -531,6 +609,12 @@ begin
     end if;
     n := n + 1; v_sum := v_sum + v_amount;
     v_lines := v_lines || jsonb_build_object('n', n, 'kind', 'handed', 'order_item', v_order, 'department_id', p_department, 'name', trim(x ->> 'name'), 'quantity', v_qty, 'amount', v_amount);
+  end loop;
+  -- each order handed: what billing holds of it now (paid, owed on its open bill) is what the row knew (none: nothing)
+  for v_order in select distinct (y ->> 'order_item')::uuid from jsonb_array_elements(coalesce(p_args -> 'handed', '[]')) y where y ->> 'order_item' is not null loop
+    if billing.accounted(p_org, v_order, p_department, true) <> coalesce(billing.amount(p_args -> 'basis' ->> v_order::text), 0) then
+      perform core.refuse('total_changed', 'order');
+    end if;
   end loop;
   if n = 0 then perform core.refuse('nothing_to_pay'); end if;
   -- a discount: an amount, with a reason from the clinic's list only (owner, 2026-10-08, D35)
@@ -592,7 +676,7 @@ create function billing.close_drawer(p_org uuid, p_department uuid, p_user uuid,
 declare v_counted numeric := billing.amount(p_args ->> 'counted'); v_reason text := nullif(trim(p_args ->> 'reason'), ''); d jsonb; v_id uuid := gen_random_uuid();
 begin
   if billing.desk(p_org, p_department) not in ('own', 'everyone') then perform core.refuse('not_a_desk'); end if;
-  if v_counted is null then perform core.refuse('bad_count'); end if;
+  if v_counted is null then perform core.refuse('drawer_count'); end if;
   perform billing.lock(array['drawer ' || p_org || ' ' || p_department || ' ' || p_user]);
   d := billing.drawer_of(p_org, p_department, p_user);
   if v_counted <> (d ->> 'expected')::numeric and v_reason is null then perform core.refuse('reason_missing', ((d ->> 'expected')::numeric)::text); end if;
@@ -604,7 +688,8 @@ end $$;
 
 -- Send to cashier (§5.4): a department that prices its own work and does not take payment here sends the lines its row hands — a name, a
 -- quantity, an amount, and the order each belongs to where it has one — as an open bill the main cashier takes with the rest of the
--- visit. Trusted as handed; who sent them and when are kept. A resend for an order replaces its lines not yet paid
+-- visit. Trusted as handed; who sent them and when are kept. A resend for an order replaces its lines not yet paid. Each order is
+-- locked, and comes with what the row knew was paid of it (basis): a payment taken since refuses it, so it is never sent twice
 create function billing.send(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_pt uuid := core.survivor(p_org, (p_args ->> 'patient_id')::uuid); v_fam uuid[]; v_bill uuid := gen_random_uuid(); x jsonb; v_amount numeric; v_qty numeric;
         v_order uuid; ord record; n int := 0;
@@ -613,6 +698,7 @@ begin
   v_fam := core.family(p_org, v_pt);
   if jsonb_array_length(coalesce(p_args -> 'lines', '[]')) = 0 then perform core.refuse('nothing_to_send'); end if;
   if jsonb_array_length(p_args -> 'lines') > 200 then perform core.refuse('too_many', 'lines'); end if;
+  perform billing.lock(array(select 'order ' || (y ->> 'order_item') from jsonb_array_elements(p_args -> 'lines') y where y ->> 'order_item' is not null));
   for x in select y from jsonb_array_elements(p_args -> 'lines') y loop
     v_amount := billing.amount(x ->> 'amount'); v_qty := billing.amount(x ->> 'quantity'); v_order := (x ->> 'order_item')::uuid;
     if coalesce(trim(x ->> 'name'), '') = '' or length(x ->> 'name') > 200 or v_amount is null or v_amount > 10000000 or v_qty is null or v_qty <= 0 then
@@ -626,52 +712,80 @@ begin
     values (p_org, v_bill, v_pt, (p_args ->> 'visit_id')::uuid, p_department, v_order, trim(x ->> 'name'), v_qty, v_amount, p_user);
     n := n + 1;
   end loop;
+  for v_order in select distinct (y ->> 'order_item')::uuid from jsonb_array_elements(p_args -> 'lines') y where y ->> 'order_item' is not null loop
+    if billing.accounted(p_org, v_order, p_department, false) <> coalesce(billing.amount(p_args -> 'basis' ->> v_order::text), 0) then
+      perform core.refuse('total_changed', 'order');
+    end if;
+  end loop;
   perform core.hint('organization:' || p_org);
   return jsonb_build_object('bill_id', v_bill, 'lines', n, 'patient_ids', jsonb_build_array(v_pt));
 end $$;
 
 -- the soft check's read (§5.4 Pay first), for the orders a list's rows show: of those performed here, the ones waiting for payment — Pay
--- first on here now, an unpaid charge or sent line for the order, and nobody went ahead anyway (…anyway frees an order for good) — those
--- paid (a payment line naming the order stands) and those gone ahead; with Pay first and Takes payment here as they stand, so a row can
--- also wait on the lines it hands itself (a department's own priced work, which billing learns only when handed). Words only: no amount,
--- except, asked for (sent), what this department's own open bills come to per order, which it handed itself (a row sends again only
--- what changed). anywhere: the doctor's chart, the orders wherever they are performed, the words alone (chosen in the build, awaiting
--- the owner)
+-- first on here now, an unpaid charge or sent line for the order, or an order priced (or At the order) the charges have not heard yet,
+-- and nobody went ahead anyway (…anyway frees an order for good) — and those gone ahead; with Pay first and Takes payment here as they
+-- stand, so a row can also wait on the lines it hands itself (a department's own priced work, which billing learns only when handed).
+-- Words only: no amount, except, asked for (lines), what billing holds of this department's own lines per order, which it handed itself
+-- — paid, and owed on its open bill, with the lines — so its row hands only the rest and sends again only what changed
 create function billing.waiting(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare v_orders uuid[] := array(select x::uuid from jsonb_array_elements_text(coalesce(p_args -> 'orders', '[]')) x); v_wait uuid[]; v_paid uuid[]; v_ahead uuid[]; v_pts uuid[];
-        v_any boolean := coalesce((p_args ->> 'anywhere')::boolean, false); v_sent jsonb;
+declare v_orders uuid[] := array(select x::uuid from jsonb_array_elements_text(coalesce(p_args -> 'orders', '[]')) x); v_wait uuid[]; v_ahead uuid[]; v_pts uuid[];
+        v_new uuid[] := '{}'; v_own jsonb; v_held uuid[];
 begin
   if cardinality(v_orders) > 500 then perform core.refuse('too_many', 'orders'); end if;
-  v_ahead := array(select distinct a.order_item from billing.anyway a where a.organization_id = p_org and a.order_item = any (v_orders) and (v_any or a.department_id = p_department));
-  v_wait := array(select distinct c.item from billing.charges c where c.organization_id = p_org and c.item = any (v_orders) and (v_any or c.department_id = p_department) and c.open
-                    and billing.pay_first(p_org, c.department_id) and billing.paid_charge(p_org, c.item, c.department_id) is null
-                  union select distinct s.order_item from billing.sent s where s.organization_id = p_org and s.order_item = any (v_orders) and (v_any or s.department_id = p_department)
-                    and billing.pay_first(p_org, s.department_id) and billing.sent_owed(p_org, s.id)
-                  except select unnest(v_ahead));
-  v_paid := array(select distinct l.order_item from billing.payment_lines l where l.organization_id = p_org and l.order_item = any (v_orders) and (v_any or l.department_id = p_department)
-                    and billing.stands(p_org, l.payment_id));
-  v_pts := array(select distinct core.survivor(p_org, c.patient_id) from billing.charges c where c.organization_id = p_org and c.item = any (v_wait || v_paid || v_ahead)
-                 union select distinct core.survivor(p_org, s.patient_id) from billing.sent s where s.organization_id = p_org and s.order_item = any (v_wait || v_paid || v_ahead)
-                   and s.patient_id is not null
-                 union select distinct core.survivor(p_org, a.patient_id) from billing.anyway a where a.organization_id = p_org and a.order_item = any (v_ahead));
-  if v_any then return jsonb_build_object('waiting', to_jsonb(v_wait), 'patient_ids', coalesce(to_jsonb(v_pts), '[]')); end if;
-  if coalesce((p_args ->> 'sent')::boolean, false) then
-    select coalesce(jsonb_object_agg(q.o, q.n), '{}') into v_sent from (select s.order_item o, sum(s.amount) n from billing.sent s
-      where s.organization_id = p_org and s.order_item = any (v_orders) and s.department_id = p_department and billing.sent_owed(p_org, s.id) group by s.order_item) q;
+  v_ahead := array(select distinct a.order_item from billing.anyway a where a.organization_id = p_org and a.order_item = any (v_orders) and a.department_id = p_department);
+  -- an open order sent here the charges have not heard yet: waiting already where it will be charged (the listener's few seconds, or
+  -- a listener parked: never a gap)
+  if billing.pay_first(p_org, p_department) and cardinality(v_orders) > 0 then
+    v_new := array(select (r ->> 'item')::uuid from core.pack_rows(p_org, 'base.orders', jsonb_build_object('where', jsonb_build_object('item', to_jsonb(v_orders),
+                     'to_department_id', p_department, 'status', '["active","in-progress","on-hold"]'::jsonb))) r
+                    where not exists (select 1 from billing.charges c where c.organization_id = p_org and c.item = (r ->> 'item')::uuid and c.department_id = p_department)
+                      and billing.priced_order(p_org, (r ->> 'item')::uuid));
   end if;
-  return jsonb_build_object('waiting', to_jsonb(v_wait), 'paid', to_jsonb(v_paid), 'ahead', to_jsonb(v_ahead), 'pay_first', billing.pay_first(p_org, p_department),
+  v_wait := array(select distinct c.item from billing.charges c where c.organization_id = p_org and c.item = any (v_orders) and c.department_id = p_department and c.open
+                    and billing.pay_first(p_org, c.department_id) and billing.paid_charge(p_org, c.item, c.department_id) is null
+                  union select distinct s.order_item from billing.sent s where s.organization_id = p_org and s.order_item = any (v_orders) and s.department_id = p_department
+                    and billing.pay_first(p_org, s.department_id) and billing.sent_owed(p_org, s.id)
+                  union select unnest(v_new)
+                  except select unnest(v_ahead));
+  -- this department's own lines, per order: those on a payment that stands, and those still owed on its open bill
+  if coalesce((p_args ->> 'lines')::boolean, false) then
+    select coalesce(jsonb_object_agg(q.o, jsonb_build_object('paid', q.paid, 'sent', q.sent, 'lines', q.lines)), '{}') into v_own from (
+      select y.o, coalesce(sum(y.amount) filter (where y.paid), 0) paid, coalesce(sum(y.amount) filter (where not y.paid), 0) sent,
+             jsonb_agg(jsonb_build_object('name', y.name, 'quantity', y.quantity, 'amount', y.amount, 'paid', y.paid) order by y.at, y.n) lines
+        from (select l.order_item o, l.name, l.quantity, l.amount, true paid, p.at, l.n from billing.payment_lines l join billing.payments p on p.organization_id = l.organization_id and p.id = l.payment_id
+               where l.organization_id = p_org and l.order_item = any (v_orders) and l.department_id = p_department and l.kind in ('handed', 'sent') and billing.stands(p_org, l.payment_id)
+              union all
+              select s.order_item, s.name, s.quantity, s.amount, false, s.at, 0 from billing.sent s
+               where s.organization_id = p_org and s.order_item = any (v_orders) and s.department_id = p_department and billing.sent_owed(p_org, s.id)) y
+       group by y.o) q;
+  end if;
+  v_held := v_wait || v_ahead || array(select distinct l.order_item from billing.payment_lines l where l.organization_id = p_org and l.order_item = any (v_orders)
+                                         and l.department_id = p_department and billing.stands(p_org, l.payment_id));
+  v_pts := array(select distinct core.survivor(p_org, c.patient_id) from billing.charges c where c.organization_id = p_org and c.item = any (v_held)
+                 union select distinct core.survivor(p_org, s.patient_id) from billing.sent s where s.organization_id = p_org and s.order_item = any (v_held) and s.patient_id is not null
+                 union select distinct core.survivor(p_org, a.patient_id) from billing.anyway a where a.organization_id = p_org and a.order_item = any (v_ahead)
+                 union select distinct core.survivor(p_org, p.patient_id) from billing.payment_lines l join billing.payments p on p.organization_id = l.organization_id and p.id = l.payment_id
+                   where l.organization_id = p_org and l.order_item = any (v_held) and l.department_id = p_department and p.patient_id is not null
+                 union select distinct core.survivor(p_org, (r ->> 'patient_id')::uuid) from core.pack_rows(p_org, 'base.orders',
+                   jsonb_build_object('where', jsonb_build_object('item', to_jsonb(v_new)))) r where cardinality(v_new) > 0);
+  return jsonb_build_object('waiting', to_jsonb(v_wait), 'ahead', to_jsonb(v_ahead), 'pay_first', billing.pay_first(p_org, p_department),
     'desk', billing.desk(p_org, p_department), 'patient_ids', coalesce(to_jsonb(v_pts), '[]'))
-    || case when v_sent is null then '{}'::jsonb else jsonb_build_object('sent', v_sent) end;
+    || case when v_own is null then '{}'::jsonb else jsonb_build_object('own', v_own) end;
 end $$;
 
 -- …anyway (§5.4): the work on an order performed here goes ahead before payment, with a one-line reason; who and when are kept. Whoever
--- may do the work may (there is no right of its own); the order must be the patient's and sent here
+-- may do the work may (there is no right of its own): write a step on it, or its answer (the service's: a result, a reply, a pack's own
+-- answer), in this department, as the writer names every type's right ('write:' and the type); the order must be sent here
 create function billing.anyway_of(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
-declare v_order uuid := (p_args ->> 'order_item')::uuid; v_reason text := trim(p_args ->> 'reason'); ord record; v_id uuid := gen_random_uuid();
+declare v_order uuid := (p_args ->> 'order_item')::uuid; v_reason text := trim(p_args ->> 'reason'); ord record; v_id uuid := gen_random_uuid(); v_answer text;
 begin
   if coalesce(v_reason, '') = '' or length(v_reason) > 300 then perform core.refuse('reason_missing'); end if;
   select y.* into ord from core.pack_entries(p_org, array[v_order]) y where y.item = v_order and y.type = any (core.kinds('order')) order by y.item_version desc limit 1;
   if ord.id is null or (ord.data ->> 'department_id')::uuid is distinct from p_department then perform core.refuse('not_found', 'order'); end if;
+  v_answer := coalesce(ord.data -> 'service' ->> 'answer', (select x.data ->> 'answer' from core.settings_at(p_org, 'service') x where x.thing_id = (ord.data -> 'service' ->> 'id')::uuid limit 1), 'result');
+  if not exists (select 1 from unnest(core.kinds('step') || v_answer) k where core.may(p_user, 'write:' || k, p_department)) then
+    perform core.refuse('not_allowed', 'the work');
+  end if;
   insert into billing.anyway (organization_id, id, patient_id, order_item, department_id, reason, author_id)
   values (p_org, v_id, core.survivor(p_org, ord.patient_id), v_order, p_department, v_reason, p_user);
   perform core.hint('organization:' || p_org);

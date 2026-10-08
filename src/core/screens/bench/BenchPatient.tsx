@@ -14,7 +14,7 @@ import { Badge, Button, Callout, Card, Centered, Heading, IconButton, Input, Kbd
 import { ageOf, fieldTone, groupByPatient, nextSteps, phaseOf, STEP_TONE, stepLabel, stepName, todayYmd } from './shared'
 import { ChartGlance } from '../chart/glance/ChartGlance'
 import { benchMarkRow } from '../marks'
-import { packRowOf } from '../rows'
+import { isStop, packRowOf } from '../rows'
 import { usePackRows } from '../useRows'
 
 interface Entry { vals: Record<string, string>; text: string; notDone: boolean; reason: string }
@@ -61,7 +61,8 @@ export function BenchPatient() {
   const next = groupByPatient((q.data?.requests ?? []).filter((r) => list.isFree(r.order.item) && !(phaseOf(r.request?.step) === 'todo' && held.has(r.order.item))),
     todayYmd(), (x) => list.place(packRowOf(x.patient.id, benchMarkRow(x)))).find((x) => x.patient.id !== patientId)
   // the packs on the page (spec §5.4): a pack's button and card under the header; an order a pack holds waiting is greyed with its word
-  // (not done, a stop, still works) and goes ahead anyway with a reason, while the patient's other orders stay workable
+  // and goes ahead anyway with a reason, while the patient's other orders stay workable; a stop is never greyed — not done, and a pack's
+  // own form stays open on it so its stop (not given) can be written; only what is not a stop waits
   const prow = useMemo(() => g ? packRowOf(g.patient.id, benchMarkRow(g)) : null, [g])
   const packs = usePackRows('patient', useMemo(() => prow ? [prow] : [], [prow]), dept)
   const free = (r: RequestQueueRow) => packs.isFree(r.order.item)
@@ -74,7 +75,7 @@ export function BenchPatient() {
   // each field carries the range that fits this patient, as the server will flag it
   const fieldsOf = (r: RequestQueueRow) => (org?.services.find((s) => s.id === r.service_id)?.fields ?? []).map((f) => fitField(f, r.patient.sex, ageOf(r.patient.born_on)))
   const formOf = (r: RequestQueueRow) => replyFormFor(r.reply_type)
-  const ready = (g?.rows ?? []).filter((r) => { const pf = formOf(r); if (pf) return free(r) && !!pf.toWrite(r, packVals[r.id]); const x = e(r.id)
+  const ready = (g?.rows ?? []).filter((r) => { const pf = formOf(r); if (pf) { const w = pf.toWrite(r, packVals[r.id]); return !!w && (free(r) || isStop(w)) } const x = e(r.id)
     return x.notDone ? !!x.reason.trim() : free(r) && (Object.values(x.vals).some((v) => v !== '') || !!x.text.trim()) })
   const problems = ready.flatMap((r) => fieldsOf(r).map((f) => problemOf(f, e(r.id).vals[f.key] ?? '')).filter(Boolean))
   const invalid = problems.includes('not a number'); const toCheck = problems.filter((p) => p === 'check value').length
@@ -144,7 +145,7 @@ export function BenchPatient() {
           </div>
           {r.question_text && <p className="mb-2 rounded-md bg-warn-soft px-2.5 py-1.5 text-14 text-warn">“{r.question_text}”</p>}
           {packs.below(or)}
-          <fieldset disabled={held && !x.notDone} className="contents">
+          <fieldset disabled={held && !x.notDone && !formOf(r)} className="contents">
           {formOf(r) ? (() => { const F = formOf(r)!.Editor; return <F request={r} value={packVals[r.id]} onChange={(v) => setPackVals((p) => ({ ...p, [r.id]: v }))} /> })()
           : x.notDone ? <Input data-v value={x.reason} onChange={(ev) => set(r.id, { reason: ev.target.value })} placeholder="Why not — haemolysed, insufficient sample, patient left…" /> : <>
             {fields.length > 0 && <table className="w-full text-14"><tbody>{fields.map((f) => { const raw = x.vals[f.key] ?? ''; const fl = flagOf(f, raw); return <tr key={f.key} className="border-b border-line last:border-0">

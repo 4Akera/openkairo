@@ -9,10 +9,11 @@ export const DONE = 'Dispensed'
 export const SEND_WORDS: SendWords = { to: 'pharmacy', field: 'Pharmacy', chip: 'Send to pharmacy', sends: 'The pharmacy gets it on Done',
   keeps: 'Not sent — on the medication list only; the patient may buy it outside', send: 'Send to the pharmacy', draft: 'To the pharmacy', sent: 'Sent to the pharmacy',
   at: (step) => `Pharmacy: ${step}`, open: 'at the pharmacy', done: 'Dispensed', notDone: 'Not given', stopped: 'Not dispensed' }
-// what to give, on each request: the medication its order is about, where the reader holds read:pharmacy.queue
+// what to give, on each request: the medication its order is about, and what was given of it so far, where the reader holds read:pharmacy.queue
 export const QUEUE_DETAILS: ReplyDetails = { table: 'pharmacy.queue', action: 'read:pharmacy.queue', where: (departmentId) => ({ department_id: departmentId }),
   of: (r) => ({ item: String(r.item), details: { drug: { name: r.drug }, dose: r.dose, frequency: r.timing, duration_days: r.duration_days, quantity: r.quantity,
-    medication_item: r.medication_item, instructions: r.instructions, warnings: r.warnings ?? [], owed: r.owed, status: r.status, question: r.question ?? undefined } }) }
+    medication_item: r.medication_item, instructions: r.instructions, warnings: r.warnings ?? [], owed: r.owed, status: r.status, question: r.question ?? undefined,
+    given: r.given ?? [] } }) }
 export const REFUSALS: Record<string, string> = { nothing_dispensed: 'Say what was given', unknown_product: 'That product is not on the clinic\'s list',
   not_a_stock_place: 'Send only to another place that keeps stock', not_enough: 'Not that much of this batch here', nothing_sent: 'Say how many boxes to send',
   nothing_received: 'Say how many boxes came', batch_missing: 'Write the batch number on the box', expiry_missing: 'Write the expiry on the box (2027-05)',

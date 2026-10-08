@@ -1,7 +1,9 @@
 // The payment card (spec §5.4, the bill-pay picture), folded out under the patient's row, never over it: each line ticked, with where and
 // when it came from (a sending department's lines as one line); untick one to leave it for later; a line priced At the order comes with
 // an empty price to type; Add a discount (D) with a reason from the clinic's list; Cash (received, change) or Card; one key takes it (↵).
-// A row of a department that prices its own work may hand its lines (handed): they are paid here, at its counter.
+// A row of a department that prices its own work may hand its lines (handed): they are paid here, at its counter, with what the row knew
+// billing held of their orders (basis), so a payment or a bill sent since refuses it. What was paid for work not done (a void charge or
+// sent line) is said under the lines, to give back from its receipt, even where nothing else is owed.
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { Banknote, CreditCard, Percent, Receipt as ReceiptIcon } from 'lucide-react'
 import { packOp } from '@core/db/rpc'
@@ -15,7 +17,8 @@ import { blankCard, cardLines, cardSum, egp, isTicked, payArgs, type Card, type 
 
 export interface Paid { payment_id: string; receipt: string; total: number; change: number | null; method: 'cash' | 'card' }
 
-export function PayCard({ departmentId, patientId, who, handed, onPaid }: { departmentId: string; patientId: string; who: string; handed?: Handed[]; onPaid: (p: Paid) => void }) {
+export function PayCard({ departmentId, patientId, who, handed, basis, onPaid }: { departmentId: string; patientId: string; who: string; handed?: Handed[]
+  basis?: Record<string, string>; onPaid: (p: Paid) => void }) {
   const { org } = useDepartment(); const done = useBillingDone()
   const q = useLines(departmentId, patientId)
   const [card, setCard] = useState<Card>(blankCard); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>(null)
@@ -27,7 +30,7 @@ export function PayCard({ departmentId, patientId, who, handed, onPaid }: { depa
     if (s.problem || busy) return
     setBusy(true); setError(null)
     try {
-      const r = await packOp<{ payment_id: string; receipt: string; total: number; change: number | null }>('billing.pay', departmentId, payArgs(patientId, lines, card))
+      const r = await packOp<{ payment_id: string; receipt: string; total: number; change: number | null }>('billing.pay', departmentId, payArgs(patientId, lines, card, basis))
       await done(); onPaid({ ...r, method: card.method })
     } catch (x) { setError(x); void q.refetch() } finally { setBusy(false) }
   }
@@ -37,7 +40,9 @@ export function PayCard({ departmentId, patientId, who, handed, onPaid }: { depa
   }
   if (q.isLoading) return <div className="p-4"><Spinner label="Loading what is owed" /></div>
   if (q.error) return <Callout tone="danger" title="Not loaded">{errorText(q.error)}</Callout>
-  if (!lines.length) return <p className="px-4 py-3 text-13 text-muted">Nothing is owed here now.</p>
+  const back = (q.data?.back ?? []).map((b) => <p key={`${b.item}:${b.payment_id}`} className="text-12 text-warn">
+    {b.name ?? `Visit · ${nameOf(org, b.department_id) ?? ''}`} was paid on {b.receipt} and will not be done: give it back from that receipt.</p>)
+  if (!lines.length) return <div className="grid gap-1 px-4 py-3"><p className="text-13 text-muted">Nothing is owed here now.</p>{back}</div>
   return <div className="grid gap-3 p-4" onKeyDown={keys}>
     <div className="grid gap-0.5">
       <p className={cn(LABEL, 'pb-1')}>{who} · what is owed</p>
@@ -50,8 +55,7 @@ export function PayCard({ departmentId, patientId, who, handed, onPaid }: { depa
               onChange={(e) => set({ typed: { ...card.typed, [l.key]: e.target.value } })} className="w-28 justify-self-end text-end tnum" />
             : <span className={cn('text-end tnum', on ? 'text-fg' : 'text-faint')}>{egp(l.price ?? 0)}</span>}
         </div> })}
-      {(q.data?.back ?? []).map((b) => <p key={`${b.item}:${b.payment_id}`} className="text-12 text-warn">
-        {b.name ?? `Visit · ${nameOf(org, b.department_id) ?? ''}`} was paid on {b.receipt} and will not be done: give it back from that receipt.</p>)}
+      {back}
       <div className="flex flex-wrap items-baseline gap-3 border-t border-line pt-2 text-13">
         <span className="text-muted">Discount</span>
         {!card.discount ? <Chip onClick={() => set({ discount: { amount: '', reason: null } })}><Percent className="size-3" />Add a discount<Kbd className="ms-1">D</Kbd></Chip>

@@ -14,7 +14,7 @@ import { Prices } from './Prices'
 import { RowCard } from './RowCard'
 import { REFUSALS } from './words'
 import type { Desk, Owed } from './money'
-import { anywayLines, asSent, noData, ordersOf, rowButton, rowData, rowWaits, type RowData, type Waiting } from './rows'
+import { anywayDue, asSent, noData, ordersOf, rowButton, rowData, rowWaits, type RowData, type Waiting } from './rows'
 
 registerScreen('billing.cashier', Cashier)
 registerScreen('billing.today', Today)
@@ -23,12 +23,13 @@ registerWords(REFUSALS)
 
 /** Takes payment here, as the department's settings stand */
 const deskOf = (ctx: RowCtx): Desk => (settingIn(ctx.org, 'billing.desk', ctx.dept.id).takes as Desk | undefined) ?? 'none'
-/** the waiting read for a list's orders, for whoever works the list (its gate); none to ask, nothing */
-async function waitingOf(rows: PackRow[], ctx: RowCtx, args: Record<string, unknown>): Promise<Waiting | null> {
+/** the waiting read for a list's orders, with what billing holds of each order's own lines, for whoever works the list (its gate); none
+ *  to ask, nothing */
+async function waitingOf(rows: PackRow[], ctx: RowCtx): Promise<Waiting | null> {
   if (!ctx.can('read:bench')) return null
-  const parts = await Promise.all(ordersOf(rows).map((orders) => packOp<Waiting>('billing.waiting', ctx.dept.id, { orders, ...args })))
-  return parts.reduce<Waiting>((a, w) => ({ ...w, waiting: [...a.waiting, ...w.waiting], paid: [...(a.paid ?? []), ...(w.paid ?? [])], ahead: [...(a.ahead ?? []), ...(w.ahead ?? [])],
-    sent: { ...a.sent, ...w.sent } }), { waiting: [], paid: [], ahead: [], sent: {} })
+  const parts = await Promise.all(ordersOf(rows).map((orders) => packOp<Waiting>('billing.waiting', ctx.dept.id, { orders, lines: true })))
+  return parts.reduce<Waiting>((a, w) => ({ ...w, waiting: [...a.waiting, ...w.waiting], ahead: [...(a.ahead ?? []), ...(w.ahead ?? [])], own: { ...a.own, ...w.own } }),
+    { waiting: [], ahead: [], own: {} })
 }
 /** who on the list owes this desk, for whoever takes payment here (200 patients a read) */
 async function owedOf(rows: PackRow[], ctx: RowCtx, desk: Desk) {
@@ -42,7 +43,7 @@ async function owedOf(rows: PackRow[], ctx: RowCtx, desk: Desk) {
 registerRowAction('billing', {
   load: async (rows, ctx): Promise<RowData> => {
     const desk = deskOf(ctx)
-    const [w, owed] = await Promise.all([waitingOf(rows, ctx, { sent: true }), owedOf(rows, ctx, desk)])
+    const [w, owed] = await Promise.all([waitingOf(rows, ctx), owedOf(rows, ctx, desk)])
     return rowData(desk, w, owed)
   },
   button: (row, ctx, data) => rowButton(row, ctx.can, (data as RowData | undefined) ?? noData(deskOf(ctx))),
@@ -50,16 +51,16 @@ registerRowAction('billing', {
 })
 
 // (c) Pay first, a soft check: an order not paid in a department with Pay first waits ("Waiting for payment"), per order; going ahead
-// anyway is recorded by billing with its reason, who and when, and the lines the row hands for those orders go to the cashier first
+// anyway is recorded by billing with its reason, who and when, and the lines the row hands for those orders, not paid nor on an open
+// bill as they stand, go to the cashier first (read again at that moment, so nothing goes twice)
 registerSoftCheck('billing', {
-  load: async (rows, ctx): Promise<RowData> => rowData(deskOf(ctx), await waitingOf(rows, ctx, ctx.list === 'chart' ? { anywhere: true } : {}), null),
-  waiting: (row, ctx, data) => rowWaits(row, ctx.list, (data as RowData | undefined) ?? noData()),
+  load: async (rows, ctx): Promise<RowData> => rowData(deskOf(ctx), await waitingOf(rows, ctx), null),
+  waiting: (row, _ctx, data) => rowWaits(row, (data as RowData | undefined) ?? noData()),
   anyway: async ({ row, orders, reason, ctx }) => {
-    const ls = anywayLines(row, orders)
-    if (ls.length) {
-      const w = await packOp<Waiting>('billing.waiting', ctx.dept.id, { orders: [...new Set(ls.map((l) => l.order!))], sent: true })
-      const unsent = ls.filter((l) => !(l.order! in (w.sent ?? {})) && !(w.paid ?? []).includes(l.order!))
-      if (unsent.length) await packOp('billing.send', ctx.dept.id, { patient_id: row.patient_id, ...(row.visit_id ? { visit_id: row.visit_id } : {}), lines: asSent(unsent) })
+    if ((row.lines ?? []).some((l) => !!l.order && orders.includes(l.order))) {
+      const due = anywayDue(row, orders, rowData(deskOf(ctx), await waitingOf([{ ...row, orders: row.orders.filter((o) => orders.includes(o.item)) }], ctx), null))
+      if (due.lines.length) await packOp('billing.send', ctx.dept.id, { patient_id: row.patient_id, ...(row.visit_id ? { visit_id: row.visit_id } : {}),
+        lines: asSent(due.lines), basis: due.basis })
     }
     for (const o of orders) await packOp('billing.anyway', ctx.dept.id, { order_item: o, reason })
   },

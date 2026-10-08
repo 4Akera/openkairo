@@ -30,7 +30,7 @@ export const useFree = (from: string, to: string | null, args: { from?: string; 
 export const packFree = (from: string, args: Record<string, unknown>) => packOp<Free>('bookings.free', from, args)
 /** the bookings of these departments from a day to a day (at most 14), or a patient's from today */
 export const useBookings = (from: string, args: { departments?: string[]; from?: string; to?: string; patient_id?: string }, enabled = true) =>
-  useQuery({ queryKey: [KEY, 'list', from, args], enabled, placeholderData: (p) => p, refetchInterval: 30_000,
+  useQuery({ queryKey: [KEY, 'list', from, args], enabled, placeholderData: (p) => p,   // read again on the clinic's hint, never on a timer (each read is logged)
     queryFn: () => packOp<{ bookings: Booking[]; today: string }>('bookings.list', from, args) })
 
 export const book = (from: string, args: Record<string, unknown>) => packOp<{ id: string; day: string; starts_at: string; number: number | null; session: string; department: string; order: string | null }>('bookings.book', from, args)

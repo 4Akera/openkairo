@@ -67,7 +67,7 @@ function TodayList({ dept, rows, name, onSaid }: { dept: string; rows: Booking[]
   const [now, setNow] = useState(() => Date.now()); useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t) }, [])
   // where the ones who came are now (the base's presence: waiting, with a doctor, seen)
   const visitIds = rows.flatMap((b) => b.here?.visit_id ? [b.here.visit_id] : [])
-  const presence = useQuery({ queryKey: ['bookings', 'presence', dept, visitIds], enabled: visitIds.length > 0, refetchInterval: 30_000, placeholderData: (x) => x,
+  const presence = useQuery({ queryKey: ['bookings', 'presence', dept, visitIds], enabled: visitIds.length > 0, placeholderData: (x) => x,
     queryFn: () => read<TableRead<PresenceRow>>({ shape: 'table', table: 'base.presence', department_id: dept, where: { item: visitIds }, entries: false }) })
   const open = rows.filter((b) => b.state === 'booked'); const earlier = rows.filter((b) => b.state !== 'booked')
   const isClinic = (b: Booking) => org?.allDepartments.find((d) => d.id === b.department_id)?.work === 'visits'

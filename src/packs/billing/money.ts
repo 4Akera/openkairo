@@ -13,7 +13,7 @@ export interface Lines { desk: Desk; patient_id: string; charges: ChargeLine[]; 
 export type Desk = 'none' | 'own' | 'everyone'
 /** one row of who owes (billing.owed) */
 export interface OwedRow { patient_id: string; last_at: string; total: number | string; unpriced: number; lines: number; visits: number; services: number; names: (string | null)[]
-  sent: string[]; waiting: string[]; before_payment: boolean }
+  sent: string[]; waiting: string[]; before_payment: boolean; back?: number }
 export interface Owed { desk: Desk; rows: OwedRow[]; more: boolean; count: number; paid: number; none: { patient_id: string; department_id: string }[] }
 export interface PaymentLine { n: number; kind: 'charge' | 'sent' | 'handed'; department_id: string; name: string | null; quantity: number | string | null; amount: number | string; typed: boolean }
 export interface Payment { payment_id: string; receipt: string; department_id: string; patient_id: string | null; method: 'cash' | 'card'; total: number | string; discount: number | string
@@ -79,13 +79,16 @@ export function cardSum(lines: CardLine[], c: Card) {
     : c.method === 'cash' && (received === null || received < total) ? 'Cash received is less than the total' : null
   return { sub, discount: off ?? 0, total, received, change: received === null ? null : received - total, problem, ticked: on.length }
 }
-/** what billing.pay takes from the card: the ticked lines, typed prices, the discount, cash or card, and the total it showed */
-export function payArgs(patientId: string, lines: CardLine[], c: Card) {
+/** what billing.pay takes from the card: the ticked lines, typed prices, the discount, cash or card, and the total it showed; with lines
+ *  handed, what the row knew billing held of their orders (basis), for the server to check nothing changed since */
+export function payArgs(patientId: string, lines: CardLine[], c: Card, basis?: Record<string, string>) {
   const s = cardSum(lines, c); const on = lines.filter((l) => isTicked(c, l.key))
+  const handed = on.filter((l) => l.handed).map((l) => ({ name: l.handed!.name, quantity: l.handed!.quantity, amount: wire(cents(l.handed!.amount)!), order_item: l.handed!.order_item ?? null }))
+  const orders = new Set(handed.flatMap((h) => h.order_item ? [h.order_item] : []))
+  const known = Object.fromEntries(Object.entries(basis ?? {}).filter(([o]) => orders.has(o)))
   return { patient_id: patientId, method: c.method, total: wire(s.total), ...(c.method === 'cash' && s.received !== null ? { received: wire(s.received) } : {}),
     charges: on.filter((l) => l.charge).map((l) => ({ ...l.charge!, ...(l.open ? { price: wire(cents(c.typed[l.key] ?? '')!) } : {}) })),
-    sent: on.flatMap((l) => l.sent ?? []),
-    handed: on.filter((l) => l.handed).map((l) => ({ name: l.handed!.name, quantity: l.handed!.quantity, amount: wire(cents(l.handed!.amount)!), order_item: l.handed!.order_item ?? null })),
+    sent: on.flatMap((l) => l.sent ?? []), handed, ...(Object.keys(known).length ? { basis: known } : {}),
     ...(c.discount && s.discount > 0 ? { discount: { amount: wire(s.discount), reason: c.discount.reason } } : {}) }
 }
 
@@ -96,10 +99,11 @@ export function owedWords(r: Pick<OwedRow, 'visits' | 'names' | 'sent' | 'unpric
     ...r.sent.map((d) => nameOf(d) ?? 'A department')].filter(Boolean)
   return { what: parts.join(' · '), unpriced: r.unpriced ? `${r.unpriced} to price` : '' }
 }
-/** the marks on a row: a department waiting (Pay first), work done before payment */
-export const owedMarks = (r: Pick<OwedRow, 'waiting' | 'before_payment'>, nameOf: Names) => [
+/** the marks on a row: a department waiting (Pay first), work done before payment, money to give back (paid for work not done) */
+export const owedMarks = (r: Pick<OwedRow, 'waiting' | 'before_payment' | 'back'>, nameOf: Names) => [
   ...r.waiting.map((d) => ({ key: `w:${d}`, word: `${nameOf(d) ?? 'A department'} is waiting`, tone: 'warn' as const })),
-  ...(r.before_payment ? [{ key: 'before', word: 'done before payment', tone: 'info' as const }] : [])]
+  ...(r.before_payment ? [{ key: 'before', word: 'done before payment', tone: 'info' as const }] : []),
+  ...(r.back ? [{ key: 'back', word: 'to give back', tone: 'warn' as const }] : [])]
 
 /** a receipt's lines as printed and shown: each charge, each department's sent or handed lines as one, with the sum */
 export function receiptLines(p: Pick<Payment, 'lines'>, nameOf: Names): { words: string; amount: number }[] {
