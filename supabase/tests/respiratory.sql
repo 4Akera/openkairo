@@ -20,14 +20,14 @@ reset role;
 select t.ok((select sample from core.code_imports where system = 'respiratory.gli2012' order by id desc limit 1), 'the list loaded is a demo sample');
 set role authenticated;
 select t.as(:'dd');
-select t.ok((public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', :'cc', 'args', '{"sex":"male","age":61,"height":170}')) -> 'fev1' ->> 'm')::numeric = 3.05,
+select t.ok((public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', :'cc', 'args', '{"sex":"male","age":61,"height":170}'::jsonb)) -> 'fev1' ->> 'm')::numeric = 3.05,
   'a man of 61, 170 cm: FEV1 predicted 3.05');
-select t.ok((public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', :'cc', 'args', '{"sex":"male","age":62,"height":172}')) ->> 'cell') = 'male:61:170',
+select t.ok((public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', :'cc', 'args', '{"sex":"male","age":62,"height":172}'::jsonb)) ->> 'cell') = 'male:61:170',
   'the nearest cell within 2 years and 3 cm');
-select t.ok((public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', :'cc', 'args', '{"sex":"male","age":30,"height":190}')) ->> 'missing') is not null,
+select t.ok((public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', :'cc', 'args', '{"sex":"male","age":30,"height":190}'::jsonb)) ->> 'missing') is not null,
   'a cell not loaded: said, never guessed');
 select t.as(:'dr');
-select t.ok(t.try($$select public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', '00000000-0000-0000-0000-0000000000d1', 'args', '{"sex":"male","age":61,"height":170}'))$$) <> 'ok',
+select t.ok(t.try($$select public.pack_op(jsonb_build_object('op', 'respiratory.predicted', 'department_id', '00000000-0000-0000-0000-0000000000d1', 'args', '{"sex":"male","age":61,"height":170}'::jsonb))$$) <> 'ok',
   'not where the pack is not ticked');
 
 \echo '── the scores: CAT, mMRC, ACT, the GOLD group'

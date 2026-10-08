@@ -143,7 +143,7 @@ select t.ok(jsonb_array_length(public.read(jsonb_build_object('shape', 'audit', 
 select t.ok(l ->> 'version' = '2019' and (l ->> 'sample')::boolean and l ->> 'licence' like 'WHO ICD-10%' and l ->> 'source' like 'openCare demo%' and (l ->> 'codes')::int > 0
   and l ->> 'loaded_at' is not null and l -> 'labels' ->> 'en' = 'ICD-10 (WHO)', 'ICD-10: the demo sample, version 2019, WHO''s licence note')
   from jsonb_array_elements(public.read('{"shape":"reference"}') -> 'lists') l where l ->> 'system' = 'icd10';
-select t.ok((select count(*) from jsonb_array_elements(public.read('{"shape":"reference"}') -> 'lists')) = 2, 'two lists loaded: ICD-10 and ATC');
+select t.ok((select count(*) from jsonb_array_elements(public.read('{"shape":"reference"}') -> 'lists')) = 3, 'three lists loaded: ICD-10, ATC and GLI-2012 (respiratory''s demo sample)');
 select t.refuses($$select core.record_import('nowhere', null, 'x.csv')$$, 'unknown_system');
 select t.refuses($$select core.record_import('atc', null, ' ')$$, 'source_missing');
 insert into core.codes (system, code, labels) values ('atc', 'Z99ZZ99', '{"en":"Probe drug"}');
@@ -151,7 +151,7 @@ select core.record_import('atc', '2026', 'atc-2026.csv');
 select t.ok(l ->> 'version' = '2026' and not (l ->> 'sample')::boolean and l ->> 'source' = 'atc-2026.csv' and (l ->> 'loads')::int = 2,
   'a full import later: the latest load shows, no longer a sample') from jsonb_array_elements(public.read('{"shape":"reference"}') -> 'lists') l where l ->> 'system' = 'atc';
 select t.as(:'doc');
-select t.ok(jsonb_array_length(public.read('{"shape":"reference"}') -> 'lists') = 2, 'any signed-in user reads the lists (reference data, no patient)');
+select t.ok(jsonb_array_length(public.read('{"shape":"reference"}') -> 'lists') = 3, 'any signed-in user reads the lists (reference data, no patient)');
 select t.as(null);
 select t.refuses($$select public.read('{"shape":"reference"}')$$, 'not_signed_in');
 select t.ok(not has_table_privilege('authenticated', 'core.code_imports', 'SELECT,INSERT') and not has_function_privilege('authenticated', 'core.record_import(text,text,text,boolean)', 'EXECUTE'),
