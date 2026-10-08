@@ -38,7 +38,7 @@ select t.landed(t.w(t.e('result', :'pt', :'cc', jsonb_build_object('status', 'fi
   'analytes', jsonb_build_array(jsonb_build_object('key', 'rhythm', 'name', 'Rhythm', 'text', 'AF'),
     jsonb_build_object('key', 'rate', 'name', 'Rate', 'code', jsonb_build_object('system', 'loinc', 'code', '8867-4'), 'value', jsonb_build_object('value', '108', 'unit', '/min', 'ucum', '/min'), 'interpretation', 'H'),
     jsonb_build_object('key', 'qtc', 'name', 'QTc', 'code', jsonb_build_object('system', 'loinc', 'code', '8636-3'), 'value', jsonb_build_object('value', '452', 'unit', 'ms', 'ucum', 'ms'), 'interpretation', 'H'),
-    jsonb_build_object('key', 'axis', 'name', 'Axis', 'code', jsonb_build_object('system', 'loinc', 'code', '8632-2'), 'value', jsonb_build_object('value', '20', 'unit', '°', 'ucum', 'deg'))))),
+    jsonb_build_object('key', 'axis', 'name', 'Axis', 'code', jsonb_build_object('system', 'loinc', 'code', '8632-2'), 'value', jsonb_build_object('value', '20', 'unit', '°', 'ucum', 'deg')))),
   '00000000-0000-0000-0000-00000000e0e1')), 'an ECG, no order');
 select t.ok(not exists (select 1 from jsonb_array_elements(t.w(t.e('result', :'pt', :'cc', jsonb_build_object('status', 'final', 'analytes', jsonb_build_array(
   jsonb_build_object('key', 'pr', 'name', 'PR', 'code', jsonb_build_object('system', 'loinc', 'code', '8625-6'), 'value', jsonb_build_object('value', '164', 'unit', 'ms', 'ucum', 'ms')),
