@@ -623,7 +623,8 @@ it works ("/x is used in: …").
   the tokens lack is asked for in core, never invented in the pack.
 - **No new packs until the owner says so.** The packs he asked for: pharmacy and laboratory (§5.3), billing (§5.4, to build), radiology (§5.5, 2026-10-08), and the departments of beds — ward, ER, ICU, CCU, the labour ward and dialysis, "all at once, they share
   common things" (§5.6, 2026-10-08); after them ObGyn's clinic, paediatrics, surgery with theatre and anaesthesia, family medicine and
-  internal medicine with its branches (cardiology, haematology, nephrology, respiratory, oncology).
+  internal medicine with its branches (cardiology, haematology, nephrology, respiratory, oncology), "the last" group (§5.7, pictures
+  2026-10-08).
 
 ### 5.1 How a pack shows up (decided with the owner, one rule at a time, from 2026-10-04)
 - **Rule 1 · on per department.** Two switches: the clinic turns a pack on (`organization.packs_used`), then each department ticks
@@ -1455,6 +1456,63 @@ numbered as on its picture.
 - **Later, not day one**: ward stock (the pharmacy's "wards' stock comes with a ward pack"), the controlled drugs book, diets and the
   kitchen, care plans, wound and pressure-area charts, fall and pressure-risk scores, APACHE II, the ICU census, monitor and
   ventilator feeds, mass casualty, the ER's and dialysis's monthly returns.
+
+### 5.7 The clinics: ObGyn, paediatrics, internal medicine and its branches, surgery with anaesthesia, family medicine (pictures 2026-10-08; nothing decided, nothing built)
+The owner asked for this last group on 2026-10-08 ("make last obgyn, peds, IM and it's branches, surgery anasthesia, family medicine").
+The pictures `/pictures.html#clinics-map` … `#family-checks` (36: `src/pictures/clinics.tsx` shared parts, `obgyn.tsx`, `paeds.tsx`,
+`medicine.tsx`, `haemonc.tsx`, `surgery.tsx`, `family.tsx`; shots in `spec/shots/2026-10-08/clinics/`) were drawn by Claude.
+*Everything below is proposed by Claude, awaiting the owner*; the questions continue the beds' numbering, Q15–Q50, each on its picture.
+- **The shape** (Q15, Q16): as the beds, shared packs for what many departments do and small packs for a specialty's own. *Vaccines*
+  (the schedule, `/vax`, due and overdue, the vaccination room's list) and *Chronic care* (registers worked out from the problem list,
+  each condition's targets and checks due, `/review`) are shared; on top, *ObGyn* (its clinic part beside the labour ward's),
+  *Paediatrics*, *Cardiology*, *Nephrology*, *Respiratory*, *Haematology*, *Oncology*, *Surgery*, *Theatre*, *Anaesthesia* and
+  *Family*. Family medicine ticks five packs (its own, chronic care, vaccines, paediatrics, ObGyn), never copies of them. The map
+  picture lists every department with the packs it ticks, in its order.
+- **How each shows up** is §5.1's: a section in the record with its fit (Pregnancy women 10–55; Gynaecology women 10 and over; Growth
+  under 19), banner words, composer commands with their card under the line (`/anc` `/obus` `/fp` `/pn`; growth through the base's `/v`, `/dev`,
+  `/vax`; `/review` `/ecg` `/echo` `/hf` `/spiro`; `/blood` `/transfuse` `/inr` `/cancer` `/chemo`; `/op` `/preop` `/opnote`;
+  `/checks`), one mark a row, a tile line and two buttons on a board (the children's ward, the chemotherapy day unit's chairs,
+  recovery's bays), and a pack's own screen only for work that is not places (the vaccination room's list, the chronic care list,
+  the theatre list, the family files).
+- **Base entries wherever the base has the idea**: vitals (weight, length, head, BP), results (the clinic's scan, the ECG, spirometry,
+  the INR, the echo answering its order), procedures (an IUD's change, the operation), the given (vaccines, blood, every drug in
+  theatre), scores (EPDS, CHA₂DS₂-VASc, CAT, ACT, RCRI, STOP-BANG, Aldrete, PEWS), problems, medications, orders. The packs' own
+  types only for what the base lacks: the antenatal check, the periods, the birth (the labour ward's), development, a patient's own
+  target, the INR clinic's week, the cancer (extends problem), the cycle and `/blood` (extend order), the transfusion record (extends
+  given), the WHO checklist's parts, the pre-op, the anaesthetic record, the operation note (extends note). Tables of their own only
+  where the data is not entries: the family's household.
+- **Worked out, never typed**: the weeks from the EDD, the fundus against the weeks, the fetal weight's centile, z-scores from the WHO
+  tables, the dose per kg, Holliday–Segar, what is due by age and sex or by the schedule, the KDIGO square, predicted spirometry, BSA
+  and each chemotherapy dose, time in range. **Shown, never a stop**: a small baby, a dose out of range, a renal dose, the checks before a
+  cycle, the medicines to stop before an operation, a count that does not add up — each a notice; the clinician decides.
+- **Questions for the owner**, by picture: (Q15) shared packs plus small ones; (Q16) family medicine ticking five packs; (Q17) the
+  pregnancy's record as one section; (Q18) the clinic's own scan as a result with no order; (Q19) gynaecology's dues worked out and
+  said in amber; (Q20) a birth elsewhere written as the birth entry; (Q21) the antenatal starter rows (Egyptian practice or WHO 2016)
+  and the queue word's order; (Q22) WHO or Egyptian growth tables, and a base change: `/v` reads length and head; (Q23) a core change:
+  a pack's one line under the base's `/rx` card (paediatrics' dose per kg, nephrology's renal list, Q33), and the clinic's own dose
+  list; (Q24) the milestone list and the newborn checks' home; (Q25) vaccines as a shared pack; (Q26) the national schedule loaded
+  read-only, and the child's card as a new printout; (Q27) Brighton or the national PEWS on the children's ward; (Q28) registers from
+  the problem list; (Q29) the chronic list on day one; (Q30) targets once for the clinic, a patient's own beside them; (Q31) the ECG
+  in the clinic and the echo at a bench; (Q32) heart failure's target doses as a setting; (Q33) the renal line under `/rx` (the core
+  change of Q23); (Q34) GLI-2012 worked out by the server; (Q35) the Blood bank on the laboratory pack; (Q36) a core change:
+  `/transfuse` offered where the Blood bank works for the department; (Q37) the INR clinic's pack; (Q38) the dosing table suggesting
+  the week; (Q39) who may change a chemotherapy regimen; (Q40) the day unit ticking ward nursing too; (Q41) the operation as an order
+  to the Theatre (the order door of §5.5 a); (Q42) the theatre list as the pack's own screen; (Q43) the medicines to stop kept in the
+  pre-op (or a base change: a medicine held from a future date); (Q44) each checklist part signed when said; (Q45) the anaesthetic
+  record signed once; (Q46) the post-op orders signed by the surgeon in theatre (or a core change: drafts that travel); (Q47) three
+  packs, Surgery, Theatre, Anaesthesia; (Q48) recovery as a department of places (beds Q3); (Q49) the household as the family pack's
+  own table (or a core link between patients, with beds Q10); (Q50) a row's marks, one a pack, or two then +n.
+- **Core and base changes these pictures ask, each needing a yes**: a pack's line under the base's `/rx` card (Q23, Q33); `/v` reading
+  length and head (Q22); `/transfuse` offered by "works for" though not an order (Q36); a step in the desk's New patient for the family
+  file (Q49). They lean on doors already asked: the pack order type and the facts handed to the order card (§5.5 a, b; `/op`, `/blood`,
+  `/chemo`), the stay passing between departments (beds Q3; recovery), a pack's rows under the board (beds Q2; the day unit). A
+  result written in the clinic with no order (`/ecg`, `/obus`, `/spiro`) is the base's outside result; no composer command writes one
+  yet.
+- **Later, not day one**: a licensed children's dose reference, ASQ-3 or Denver II, links to the ministry's heel-prick and hearing
+  results, reminders by SMS; Doppler and the biophysical profile, colposcopy, infertility; insulin titration, KFRE, Holter and stress
+  echo, ECG and spirometer files, a peak-flow diary; blood bank stock and barcodes, MRI T2* trends; AJCC stage tables, the tumour
+  board's list; monitor feeds into the anaesthetic record, sterilisation and implant registries, theatre use reports, e-signed consent;
+  home visits and the ministry's family planning returns.
 
 ---
 
