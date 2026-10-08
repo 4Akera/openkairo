@@ -162,7 +162,7 @@ export function parsePn(rest: string, ctx: Pick<Ctx, 'facts'>): Result {
   out.push({ function: PN, kind: 'postnatal', params: pnData(o), line: pnLine(o), action: 'write:obgyn.postnatal' })
   // a pregnancy still standing ends here, once (a birth signed on our labour ward ends it there): the birth's words are the card's
   const preg = ctx.facts?.pregnancy
-  if (preg && (preg.data as { pregnant?: boolean }).pregnant) out.push({ function: 'pregnancy', kind: 'pregnancy', params: { action: 'end', entry_id: preg.entry_id, was: preg.data, words: preg.words, reason: 'birth' }, line: 'Pregnancy ended · the birth' })
+  if (preg && (preg.data as { pregnant?: boolean }).pregnant) out.push({ function: 'pregnancy', kind: 'pregnancy', params: { action: 'end', entry_id: preg.entry_id, was: preg.data, words: preg.words, reason: 'Delivered' }, line: 'Pregnancy ended · delivered' })
   if (breast !== null) {
     const now = ctx.facts?.breastfeeding
     out.push({ function: 'breastfeeding', kind: 'feeding', params: { breastfeeding: breast, ...(now ? { entry_id: now.entry_id } : {}) }, line: breast ? 'Breastfeeding' : 'Not breastfeeding' })

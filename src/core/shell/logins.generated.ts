@@ -51,4 +51,9 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'kandil@demo.com', name: 'Dr. Hassan Kandil', role: 'Paediatrician' },
     { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
   ] },
+  { department: 'ObGyn clinic', departmentId: '16f24bcc-90d4-50fa-8afb-eafa79bca011', people: [
+    { email: 'midwife@demo.com', name: 'Samah Lotfy', role: 'Midwife' },
+    { email: 'zaki@demo.com', name: 'Dr. Ahmed Zaki', role: 'Obstetrician' },
+    { email: 'obgyn@demo.com', name: 'Dr. Nermeen Fathy', role: 'Obstetrician' },
+  ] },
 ]

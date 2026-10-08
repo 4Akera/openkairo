@@ -52,7 +52,7 @@ begin
   perform demo.patient(demo.id('obgyn', 'patient:nahla'), array['Nahla'], 'Gaber', 'female', demo.born(26, 60), '+201117745020');
   perform demo.w(zaki, jsonb_build_array(demo.e('pregnancy', oc, null, demo.ago((224 - 87) * day), pg_temp.preg(224))));
   perform pg_temp.visit(zaki, 224, 16, 1, 106, 66, 61, '{"fhr":152,"protein":"nil","booking":{"gravida":1,"para":0,"before":"her first pregnancy","blood_group":"A","rh":"positive","antibodies":"none"}}');
-  perform pg_temp.visit(zaki, 224, 20, 4, 108, 66, 62, '{"sfh":20,"fhr":150,"protein":"nil"}');
+  perform pg_temp.visit(zaki, 224, 20, 4, 108, 66, 62, '{"sfh":20,"fhr":150,"protein":"nil","taken":["anomaly scan","tetanus toxoid"]}');
   perform pg_temp.visit(zaki, 224, 24, 2, 108, 68, 63, '{"sfh":24,"fhr":148,"protein":"nil"}');
   perform pg_temp.visit(zaki, 224, 28, 1, 110, 70, 65, '{"sfh":27,"fhr":146,"protein":"nil","lie":"cephalic","taken":["OGTT","CBC"]}');
   perform demo.w(zaki, jsonb_build_array(demo.e('result', oc, null, demo.ago((224 - 197) * day - 20), jsonb_build_object('status', 'final', 'service', jsonb_build_object('name', 'Scan in the clinic'),

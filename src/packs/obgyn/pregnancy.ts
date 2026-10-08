@@ -50,9 +50,11 @@ export function forHer(whom: Whom, her: Her): boolean {
   }
 }
 const wordOf = (r: ScheduleRow) => r.word || r.what.split(' · ')[0]
-/** the rows due at these weeks for her, not yet taken (what was taken is kept by its word on the antenatal checks) */
+/** the rows due at these weeks for her, not yet taken (what was taken is kept by its word on the antenatal checks): what is due for her
+ *  in particular (Rh negative, a previous caesarean…) first, then the rest, each in the schedule's order */
 export const dueNow = (rows: ScheduleRow[] | undefined, weeks: number | null, her: Her, taken: string[] = []) =>
   weeks === null ? [] : (rows ?? []).filter((r) => weeks >= r.from && weeks <= r.to && forHer(r.whom, her) && !taken.includes(wordOf(r)))
+    .map((r, i) => ({ r, i })).sort((a, b) => Number(a.r.whom === 'everyone') - Number(b.r.whom === 'everyone') || a.i - b.i).map((x) => x.r)
 export const dueWord = (r: ScheduleRow) => wordOf(r)
 
 /** the next visit's weeks by the clinic's intervals (every 4 to 28, 2 to 36, then weekly) */

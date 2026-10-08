@@ -1611,11 +1611,14 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   points, "Crossed two centile lines down since 4 months", every measurement), Development (each check by area) and Newborn checks
   (from the facts page) sections; banner words (the age and weight, a z-score beyond ±2, "hearing: refer, not repeated"); `/dev` with
   its card (the clinic's list for the age, yes or not yet, the notice past the list's age with its chips); the children's ward tile line
-  (the weight and its age, amber past 3 days, and Holliday–Segar's maintenance). Demo: Dr. Rehab Shaker (paeds@demo.com), Dr. Hassan
+  (the weight and its age, amber past 3 days, and Holliday–Segar's maintenance); its lines under the base's cards through the core's
+  `registerCardLine` (C1): under /rx the dose per kg (the latest weight, the mg/kg a day or a dose, in or outside the clinic's range,
+  what the range is in ml for this weight; after the draft the mg/kg) and under /v the z-scores and centiles of the values being typed
+  (the age today, the sex; beyond ±2 in amber; the tables named). Demo: Dr. Rehab Shaker (paeds@demo.com), Dr. Hassan
   Kandil (kandil@demo.com), Doha Wagdy (children.nurse@demo.com, the base's Nurse); Malek, Jana, Kenzy in the clinic, five children on
   the ward with two PEWS. Tests: `supabase/tests/paediatrics.sql`, `npm run test:paediatrics`. *Differences from the pictures, and
-  why:* the lines under the base's /v and /rx cards (the z-scores, the dose per kg) wait for the core's line under a card (C1, lane
-  L1); their words are built (`dose.ts`, the op) and wired when it lands; the demo sample stops at 2 years, so Jana (3 years 2 months)
+  why:* the z-scores under /v are worked out in the browser from the same loaded tables by the same LMS sums as the server's (`lms.ts`,
+  the record keeps the server's), since the core's line under a card is synchronous and cannot wait for the op; the demo sample stops at 2 years, so Jana (3 years 2 months)
   shows her weight and length "beyond the table" rather than the picture's z −0.1; /dev's chips go into the check's plan, since a card
   cannot add drafts of its own (the order is typed on the line; a core question); the hearing test is a procedure, the other newborn
   checks observations; PEWS on the tile is ward nursing's word (the picture), so it shows there once the ward ticks ward nursing — the

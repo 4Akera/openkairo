@@ -30,7 +30,7 @@ test('the fundus fits the weeks within the clinic\'s band, from 24 weeks', () =>
 })
 test('what is due: at these weeks, for her (worked out from the booking), not yet taken', () => {
   const rh = { age: 29, booking: { rh: 'negative' as const, risks: ['previous_caesarean'] } }
-  assert.deepEqual(dueNow(SCHEDULE, 28, rh).map(dueWord), ['OGTT', 'anti-D', 'tetanus toxoid'])
+  assert.deepEqual(dueNow(SCHEDULE, 28, rh).map(dueWord), ['anti-D', 'OGTT', 'tetanus toxoid'], 'hers in particular first (Rh negative), then everyone\'s')
   assert.deepEqual(dueNow(SCHEDULE, 28, { age: 26, booking: { rh: 'positive' } }).map(dueWord), ['OGTT', 'tetanus toxoid'], 'Rh positive: no anti-D')
   assert.deepEqual(dueNow(SCHEDULE, 28, rh, ['tetanus toxoid', 'OGTT']).map(dueWord), ['anti-D'], 'what was taken is not due again')
   assert.deepEqual(dueNow(SCHEDULE, 36, rh).map(dueWord), ['birth plan'])
@@ -90,7 +90,7 @@ test('/fp, /periods, /pn: base entries where the base has the idea, the pack\'s 
   assert.equal(pe.line, 'Periods · LMP 2026-09-21 · every 26–28 days · 8–9 days · heavy, clots · pain moderate')
   const pn = ok(parsePn('bp 122/78 bleeding none wound healed breast', facts(315)))
   assert.deepEqual(pn.map((d) => d.function), ['vitals', 'obgyn.postnatal', 'pregnancy', 'breastfeeding'], 'a pregnancy still standing ends here, once')
-  assert.equal((pn[2].params as { action: string; reason: string }).action, 'end')
+  assert.equal((pn[2].params as { action: string; reason: string }).action, 'end'); assert.equal((pn[2].params as { reason: string }).reason, 'Delivered', 'the base card\'s own word')
   assert.deepEqual(ok(parsePn('bleeding light', { facts: { pregnancy: null, breastfeeding: null, alerts: [] } })).map((d) => d.function), ['obgyn.postnatal'], 'no pregnancy standing: nothing to end')
 })
 console.log(`obgyn: ${n} groups passed`)

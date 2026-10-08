@@ -51,8 +51,8 @@ create function obgyn.postnatal_line(e jsonb) returns text language sql stable s
   from (select e -> 'data' -> 'obgyn' o) x
 $$;
 
--- ── what the queue's one word reads, a row per item: the pregnancy (LMP or weeks, current or ended), a BP, an antenatal check's protein
--- and booking, a contraception method; the word itself is the client's, from these and the clinic's schedule ──
+-- ── what the queue's one word reads, a row per item: the pregnancy (LMP or weeks, current or ended), a woman's BP, an antenatal check's
+-- protein and booking, a contraception method; the word itself is the client's, from these and the clinic's schedule (it reads the sex) ──
 create table obgyn.marks (
   organization_id uuid not null,
   item          uuid not null,
@@ -84,6 +84,8 @@ begin
       v_kind := 'method'; v_data := jsonb_strip_nulls(jsonb_build_object('method', coalesce(d -> 'value' -> 'concept' ->> 'text', d -> 'value' ->> 'text'), 'note', d ->> 'note'));
     end if;
     continue when v_kind is null;
+    -- a man's BP or method says nothing on ObGyn's list: kept for women (and anyone whose sex is not recorded)
+    continue when v_kind in ('bp', 'method') and base.pack_identity(p_org, l.patient_id, l.occurred_at) ->> 'sex' = 'male';
     insert into obgyn.marks values (p_org, k, core.survivor(p_org, l.patient_id), v_kind, l.occurred_at, v_data,
       (select coalesce(array_agg(e.id order by e.recorded_at), '{}') from core.pack_entries(p_org, array[k]) e where e.item = k));
   end loop;
@@ -93,7 +95,7 @@ reset role;
 
 grant select, delete on obgyn.marks to core_eraser;
 grant execute on function obgyn.marks_refresh(uuid, uuid[]) to core_eraser;
-select core.declare_table('obgyn.marks', 'obgyn', 'obgyn.marks_refresh(uuid,uuid[])', 'read:record');
+select core.declare_table('obgyn.marks', 'obgyn', 'obgyn.marks_refresh(uuid,uuid[])', 'read:record', reads => '{sex}');
 select core.declare_listener('obgyn', array['pregnancy', 'vitals', 'observation'], 'obgyn.marks_refresh(uuid,uuid[])');
 
 -- ── its types, each on the base's observation (its value the visit in words; the base's lists, checks, review and FHIR apply) ──

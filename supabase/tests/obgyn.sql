@@ -35,7 +35,7 @@ select t.as(:'ob');
 select t.landed(t.w(t.e('pregnancy', :'her', :'oc', jsonb_build_object('status', 'current', 'pregnant', true, 'lmp', jsonb_build_object('value', ((now() at time zone 'Africa/Cairo')::date - 199)::text, 'precision', 'day')),
   '00000000-0000-0000-0000-00000000d301')), 'pregnant, by the LMP');
 select t.landed(t.w(jsonb_build_array(
-  t.e('vitals', :'her', :'oc', '{"bp":{"sys":{"value":"118","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"74","unit":"mmHg","ucum":"mm[Hg]"}},"weight":{"value":"71","unit":"kg","ucum":"kg"}}',
+  t.e('vitals', :'her', :'oc', '{"bp":{"sys":{"value":"118","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"74","unit":"mmHg","ucum":"mm[Hg]"}},"weight":{"value":"71","unit":"kg","ucum":"kg"}}'),
   t.e('obgyn.anc', :'her', :'oc', pg_temp.anc('{"weeks":28,"days":3,"sfh":29,"fhr":144,"lie":"cephalic","protein":"nil","booking":{"gravida":3,"para":1,"miscarriages":1,"blood_group":"O","rh":"negative","risks":["previous_caesarean"]},"taken":["anti-D"]}'),
     '00000000-0000-0000-0000-00000000d302'))), 'BP and weight in the base''s vitals and the check, in one set');
 reset role;
@@ -73,16 +73,16 @@ select core.drain() as drained;
 set role authenticated;
 select t.as(:'ob');
 select t.ok((select r -> 'data' ->> 'method' from t.rows('obgyn.marks', :'oc', jsonb_build_object('patient_id', :'her', 'kind', 'method')) r) = 'Copper IUD', 'the queue''s table: the method');
-select t.as(:'mw');
-select t.refused(t.w(t.e('obgyn.periods', :'her', :'oc', jsonb_build_object('code', jsonb_build_object('text', 'Periods'), 'value', jsonb_build_object('text', 'Periods'), 'obgyn', '{"flow":"heavy"}'::jsonb))),
-  'not_allowed', 'the midwife writes no periods');
+select t.as('11111111-0000-0000-0000-0000000000b3');
+select t.refused(t.w(t.e('obgyn.periods', :'her', :'im', jsonb_build_object('code', jsonb_build_object('text', 'Periods'), 'value', jsonb_build_object('text', 'Periods'), 'obgyn', '{"flow":"heavy"}'::jsonb))),
+  'not_allowed', 'a nurse where the department does not use the pack writes no periods (everyday only where it is used)');
 
 \echo '── the visit after the birth: a birth elsewhere, the pregnancy ended once (the base''s)'
 select t.as(:'ob');
 select t.landed(t.w(jsonb_build_array(
   t.e('obgyn.postnatal', :'her', :'oc', jsonb_build_object('code', jsonb_build_object('text', 'Visit after the birth'), 'value', jsonb_build_object('text', 'Visit after the birth'),
     'obgyn', '{"days":42,"bleeding":"none","wound":"healed","birth":{"on":"2026-08-27","weeks":39,"days":0,"where":"elsewhere","place":"Heliopolis, private","how":"caesarean","baby":"boy","grams":3400}}'::jsonb)),
-  t.e('pregnancy', :'her', :'oc', jsonb_build_object('status', 'ended', 'pregnant', true, 'reason', 'birth', 'lmp', jsonb_build_object('value', ((now() at time zone 'Africa/Cairo')::date - 199)::text, 'precision', 'day')),
+  t.e('pregnancy', :'her', :'oc', jsonb_build_object('status', 'ended', 'pregnant', true, 'reason', 'Delivered', 'lmp', jsonb_build_object('value', ((now() at time zone 'Africa/Cairo')::date - 199)::text, 'precision', 'day')),
     null, null, '00000000-0000-0000-0000-00000000d301', 'changes'))), 'the visit, and the pregnancy ended: the birth');
 reset role;
 select t.ok((select obgyn.postnatal_line(jsonb_build_object('data', x.data)) from core.entries x where x.type = 'obgyn.postnatal' order by x.recorded_at desc limit 1)

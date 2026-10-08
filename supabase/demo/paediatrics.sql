@@ -2,7 +2,8 @@
 -- with Dr. Rehab Shaker: Malek Shoukry (11 months, in consult: his weight has fallen from the 24th centile at 4 months to the 2nd today,
 -- weight-for-length below −2), Jana Moataz (3 years 2 months, waiting: fever and a red left ear; her amoxicillin in July) and Kenzy Hafez
 -- (10 months, waiting: her checks at 2, 4 and 6 months all yes; her newborn hearing screen said refer in both ears and was never
--- repeated). On the Children's ward, five children in beds 1, 2, 3, 5 and 6 with their latest weights (one weighed 4 days ago) and two
+-- repeated). On the Children's ward, five children in beds 1, 2, 3, 5 and 6 (days 2, 1, 3, 1 and 4) with their latest weights (one weighed
+-- 4 days ago) and two
 -- Brighton PEWS (3 and 4). Times relative to the load; ids in the pack's namespace; a reload erases these patients first.
 select demo.layer('paediatrics');
 
@@ -93,8 +94,8 @@ begin
 
   -- ── the Children's ward: five children, each with the latest weight the board reads ──
   perform demo.patient(demo.id('paediatrics', 'patient:ziad'), array['Ziad'], 'Barakat', 'male', demo.born(2, 40), '+201006631174');
-  s := pg_temp.admit(kandil, 1, 2 * day - 120, 'pneumonia');
-  perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(day + 300), demo.vitals(null, null, 132, 38.2, 95, 38, 12.4))));
+  s := pg_temp.admit(kandil, 1, day + 120, 'pneumonia');
+  perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(day + 60), demo.vitals(null, null, 132, 38.2, 95, 38, 12.4))));
   perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(180), demo.score('paediatrics.pews', '{"behaviour":"sleeping","circulation":"pink","breathing":"normal","nebulisers":false,"vomiting":false}'))));
 
   perform demo.patient(demo.id('paediatrics', 'patient:rawan'), array['Rawan'], 'Mekky', 'female', demo.born(6, 100), '+201114490023');
@@ -103,8 +104,8 @@ begin
   perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(60), demo.score('paediatrics.pews', '{"behaviour":"irritable","circulation":"pale","breathing":"normal","nebulisers":false,"vomiting":false}'))));
 
   perform demo.patient(demo.id('paediatrics', 'patient:adam'), array['Adam'], 'Abdelmoneim', 'male', demo.born(0, 152), '+201228875519');
-  s := pg_temp.admit(kandil, 3, 3 * day - 200, 'bronchiolitis', true);
-  perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(2 * day + 120), demo.vitals(null, null, 168, 37.9, 92, 64, 6.8))));
+  s := pg_temp.admit(kandil, 3, 2 * day + 120, 'bronchiolitis', true);
+  perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(2 * day + 60), demo.vitals(null, null, 168, 37.9, 92, 64, 6.8))));
   perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(40), demo.score('paediatrics.pews', '{"behaviour":"irritable","circulation":"pink","breathing":"recessing","nebulisers":false,"vomiting":false}'))));
 
   perform demo.patient(demo.id('paediatrics', 'patient:retaj'), array['Retaj'], 'Zidan', 'female', demo.born(9, 70), '+201009926631');
@@ -112,6 +113,7 @@ begin
   perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(190), demo.vitals(104, 62, 96, 36.8, 99, 20, 24.0))));
 
   perform demo.patient(demo.id('paediatrics', 'patient:yehia'), array['Yehia'], 'Sallam', 'male', demo.born(4, 20), '+201143367708');
-  s := pg_temp.admit(kandil, 6, 4 * day - 60, 'UTI, febrile convulsion');
-  perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(4 * day - 90), demo.vitals(98, 60, 124, 39.1, 97, 24, 16.0))));
+  -- weighed in the emergency room the day before he came up (4 days ago): amber on the board
+  perform demo.w(kandil, jsonb_build_array(demo.e('vitals', ward, null, demo.ago(4 * day), demo.vitals(98, 60, 124, 39.1, 97, 24, 16.0))));
+  s := pg_temp.admit(kandil, 6, 3 * day - 60, 'UTI, febrile convulsion');
 end $$;
