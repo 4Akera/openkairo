@@ -1603,6 +1603,37 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   starter setup ticks only paediatrics (a setup may tick only its own pack); the tile line reads the weights once per board from the
   pack's table through a small store, because the board hands a line only its row (beds' approved "a pack reads its data once per
   board" replaces it at integration).
+- *Built 2026-10-08 (lane L2), ObGyn's clinic part* (`obgyn`, migration 27, role block d3; the pack created by this lane, agreed with
+  the beds lane, which adds the labour ward's part to the same pack later — its types, MEOWS, Apgar and setup — with role ids d310–d31f
+  kept for it; the bare pack is tagged `obgyn-pack-ready`): its types, each on the base's observation, `obgyn.anc` (the weeks and days,
+  the fundus, the baby's heart, the lie, moves, urine protein, oedema; at booking G, P, miscarriages, what came before, the blood group
+  and Rh, the risks; the schedule's chips taken), `obgyn.periods` (the LMP, the cycle, the days, flow, clots, pads, pain) and
+  `obgyn.postnatal` (the days since the birth, bleeding, the wound, and a birth elsewhere: when, the weeks, where, how and why, the baby);
+  its own codes (`obgyn.codes`: contraception, cervical screening — base observations); its table `obgyn.marks` (what the queue's one
+  word reads: the pregnancy, a BP, a check's protein and blood group, a method), fed after commit by a listener on the base's
+  pregnancy, vitals and observations and by its own check; EPDS (`obgyn.epds`, 1987, alias /epds; 10–12 and 13 or more in amber);
+  settings with the drawn starter rows as their defaults (Q21: the visits as most Egyptian clinics run them) — `obgyn.schedule` (from,
+  to, what, for whom, the queue's word), `obgyn.visits` (how often, the fundus band), `obgyn.notices` (BP, protein, the baby's weight
+  and the liquor) and `obgyn.gynaecology` (cervical screening, each method's interval); Obstetrician (`obgyn.obstetrician`, built on
+  Doctor) and Midwife (`obgyn.midwife`, built on Nurse: the antenatal and postnatal checks); the setup `obgyn.clinic` (the queue,
+  antenatal and gynaecology presets). Client (`src/packs/obgyn/`): `/anc` (the base's vitals and the check in one set; its card: the
+  weeks from the LMP, the fundus against them, the chips, the booking at the first visit, what the schedule says is due as chips taken
+  into the check, the next visit), `/obus` (the base's result with no order: the four measures and the weeks each fits, Hadlock's fetal
+  weight and its centile for the weeks, the liquor, placenta, presentation and heart, "Small for the weeks" a notice), `/fp` (the method;
+  an IUD or implant put in, the base's procedure with its fields), `/periods`, `/pn` (the base's vitals, the visit after the birth with
+  a birth elsewhere, the base's pregnancy ended once, breastfeeding the base's fact), the Pregnancy section (dates, before, blood group,
+  risks, every visit as a row with its BP and weight, the scans with their centiles, Hb, the birth or "not written") and Gynaecology
+  (periods, the method and its change, cervical screening), banner words (G and P, Rh negative, a change due) and the queue's one word
+  (BP from the notice, protein, what is due, the birth not written past 42 weeks, the weeks; an IUD's change for a woman not pregnant).
+  Demo: Dr. Nermeen Fathy (obgyn@demo.com), Dr. Ahmed Zaki (zaki@demo.com), Samah Lotfy (midwife@demo.com); Rania, Nahla, Eman, Aya,
+  Reham. Tests: `supabase/tests/obgyn.sql`, `npm run test:obgyn`. *Differences from the pictures, and why:* the antenatal card's chips
+  (anti-D, OGTT) and /dev's are kept in the check as taken, not drafted as their own order or dose, since a card cannot add drafts (the
+  order is typed on the line; a core question); a birth elsewhere is kept in the visit after the birth, since the birth type is the
+  labour ward's (to come); the fetal weight's centile is Hadlock's own (the mean by weeks, SD 12.7%), so the picture's drawn 8th
+  centile at 1 419 g and 32 weeks works out lower (worked out, never typed); EPDS is written through the base's score card (/epds),
+  beside /pn rather than inside its card; `/periods` is a line of its own (the picture shows its draft, not its command); Eman's "P3"
+  banner word waits for a booking (her parity is said only by an antenatal check's booking); the queue's word reads the pack's table
+  through a small store (a mark is handed only the row), drawn from the list's next redraw.
 
 ---
 

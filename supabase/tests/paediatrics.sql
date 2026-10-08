@@ -20,10 +20,10 @@ insert into core.codes (system, code, labels, props) values
   ('paediatrics.who_growth', 'wfa.m.10', '{"en":"wfa boys 10"}', '{"L":0.082,"M":9.1649,"S":0.10891,"sample":true}'),
   ('paediatrics.who_growth', 'wfa.m.11', '{"en":"wfa boys 11"}', '{"L":0.073,"M":9.4122,"S":0.10906,"sample":true}'),
   ('paediatrics.who_growth', 'wfa.m.12', '{"en":"wfa boys 12"}', '{"L":0.0644,"M":9.6479,"S":0.10925,"sample":true}'),
-  ('paediatrics.who_growth', 'lfa.m.11', '{"en":"lfa boys 11"}', '{"L":1,"M":74.5388,"S":0.03137,"sample":true}'),
-  ('paediatrics.who_growth', 'lfa.m.12', '{"en":"lfa boys 12"}', '{"L":1,"M":75.7488,"S":0.03149,"sample":true}'),
-  ('paediatrics.who_growth', 'wfl.m.72.0', '{"en":"wfl boys 72.0"}', '{"L":-0.3521,"M":8.9014,"S":0.08194,"sample":true}'),
-  ('paediatrics.who_growth', 'wfl.m.72.5', '{"en":"wfl boys 72.5"}', '{"L":-0.3521,"M":9.0109,"S":0.08187,"sample":true}')
+  ('paediatrics.who_growth', 'lfa.m.11', '{"en":"lfa boys 11"}', '{"L":1,"M":74.5388,"S":0.03125,"sample":true}'),
+  ('paediatrics.who_growth', 'lfa.m.12', '{"en":"lfa boys 12"}', '{"L":1,"M":75.7488,"S":0.03137,"sample":true}'),
+  ('paediatrics.who_growth', 'wfl.m.72.0', '{"en":"wfl boys 72.0"}', '{"L":-0.3521,"M":8.8697,"S":0.08254,"sample":true}'),
+  ('paediatrics.who_growth', 'wfl.m.72.5', '{"en":"wfl boys 72.5"}', '{"L":-0.3521,"M":8.9788,"S":0.08262,"sample":true}')
 on conflict (system, code) do nothing;
 select t.as(:'ow');
 select public.write_setting(jsonb_build_object('key', 'organization.packs_used', 'data', jsonb_build_object('packs',

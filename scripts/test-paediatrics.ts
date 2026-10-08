@@ -9,6 +9,7 @@ import { ageText, centileText, crossed, crossedText, latestOf, lineOf, maintenan
 import { childWords, growthSummary, growthWord } from '../src/packs/paediatrics/words'
 import { doseLine, doseMg, mgPerMl, ruleFor, type DoseRule } from '../src/packs/paediatrics/dose'
 import { ageMonths, devLine, lateOf, listFor, newCheck, newbornOf, summaryOf, withSummary, type Milestone } from '../src/packs/paediatrics/develop'
+import { lmsAt, zOf, type Lms } from '../src/packs/paediatrics/lms'
 import type { ServerEntry } from '../src/core/db/types'
 
 let n = 0
@@ -119,5 +120,14 @@ test('the newborn checks: base entries by the pack\'s codes, the latest of each,
   assert.ok(!newbornOf(crossedOut).some((r) => r.code === 'birth'), 'crossed out: gone')
   const passed = [...facts, entry('procedure', { concept: nb('hearing'), status: 'completed', outcome: 'pass, both ears' }, ago(200))]
   assert.equal(newbornOf(passed).find((r) => r.code === 'hearing')!.refer, false, 'repeated and passed: the latest')
+})
+test('the LMS sums the /v line shows are the server\'s: Malek at 11 months, weight 7.5, length 72.4', () => {
+  const t = new Map<string, Lms>([['wfa.m.11', [0.073, 9.4122, 0.10906]], ['wfa.m.12', [0.0644, 9.6479, 0.10925]], ['lfa.m.11', [1, 74.5388, 0.03125]], ['lfa.m.12', [1, 75.7488, 0.03137]],
+    ['wfl.m.72.0', [-0.3521, 8.8697, 0.08254]], ['wfl.m.72.5', [-0.3521, 8.9788, 0.08262]]])
+  const mo = 335 / 30.4375   // 335 days, as the server reads the age
+  assert.equal(zOf(7.5, lmsAt(t, 'wfa', 'm', mo)!), -2.07); assert.equal(zOf(72.4, lmsAt(t, 'lfa', 'm', mo)!), -0.92); assert.equal(zOf(7.5, lmsAt(t, 'wfl', 'm', 72.4)!), -2.22)
+  assert.ok(Math.abs(lmsAt(t, 'wfa', 'm', 11.5)![1] - (9.4122 + 9.6479) / 2) < 1e-9, 'between two rows, in proportion')
+  assert.equal(lmsAt(t, 'wfa', 'm', 30), null, 'beyond the loaded table: nothing guessed')
+  assert.ok(zOf(30, [0.073, 9.4122, 0.10906]) > 3 && zOf(30, [0.073, 9.4122, 0.10906]) < 20, 'past +3: the restricted way')
 })
 console.log(`paediatrics: ${n} groups passed`)
