@@ -676,8 +676,10 @@ begin
     'patient_ids', case when p.patient_id is null then '[]'::jsonb else jsonb_build_array(core.survivor(p_org, p.patient_id)) end);
 end $$;
 
--- a receipt or a refund slip printed at this desk (§3.13 Printing, owner 2026-10-08): recorded before it prints, one row a copy, so the
--- copy knows whether it is the first or a reprint (and when the first was), whoever prints it and after any reload. The desk's scope is
+-- a receipt or a refund slip printed at this desk (§3.13 Printing, owner 2026-10-08): recorded as it prints — once the core has logged the
+-- read and the printer is free, just before it is drawn — one row a copy, so the copy knows whether it is the first or a reprint (and
+-- when the first was), whoever prints it and after any reload; with the receipt as it stands at that moment (given back since, and on
+-- which slip; the slip, which receipt it gives back), so the paper says so even where the screen had not heard yet. The desk's scope is
 -- the receipts': a desk of everyone's prints any desk's, a desk of its own only what it took; a department taking no payment none
 create function billing.print(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare v_desk text := billing.desk(p_org, p_department); p billing.payments; v_id uuid := gen_random_uuid(); v_at timestamptz; v_copy int; v_first timestamptz;
@@ -689,7 +691,9 @@ begin
   if v_desk = 'own' and p.department_id <> p_department then perform core.refuse('not_this_desk', p.receipt); end if;
   insert into billing.prints (organization_id, id, payment_id, department_id, author_id) values (p_org, v_id, p.id, p_department, p_user) returning at into v_at;
   select count(*), min(x.at) into v_copy, v_first from billing.prints x where x.organization_id = p_org and x.payment_id = p.id;
-  return jsonb_build_object('id', v_id, 'receipt', p.receipt, 'copy', v_copy, 'reprint', v_copy > 1, 'at', v_at, 'first_at', v_first);
+  return jsonb_build_object('id', v_id, 'receipt', p.receipt, 'copy', v_copy, 'reprint', v_copy > 1, 'at', v_at, 'first_at', v_first,
+    'refunded_by', (select r.receipt from billing.payments r where r.organization_id = p_org and r.refund_of = p.id),
+    'refund_of', (select r.receipt from billing.payments r where r.organization_id = p_org and r.id = p.refund_of));
 end $$;
 
 -- close my drawer at this desk: the float and the cash since my last closing, counted against what is there; a difference needs its

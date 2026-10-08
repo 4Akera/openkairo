@@ -1,6 +1,7 @@
 // Billing's pure model (spec/openCare.md §5.4): money in whole piastres (no floating point), the server's lines turned into the payment
 // card's lines and back into what the pay operation takes, the row's words, the receipt's lines, the day's tiles and a drawer's words.
 // No React and no client here, so `npm run test:billing` reads it.
+import type { Recorded } from '@core/print/session'
 
 /** what billing.lines answers for a patient at this desk */
 export interface ChargeLine { item: string; department_id: string; kind: 'service' | 'visit'; name: string | null; from_department_id: string | null; at: string
@@ -141,6 +142,18 @@ export function printedWords(prints: Payment['prints'], timeOf: (iso: string) =>
   const ps = prints ?? []
   return ps.length ? `Printed ${timeOf(ps[0].at)}${ps.length > 1 ? ` · again ${ps.slice(1).map((x) => timeOf(x.at)).join(', ')}` : ''}` : ''
 }
+
+/** what billing.print answers for a copy: whether it is a later one, the server's time of it, and the receipt as it stands at that moment
+ *  (given back since, and on which slip) */
+export interface PrintCopy { copy: number; reprint: boolean; at: string; first_at: string; refunded_by: string | null; refund_of: string | null }
+/** a receipt's copy, recorded by billing (print: billing.print) once the core has logged the read and the printer is free — a print
+ *  refused before it counts no copy — then drawn as billing holds it at that moment (given back at another desk since this screen read
+ *  it: it says so), its reprint mark at the server's time of the copy */
+export const recordCopy = (p: Payment, print: (paymentId: string) => Promise<PrintCopy>, viewOf: (p: Payment) => ReceiptView) =>
+  async (): Promise<Recorded<ReceiptView>> => {
+    const c = await print(p.payment_id)
+    return { again: c.reprint, at: c.at, data: viewOf({ ...p, refunded_by: c.refunded_by === undefined ? p.refunded_by : c.refunded_by }) }
+  }
 
 /** a drawer counted against what it should hold */
 export function drawerWords(expected: number, counted: number | null) {

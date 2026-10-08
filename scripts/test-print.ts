@@ -1,13 +1,17 @@
 // The core's print facility (spec/openCare.md §3.13 Printing; the owner's (p1)–(p5), 2026-10-08), with no browser: Code 128 against the
 // published patterns and known encodings; the papers and the one stylesheet of a print (the page's size, one label a page, the
-// print-only rule, nothing in place outside a print); a print's lifecycle start to end (the read log first, drawn, the dialog, all taken
-// away whatever happened, one at a time, the reprint mark); the P key; the clinic's header; the shared parts.   npm run test:print
+// print-only rule, nothing in place outside a print); a print's lifecycle start to end (the read log first, a pack's own copy recorded
+// only then, drawn, the dialog, all taken away whatever happened, one at a time, the reprint mark at the server's time, each thing of a
+// printout on its own); the page's part (the printout's element off screen in the light theme, taken away after the dialog); the P key
+// (an Arabic keyboard too); the clinic's header; the shared parts.   npm run test:print
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { CODE_B, CODE_C, QUIET, START_B, START_C, STOP, VALUES, decode128, encode128, modulesOf, widthsOf } from '../src/core/print/code128'
 import { PAPERS, ROOT_ID, mmOf, pageOf, stylesheet } from '../src/core/print/paper'
 import { browserMemory, printer, type PrintEnv, type PrintJob } from '../src/core/print/session'
+import { domEnv, hostFor, type Page } from '../src/core/print/dom'
 import { registerPrintout } from '../src/core/print/registry'
 import { holdPrintKey, isPrintKey, onPrintKey, type KeyLike } from '../src/core/print/key'
 import { headerLines, headerOf, logoOk, LOGO_MAX } from '../src/core/print/header'
@@ -91,12 +95,13 @@ await test('the stylesheet of a print: the page sized, each label a page, and in
 const header = { name: 'Nile Clinic', logo: null, address: null, phone: null, tax_number: null }
 quiet(() => registerPrintout('base.probe', { paper: 'label', Component: () => null }))
 function pretend(over: Partial<PrintEnv> = {}) {
-  const steps: string[] = []; const kept = new Map<string, number>(); let styled = ''
-  const env: PrintEnv = { log: async (j) => { steps.push(`log ${j.patientId}`) }, draw: async (p, j, r) => { steps.push(`draw ${p.paper} ${j.thing} ${r ?? 'first'}`); return 400 },
+  const steps: string[] = []; const kept = new Map<string, number>(); let styled = ''; const drawn: unknown[] = []
+  const env: PrintEnv = { log: async (j) => { steps.push(`log ${j.patientId}`) },
+    draw: async (p, j, r, again) => { steps.push(`draw ${p.paper} ${j.thing} ${r ?? 'first'}${again ? ` [${again.join(' ')}]` : ''}`); drawn.push(j.data); return 400 },
     style: (css) => { styled = css; steps.push('style') }, dialog: async () => { steps.push(`dialog ${styled ? 'styled' : 'bare'}`) },
-    unstyle: () => { styled = ''; steps.push('unstyle') }, clear: () => { steps.push('clear') }, now: () => new Date('2026-10-08T08:42:00Z'), time: () => '10:42',
+    unstyle: () => { styled = ''; steps.push('unstyle') }, clear: () => { steps.push('clear') }, now: () => new Date('2026-10-08T10:42:00Z'), time: (at) => at.toISOString().slice(11, 16),
     memory: { seen: (t) => kept.has(t), keep: (t, at) => { kept.set(t, at.getTime()) } }, ...over }
-  return { env, steps, styled: () => styled }
+  return { env, steps, styled: () => styled, kept, drawn }
 }
 const job = (over: Partial<PrintJob> = {}): PrintJob => ({ key: 'base.probe', data: {}, header, thing: 'S-1008-0001', patientId: 'pt', departmentId: 'lab', ...over })
 await test('a print: logged like a read first, drawn, the page sized, the dialog, then everything taken away; nothing left in place after', async () => {
@@ -112,7 +117,46 @@ await test('a second print of the same thing is a reprint with its time; the pri
   await print(job()); assert.deepEqual(await print(job()), { printed: true, reprint: '10:42' })
   assert.match(p.steps.join('|'), /draw label S-1008-0001 10:42/)
   assert.deepEqual(await print(job({ thing: 'S-1008-0002' })), { printed: true, reprint: null })
-  assert.deepEqual(await printer(pretend().env)(job({ again: true })), { printed: true, reprint: '10:42' }, 'a receipt\'s own count: a reprint after a reload')
+  const r = pretend(); const rec = async () => ({ again: true, at: '2026-10-08T10:50:00Z' })
+  assert.deepEqual(await printer(r.env)(job({ record: rec })), { printed: true, reprint: '10:50' }, 'a receipt\'s own count: a reprint after a reload, at the server\'s time of the copy')
+  assert.equal(r.kept.size, 0, 'a pack that keeps its own copies: nothing for this browser to remember')
+})
+await test('a pack\'s own copy is recorded only once the read is logged and the printer is free: a print refused or failed before it counts none', async () => {
+  const calls: string[] = []; const record = async () => { calls.push('record'); return { again: calls.filter((c) => c === 'record').length > 1 } }
+  const a = pretend({ log: async () => { calls.push('log'); throw new Error('not allowed') } })
+  await assert.rejects(printer(a.env)(job({ record })), /not allowed/)
+  assert.deepEqual(calls, ['log'], 'the read could not be logged: no copy recorded, nothing drawn'); assert.deepEqual(a.steps, ['unstyle', 'clear'])
+  calls.length = 0; let release: (() => void) | null = null
+  const b = pretend({ log: async () => { calls.push('log') }, dialog: () => new Promise<void>((r) => { release = r }) }); const print = printer(b.env)
+  const first = print(job({ record })); await new Promise((r) => setTimeout(r, 0))
+  assert.deepEqual(await print(job({ record })), { printed: false, why: 'busy' }, 'P pressed again while the dialog is open')
+  assert.deepEqual(calls, ['log', 'record'], 'the busy print recorded no copy'); release!(); assert.deepEqual(await first, { printed: true, reprint: null }, 'the one copy: the original')
+  assert.deepEqual(b.steps.slice(0, 1), ['draw label S-1008-0001 first'], 'recorded after the log and before it is drawn')
+  assert.deepEqual(await quiet(() => print(job({ key: 'base.nothing', record }))), { printed: false, why: 'unknown' }); assert.equal(calls.length, 2, 'no printout: no copy')
+})
+await test('the reprint\'s time is the server\'s: the pack\'s copy, else the logged read; this computer\'s clock only where no server said', async () => {
+  const slow = { now: () => new Date('2026-10-08T10:46:00Z') }   // this computer's clock four minutes slow
+  assert.deepEqual(await printer(pretend(slow).env)(job({ record: async () => ({ again: true, at: '2026-10-08T10:50:00Z' }) })), { printed: true, reprint: '10:50' })
+  const logged = pretend({ ...slow, log: async () => '2026-10-08T10:50:00.123Z' }); const print = printer(logged.env)
+  await print(job()); assert.deepEqual(await print(job()), { printed: true, reprint: '10:50' }, 'the browser remembers the thing; the read log says when')
+  const none = pretend(slow); await printer(none.env)(job({ patientId: null })); assert.deepEqual(await printer(none.env)(job({ patientId: null })), { printed: true, reprint: '10:46' })
+  assert.deepEqual(await printer(pretend({ ...slow, log: async () => 'not a time' }).env)(job({ record: async () => ({ again: true }) })), { printed: true, reprint: '10:46' }, 'no time to read')
+})
+await test('what is drawn is what the pack holds when the copy is recorded (a receipt given back meanwhile says so); else what the screen showed', async () => {
+  const p = pretend()
+  await printer(p.env)(job({ data: { refunded: null }, record: async () => ({ again: false, data: { refunded: 'R-00413' } }) }))
+  await printer(p.env)(job({ data: { refunded: null } }))
+  assert.deepEqual(p.drawn, [{ refunded: 'R-00413' }, { refunded: null }])
+})
+await test('several things on one printout (a sheet of labels): each remembered on its own, each printed before marked, a new one not', async () => {
+  const p = pretend(); const print = printer(p.env)
+  await print(job({ thing: 'S-1', things: ['S-1'] })); await print(job({ thing: 'S-4', things: ['S-4'] }))
+  assert.deepEqual(await print(job({ thing: 'S-1 S-4', things: ['S-1', 'S-4'] })), { printed: true, reprint: '10:42' }, 'both printed before, one at a time: a reprint')
+  assert.equal(p.steps.filter((x) => x.startsWith('draw')).at(-1), 'draw label S-1 S-4 10:42 [S-1 S-4]', 'every label of it marked')
+  assert.deepEqual(await print(job({ thing: 'S-4 S-7', things: ['S-4', 'S-7'] })), { printed: true, reprint: '10:42' })
+  assert.equal(p.steps.filter((x) => x.startsWith('draw')).at(-1), 'draw label S-4 S-7 10:42 [S-4]', 'S-7 is printed for the first time: not marked')
+  assert.deepEqual([...p.kept.keys()].sort(), ['base.probe:S-1', 'base.probe:S-4', 'base.probe:S-7'], 'remembered thing by thing, never as the whole sheet')
+  assert.equal(p.steps.filter((x) => x.startsWith('draw'))[0], 'draw label S-1 first []', 'a first: nothing printed before')
 })
 await test('whatever fails, nothing stays: a log that cannot be written prints nothing; a failing draw or dialog is taken away; one print at a time', async () => {
   const a = pretend({ log: async () => { throw new Error('log failed') } })
@@ -134,12 +178,61 @@ await test('this browser\'s memory of what it printed: a day; storage blocked, t
   blocked.keep('x', new Date()); assert.ok(blocked.seen('x'))
 })
 
+// the page's part, against a pretend document and window: what is put in place, and that it is all taken away
+function pretendPage(afterprint = true) {
+  const els: { tag: string; id: string; style: { cssText: string }; textContent: string | null; attrs: Record<string, string>; in: string | null }[] = []
+  const listeners = new Set<() => void>(); let printed = 0
+  const make = (tag: string) => { const el = { tag, id: '', style: { cssText: '' }, textContent: null as string | null, attrs: {} as Record<string, string>, in: null as string | null,
+    setAttribute(k: string, v: string) { el.attrs[k] = v }, remove() { el.in = null } }; els.push(el); return el }
+  const doc = { createElement: make, body: { appendChild: (el: { in: string | null }) => { el.in = 'body' } }, head: { appendChild: (el: { in: string | null }) => { el.in = 'head' } } }
+  const win = { addEventListener: (_: string, fn: () => void) => { listeners.add(fn) }, removeEventListener: (_: string, fn: () => void) => { listeners.delete(fn) },
+    print: () => { printed++; if (afterprint) [...listeners].forEach((f) => f()) } }
+  return { page: { doc, win } as unknown as Page, els, placed: () => els.filter((e) => e.in), listeners, printed: () => printed }
+}
+await test('the page\'s part: the printout drawn into its own element off screen, in the light theme at the paper\'s width; the stylesheet in place for the dialog; then none of it left', async () => {
+  const host = hostFor({ createElement: pretendPage().page.doc.createElement } as Document, 'receipt') as unknown as { id: string; attrs: Record<string, string>; style: { cssText: string } }
+  assert.equal(host.id, 'oc-print'); assert.equal(host.attrs['data-theme'], 'light', 'the light theme, whatever the screen\'s: dark text on white paper')
+  assert.equal(host.attrs['aria-hidden'], 'true'); assert.equal(host.attrs.dir, 'ltr')
+  assert.match(host.style.cssText, /position:fixed;left:-10000px;/, 'off screen'); assert.match(host.style.cssText, /width:80mm;/, 'the roll\'s width')
+  assert.match(host.style.cssText, /background:var\(--paper\);color:var\(--fg\)/, 'the light theme\'s own paper and ink')
+  assert.match((hostFor({ createElement: pretendPage().page.doc.createElement } as Document, 'a5') as unknown as { style: { cssText: string } }).style.cssText, /width:124mm;/, 'A5 inside its margins')
+  const pg = pretendPage(); const seen: string[] = []; let unmounted = 0
+  const env = domEnv(pg.page, { log: async () => null, time: (at) => at.toISOString().slice(11, 16), memory: browserMemory(null),
+    render: async (h, p, j, r) => { seen.push(`${(h as unknown as { attrs: Record<string, string> }).attrs['data-theme']} ${p.paper} ${j.thing} ${r ?? 'first'}`); return { height: 378, unmount: () => { unmounted++ } } } })
+  const during: string[] = []
+  const print = printer({ ...env, dialog: async () => { during.push(...pg.placed().map((e) => `${e.tag}#${e.id} in ${e.in}`)); await env.dialog() } })
+  assert.deepEqual(await print(job({ key: 'base.probe' })), { printed: true, reprint: null })
+  assert.deepEqual(seen, ['light label S-1008-0001 first'], 'drawn into the light element')
+  assert.deepEqual(during, ['div#oc-print in body', 'style#oc-print-style in head'], 'during the dialog: the printout and its stylesheet, nothing else')
+  assert.match(pg.els.find((e) => e.tag === 'style')!.textContent!, /@page \{ size: 50mm 25mm; margin: 0mm; \}/)
+  assert.deepEqual(pg.placed(), [], 'after it: the element and the stylesheet taken away'); assert.equal(unmounted, 1, 'the drawing unmounted'); assert.equal(pg.printed(), 1)
+  assert.equal(pg.listeners.size, 0, 'afterprint no longer listened to')
+})
+await test('the browser\'s read log: the purpose and, opened anyway, the reason the screen\'s reads carry; the server\'s time back for the reprint mark', () => {
+  const src = readFileSync(new URL('../src/core/print/browser.tsx', import.meta.url), 'utf8')
+  assert.match(src, /shape: 'printed', patient_id: job\.patientId, department_id: job\.departmentId \?\? null,\s+purpose: job\.purpose \?\? 'TREAT', \.\.\.\(job\.reason \? \{ reason: job\.reason \} : \{\}\)/)
+  assert.match(src, /\)\)\?\.at \?\? null/, 'its time returned'); assert.match(src, /domEnv\(\{ doc: document, win: window \}/, 'the page\'s part tested above is the one the browser runs')
+})
+await test('the dialog: done when the browser says afterprint, or at the latest a moment after print() returned where it says nothing', async () => {
+  const quietPage = pretendPage(false); const env = domEnv(quietPage.page, { log: async () => null, render: async () => ({ height: 0, unmount: () => {} }), time: () => '', memory: browserMemory(null), latest: 5 })
+  const t0 = Date.now(); await env.dialog(); assert.ok(Date.now() - t0 >= 4, 'no afterprint: it waits its moment'); assert.equal(quietPage.listeners.size, 0)
+  const said = pretendPage(true); await domEnv(said.page, { log: async () => null, render: async () => ({ height: 0, unmount: () => {} }), time: () => '', memory: browserMemory(null), latest: 60_000 }).dialog()
+  assert.equal(said.listeners.size, 0, 'afterprint: done at once')
+  const failing = pretendPage(); const fenv = domEnv(failing.page, { log: async () => null, time: () => '', memory: browserMemory(null), render: async () => { throw new Error('no drawing') } })
+  await assert.rejects(printer(fenv)(job({ key: 'base.probe' })), /no drawing/); assert.deepEqual(failing.placed(), [], 'a drawing that fails leaves nothing behind')
+})
+
 const key = (over: Partial<KeyLike> = {}): KeyLike => ({ key: 'p', metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, target: { tagName: 'DIV' }, ...over })
 await test('the P key: P alone, never while typing in a field, never with a modifier (Cmd-P stays the browser\'s), never held; the printout shown last answers', () => {
   assert.ok(isPrintKey(key())); assert.ok(isPrintKey(key({ key: 'P' })), 'Caps Lock')
   for (const m of ['metaKey', 'ctrlKey', 'altKey', 'shiftKey'] as const) assert.ok(!isPrintKey(key({ [m]: true })), m)
   for (const tagName of ['INPUT', 'TEXTAREA', 'SELECT']) assert.ok(!isPrintKey(key({ target: { tagName } })), tagName)
   assert.ok(!isPrintKey(key({ target: { tagName: 'DIV', isContentEditable: true } }))); assert.ok(!isPrintKey(key({ repeat: true }))); assert.ok(!isPrintKey(key({ key: 'o' })))
+  assert.ok(isPrintKey(key({ key: 'ح', code: 'KeyP' })), 'an Arabic keyboard: the key where P is (it types ح)')
+  assert.ok(isPrintKey(key({ key: 'P', code: 'KeyR' })), 'a Latin keyboard that puts P elsewhere (Dvorak): the letter P')
+  assert.ok(!isPrintKey(key({ key: 'l', code: 'KeyP' })), 'and the key where P is on a qwerty types another letter there: not P')
+  for (const m of ['metaKey', 'ctrlKey', 'altKey', 'shiftKey'] as const) assert.ok(!isPrintKey(key({ key: 'ح', code: 'KeyP', [m]: true })), `Arabic with ${m}`)
+  assert.ok(!isPrintKey(key({ key: 'ح', code: 'KeyP', target: { tagName: 'INPUT' } })), 'typing an Arabic name: never'); assert.ok(!isPrintKey(key({ key: 'ح', code: 'KeyP', repeat: true })))
   const hits: string[] = []
   assert.equal(onPrintKey(key()), false, 'nothing on screen to print')
   const a = holdPrintKey(() => hits.push('a')); const b = holdPrintKey(() => hits.push('b'))
@@ -155,6 +248,9 @@ await test('the clinic\'s header: the setting as it stands, else the organizatio
   assert.equal(h.name, 'عيادة النيل'); assert.deepEqual(headerLines(h), ['12 Nile St, Cairo', 'Tel. +20 2 2345 6789 · Tax no. 123-456-789'])
   assert.ok(logoOk('data:image/png;base64,iVBORw0KGgo=')); assert.ok(!logoOk('data:image/gif;base64,R0lGOD=')); assert.ok(!logoOk('javascript:alert(1)'))
   assert.ok(!logoOk(`data:image/png;base64,${'A'.repeat(LOGO_MAX)}`), 'too large')
+  // Settings → Organization → Printouts is the core's: it names no layer's printout (a clinic with no billing sees no money word)
+  for (const f of ['src/core/screens/settings/Header.tsx', 'src/core/screens/Settings.tsx']) assert.doesNotMatch(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'), /receipt|prescription/i, f)
+  assert.match(readFileSync(new URL('../src/core/screens/settings/Header.tsx', import.meta.url), 'utf8'), />On a printout</)
 })
 await test('the parts: the header (an Arabic name right to left), the bars (each run of modules, the quiet zones drawn), the reprint mark, Arabic', () => {
   const html = renderToStaticMarkup(createElement(PrintHeader, { header: { name: 'عيادة النيل', logo: 'data:image/png;base64,iVBORw0KGgo=', address: 'Cairo', phone: '0100', tax_number: '9' } }))

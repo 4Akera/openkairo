@@ -125,8 +125,9 @@ test('printed, it says what the screen says; a later copy is marked Reprint with
   assert.equal(refunded.refunded, 'Refunded · given back on R-00413'); assert.match(text(renderToStaticMarkup(createElement(ReceiptPaper, { view: refunded, header }))), /Refunded · given back on R-00413/)
   assert.equal(printedWords([], (x) => x), ''); assert.equal(printedWords([{ at: '10:42', by: null }, { at: '10:50', by: null }, { at: '11:02', by: null }], (x) => x), 'Printed 10:42 · again 10:50, 11:02')
   const src = read('src/packs/billing/Receipt.tsx')
-  assert.ok(src.indexOf("packOp<{ reprint: boolean }>('billing.print'") < src.indexOf("key: 'billing.receipt'"), 'each copy recorded first, then printed')
-  assert.match(src, /again: c\.reprint/, 'the copy\'s mark from billing\'s own count'); assert.match(src, /patientId: p\.patient_id, purpose: 'PATADMIN'/, 'the print of the patient\'s receipt logged like a read')
+  assert.match(src, /record: recordCopy\(p, \(id\) => packOp<PrintCopy>\('billing\.print'/, 'the copy recorded inside the print, by billing\'s own operation')
+  assert.doesNotMatch(src.slice(0, src.indexOf("key: 'billing.receipt'")), /packOp[^\n]*'billing\.print'/, 'never before the print has begun')
+  assert.match(src, /patientId: p\.patient_id, purpose: 'PATADMIN'/, 'the print of the patient\'s receipt logged like a read')
 })
 test('a drawer counted: even, short or over, by how much', () => {
   assert.deepEqual(drawerWords(411000, 409000), { word: '20.00 short', tone: 'warn', difference: -2000 })

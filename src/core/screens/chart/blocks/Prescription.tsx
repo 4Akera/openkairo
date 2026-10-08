@@ -9,6 +9,7 @@
 import { useContext } from 'react'
 import type { EntryData } from '../../../db/shapes.generated'
 import { PrintButton, usePrint } from '../../../print'
+import { purposeFor } from '../../../hooks/reads'
 import { ChartContext, type Chart } from '../context'
 import { newestRxSet, prescriptionOf, sigOf, type RxSheet } from '../model/prescription'
 import { stepOf } from '../../../db/views'
@@ -42,12 +43,13 @@ export function Prescription({ items }: GroupProps) {
   </div>
 }
 
-/** Print prescription (A5), and P where it is this visit's newest; the print of the patient's prescription is logged like a read */
+/** Print prescription (A5), and P where it is this visit's newest; the print of the patient's prescription is logged like a read, under
+ *  the purpose the chart's own reads carry (break the glass with its reason, while the record is opened that way) */
 function PrintRx({ rx, chart: c }: { rx: RxSheet; chart: Chart }) {
   const print = usePrint(); const env = useBlockEnv()
   const newest = newestRxSet(c.r.server.entries, c.encounter?.id, env.org?.types) === rx.set
   return <PrintButton className="justify-self-start" size="sm" variant="ghost" label="Print prescription" keyed={newest}
-    print={() => print({ key: 'base.prescription', data: rx, thing: rx.set, patientId: c.patientId, departmentId: c.departmentId, purpose: 'TREAT' })} />
+    print={() => print({ key: 'base.prescription', data: rx, thing: rx.set, patientId: c.patientId, departmentId: c.departmentId, ...purposeFor(c.patientId) })} />
 }
 
 function MedLine({ item }: { item: ChartItem }) {

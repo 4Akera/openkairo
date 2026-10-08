@@ -38,9 +38,14 @@ export function prescriptionOf(items: ChartItem[], ctx: { org?: Pick<Organizatio
   }
 }
 
-/** this visit's newest prescription (the set of its latest prescribed medicine): the one P prints */
+/** this visit's newest prescription: the set of its latest medicine a patient takes away, as printable() keeps them (each medicine as
+ *  it stands, its latest version: prescribed, not stopped nor completed, not crossed out nor hidden) — the one P prints. A stop or a
+ *  medicine finished later in the visit has no Print of its own, so it never takes P from the prescription that has one */
 export function newestRxSet(entries: ServerEntry[], visitId: string | null | undefined, types?: Organization['types']): string | null {
   if (!visitId) return null
-  return entries.filter((e) => e.visit_id === visitId && !e.hidden && baseOf(e.type, types) === 'medication' && (e.data as EntryData['medication'] | undefined)?.basis !== 'reported')
+  const latest = new Map<string, ServerEntry>()
+  for (const e of entries) { const had = latest.get(e.item); if (!had || e.item_version > had.item_version) latest.set(e.item, e) }
+  return [...latest.values()].filter((e) => { const d = e.data as EntryData['medication'] | undefined
+    return e.visit_id === visitId && !e.hidden && baseOf(e.type, types) === 'medication' && d?.basis !== 'reported' && !!d?.drug && !ENDED.has(d?.status ?? '') })
     .sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0]?.set_id ?? null
 }

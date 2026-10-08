@@ -1,8 +1,9 @@
 // The receipt (spec §5.4, the bill-receipt picture), shown and kept: the clinic's header, its receipt number, the date and time, the
 // patient and record number, the lines (a department's sent or handed lines as one), the total, the discount and its reason, the cash
 // received and the change (or Card), who took it — drawn once (ReceiptPaper) for the screen and the receipt roll alike. Print receipt
-// (P) and Print again (§3.13 Printing, owner 2026-10-08): billing records each copy before it prints, so a later one is marked
-// "Reprint" with its time even after a reload; the core logs the print of the patient's receipt like a read. A refund is a payment of
+// (P) and Print again (§3.13 Printing, owner 2026-10-08): the core logs the print of the patient's receipt like a read, then billing
+// records the copy (only then: a print refused or failed before it counts none) and the receipt is drawn as billing holds it at that
+// moment, so a later copy is marked "Reprint" with the server's time of it, even after a reload. A refund is a payment of
 // its own naming the receipt it undoes, with its reason, and prints its own slip: Give back… folds out under the receipt for whoever
 // may, and the slip it makes is shown there to print.
 import { useState } from 'react'
@@ -14,16 +15,19 @@ import type { PatientBanner } from '@core/db/types'
 import { PrintButton, useClinicHeader, usePrint } from '@core/print'
 import { Button, Card, Input, cn, errorText, hm } from '@core/ui'
 import { useBillingDone, usePaid } from './hooks'
-import { egp, printedWords, receiptView, signed, type Payment } from './money'
+import { egp, printedWords, receiptView, recordCopy, signed, type Payment, type PrintCopy, type ReceiptView } from './money'
 import { ReceiptPaper } from './ReceiptPaper'
 
 export function Receipt({ payment: p, departmentId, patient, onGiven }: { payment: Payment; departmentId: string; patient: PatientBanner | null; onGiven?: (receipt: string) => void }) {
   const { org, can } = useDepartment(); const header = useClinicHeader(); const print = usePrint(); const done = useBillingDone()
-  const view = receiptView(p, (id) => nameOf(org, id), patient ? { name: `${patient.given_name} ${patient.family_name}`, number: patient.record_number } : null)
-  // each copy recorded first (the first is the original), then printed: the copy knows whether it is a reprint
+  const viewOf = (x: Payment) => receiptView(x, (id) => nameOf(org, id), patient ? { name: `${patient.given_name} ${patient.family_name}`, number: patient.record_number } : null)
+  const view = viewOf(p)
+  // the read logged, then the copy recorded by billing (the first the original) and drawn as billing holds the receipt then
   const printIt = async () => {
-    const c = await packOp<{ reprint: boolean }>('billing.print', departmentId, { payment_id: p.payment_id })
-    try { return await print({ key: 'billing.receipt', data: view, thing: p.receipt, patientId: p.patient_id, purpose: 'PATADMIN', again: c.reprint }) } finally { void done() }
+    try {
+      return await print<ReceiptView>({ key: 'billing.receipt', data: view, thing: p.receipt, patientId: p.patient_id, purpose: 'PATADMIN',
+        record: recordCopy(p, (id) => packOp<PrintCopy>('billing.print', departmentId, { payment_id: id }), viewOf) })
+    } finally { void done() }
   }
   const copies = printedWords(p.prints, hm)
   return <div className="grid justify-items-center gap-2">

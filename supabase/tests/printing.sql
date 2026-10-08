@@ -32,8 +32,9 @@ select t.refuses($$select public.write_setting('{"key":"organization.header","da
 
 \echo '── a print of a patient''s information is logged like a read: who printed what, for which patient, when, from where; nothing returned'
 select t.as(:'lt');
-select t.ok(public.read(jsonb_build_object('shape', 'printed', 'patient_id', :'pt', 'department_id', :'labd', 'printout', 'lis.labels', 'what', 'S-1008-0001')) = '{"logged":true}',
-  'labels printed at the Lab: logged, and nothing of the patient comes back');
+select t.ok((r - 'at') = '{"logged":true}' and (r ->> 'at')::timestamptz between now() and clock_timestamp(),
+  'labels printed at the Lab: logged, and nothing of the patient comes back, only when (the server''s time, for a reprint''s mark)')
+  from public.read(jsonb_build_object('shape', 'printed', 'patient_id', :'pt', 'department_id', :'labd', 'printout', 'lis.labels', 'what', 'S-1008-0001')) r;
 reset role;
 select t.ok(l.purpose = 'TREAT' and l.department_id = :'labd' and l.what -> 'prints' = '[{"printout":"lis.labels","what":"S-1008-0001"}]' and l.reads = 1 and l.at is not null,
   'one row of the read log: the technician, the patient, the Lab, the labels and their sample, when')
@@ -60,6 +61,19 @@ set role authenticated;
 select t.as(:'ow');
 select t.ok((select count(*) from jsonb_array_elements(public.read(jsonb_build_object('shape', 'log', 'patient_id', :'pt')) -> 'reads') r where r -> 'what' ? 'prints') = 3,
   'whoever reviews the read log sees each print: who, what, for whom, when');
+
+\echo '── a record opened anyway (break the glass): a print from it carries the same purpose and reason, so it joins that read''s row'
+select t.as(:'dr');
+select t.ok(public.read(jsonb_build_object('shape', 'record', 'patient_id', :'pt', 'department_id', :'im', 'purpose', 'BTG', 'reason', 'unconscious, no one to ask')) is not null
+  and public.read(jsonb_build_object('shape', 'printed', 'patient_id', :'pt', 'department_id', :'im', 'printout', 'base.prescription', 'what', 'set-2', 'purpose', 'BTG',
+    'reason', 'unconscious, no one to ask')) ->> 'logged' = 'true', 'the doctor opens the record anyway, says why, and prints a prescription from it');
+reset role;
+select t.ok(l.reason = 'unconscious, no one to ask' and l.what ? 'records' and l.what -> 'prints' = '[{"printout":"base.prescription","what":"set-2"}]' and l.reads = 2,
+  'one row of break the glass, with why: the read and the print from it, neither lost')
+  from core.read_log l where l.user_id = '00000000-0000-0000-0000-0000000000b1' and l.patient_id = :'pt' and l.purpose = 'BTG';
+select t.ok(not exists (select 1 from core.read_log l where l.user_id = '00000000-0000-0000-0000-0000000000b1' and l.patient_id = :'pt' and l.purpose = 'TREAT'
+  and l.what -> 'prints' @> '[{"what":"set-2"}]'), 'not as a read of care');
+set role authenticated;
 
 \echo '── refused: a printout that is not one, a patient not found, a purpose not known, a department not the clinic''s, who does not find patients'
 select t.as(:'dr');

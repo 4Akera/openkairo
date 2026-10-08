@@ -79,7 +79,7 @@ function OrganizationPage({ org }: { org: Organization }) {
       <div className="grid gap-6 p-4"><ClinicZone org={org} /><RecordViewSetting org={org} /></div>
     </Section>
     <Section id="org.printouts" title="Printouts" summary={`the clinic's header: ${headerOf(org).name}`}>
-      <p className="mb-3 text-12 text-faint">Every printout (a receipt, a prescription) carries this header. Printing goes through the browser's own print dialog: choose the printer there once on each computer.</p>
+      <p className="mb-3 text-12 text-faint">Every printout carries this header. Printing goes through the browser's own print dialog: choose the printer there once on each computer.</p>
       <ClinicHeaderSetting org={org} />
     </Section>
     <Section flush id="org.changes" title="Recent changes" count={ch.data?.length} summary="the last 30 changes to settings, newest first">

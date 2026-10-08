@@ -442,8 +442,9 @@ $$;
 
 -- a printout of a patient's information, logged like a read (§3.13 Printing, the owner's (p4), 2026-10-08): who printed what (the
 -- printout's key and the thing it carries: a sample number, a receipt's number), for which patient, when, and from where — one row of
--- the read log, merged with the person's other reads of that patient in ten minutes. It returns nothing of the patient: what was
--- printed was read through the doors already. For whoever finds patients (read:patients), as a read of the patient is
+-- the read log under the purpose (and, for a record opened anyway, the reason) its screen's reads carry, merged with the person's other
+-- reads of that patient in ten minutes. It returns nothing of the patient (what was printed was read through the doors already), only
+-- when it was logged, the server's time a reprint's mark carries. For whoever finds patients (read:patients), as a read of the patient is
 create function core.read_printed(me core.users, q jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare p core.patients; v_dept uuid := (q ->> 'department_id')::uuid; v_key text := q ->> 'printout'; v_what text := nullif(trim(coalesce(q ->> 'what', '')), '');
 begin
@@ -455,9 +456,9 @@ begin
   if length(v_what) > 200 then perform core.refuse('bad_printout', 'what'); end if;
   select * into p from core.patients x where x.organization_id = me.organization_id and x.id = core.survivor(me.organization_id, (q ->> 'patient_id')::uuid);
   if not found then perform core.refuse('not_found', 'patient'); end if;
-  perform core.log_read(me, v_dept, p.id, coalesce(q ->> 'purpose', 'TREAT'), null,
+  perform core.log_read(me, v_dept, p.id, coalesce(q ->> 'purpose', 'TREAT'), q ->> 'reason',
     jsonb_build_object('prints', jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('printout', v_key, 'what', v_what)))), 0);
-  return jsonb_build_object('logged', true);
+  return jsonb_build_object('logged', true, 'at', clock_timestamp());
 end $$;
 
 -- the one door out. FHIR (shape fhir) is added by the base's export migration through core.read_fhir.

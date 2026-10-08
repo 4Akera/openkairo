@@ -7,7 +7,8 @@ import type { Department, OrderRow, PresenceRow, QueueRow, VisitRow } from '../s
 import { afterDone, backOf, backReason, barOf, callsOnOpen, cmdEnter, doneLabel, ordersOut, roleOf, stayWords, visitMoves } from '../src/core/screens/chart/model/visit'
 import { byDate, bySet, byVisit, filterSets } from '../src/core/screens/chart/model/encounter'
 import { itemsOf } from '../src/core/screens/chart/model/items'
-import { E, T0, org, presence, types } from './chart-fixtures'
+import { E, T0, next, org, presence, types } from './chart-fixtures'
+import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { arabicDigits, arabicDose, arabicSig } from '../src/core/screens/chart/model/arabic'
@@ -113,6 +114,21 @@ test('the directions in Arabic, as the base can say them: dose, route, how often
     'what it cannot say is left out, never guessed')
   assert.deepEqual(['0.5 tab', '3 caps', '12 drops', '10 ml'].map(arabicDose), ['نصف قرص', '٣ كبسولات', '١٢ نقطة', '١٠ مل']); assert.equal(arabicDigits('1.5'), '١٫٥')
 })
+test('the Arabic never says what the prescription did not: a dose with no unit names no form; words that say not to are never turned into an order', () => {
+  // amoxicillin suspension 5 tds 7d, a drug the composer does not know: the dose is a bare 5
+  assert.equal(arabicDose('5'), null, 'not "5 tablets" of a syrup')
+  assert.equal(arabicSig({ dose: '5', route: null, frequency: 'TDS', prn: null, days: 7, instructions: null }), '٣ مرات يومياً لمدة ٧ أيام')
+  for (const words of ['do not take with food', 'not after meals', 'never with food', 'avoid taking with food', "don't take before meals", 'without food', 'with food or milk'])
+    assert.equal(arabicSig({ dose: '1 tablet', route: 'oral', frequency: 'OD', prn: null, days: null, instructions: words }), 'قرص واحد بالفم مرة واحدة يومياً', words)
+  assert.equal(arabicSig({ dose: '1 tablet', route: 'oral', frequency: 'OD', prn: null, days: null, instructions: 'empty stomach, never with food' }), 'قرص واحد بالفم مرة واحدة يومياً على معدة فارغة',
+    'phrase by phrase: the one wholly known is said, the one saying not to is left to the English')
+  assert.equal(arabicSig({ dose: '1 tablet', route: 'oral', frequency: 'BD', prn: null, days: null, instructions: 'Take after meals; with plenty of water.' }), 'قرص واحد بالفم مرتين يومياً بعد الأكل مع كوب ماء')
+})
+test('the composer\'s own notes for nocte, hs and mane are said: at night, in the morning', () => {
+  // amitriptyline 25 mg nocte 30d: the composer writes once a day and "at night"
+  assert.equal(arabicSig({ dose: '25 mg', route: 'oral', frequency: 'OD', prn: null, days: 30, instructions: 'at night' }), '٢٥ مجم بالفم مرة واحدة يومياً ليلاً لمدة ٣٠ يوماً')
+  assert.equal(arabicSig({ dose: '20 mg', route: 'oral', frequency: 'OD', prn: null, days: null, instructions: 'in the morning; before breakfast' }), '٢٠ مجم بالفم مرة واحدة يومياً صباحاً قبل الفطار')
+})
 const rxItems = () => itemsOf([E('medication', { id: 'm1', visit_id: 'v1', set_id: 'rx1', data: augmentin }), E('medication', { id: 'm2', visit_id: 'v1', set_id: 'rx1', data: glucophage }),
   E('medication', { id: 'm3', visit_id: 'v1', set_id: 'rx1', data: ventolin }), E('medication', { id: 'm4', visit_id: 'v1', set_id: 'rx1', data: { ...glucophage, basis: 'reported' } }),
   E('medication', { id: 'm5', visit_id: 'v1', set_id: 'rx1', data: { ...augmentin, status: 'stopped' } }), E('medication', { id: 'm6', visit_id: null, set_id: 'rx1', data: augmentin })], { types })
@@ -144,5 +160,16 @@ test('P prints this visit\'s newest prescription', () => {
   const es = [E('medication', { visit_id: 'v1', set_id: 'old', recorded_at: '2026-09-27T08:00:00Z', data: augmentin }), E('medication', { visit_id: 'v1', set_id: 'new', recorded_at: '2026-09-27T09:00:00Z', data: glucophage }),
     E('medication', { visit_id: 'v1', set_id: 'told', recorded_at: '2026-09-27T09:30:00Z', data: { ...glucophage, basis: 'reported' } }), E('medication', { visit_id: 'v2', set_id: 'other', recorded_at: '2026-09-27T10:00:00Z', data: augmentin })]
   assert.equal(newestRxSet(es, 'v1', types), 'new'); assert.equal(newestRxSet(es, null, types), null); assert.equal(newestRxSet(es, 'v9', types), null)
+  // later in the visit the doctor stops the patient's old omeprazole: the stop has no Print of its own, so P stays with the prescription
+  const omep = E('medication', { visit_id: 'v0', set_id: 'long-ago', recorded_at: '2026-08-01T08:00:00Z', data: rxData('Omeprazole', { strength: '20 mg' }) })
+  const stop = next(omep, 'medication', { ...rxData('Omeprazole', { strength: '20 mg' }), status: 'stopped' }, { visit_id: 'v1', set_id: 'stop', recorded_at: '2026-09-27T09:45:00Z' })
+  assert.equal(newestRxSet([...es, omep, stop], 'v1', types), 'new', 'the newest set with something to take away')
+  const done = next(E('medication', { visit_id: 'v1', set_id: 'new2', recorded_at: '2026-09-27T09:50:00Z', data: augmentin }), 'medication', { ...augmentin, status: 'completed' },
+    { visit_id: 'v1', set_id: 'finished', recorded_at: '2026-09-27T09:55:00Z' })
+  assert.equal(newestRxSet([...es, done], 'v1', types), 'new', 'a medicine finished since: as it stands, nothing to take away')
+  const struck = E('crossed_out', { item: es[1].item, item_version: 2, visit_id: 'v1', set_id: 'x', recorded_at: '2026-09-27T09:58:00Z', data: { reason: 'wrong_patient' } })
+  assert.equal(newestRxSet([...es, struck], 'v1', types), 'old', 'crossed out: the one before it')
+  const src = readFileSync(new URL('../src/core/screens/chart/blocks/Prescription.tsx', import.meta.url), 'utf8')
+  assert.match(src, /patientId: c\.patientId, departmentId: c\.departmentId, \.\.\.purposeFor\(c\.patientId\)/, 'its print logged under the chart\'s own purpose: break the glass, with why, where it was opened anyway')
 })
 console.log(`chart (the patient screen): ${n} groups passed`)

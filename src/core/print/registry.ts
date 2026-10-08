@@ -1,6 +1,7 @@
 // The printouts (spec/openCare.md §3.13 Printing, (p2)): a pack or the base registers each one it prints — its key, its paper and the
 // component that draws it — and the core prints it by its key without naming it. A printout draws only what it is handed, which is
-// what its screen shows; the core hands it the clinic's header (every printout's) and, on a later copy, the reprint's time. Pure.
+// what its screen shows; the core hands it the clinic's header (every printout's) and, on a later copy, the reprint's time (and, for a
+// printout of several things, which of them were printed before). Pure.
 import type { ComponentType } from 'react'
 import type { ClinicHeader } from './header'
 import type { PaperKey } from './paper'
@@ -10,6 +11,9 @@ export interface PrintoutProps<D = unknown> {
   header: ClinicHeader
   /** a later copy of the same thing: "Reprint · 10:42" (the time of this copy); null on the first */
   reprint: string | null
+  /** a printout of several things (PrintJob.things, a sheet of labels): those of them printed before, each marked on its own; absent,
+   *  the reprint is the whole printout's */
+  reprinted?: string[]
 }
 export interface Printout<D = unknown> { paper: PaperKey; Component: ComponentType<PrintoutProps<D>> }
 const printouts = new Map<string, Printout>()

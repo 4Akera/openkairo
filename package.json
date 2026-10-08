@@ -23,7 +23,7 @@
     "test:registries": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-registries.ts",
     "test:pharmacy": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-pharmacy.ts",
     "test:lis": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-lis.ts",
-    "test:billing": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing.ts",
+    "test:billing": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing.ts && npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing-print.ts",
     "test:print": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-print.ts",
     "gen:types": "supabase gen types typescript --local --schema public > src/core/db/types.generated.ts",
     "gen:shapes": "npx --yes tsx scripts/gen-shapes.ts",

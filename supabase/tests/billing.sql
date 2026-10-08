@@ -339,13 +339,15 @@ select t.as(:'cr');
 reset role;
 select id as r5 from billing.payments where receipt = 'R-00005' \gset
 set role authenticated;
-select t.ok((c ->> 'copy')::int = 1 and not (c ->> 'reprint')::boolean and c ->> 'receipt' = 'R-00001', 'R-00001 printed at the Cashier: the original')
+select t.ok((c ->> 'copy')::int = 1 and not (c ->> 'reprint')::boolean and c ->> 'receipt' = 'R-00001' and c ->> 'refunded_by' = 'R-00003' and c ->> 'refund_of' is null,
+  'R-00001 printed at the Cashier: the original, as it stands now (given back on R-00003), so the paper says so whatever the screen had read')
   from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r1')) c;
 select t.ok((c ->> 'copy')::int = 2 and (c ->> 'reprint')::boolean and (c ->> 'first_at')::timestamptz < (c ->> 'at')::timestamptz, 'printed again: a reprint, with its time')
   from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r1')) c;
 select t.ok(jsonb_array_length(p -> 'payments' -> 0 -> 'prints') = 2 and p -> 'payments' -> 0 -> 'prints' -> 0 ->> 'by' = 'Cashier Mona',
   'the receipt read again (a reload) knows both copies, who printed them and when') from pg_temp.op('billing.paid', :'cash', '{"receipt":"R-00001"}') p;
-select t.ok((c ->> 'copy')::int = 1, 'the refund slip R-00003 is a thing of its own: its first copy') from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r3')) c;
+select t.ok((c ->> 'copy')::int = 1 and c ->> 'refund_of' = 'R-00001' and c ->> 'refunded_by' is null, 'the refund slip R-00003 is a thing of its own: its first copy, naming the receipt it undoes')
+  from pg_temp.op('billing.print', :'cash', jsonb_build_object('payment_id', :'r3')) c;
 select t.ok(p -> 'payments' -> 0 ->> 'refund_of' = 'R-00001' and p -> 'payments' -> 0 ->> 'reason' = 'the patient was charged twice', 'the slip names the receipt it undoes, and why')
   from pg_temp.op('billing.paid', :'cash', '{"receipt":"R-00003"}') p;
 select t.ok(p -> 'payments' -> 0 ->> 'refunded_by' = 'R-00003', 'and the receipt given back says on which slip') from pg_temp.op('billing.paid', :'cash', '{"receipt":"R-00001"}') p;
@@ -353,7 +355,7 @@ select t.refuses(format($q$select pg_temp.op('billing.print', %L, '{"payment_id"
 -- the desk's scope (the receipts'): the Lab, taking its own charges, prints what it took and not the Cashier's; the Cashier (everyone's)
 -- prints any desk's; whoever may not see receipts may not print one; a department not using billing has no such door
 select t.as(:'tech');
-select t.ok((c ->> 'copy')::int = 1, 'the Lab prints its own R-00005') from pg_temp.op('billing.print', :'lab', jsonb_build_object('payment_id', :'r5')) c;
+select t.ok((c ->> 'copy')::int = 1 and c ->> 'refunded_by' is null, 'the Lab prints its own R-00005 (not given back)') from pg_temp.op('billing.print', :'lab', jsonb_build_object('payment_id', :'r5')) c;
 select t.refuses(format($q$select pg_temp.op('billing.print', %L, '{"payment_id":"%s"}')$q$, :'lab', :'r1'), 'not_this_desk');
 select t.as(:'cr');
 select t.ok((c ->> 'copy')::int = 2 and (c ->> 'reprint')::boolean, 'the Cashier prints the Lab''s receipt too: a reprint wherever the first was printed')

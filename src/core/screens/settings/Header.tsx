@@ -1,7 +1,7 @@
 // Settings → Organization → Printouts: the clinic's header on every printout (spec §3.13 Printing, the owner's (p3), 2026-10-08) — its
 // name, logo, address, phone and tax number, the core's setting organization.header, as one card with its own Save. The logo is made
 // small here before it is kept (at most 600 × 200 pixels, a PNG), since the setting carries it to every screen; the preview is the
-// header as a receipt draws it.
+// header as a printout draws it. The core names no printout here: they are their layers' own (print/registry.ts).
 import { useState } from 'react'
 import { ImagePlus, X } from 'lucide-react'
 import { writeSetting } from '../../db/rpc'
@@ -58,7 +58,7 @@ export function ClinicHeaderSetting({ org }: { org: Organization }) {
       </div>
       {problem && <p role="alert" className="text-12 text-danger">{problem}</p>}
     </div>
-    <div className="grid content-start gap-1"><p className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">On a receipt</p>
+    <div className="grid content-start gap-1"><p className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">On a printout</p>
       <div data-theme="light" className="rounded-lg border border-line bg-paper p-3 text-fg" style={{ fontSize: '9pt' }}>
         <PrintHeader header={{ name: h.name.trim() || saved.name, logo: h.logo || null, address: h.address.trim() || null, phone: h.phone.trim() || null, tax_number: h.tax_number.trim() || null }} />
       </div></div>

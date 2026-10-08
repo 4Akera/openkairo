@@ -1,6 +1,7 @@
 // The Print key (spec/openCare.md §3.13 Printing, (p1)): P prints what the screen offers to print — never while typing in a field, never
-// with a modifier (so the browser's own Cmd-P / Ctrl-P stays the browser's), never held down. Where several printouts are on screen,
-// the one shown last answers. The test (npm run test:print) reads isPrintKey and the stack.
+// with a modifier (so the browser's own Cmd-P / Ctrl-P stays the browser's), never held down. The P key is the letter P, or, with a
+// keyboard that types no Latin letters (Arabic: that key types ح), the key where P is. Where several printouts are on screen, the one
+// shown last answers. The test (npm run test:print) reads isPrintKey and the stack.
 import { useEffect, useRef } from 'react'
 
 /** the parts of a key event the rule reads */
@@ -11,9 +12,12 @@ export const typingIn = (target: unknown) => {
   const el = target as { tagName?: string; isContentEditable?: boolean } | null
   return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName ?? '') || !!el.isContentEditable)
 }
-/** P alone (Caps Lock or not), outside a field */
+/** the key is P: the letter P (Caps Lock or not, whatever key types it), or the key where P is when the keyboard types something that
+ *  is not a Latin letter there (an Arabic layout); a Latin layout that puts another letter there (Dvorak) keeps that letter */
+const isP = (e: Pick<KeyLike, 'key' | 'code'>) => e.key === 'p' || e.key === 'P' || (e.code === 'KeyP' && !/^[a-z]$/i.test(e.key))
+/** P alone, outside a field */
 export const isPrintKey = (e: KeyLike) =>
-  (e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.repeat && !e.defaultPrevented && !typingIn(e.target)
+  isP(e) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.repeat && !e.defaultPrevented && !typingIn(e.target)
 
 // the printouts on screen that answer P, the last shown first
 const stack: { id: number; fn: () => void }[] = []

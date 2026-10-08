@@ -1,8 +1,10 @@
 // How to take a medicine, in Arabic, as the base can say it (spec §4.6 the chart, §3.13 Printing; the owner's prescription on A5,
 // 2026-10-08): "قرص واحد بالفم مرتين يومياً بعد الأكل لمدة ٧ أيام". From what the prescription says — the dose, the route, how often,
-// as needed, its own words when they are among the few known here, and for how long — with Arabic-Indic digits; what the base cannot
-// say in Arabic is left out (the English line stays above it). The base's own words, beside a pack's (chosen in the build, awaiting
-// the owner: one list later). Pure (npm run test:chart).
+// as needed, its own words where a whole phrase of them is among the few known here, and for how long — with Arabic-Indic digits; what
+// the base cannot say in Arabic is left out, never guessed (the English line stays above it): a dose with no unit names no form, and
+// the doctor's own words are said only phrase by phrase where a phrase is wholly a known one, so "do not take with food" is never
+// turned into "with food". The base's own words, beside a pack's (chosen in the build, awaiting the owner: one list later). Pure
+// (npm run test:chart).
 import type { MedLine } from './record'
 
 const DIGITS = '٠١٢٣٤٥٦٧٨٩'
@@ -34,22 +36,29 @@ export const ROUTE_AR: Record<string, string> = { oral: 'بالفم', sc: 'حق�
 export const OFTEN_AR: Record<string, string> = { OD: 'مرة واحدة يومياً', BD: 'مرتين يومياً', TDS: '٣ مرات يومياً', QDS: '٤ مرات يومياً', q4h: 'كل ٤ ساعات',
   q6h: 'كل ٦ ساعات', q8h: 'كل ٨ ساعات', q12h: 'كل ١٢ ساعة', weekly: 'مرة واحدة أسبوعياً', monthly: 'مرة واحدة شهرياً', PRN: 'عند اللزوم', once: 'مرة واحدة',
   stat: 'فوراً مرة واحدة', HS: 'قبل النوم', nocte: 'قبل النوم' }
-// the prescription's own words the base can say (the rest stay in English, as written)
-const WORDS: [RegExp, string][] = [[/\b(with|during) (meals?|food)\b/i, 'مع الأكل'], [/\bafter (meals?|food|eating)\b/i, 'بعد الأكل'], [/\bbefore breakfast\b/i, 'قبل الفطار'],
-  [/\bbefore (meals?|food|eating)\b/i, 'قبل الأكل'], [/\b(at )?bed ?time\b/i, 'قبل النوم'], [/\bempty stomach\b/i, 'على معدة فارغة'], [/\bwith (plenty of )?water\b/i, 'مع كوب ماء']]
+// the prescription's own words the base can say: each a whole phrase (a part of the words between commas, semicolons or full stops,
+// "take" before it or not), never a phrase found inside other words, which may say not to (the rest stay in English, as written). The
+// composer's own notes are among them: nocte and hs write "at night", mane "in the morning" (visit/parse.ts)
+const WORDS: [RegExp, string][] = [[/^(with|during) (meals?|food)$/, 'مع الأكل'], [/^after (meals?|food|eating)$/, 'بعد الأكل'], [/^before breakfast$/, 'قبل الفطار'],
+  [/^before (meals?|food|eating)$/, 'قبل الأكل'], [/^(at )?bed ?time$/, 'قبل النوم'], [/^at night$/, 'ليلاً'], [/^in the morning$/, 'صباحاً'],
+  [/^(on an? )?empty stomach$/, 'على معدة فارغة'], [/^with (a glass of |plenty of )?water$/, 'مع كوب ماء']]
+/** the doctor's words the base can say in Arabic, phrase by phrase in their order; a phrase not wholly a known one says nothing */
+const phrases = (text: string | null | undefined) => (text ?? '').toLowerCase().split(/[;,.\n]/).map((p) => p.trim().replace(/\s+/g, ' ').replace(/^take /, ''))
+  .flatMap((p) => WORDS.filter(([re]) => re.test(p)).map(([, w]) => w))
 const days = (n: number) => n === 1 ? 'لمدة يوم واحد' : n === 2 ? 'لمدة يومين' : n <= 10 ? `لمدة ${arabicDigits(n)} أيام` : `لمدة ${arabicDigits(n)} يوماً`
 
-/** the dose in Arabic: a count of its form (one tablet, two puffs), a measure (٥٠٠ مجم), or nothing the base can say */
+/** the dose in Arabic: a count of its form (one tablet, two puffs), a measure (٥٠٠ مجم), or nothing the base can say — a number with no
+ *  unit names no form (it may be a syrup's), so it is left out */
 export function arabicDose(dose: string | null | undefined): string | null {
   const m = (dose ?? '').trim().match(/^(\d+(?:\.\d+)?)\s*(.*)$/)
   if (!m) return null
   const value = Number(m[1]); const unit = m[2].trim().toLowerCase(); const form = FORM_OF[unit]
-  return form ? counted(value, FORMS[form]) : UNITS[unit] ? `${arabicDigits(value)} ${UNITS[unit]}` : unit ? null : counted(value, FORMS.tablet)
+  return form ? counted(value, FORMS[form]) : UNITS[unit] ? `${arabicDigits(value)} ${UNITS[unit]}` : null
 }
 /** the directions in Arabic: dose, route, how often, as needed, the prescription's own known words, how long */
 export function arabicSig(l: Pick<MedLine, 'dose' | 'route' | 'frequency' | 'prn' | 'days' | 'instructions'>): string {
   const often = l.frequency ? OFTEN_AR[l.frequency] ?? null : null
   const asNeeded = l.prn && l.frequency !== 'PRN' ? 'عند اللزوم' : null
-  const words = [...new Set(WORDS.filter(([re]) => re.test(l.instructions ?? '')).map(([, w]) => w))]
+  const words = [...new Set(phrases(l.instructions))]
   return [arabicDose(l.dose), l.route ? ROUTE_AR[l.route] ?? null : null, often, asNeeded, ...words, l.days ? days(l.days) : null].filter(Boolean).join(' ')
 }

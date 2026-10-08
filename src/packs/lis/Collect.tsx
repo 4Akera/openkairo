@@ -4,7 +4,8 @@
 // tube, or printed on its label where the laboratory's Sample labels says printed), the tubes by colour with the tests drawn into each,
 // fasting asked where it matters, then Collected — a collected step on each order, carrying the sample number — or Couldn't collect with
 // a reason the doctor sees. Where labels print (§3.13 Printing, owner 2026-10-08): at Collected, "Collected · 3 tubes · labels ready",
-// Print 3 labels (P), then Print again (the same numbers); a patient's tubes still at Collected print again from their row. + Walk-in as on any
+// Print 3 labels (P), then Print again (the same numbers, and the time of collection the record holds, the server's); a patient's tubes
+// still at Collected print from their row, each sample's labels marked Reprint where it was printed before. + Walk-in as on any
 // bench, with the laboratory's own second step (Step.tsx). A tube Receive rejected comes back to To collect, "new sample" and why.
 // With collection chairs (the large lab's switch): each collector picks a chair (kept in this browser), every patient's tests of the
 // day get a ticket number in the order they came (lis.tickets), Call next calls the next with no chair (stat first) to mine, and my
@@ -32,7 +33,7 @@ import { byWord, packRowOf } from '@core/screens/rows'
 import { usePackRows } from '@core/screens/useRows'
 import { needsFasting, tubesFor } from './tubes'
 import { PrintButton, usePrint } from '@core/print'
-import { atCollected, labelsOf, printWords, samplesOf, type Label } from './labels'
+import { atCollected, collectedAt, labelsOf, printWords, sampleNumbers, samplesOf, type Label } from './labels'
 import { Cap } from './Cap'
 import { byArrival, largeOf, nextUp, nowAt, ticketOf, type Ticket } from './large'
 
@@ -61,7 +62,7 @@ export function Collect({ dept }: ScreenProps) {
   const [ready, setReady] = useState<{ words: string; labels: Label[]; patient: string } | null>(null)
   const large = largeOf(org, dept.id); const [chair, setChair] = useChair(dept.id, large.chairs)
   const printing = large.labels === 'printed'; const print = usePrint()
-  const printLabels = (labels: Label[], patientId: string) => print({ key: 'lis.labels', data: labels, thing: samplesOf(labels), patientId, purpose: 'TREAT' })
+  const printLabels = (labels: Label[], patientId: string) => print({ key: 'lis.labels', data: labels, thing: samplesOf(labels), things: sampleNumbers(labels), patientId, purpose: 'TREAT' })
   const f = find.trim().toLowerCase()
   const rows = useMemo(() => q.data?.requests ?? [], [q.data])
   const packs = usePackRows('screen', useMemo(() => groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g))), [rows]), dept)
@@ -98,24 +99,26 @@ export function Collect({ dept }: ScreenProps) {
     try { await packOp('lis.call', dept.id, { number: t.number, chair, take }); await tickets.refetch(); setOpen(g.patient.id); setFasting(null); setWhy(null); setSaid(`#${t.number} · ${g.patient.given_name} ${g.patient.family_name} → Chair ${chair}`) }
     catch (x) { setSaid(null); setError(errorText(x)); void tickets.refetch() } finally { setBusy(null) }
   }
-  const land = async (g: PatientGroup, items: EntryIn[], words: string, labels?: Label[]) => {
+  const land = async (g: PatientGroup, items: EntryIn[], words: string, labelsAt?: (at: string | null) => Label[]) => {
     setBusy(g.patient.id); setError(null)
     // the number went on these tubes: a new sample (one sent back) gets a new one
-    try { await write(oneSet(items)); qc.removeQueries({ queryKey: ['lis.sample', dept.id, g.patient.id] }); setOpen(null); setSaid(words)
-      setReady(labels?.length ? { words, labels, patient: g.patient.id } : null); refresh(qc) }
+    try { const landed = await write(oneSet(items)); qc.removeQueries({ queryKey: ['lis.sample', dept.id, g.patient.id] }); setOpen(null); setSaid(words)
+      const labels = labelsAt?.(collectedAt(landed)); setReady(labels?.length ? { words, labels, patient: g.patient.id } : null); refresh(qc) }
     catch (x) { setError(errorText(x)) } finally { setBusy(null) }
   }
-  // collected: the step on each test with the number; where labels print, its labels ready (the number, now, the fasting answer)
+  // collected: the step on each test with the number (no time of its own: the writer's, the server's); where labels print, its labels
+  // ready once it has landed (the number, the time the record gave it, the fasting answer)
   const collect = (g: PatientGroup, n: string) => land(g, g.rows.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'in-progress',
     ...(serviceOf(r)?.steps.includes('collected') ? { step: 'collected' } : {}), specimen: n, ...(fasting === false ? { note: 'not fasting' } : {}) } })),
     printing ? `${g.patient.given_name} ${g.patient.family_name} · ${n} · Collected · ${tubesOf(g)} ${tubesOf(g) === 1 ? 'tube' : 'tubes'} · labels ready`
       : `${g.patient.given_name} ${g.patient.family_name} · ${n}: write it on each tube`,
-    printing ? labelsOf(g.rows, serviceOf, { sample: n, at: new Date().toISOString(), fasting }) : undefined)
+    printing ? (at) => labelsOf(g.rows, serviceOf, { sample: n, at, fasting }) : undefined)
   const notCollected = (g: PatientGroup, reason: string) => land(g, g.rows.map((r) => answerEntry(r, dept.id, { type: 'step', data: { status: 'cancelled', reason } })),
     `${g.patient.given_name} ${g.patient.family_name}: not collected (${reason.toLowerCase()}) — the doctor sees why`)
 
   const tubesOf = (g: PatientGroup) => tubesFor(g.rows.map((r) => ({ code: serviceOf(r)?.code ?? '', section_name: r.section_name }))).length
-  // a patient's tubes still at Collected: their labels again, each tube its own sample's number
+  // a patient's tubes still at Collected: their labels again, each tube its own sample's number; the button says Print until it has
+  // printed here (the paper says Reprint, label by label, for a sample printed before)
   const again = (g: PatientGroup) => printing ? labelsOf(g.rows.filter(atCollected), serviceOf) : []
   const row = (g: PatientGroup) => {
     const isOpen = open === g.patient.id; const walk = g.rows.some((r) => isWalkIn(r.order, org?.allDepartments ?? []))
@@ -136,7 +139,7 @@ export function Collect({ dept }: ScreenProps) {
       : view === 'todo' && can('write:step') ? <span className="flex gap-1.5">
         {chair && t && t.chair !== chair && <Button size="sm" variant="ghost" loading={busy === `call ${t.number}`} onClick={() => void call(t, g, elsewhere)}><Megaphone />{elsewhere ? 'Call here' : 'Call'}</Button>}
         <Button size="sm" variant={isOpen ? 'ghost' : 'outline'} aria-expanded={isOpen} onClick={() => toggle(g.patient.id)}>{isOpen ? 'Close' : 'Collect'}</Button></span>
-      : view === 'collected' && again(g).length ? <PrintButton label={printWords(again(g))} printed print={() => printLabels(again(g), g.patient.id)} /> : undefined} />,
+      : view === 'collected' && again(g).length ? <PrintButton label={printWords(again(g))} print={() => printLabels(again(g), g.patient.id)} /> : undefined} />,
       isOpen && (view === 'todo' || heldView) && fold(g, false, word)]
   }
   // the fold to collect: the sample number, the tubes by colour, fasting where it matters, then Collected or why not
