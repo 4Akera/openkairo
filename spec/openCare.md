@@ -1377,7 +1377,7 @@ for billing. Each is **to build**, in the core's own files, never a pack's (owne
   (D11), a hold's short name beside its word (D22: the soft check's word carries it), the order-card field (D1), and the
   chargeables door for now (D16; *Later*).
 
-### 5.5 Radiology (the owner's answers to the pictures, 2026-10-08; nothing built)
+### 5.5 Radiology (the owner's answers to the pictures, 2026-10-08; built 2026-10-08, merged)
 The pictures `/pictures.html#rad-order` … `#rad-settings` (`src/pictures/radiology.tsx`) were drawn by Claude; the owner answered
 their questions on 2026-10-08 ("1 two tabs, 2-6 ok, 7 yours"). What the owner decided:
 - **Two tabs** (Q1): *Scan* for the radiographer (one list for every room, a filter by kind: X-ray, Ultrasound, CT, MRI; To scan ·
