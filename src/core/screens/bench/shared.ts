@@ -1,13 +1,15 @@
 import type { Organization, RequestQueueRow } from '../../db/types'
 import { ymd } from '../../ui'
 import type { Tone } from '../../ui/tone'
+import { turnOf } from '../rows'
 // The bench works a department's request queue by patient: one sample, one person, many tests (spec 05, the request surface at volume).
 /** one patient's open requests; since = when the longest wait today began (null when every request is from an older day) */
 export interface PatientGroup { patient: RequestQueueRow['patient']; rows: RequestQueueRow[]; priority: 'stat' | 'urgent' | 'routine'; oldest: string; from: string[]; since: string | null }
 const RANK = { stat: 0, urgent: 1, routine: 2 } as const
 /** the bench's order, which the patient screen's "next patient" follows too: today's patients first (urgent, then the longest
- *  wait today), then patients with only older requests (urgent, then oldest) */
-export function groupByPatient(rows: RequestQueueRow[], today = todayYmd()): PatientGroup[] {
+ *  wait today), then patients with only older requests (urgent, then oldest). place (§5.7, core change (h)): a patient's place on the
+ *  list, a time a pack gives (a booking): a patient booked for today is today's, and goes in at the place, or as they came when later */
+export function groupByPatient(rows: RequestQueueRow[], today = todayYmd(), place?: (g: PatientGroup) => number | null, now = Date.now()): PatientGroup[] {
   const by = new Map<string, PatientGroup>()
   for (const r of rows) {
     const g = by.get(r.patient.id) ?? { patient: r.patient, rows: [], priority: 'routine', oldest: r.occurred_at, from: [], since: null }
@@ -18,8 +20,15 @@ export function groupByPatient(rows: RequestQueueRow[], today = todayYmd()): Pat
     if (isToday(r, today)) { const w = waitFrom(r, today); if (!g.since || Date.parse(w) < Date.parse(g.since)) g.since = w }
     by.set(r.patient.id, g)
   }
+  const turn = new Map<PatientGroup, [number, number]>()
+  if (place) for (const g of by.values()) {
+    const p = place(g); if (p == null) continue
+    if (!g.since && ymd(new Date(p).toISOString()) === today) g.since = new Date(p).toISOString()
+    if (g.since) turn.set(g, turnOf(Math.min(Date.parse(g.since), p), p, now))   // a booked order was asked for before its place: never late
+  }
+  const at = (g: PatientGroup): [number, number] => turn.get(g) ?? [1, Date.parse(g.since!)]
   return [...by.values()].sort((a, b) => Number(!a.since) - Number(!b.since) || RANK[a.priority] - RANK[b.priority]
-    || (a.since && b.since ? Date.parse(a.since) - Date.parse(b.since) : a.oldest.localeCompare(b.oldest)))
+    || (a.since && b.since ? at(a)[0] - at(b)[0] || at(a)[1] - at(b)[1] : a.oldest.localeCompare(b.oldest)))
 }
 export const ageOf = (born: string) => { const [y, m = 1, d = 1] = born.split('-').map(Number); const n = new Date(); return n.getFullYear() - y - (n.getMonth() + 1 < m || (n.getMonth() + 1 === m && n.getDate() < d) ? 1 : 0) }
 /** 34 F */

@@ -12,9 +12,10 @@ import type { Department, OrderRow, Organization, PackDeclared } from '../db/typ
 import { isPackKey, stateTone, type MarkRow, type StateTone } from './marks'
 
 /** where a row is drawn: the desk, the clinic queue (and its requests), the base bench, the bench's patient page, the page that answers
- *  one request (Request.tsx), a pack's own list built on the core ListRow, and the doctor's chart (its order lines: a soft check's word
- *  and tone only, never a button, a card or "…anyway"; owner, 2026-10-08) */
-export type RowList = 'desk' | 'queue' | 'bench' | 'patient' | 'request' | 'screen' | 'chart'
+ *  one request (Request.tsx), a pack's own list built on the core ListRow, the doctor's chart (its order lines: a soft check's word and
+ *  tone only, never a button, a card or "…anyway", owner, 2026-10-08; and a pack's words on an order's line, core change (l), §5.7) and the
+ *  desk's patient card (core change (i), §5.7: one patient, the visit they have open here or none, no orders) */
+export type RowList = 'desk' | 'queue' | 'bench' | 'patient' | 'request' | 'screen' | 'chart' | 'card'
 
 /** (b) one line a department prices itself: what it is, how many, what it comes to (plain numbers), and the order it belongs to where it
  *  has one (so a soft check can wait per order) */
@@ -180,4 +181,122 @@ export async function goAhead(defs: readonly SoftCheckDef[], row: PackRow, items
   const calls = anywayCalls(items, waits)
   await Promise.all(calls.map((c) => defs.find((d) => d.pack === c.pack)!.anyway({ row, orders: c.orders, reason: reasonOf(reason), ctx })))
   return calls.flatMap((c) => c.orders)
+}
+
+// ── (h) a row's place (owner, 2026-10-08, "yes to queue order"): a pack the department uses gives a row its place, a time — a booked
+//    patient's time or number — and the clinic queue and the bench's To do put the row at it; walk-ins fill the gaps. One who came early
+//    waits for their place; one who came late goes in as they came; an urgent row still goes first (the lists' own rule, before this) ──
+export interface RowPlace {
+  load?: RowLoad
+  /** the row's place, an ISO time; none: the row goes as it came */
+  place: (row: PackRow, ctx: RowCtx, data: unknown) => string | null | undefined
+}
+export interface RowPlaceDef extends RowPlace { pack: string }
+const placeDefs: RowPlaceDef[] = []
+/** a pack's one row place (a second is refused, and so is one of the core or the base) */
+export function registerRowPlace(pack: string, p: RowPlace): boolean {
+  if (!isPackKey(pack)) { console.error(`openCare: row places belong to a pack: ${pack}`); return false }
+  if (placeDefs.some((d) => d.pack === pack)) { console.error(`openCare: ${pack} has its row place already`); return false }
+  if (typeof p?.place !== 'function') { console.error(`openCare: the row place of ${pack} needs a place`); return false }
+  placeDefs.push({ pack, ...p }); return true
+}
+export const rowPlaceDefs = (): readonly RowPlaceDef[] => placeDefs
+/** a row's place: the first a pack this department uses gives, in its pack order; a time that does not read as one says nothing */
+export function placeOf(defs: readonly RowPlaceDef[], row: PackRow, ctx: RowCtx, data: PackData): number | null {
+  for (const d of used(defs, ctx)) {
+    if (!ready(d, data)) continue
+    let p: string | null | undefined = null
+    try { p = d.place(row, ctx, data[d.pack]) } catch (e) { console.error(`openCare: the row place of ${d.pack} failed`, e); continue }
+    const t = typeof p === 'string' ? Date.parse(p) : NaN
+    if (Number.isFinite(t)) return t
+  }
+  return null
+}
+/** a row's turn (owner, 2026-10-08: "a booked patient goes in at their time or number, ahead of walk-ins who came earlier; walk-ins fill
+ *  the gaps"): a booked row here by its place, once the place has come, goes ahead of the rest, in place order; one whose place has not
+ *  come yet waits for it (behind those here now); one who came after their place goes in as they came, into the gaps, as a walk-in does.
+ *  Returned as [band, time]: band 0 first */
+export function turnOf(came: number, place: number | null, now: number): [number, number] {
+  if (place == null || came > place) return [1, came]
+  return place <= now ? [0, place] : [1, place]
+}
+/** rows in their turn, urgent first (the list's own rank), then by turn, then as they were (a stable sort) */
+export function inTurn<R>(rows: readonly R[], rank: (r: R) => number, came: (r: R) => number, place: (r: R) => number | null, now: number): R[] {
+  return rows.map((r, i) => ({ r, i, k: rank(r), t: turnOf(came(r), place(r), now) }))
+    .sort((a, b) => a.k - b.k || a.t[0] - b.t[0] || a.t[1] - b.t[1] || a.i - b.i).map((x) => x.r)
+}
+
+// ── (l) a pack's words on a row's orders, from its own data (owner, 2026-10-08): read once a list as a row action reads its own; drawn
+//    as the row's marks and, on the doctor's chart, on the order's line ("booked · Sun 11 Oct 10:00"). A state tone only. Unlike a soft
+//    check's, the word may carry a date or a time, and nothing waits on it ──
+/** a word on one of the row's orders, or (no order) on the row itself: a booked visit's "booked · No. 5" */
+export interface OrderWord { order?: string; word: string; tone?: StateTone }
+export interface OrderWords {
+  load?: RowLoad
+  words: (row: PackRow, ctx: RowCtx, data: unknown) => readonly OrderWord[] | null | undefined
+}
+export interface OrderWordsDef extends OrderWords { pack: string }
+const wordDefs: OrderWordsDef[] = []
+/** a pack's one set of order words (a second is refused, and so is one of the core or the base) */
+export function registerOrderWords(pack: string, w: OrderWords): boolean {
+  if (!isPackKey(pack)) { console.error(`openCare: order words belong to a pack: ${pack}`); return false }
+  if (wordDefs.some((d) => d.pack === pack)) { console.error(`openCare: ${pack} has its order words already`); return false }
+  if (typeof w?.words !== 'function') { console.error(`openCare: the order words of ${pack} need words`); return false }
+  wordDefs.push({ pack, ...w }); return true
+}
+export const orderWordDefs = (): readonly OrderWordsDef[] => wordDefs
+/** each order's words on the row, by order (the row's own under ''): only orders on the row, from the packs the department uses, in its pack order, one a pack;
+ *  at most 40 letters; a failing pack says nothing */
+export function orderWordsOf(defs: readonly OrderWordsDef[], row: PackRow, ctx: RowCtx, data: PackData): Map<string, { key: string; word: string; tone?: StateTone }[]> {
+  const out = new Map<string, { key: string; word: string; tone?: StateTone }[]>(); const on = new Set(row.orders.map((o) => o.item))
+  for (const d of used(defs, ctx)) {
+    if (!ready(d, data)) continue
+    let ws: readonly OrderWord[] | null | undefined = null
+    try { ws = d.words(row, ctx, data[d.pack]) } catch (e) { console.error(`openCare: the order words of ${d.pack} failed`, e); continue }
+    for (const w of Array.isArray(ws) ? ws : []) {
+      const word = typeof w?.word === 'string' ? w.word.replace(/\s+/g, ' ').trim().slice(0, 40) : ''
+      const at = typeof w?.order === 'string' && w.order ? w.order : ''
+      if (!word || (at && !on.has(at))) continue
+      const list = out.get(at) ?? []; if (list.some((x) => x.key === d.pack)) continue
+      const tone = stateTone(w.tone); list.push({ key: d.pack, word, ...(tone ? { tone } : {}) }); out.set(at, list)
+    }
+  }
+  return out
+}
+
+// ── (m) a pack's own view on a bench (owner, 2026-10-08): one counted filter in the bench's toolbar, the orders it names, in groups of
+//    its words (To book; Booked · coming), not greyed. An order in it leaves To do; one in progress stays where it is ──
+export interface BenchView {
+  label: string
+  /** its groups in the order they show (a group not named comes after, as found) */
+  groups?: readonly string[]
+  /** the groups its count in the toolbar counts (default: every group) */
+  counts?: readonly string[]
+  load?: RowLoad
+  /** the group an order of the row is in, in the pack's words; none: not in the view */
+  group: (order: string, row: PackRow, ctx: RowCtx, data: unknown) => string | null | undefined
+}
+export interface BenchViewDef extends BenchView { pack: string }
+const viewDefs: BenchViewDef[] = []
+/** a pack's one bench view (a second is refused, and so is one of the core or the base) */
+export function registerBenchView(pack: string, v: BenchView): boolean {
+  if (!isPackKey(pack)) { console.error(`openCare: bench views belong to a pack: ${pack}`); return false }
+  if (viewDefs.some((d) => d.pack === pack)) { console.error(`openCare: ${pack} has its bench view already`); return false }
+  if (typeof v?.group !== 'function' || !v.label?.trim()) { console.error(`openCare: the bench view of ${pack} needs a label and a group`); return false }
+  viewDefs.push({ pack, ...v }); return true
+}
+export const benchViewDefs = (): readonly BenchViewDef[] => viewDefs
+/** the packs' views for a bench's rows: each pack the department uses, its label, its orders by group, and its groups' order */
+export function benchViewsOf(defs: readonly BenchViewDef[], rows: readonly PackRow[], ctx: RowCtx, data: PackData): { pack: string; label: string; groups: Map<string, string>; order: string[]; counts: string[] | null }[] {
+  return used(defs, ctx).flatMap((d) => {
+    if (!ready(d, data)) return []
+    const groups = new Map<string, string>()
+    for (const r of rows) for (const o of r.orders) {
+      let g: string | null | undefined = null
+      try { g = d.group(o.item, r, ctx, data[d.pack]) } catch (e) { console.error(`openCare: the bench view of ${d.pack} failed`, e); return [] }
+      const word = typeof g === 'string' ? g.replace(/\s+/g, ' ').trim().slice(0, 40) : ''
+      if (word) groups.set(o.item, word)
+    }
+    return [{ pack: d.pack, label: d.label.trim(), groups, order: [...(d.groups ?? [])], counts: d.counts ? [...d.counts] : null }]
+  })
 }

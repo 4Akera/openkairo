@@ -16,6 +16,7 @@ import { read } from '../../db/rpc'
 import type { PresenceRow, TableRead } from '../../db/types'
 import { Centered, SplitPane, Spinner, errorText } from '../../ui'
 import { nextPatient } from '../clinic/words'
+import { useInTurn } from '../Queue'
 import type { ComposerHandle } from '../visit/Composer'
 import { ChartBanner } from './ChartBanner'
 import { EncounterPane } from './center/EncounterPane'
@@ -55,7 +56,9 @@ export function ChartScreen() {
   useEffect(() => { const h = document.documentElement; h.classList.add('no-scrollbar'); return () => h.classList.remove('no-scrollbar') }, [])
   useEffect(() => { if (rec.data) rememberPatient({ ...rec.data.patient }) }, [rec.data?.patient.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // the next patient by the list's own rule: my Back patient (or an unclaimed one) first, else the first waiting
-  const next = useMemo(() => nextPatient((queue.data?.rows ?? []).filter((r) => r.id !== visitId), me), [queue.data, visitId, me])
+  // (the waiting in their turn, as the queue shows them: a booked patient at their place, §5.7)
+  const inTurn = useInTurn(useMemo(() => queue.data?.rows ?? [], [queue.data]))
+  const next = useMemo(() => nextPatient(inTurn.filter((r) => r.id !== visitId), me), [inTurn, visitId, me])
   // what the center shows, the kind filter and the tab (under 640 px) live in the URL
   const at = atOf(params); const kind = kindOf(params.get('kind')); const tab = params.get('tab') === 'record' ? 'aside' : 'main'
   // each change starts from the address as it is now (two quick changes both count), and replaces it: Esc is the way back

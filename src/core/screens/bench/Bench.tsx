@@ -19,10 +19,11 @@ import { usePackRows } from '../useRows'
 import { WalkIn } from './WalkIn'
 import { benchOffers } from './WhatFor'
 import { isWalkIn } from './walkins'
-import { ageSex, groupByPatient, matches, nextSteps, phaseOf, splitByDay, stepName, stepWords, testsLine, todayYmd, type DayGroup, type Phase } from './shared'
+import { ageSex, groupByPatient, matches, nextSteps, phaseOf, splitByDay, stepName, stepWords, testsLine, todayYmd, type DayGroup, type PatientGroup, type Phase } from './shared'
 
-/** the views: to do, in progress, done today, and one a word for orders a pack holds waiting ("Waiting for payment", spec §5.4) */
-type Segment = Phase | 'done' | `wait:${string}`
+/** the views: to do, in progress, done today, one a word for orders a pack holds waiting ("Waiting for payment", spec §5.4), and a
+ *  pack's own view (To book, spec §5.7, core change (m)) */
+type Segment = Phase | 'done' | `wait:${string}` | `view:${string}`
 
 /** The bench (base.bench): whose sample is next, and what is waiting on us. Scan or type, then one row per patient in three views,
  *  counted in the toolbar — to do (not started), in progress, done today; a pack the department uses may give its own words (the lab's
@@ -43,7 +44,13 @@ export function Bench({ dept }: ScreenProps) {
   const rows = useMemo(() => q.data?.requests ?? [], [q.data])
   // the packs on the rows (spec §5.4): their buttons and cards; the orders a pack holds waiting go to that word's view, greyed there,
   // and the patient's other orders stay in To do and In progress; a row opens while one of its orders is free
-  const packs = usePackRows('bench', useMemo(() => groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g))), [rows]), dept)
+  const allRows = useMemo(() => groupByPatient(rows).map((g) => packRowOf(g.patient.id, benchMarkRow(g))), [rows])
+  const packs = usePackRows('bench', allRows, dept)
+  // a patient's place on the list (a booking's time, core change (h)), and the packs' own views (core change (m)): an order not
+  // started that a pack's view names leaves To do for that view, in its group
+  const placeOfGroup = (g: PatientGroup) => packs.place(packRowOf(g.patient.id, benchMarkRow(g)))
+  const pviews = packs.views(allRows)
+  const viewOf = (r: RequestQueueRow) => phaseOf(r.request?.step) === 'todo' ? pviews.find((v) => v.groups.has(r.order.item)) : undefined
   const free = (r: RequestQueueRow) => packs.isFree(r.order.item)
   const openable = (pid: string) => rows.some((r) => r.patient.id === pid && free(r))
   const recent = q.data?.recent ?? []
@@ -51,21 +58,26 @@ export function Bench({ dept }: ScreenProps) {
   const inSection = (s: string | null) => !section || (s ?? 'Other') === section
   const f = find.trim().toLowerCase(); const today = todayYmd()
   const shown = rows.filter((r) => inSection(r.section_name))
-  const days = (rs: RequestQueueRow[]) => splitByDay(groupByPatient(rs, today).filter((g) => matches(g.patient, f)))
-  const byPhase = (p: Phase) => days(shown.filter((r) => free(r) && phaseOf(r.request?.step) === p))
+  const days = (rs: RequestQueueRow[]) => splitByDay(groupByPatient(rs, today, placeOfGroup).filter((g) => matches(g.patient, f)))
+  const byPhase = (p: Phase) => days(shown.filter((r) => free(r) && phaseOf(r.request?.step) === p && !viewOf(r)))
   const todo = byPhase('todo'); const doing = byPhase('doing')
   const held = byWord(shown, packs.waits, packs.ahead).map((w) => ({ id: `wait:${w.word}` as const, word: w.word, lists: days(w.rows) }))
   const done = recent.filter((r) => inSection(r.section_name) && matches(r.patient, f))
   const first = words.todo ?? 'To do'
+  const rank = (order: string[], w: string) => { const i = order.indexOf(w); return i < 0 ? order.length : i }
+  const packLists = pviews.map((v) => ({ id: `view:${v.pack}` as const, label: v.label, counts: v.counts, groups: [...new Set(v.groups.values())].sort((a, b) => rank(v.order, a) - rank(v.order, b)).map((word) => ({ word,
+    list: groupByPatient(shown.filter((r) => viewOf(r) === v && v.groups.get(r.order.item) === word), today).filter((g) => matches(g.patient, f)) })).filter((x) => x.list.length) }))
   const segs: [Segment, string, number][] = [['todo', first, todo.today.length], ['doing', 'In progress', doing.today.length],
-    ...held.map((h): [Segment, string, number] => [h.id, h.word, h.lists.today.length + h.lists.older.length]), ['done', words.done ?? 'Done today', done.length]]
+    ...held.map((h): [Segment, string, number] => [h.id, h.word, h.lists.today.length + h.lists.older.length]),
+    ...packLists.map((v): [Segment, string, number] => [v.id, v.label, v.groups.filter((x) => !v.counts || v.counts.includes(x.word)).reduce((n, x) => n + x.list.length, 0)]), ['done', words.done ?? 'Done today', done.length]]
   // a word's view goes once nothing waits with it: back to the first
-  const seg: Segment = chosen.startsWith('wait:') && !held.some((h) => h.id === chosen) ? 'todo' : chosen
+  const seg: Segment = (chosen.startsWith('wait:') && !held.some((h) => h.id === chosen)) || (chosen.startsWith('view:') && !packLists.some((v) => v.id === chosen)) ? 'todo' : chosen
   const waitList = held.find((h) => h.id === seg)
+  const packList = packLists.find((v) => v.id === seg)
   const lists = seg === 'todo' ? todo : seg === 'doing' ? doing : waitList?.lists ?? null
   const oldOpen = showOld || !!f   // a scan finds a patient from an older day too
-  const visible: DayGroup[] = lists ? [...lists.today, ...(oldOpen ? lists.older : [])] : []
-  const n = lists ? visible.length : done.length
+  const visible: DayGroup[] = lists ? [...lists.today, ...(oldOpen ? lists.older : [])] : packList ? packList.groups.flatMap((x) => x.list) : []
+  const n = lists || packList ? visible.length : done.length
   const c = Math.min(cursor, Math.max(0, n - 1))
   const open = (pid: string) => navigate(`/bench/${pid}`)
   const canWalkIn = can('write:order') && benchOffers(org, departmentId).length > 0   // a bench orders only for itself: a walk-in
@@ -98,8 +110,9 @@ export function Bench({ dept }: ScreenProps) {
   // while scanning, where else the patient is, older days included
   const found: [Segment, string, number][] = segs.map(([k, l, m]) => [k, l, k === 'todo' ? todo.today.length + todo.older.length : k === 'doing' ? doing.today.length + doing.older.length : k === 'done' ? done.length : m])
   const none = (text: string) => <Nothing text={f ? 'No match here.' : text} others={f ? found.filter(([k, , m]) => k !== seg && m > 0) : []} onPick={pick} />
-  const row = (g: DayGroup, i: number, old: boolean) => {
-    const pr = packRowOf(`${seg} ${g.patient.id}`, benchMarkRow(g)); const ready = g.rows.filter(free); const waiting = g.rows.filter((r) => !free(r))
+  const row = (g: DayGroup, i: number, old: boolean, group = '') => {
+    // a patient in two groups of a pack's view is two rows, each its own
+    const pr = packRowOf(`${seg} ${group} ${g.patient.id}`, benchMarkRow(g)); const ready = g.rows.filter(free); const waiting = g.rows.filter((r) => !free(r))
     const steps = nextSteps(ready, org, can).map((s) => <Button key={`${s.type} ${s.key}`} size="sm" variant="outline" onClick={() => void advance(s.rows, s.key, s.type)} disabled={stepping}>{stepName(s.key)} {s.rows.length}</Button>)
     // an order a pack holds waiting: its buttons greyed, its word on the row, and Go ahead anyway… with a reason (spec §5.4)
     const heldSteps = nextSteps(waiting, org, can)
@@ -120,13 +133,13 @@ export function Bench({ dept }: ScreenProps) {
     return <ListRow key={g.patient.id} number={g.patient.record_number} name={`${g.patient.given_name} ${g.patient.family_name}`} age={ageSex(g.patient)}
       status={<>{g.priority !== 'routine' && <Tag tone="danger">{g.priority}</Tag>}{walk && <Tag tone="info">walk-in</Tag>}{seg === 'doing' && stepWords(g.rows).map((w) => <Tag key={w} tone={w === 'reopened' ? 'warn' : 'neutral'}>{w}</Tag>)}<span className="truncate">{testsLine(g.rows)}</span>
         {walk?.order.asked_by && <span className="truncate text-12 text-faint">· {walk.order.asked_by}</span>}</>}
-      who={where} actions={steps.length ? <>{where}{steps}</> : undefined} marks={[...marks(benchMarkRow(g)), ...packs.marks(pr)]} minutes={g.since ? minutesSince(g.since) : null} muted={old}
+      who={where} actions={steps.length ? <>{where}{steps}</> : undefined} marks={[...marks(benchMarkRow(g)), ...packs.marks(pr)]} minutes={g.since && !seg.startsWith('view:') ? minutesSince(g.since) : null} muted={old}
       extra={packs.buttons(pr)} below={packs.below(pr)}
       selected={i === c && arrows} enter={i === c && !arrows && !!f} hover={!kbd} className={i === c ? 'bench-cursor' : undefined} onOpen={openable(g.patient.id) ? () => open(g.patient.id) : undefined} />
   }
 
   // the frame's toolbar: the three views counted (the first in a state colour while any wait), the sections, the scan box
-  const views: ScreenView<Segment>[] = segs.map(([id, label, count]) => ({ id, label, count, ...(id === 'todo' || id.startsWith('wait:') ? { needs: 'warn' as const } : {}) }))
+  const views: ScreenView<Segment>[] = segs.map(([id, label, count]) => ({ id, label, count, ...(id === 'todo' || id.startsWith('wait:') || id.startsWith('view:') ? { needs: 'warn' as const } : {}) }))
   const scan = <div className="relative w-full sm:w-80"><ScanLine className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
     <Input ref={box} autoFocus value={find} onChange={(e) => { setFind(e.target.value); setCursor(0); setKbd(!!e.target.value); setArrows(false) }} onKeyDown={onKey} placeholder="Scan or type a record number or name"
       aria-label="Scan or type a record number or name — ↑↓ move · ↵ open · Esc clear" className="ps-9 pe-8" />
@@ -141,7 +154,9 @@ export function Bench({ dept }: ScreenProps) {
         {lists.today.length ? lists.today.map((g, i) => row(g, i, false)) : f && lists.older.length ? null : none(seg === 'todo' ? `Nobody ${first.toLowerCase()} today.` : waitList ? 'Nobody waiting today.' : 'Nothing in progress today.')}
         {lists.older.length > 0 && <ListSection title={seg === 'doing' ? 'In progress, older days' : waitList ? `${waitList.word}, older days` : words.older ?? 'Not started, older days'}
           count={lists.older.length} folded={!oldOpen} onToggle={f ? undefined : () => setShowOld(!showOld)}>{lists.older.map((g, j) => row(g, lists.today.length + j, true))}</ListSection>}
-      </> : done.length ? done.map((r, i) => { const pr = packRowOf(`done ${r.id}`, benchMarkRow({ patient: r.patient, rows: [r] }))
+      </> : packList ? (packList.groups.length ? packList.groups.map((x, gi) => { const before = packList.groups.slice(0, gi).reduce((m, y) => m + y.list.length, 0)
+          return <ListSection key={x.word} title={x.word} count={x.list.length}>{x.list.map((g, j) => row(g, before + j, false, x.word))}</ListSection> }) : none('Nothing here.'))
+      : done.length ? done.map((r, i) => { const pr = packRowOf(`done ${r.id}`, benchMarkRow({ patient: r.patient, rows: [r] }))
           return <Released key={r.id} r={r} marks={marks(benchMarkRow({ patient: r.patient, rows: [r] }))} next={i === c && (kbd || !!f)} onCorrect={() => navigate(`/bench/correct/${r.id}`)}
             extra={packs.buttons(pr)} below={packs.below(pr)} /> })
         : none('Nothing released in the last 24 hours.')}
