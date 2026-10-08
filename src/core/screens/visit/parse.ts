@@ -24,12 +24,13 @@ export interface Ctx {
   send?: SendWords | null                             // where a prescription goes from here, in its pack's words (visit/send.ts): /rx … send
   facts?: StandingFacts                               // the pregnancy, breastfeeding and alerts standing now: /preg, /bf, /alert change or end them
   scores?: ScoreTable[]                               // the score tables (read 'me'): /score and each score's alias (/gcs)
+  record?: Pick<RecordView, 'patient' | 'values' | 'medications' | 'allergies' | 'allergy_review'>   // what the chart shows, read-only: a pack's order card may show it (spec §5.5, (b))
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
 import { allowed, commandNamed, notHere, registerCommand } from './commands'
 import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, factLine, pregnancy, type StandingFacts } from './facts'
 import { aliasLine, emptyScore, parseScore, scoreLine, type ScoreParams } from './score'
-import type { ScoreTable } from '../../db/types'
+import type { RecordView, ScoreTable } from '../../db/types'
 import { PLAIN_SEND, type SendWords } from './send'
 
 /** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */

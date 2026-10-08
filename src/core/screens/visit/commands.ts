@@ -18,6 +18,7 @@ export interface Command {
   action: string                    // the action a role needs to see it, e.g. write:prescription
   pack?: string                     // a pack's command shows only in a department that uses the pack
   orders?: boolean                  // …or, a pack's order command: where a department using the pack works for this one, searching its services only
+  section?: string                  // …and only this section of them (an imaging pack's /ct: CT; spec §5.1 rule 1, "each its section")
   group?: 'record' | 'orders' | 'safety'   // where the / list shows it (a pack's commands sit under the pack's own name)
   groupTitle?: string               // a pack's group in the / list, in its words ("Laboratory")
   title?: string                    // its name in the / list, in a word or two ("Vitals", "Diagnosis"); else its label

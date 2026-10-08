@@ -118,7 +118,7 @@ export function suggest(text: string, ctx: Ctx, presets: Template[], onList: Set
     if (/^(urgent|stat)$/i.test(partial)) return null
     const p = partial.toLowerCase(); if (!p) return null                     // from the first letter typed: a catalogue grows long
     const from = oc?.orders && oc.pack ? ordersFrom(oc.pack, ctx) : null
-    const pool = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!from || from.has(s.department_id ?? '')))
+    const pool = ctx.services.filter((s) => s.department_id !== ctx.departmentId && (!from || from.has(s.department_id ?? '')) && (!oc?.section || s.section_name === oc.section))
     // best first: its code, then its name, then a word of it, starting with what is typed; then anywhere in the name
     const rank = (s: Ctx['services'][number]) => { const n = s.name.toLowerCase()
       return s.code === p ? 0 : s.code.startsWith(p) ? 1 : n.startsWith(p) ? 2 : n.split(/[\s/,()·-]+/).some((w) => w.startsWith(p)) ? 3 : n.includes(p) ? 4 : 9 }

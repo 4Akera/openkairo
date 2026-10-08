@@ -139,6 +139,7 @@ insert into core.codes (system, code, labels, props) select 'loinc', c, jsonb_bu
   ('98979-8', 'eGFR (CKD-EPI 2021)', '{"ucum":"mL/min/{1.73_m2}"}'), ('1968-7', 'Direct bilirubin', '{"ucum":"mg/dL","allowed":["mg/dL","umol/L"]}'),
   ('13457-7', 'LDL cholesterol (calculated)', '{"ucum":"mg/dL","allowed":["mg/dL","mmol/L"]}'), ('19123-9', 'Magnesium', '{"ucum":"mg/dL","allowed":["mg/dL","mmol/L"]}'),
   ('10839-9', 'Troponin I', '{"ucum":"ng/mL","allowed":["ng/mL","ng/L"]}'), ('2857-1', 'PSA', '{"ucum":"ng/mL"}'), ('21198-7', 'β-hCG', '{}'),
+  ('18782-3', 'Radiology study observation (narrative)', '{}'), ('19005-8', 'Radiology imaging study impression (narrative)', '{}'),
   ('5196-1', 'HBsAg', '{}'), ('16128-1', 'HCV antibody', '{}'), ('882-1', 'ABO and Rh group', '{}'), ('2756-5', 'Urine pH', '{}'), ('2965-2', 'Urine specific gravity', '{}')
 ) v(c, l, p) on conflict do nothing;
 insert into core.codes (system, code, labels) values ('ucum', 'mg/g', '{"en":"mg/g"}');
@@ -339,7 +340,7 @@ insert into core.codes (system, code, labels, props) values
   ('local.allergy-class', 'fluoroquinolone', '{"en": "fluoroquinolone"}', '{"rules": []}'),
   ('local.allergy-class', 'heparin', '{"en": "heparin"}', '{"rules": [{"also": ["heparin"], "level": "warn", "note": "A heparin reaction, especially heparin-induced thrombocytopenia (HIT), applies to unfractionated heparin and all low-molecular-weight heparins (enoxaparin, dalteparin, tinzaparin). Use a non-heparin anticoagulant (for example argatroban or fondaparinux) as haematology advises."}]}'),
   ('local.allergy-class', 'insulin', '{"en": "insulin"}', '{"rules": []}'),
-  ('local.allergy-class', 'iodinated_contrast', '{"en": "iodinated contrast"}', '{"rules": [{"also": ["iodinated_contrast"], "level": "warn", "note": "A previous reaction to iodinated contrast raises the risk of another with any iodinated agent. Follow the radiology protocol: consider a different contrast agent, a non-contrast study, or premedication for prior non-severe reactions. Shellfish, fish or povidone-iodine allergy is not a reason to withhold contrast."}]}'),
+  ('local.allergy-class', 'iodinated_contrast', '{"en": "iodinated contrast"}', '{"rules": [{"also": ["iodinated_contrast"], "level": "warn", "note": "A previous reaction to iodinated contrast raises the risk of another with any iodinated agent. Follow the imaging department''s protocol: consider a different contrast agent, a non-contrast study, or premedication for prior non-severe reactions. Shellfish, fish or povidone-iodine allergy is not a reason to withhold contrast."}]}'),
   ('local.allergy-class', 'latex', '{"en": "latex"}', '{"rules": []}'),
   ('local.allergy-class', 'local_anaesthetic_amide', '{"en": "local anaesthetic amide"}', '{"rules": [{"also": ["local_anaesthetic_amide"], "level": "caution", "note": "True allergy to amide local anaesthetics is rare. Most reactions are vasovagal, adrenaline effects, or reactions to preservatives (parabens, metabisulfite). Cross-reactivity between amides is limited and allergy testing can identify a safe agent. Ester anaesthetics (procaine, benzocaine) are a separate group."}]}'),
   ('local.allergy-class', 'macrolide', '{"en": "macrolide"}', '{"rules": []}'),
