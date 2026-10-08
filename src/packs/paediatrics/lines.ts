@@ -38,17 +38,23 @@ export function vLine(q: Record<string, unknown>, ctx: CardLineCtx, tables: Map<
   if (!sex) return { rows: ['The sex is not recorded: the WHO tables are read by sex'] }
   if (!tables) return null
   const months = days / 30.4375; const said: (string | { text: string; tone?: 'warn' })[] = []; const outside: string[] = []; let shortWord: string | null = null
+  let wasting: number | null = null
   const one = (k: Ind, v: number | null, x: number | null) => {
     if (v === null || x === null) return
     const lms = lmsAt(tables, k, sex, x); if (!lms) { outside.push(NAMES[k]); return }
     const z = zOf(v, lms); const text = `${NAMES[k]} z ${zText(z, 2)} (${centileText(Math.round(phi(z) * 1000) / 10)})`
     said.push(zOff(z) ? { text, tone: 'warn' } : text); if (k === 'wfa' || (!shortWord && zOff(z))) shortWord = `${NAMES[k]} z ${zText(z, 2)}`
+    if (k === 'wfl') wasting = z
   }
   one('wfa', weight, months); one('lfa', length, months); one('hcfa', head, months); one('wfl', weight, length !== null && days < 731 ? length : null)
   const age = days < 731 ? `${Math.floor(months)} months` : `${Math.floor(months / 12)} years`
   const rows: Words[] = []
   if (said.length) rows.push(said)
   rows.push(`WHO 2006, ${sex === 'm' ? 'boys' : 'girls'}, ${age} · from the loaded tables, as the record keeps them${outside.length ? ` · beyond the loaded tables: ${outside.join(', ')}` : ''}`)
+  // the WHO's words for weight-for-length: below −3 severe, below −2 moderate wasting; above +2 a risk of overweight, +3 obese (shown, never a stop)
+  const w = wasting as number | null
+  if (w !== null && (w < -2 || w > 2)) rows.push([{ text: w < -3 ? 'Weight-for-length below −3: severe wasting (WHO).' : w < -2 ? 'Weight-for-length below −2: moderate wasting (WHO).'
+    : w > 3 ? 'Weight-for-length above +3: obesity (WHO).' : 'Weight-for-length above +2: overweight (WHO).', tone: 'warn' }])
   return { rows, short: shortWord }
 }
 const phi = (z: number) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)); const d = 0.3989422804 * Math.exp(-z * z / 2)

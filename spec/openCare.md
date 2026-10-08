@@ -1614,11 +1614,13 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (the weight and its age, amber past 3 days, and Holliday–Segar's maintenance); its lines under the base's cards through the core's
   `registerCardLine` (C1): under /rx the dose per kg (the latest weight, the mg/kg a day or a dose, in or outside the clinic's range,
   what the range is in ml for this weight; after the draft the mg/kg) and under /v the z-scores and centiles of the values being typed
-  (the age today, the sex; beyond ±2 in amber; the tables named). Demo: Dr. Rehab Shaker (paeds@demo.com), Dr. Hassan
+  (the age today, the sex; beyond ±2 in amber; the tables named; weight-for-length below −2 "moderate wasting (WHO)" in amber). Demo: Dr. Rehab Shaker (paeds@demo.com), Dr. Hassan
   Kandil (kandil@demo.com), Doha Wagdy (children.nurse@demo.com, the base's Nurse); Malek, Jana, Kenzy in the clinic, five children on
   the ward with two PEWS. Tests: `supabase/tests/paediatrics.sql`, `npm run test:paediatrics`. *Differences from the pictures, and
   why:* the z-scores under /v are worked out in the browser from the same loaded tables by the same LMS sums as the server's (`lms.ts`,
-  the record keeps the server's), since the core's line under a card is synchronous and cannot wait for the op; the demo sample stops at 2 years, so Jana (3 years 2 months)
+  the record keeps the server's), since the core's line under a card is synchronous and cannot wait for the op (the op stays, tested,
+  for whoever needs the server's answer); the /v card's "take or leave" chips (a problem, a lab order, a feeding note) are not drawn,
+  since a card cannot add drafts; the demo sample stops at 2 years, so Jana (3 years 2 months)
   shows her weight and length "beyond the table" rather than the picture's z −0.1; /dev's chips go into the check's plan, since a card
   cannot add drafts of its own (the order is typed on the line; a core question); the hearing test is a procedure, the other newborn
   checks observations; PEWS on the tile is ward nursing's word (the picture), so it shows there once the ward ticks ward nursing — the
@@ -1646,7 +1648,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   a birth elsewhere, the base's pregnancy ended once, breastfeeding the base's fact), the Pregnancy section (dates, before, blood group,
   risks, every visit as a row with its BP and weight, the scans with their centiles, Hb, the birth or "not written") and Gynaecology
   (periods, the method and its change, cervical screening), banner words (G and P, Rh negative, a change due) and the queue's one word
-  (BP from the notice, protein, what is due, the birth not written past 42 weeks, the weeks; an IUD's change for a woman not pregnant).
+  (BP from the notice, protein, what is due — hers in particular first, Rh negative or a previous caesarean, then everyone's —, the birth
+  not written past 42 weeks, the weeks; an IUD's change for a woman not pregnant).
   Demo: Dr. Nermeen Fathy (obgyn@demo.com), Dr. Ahmed Zaki (zaki@demo.com), Samah Lotfy (midwife@demo.com); Rania, Nahla, Eman, Aya,
   Reham. Tests: `supabase/tests/obgyn.sql`, `npm run test:obgyn`. *Differences from the pictures, and why:* the antenatal card's chips
   (anti-D, OGTT) and /dev's are kept in the check as taken, not drafted as their own order or dose, since a card cannot add drafts (the

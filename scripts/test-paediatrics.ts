@@ -147,6 +147,7 @@ test('the lines under /rx and /v (C1): the picture\'s amoxicillin for Jana, the 
   const v = vLine({ weight: 7.5, length: 72.4, head: 45.4 }, ctx(malek), t)!
   assert.deepEqual(v.rows[0], [{ text: 'weight z −2.07 (1.9)', tone: 'warn' }, 'length z −0.92 (17.9)', { text: 'for length z −2.22 (1.3)', tone: 'warn' }].map((w) => typeof w === 'string' ? w.replace(/\((\d+\.\d)\)/, (_, c) => `(${centileText(Number(c))})`) : { ...w, text: w.text.replace(/\((\d+\.\d)\)/, (_, c) => `(${centileText(Number(c))})`) }))
   assert.match(String(v.rows[1]), /^WHO 2006, boys, 11 months · from the loaded tables, as the record keeps them · beyond the loaded tables: head$/)
+  assert.deepEqual(v.rows[2], [{ text: 'Weight-for-length below −2: moderate wasting (WHO).', tone: 'warn' }], 'the picture\'s amber sentence')
   assert.equal(v.short, 'weight z −2.07'); assert.equal(vLine({ weight: 7.5 }, ctx(malek), null), null, 'the tables not read yet: nothing yet')
   // through the core's registry, in a department that uses the pack, and nowhere else
   registerCardLine('paediatrics', 'medication', 'Paediatrics', rxLine)
