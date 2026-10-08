@@ -13,6 +13,8 @@
 -- include: supabase/demo/lis.sql
 -- include: supabase/seeds/billing.sql
 -- include: supabase/demo/billing.sql
+-- include: supabase/seeds/radiology.sql
+-- include: supabase/demo/radiology.sql
 -- include: supabase/seeds/bookings.sql
 -- include: supabase/demo/bookings.sql
 -- include: supabase/seeds/clinic_packs.sql

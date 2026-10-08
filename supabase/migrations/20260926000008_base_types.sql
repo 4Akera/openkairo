@@ -35,7 +35,7 @@ begin
   -- a correction is its authors' or a writer of that type in its department (a reader who opened it anyway is neither)
   if p_entry ->> 'replaces' is not null
      and not exists (select 1 from core.entries x where x.organization_id = t.organization_id and x.item = t.item and x.author_id = (p_entry ->> 'author_id')::uuid)
-     and not core.may((p_entry ->> 'author_id')::uuid, 'write:' || t.type,
+     and not core.may((p_entry ->> 'author_id')::uuid, core.write_action(t.type),
                       (select x.department_id from core.entries x where x.organization_id = t.organization_id and x.item = t.item and x.item_version = 1)) then
     return jsonb_build_array(base.find('not_allowed', 'refuse', 'a correction is its author''s or its department''s'));
   end if;
@@ -490,7 +490,7 @@ begin
     return jsonb_build_array(base.find('has_answers'));
   end if;
   if not exists (select 1 from core.entries x where x.organization_id = v_org and x.item = t.item and x.author_id = v_by)
-     and not core.may(v_by, 'write:' || t.type, t.department_id) then
+     and not core.may(v_by, core.write_action(t.type), t.department_id) then
     return jsonb_build_array(base.find('not_allowed'));
   end if;
   return '[]';

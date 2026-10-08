@@ -5,11 +5,11 @@ import { useDepartment } from '../../hooks/organization'
 import { replyFormFor } from '../../renderers'
 import type { Department, Organization, Service } from '../../db/types'
 import { Button, Callout, Input, Kbd, cn, errorText } from '../../ui'
-import { startWords, walkInServices } from './walkins'
+import { startWords, walkInServices, type WalkInService } from './walkins'
 
 /** what a walk-in's second step gets: the bench, and Start with the services and who asked; a pack's part after what for (extra, drawn
  *  before who asked) and the Start button's words for what that part chose (start), when the bench uses a pack that gives one */
-export interface WhatForProps { bench: Pick<Department, 'id'>; busy: boolean; error: unknown; onStart: (services: Service[], askedBy?: string) => void; note?: ReactNode
+export interface WhatForProps { bench: Pick<Department, 'id'>; busy: boolean; error: unknown; onStart: (services: (Service & Pick<WalkInService, 'as' | 'priority'>)[], askedBy?: string) => void; note?: ReactNode
   extra?: (services: Service[]) => ReactNode; start?: (services: Service[]) => string | null }
 const steps = new Map<string, ComponentType<WhatForProps>>()
 /** a pack's own second step for the benches that use it (the laboratory's: the /order line and its most-asked tests); once per pack */
