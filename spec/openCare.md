@@ -1575,6 +1575,34 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   echo, ECG and spirometer files, a peak-flow diary; blood bank stock and barcodes, MRI T2* trends; AJCC stage tables, the tumour
   board's list; monitor feeds into the anaesthetic record, sterilisation and implant registries, theatre use reports, e-signed consent;
   home visits and the ministry's family planning returns.
+- *Built 2026-10-08 (lane `clinics-theatre`), oncology* (`oncology`, migration 33, role block e8): the cancer `oncology.cancer` (the base's
+  problem plus `oncology` {site, side, morphology (ICD-O-3, its own open system `oncology.icdo3`), grade, TNM with its edition, stage,
+  markers, intent, plan (operation · chemotherapy · radiotherapy · endocrine · targeted · immunotherapy, each done · now · to come),
+  regimen}; FHIR adds the stage beside the base's Condition); ECOG the base's observation (LOINC 89247-1, added to the committed subset);
+  the cycle `oncology.cycle` (the base's order to the day unit plus {regimen, cycle of n, day, height, weight, BSA, percent, Give · Delay ·
+  Reduce, each dose with what it was worked from, the checks, the toxicity, the medicines before}; its table `oncology.cycles` for the
+  day unit, `read:queue`; FHIR adds its words as orderDetail); each toxicity the base's observation coded with CTCAE v5 (`oncology.ctcae`).
+  The regimens and plans are the clinic setting `oncology.regimens` (drugs mg/m², AUC by Calvert with Cockcroft–Gault, mg/kg or flat,
+  each with its rounding and a reaction watch; days between cycles; cycles; medicines before; checks with limits), written with
+  `edit:oncology.regimens`, held by every Oncologist (Q39 drawn; the history is the setting's). Roles: Oncologist (`oncology.oncologist`,
+  built on Doctor, `write:oncology.cancer`) and Chemotherapy nurse (`oncology.chemo_nurse`, built on Nurse, with the base's admit and
+  discharge). Setups `oncology.clinic` (the queue) and `oncology.day_unit` (eight chairs on the base's board; its one service, the cycle,
+  answered by the unit's note). Client: the Cancer section (diagnosis, stage, markers, ECOG, intent, the plan, the cycles with what came
+  after, the anthracycline so far, the heart), its chip and Summary line and banner words ("Breast · IIB", "AC 2 of 4"); `/chemo` (offered
+  where the day unit works for the department) works out BSA by Mosteller and every dose from today's height and weight, shows the
+  regimen's checks against the latest values (eGFR by CKD-EPI 2021 when only creatinine is there; shown, never a stop), grades the
+  toxicity, and writes the cycle, each drug as the base's medication sent where prescriptions go and each grade; its card's chips rewrite
+  the line, so the line and the drafts agree; `/cancer` fills a new cancer's card, and on one already recorded writes today's ECOG. The
+  day unit's tile line ("AC C3 D1", a dose reduced, "reaction watch" in the first 30 minutes of a drug the regimen marks). Demo: the
+  Oncology clinic and the Chemotherapy day unit; Dr. Hesham Abdallah (oncology@demo.com) and Asmaa Farid (chemo@demo.com); Wafaa Shaker
+  (in consult for AC 3), Samir Tolba (FOLFOX 5, in Chair 2), Nesma Sabry (paclitaxel week 3 signed for today, not in a chair). Tests:
+  `supabase/tests/oncology.sql`, `npm run test:oncology`. *Not yet, and why:* changing a recorded cancer's stage, intent, plan or regimen
+  from the line needs a pack draft that changes its own entry (`refers_to`, a core door not in C1–C5): `/cancer` on a recorded cancer
+  writes ECOG only and shows the rest; the day unit's rows of today's cycles not in a chair and their Start wait for C5 (lane
+  `clinics-shared`): `notInAChair` and the read are ready; the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
+  ward nursing's (`bedside`, beds lane), not in this base: the cycle is ended by the unit's note until then; the composer reads no
+  setting, so `/chemo` takes the regimens the chart last read (the Cancer section's).
+
 
 ---
 
