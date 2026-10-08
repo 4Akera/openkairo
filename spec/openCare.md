@@ -1406,7 +1406,7 @@ their questions on 2026-10-08 ("1 two tabs, 2-6 ok, 7 yours"). What the owner de
   the chart already shows (latest values, current medicines, allergies); (c) an order finished with no answer to come (an X-ray not
   reported) puts a row on the requester's To review for their own reading.
 
-### 5.6 The departments of beds: ward, ER, ICU, CCU, labour ward, dialysis (pictures 2026-10-08; nothing decided, nothing built)
+### 5.6 The departments of beds: ward, ER, ICU, CCU, labour ward, dialysis (pictures 2026-10-08; building from 2026-10-09)
 The owner asked for these six together on 2026-10-08 ("they share common things"). The pictures `/pictures.html#stay-map` …
 `#hd-schedule` (`src/pictures/stays.tsx`, `ward.tsx`, `er.tsx`, `icu.tsx`, `labour.tsx`, `dialysis.tsx`; shots in
 `spec/shots/2026-10-08/stays/`) were drawn by Claude. *Everything below is proposed by Claude, awaiting the owner*; each question is
@@ -1455,6 +1455,33 @@ numbered as on its picture.
 - **Later, not day one**: ward stock (the pharmacy's "wards' stock comes with a ward pack"), the controlled drugs book, diets and the
   kitchen, care plans, wound and pressure-area charts, fall and pressure-risk scores, APACHE II, the ICU census, monitor and
   ventilator feeds, mass casualty, the ER's and dialysis's monthly returns.
+- **The owner's answers so far (2026-10-08, in chat).** "Brainstorm best ideas and start building"; then YES to five core and base
+  changes: (C1) the packs' words on the board tiles, a pack reading its data once per board; (Q5, B1) consciousness (ACVPU) and
+  oxygen as base vital signs, with the LOINC codes and UCUM units the bed departments need; (C3) on a ward that uses Ward nursing, the
+  usual /v also writes NEWS2; (Q3) one Done passes a stay to the next department; (Q10) the baby's record made inside the birth's
+  own Done, twins included. The order: Ward nursing and these core changes first, then the specialty packs two at a time (Emergency
+  with Critical care, then the labour ward with dialysis). The rows under the board (Q2) come from the clinics' build, which the
+  owner approved for the chemotherapy day unit.
+- **Chosen by Claude at the owner's request ("brainstorm best ideas and start building"), awaiting the owner**: the pack keys are
+  `bedside` (Ward nursing), `casualty` (Emergency), `intensive` (Critical care, its ICU and CCU setups), `obgyn` (created by the
+  clinics' build; the labour ward adds to it) and `haemodialysis` (Dialysis), since `ward`, `critical`, `emergency` and `dialysis`
+  are words core files already use (`opencare/no-pack-names`); a person always reads the labels. Role blocks d0–d4; one migration
+  each from 17 (18 casualty, 19 intensive, 21 haemodialysis), each ending with `core.lock_pack`; no pack requires another (the
+  clinic ticks Ward nursing beside each specialty, the specialty first in the department's pack order, so its two tile buttons
+  win). Q11 needs no base change: the base's `note` already takes the kind *handover*.
+- **Built, piece 1 (Ward nursing: NEWS2 with the obs; 2026-10-09)**: migration 17 declares `bedside` and NEWS2 (RCP 2017) as two of
+  the server's score tables, `bedside.news2` (SpO₂ scale 1) and `bedside.news2_s2` (scale 2, for a patient whose doctor set a target
+  of 88–92 %), and the starter setup `bedside.ward` (eight beds, inpatient; it only ticks the pack on the base's Medical Ward). The
+  ward's line `/obs 105/68 104 38.4 94 22 air a` (BP, then P T SpO₂ RR in order or by name; air or oxygen; A C V P U; `s2` for scale
+  2) drafts the base's vitals and the base's score in one set, and the server adds NEWS2 up; a note under the cards gives RCP's
+  response (only a notice), a caution in pregnancy, and a warning when the two cards disagree. The banner says "NEWS2 6" (amber 5–6,
+  red 7+; no colour under 16), the NEWS2 section draws this stay's trend, and a stay with no obs says "no obs yet" on its tile ("no
+  obs for N h" in amber after an hour). ACVPU and air or oxygen live in NEWS2's answers until piece 2 makes them base vitals; piece 2
+  then lets /v write NEWS2 on a ward and /obs goes. Demo: Nour Adel (nurse) and three patients on the Medical Ward (Samira 2 → 6 on
+  scale 1, Abdelmoneim on scale 2 falling 8 → 3, Tahany admitted with no bed and no obs). *Questions it raised, for the owner*: should
+  the server keep each item's points with a score, so the banner can say "3 in one sign"; should the board refresh itself every
+  minute (today an overdue tile turns amber at the next refresh); should the composer know the patient's age (for an "under 16"
+  caution).
 
 ---
 
@@ -2061,4 +2088,9 @@ types, parked pack calls with per-call Retry, Postgres enums.
     `test:pharmacy` 10 (+1), `test:lis` 12 (+1), `test:registries` 9; 31 suites, 1490 checks. Seen in the browser
     (`spec/shots/2026-10-08/` 6–8): the cashier's list and card; a Pay first row on Collect with Collect anyway…; Hamdy's Owed row
     paying the rest beside his open bill (paid in two, each once; View receipt; the pharmacist's drawer closed from "1,090").
+- 2026-10-09: **Ward nursing, piece 1: NEWS2 with the obs** (§5.6; lane `beds`; no core or base change): migration 17 (`bedside`,
+  NEWS2 scales 1 and 2, setup `bedside.ward`), `src/packs/bedside` (/obs, the note, banner word, section, tile line), seed and demo
+  (Nour Adel; Samira, Abdelmoneim, Tahany). `bedside` 40 checks, `demo` 76; 32 suites, 1536 checks; `test:bedside` 11 groups and
+  every node suite green; lint 0 errors. `typecheck` and `build` stop only on `src/pictures/bookings.tsx` (another session's commit
+  2878882: Chips without onClick); `vite build` alone builds.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

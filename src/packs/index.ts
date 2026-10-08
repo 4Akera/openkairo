@@ -2,4 +2,5 @@
 import * as pharmacy from './pharmacy'
 import * as lis from './lis'
 import * as billing from './billing'
-export const packs = { pharmacy, lis, billing }
+import * as bedside from './bedside'
+export const packs = { pharmacy, lis, billing, bedside }
