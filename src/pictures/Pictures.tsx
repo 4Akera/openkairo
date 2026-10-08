@@ -9,6 +9,7 @@ import { LabAnalysers, LabChairs, LabReceive, LabSettings } from './biglab'
 import { OrderAsk, OrderList, OrderScan, OrderSet, OrderTyping, OrderWhere } from './order'
 import { RadBack, RadContrast, RadCritical, RadList, RadOrder, RadReport, RadScan, RadSettings, RadWalkIn } from './radiology'
 import { StoreArrived, StoreSend, StoreSetup, StoreStock } from './store'
+import { BookBench, BookCalls, BookConsult, BookDesk, BookDiary, BookQueue, BookSettings, BookToday, BookWalkIn } from './bookings'
 
 const LIST: { id: string; title: string; note: string; Page: ComponentType }[] = [
   { id: 'bench-walkin', title: 'Any bench · a walk-in', note: 'Two steps: first who (search, or New patient), then what for (this room\'s services); who asked folded.', Page: BenchWalkIn },
@@ -46,6 +47,15 @@ const LIST: { id: string; title: string; note: string; Page: ComponentType }[] =
   { id: 'rad-back', title: 'Radiology · what comes back to the doctor', note: 'To review: critical first; the report in the chart, impression first; a film-only X-ray asks for the doctor\'s reading.', Page: RadBack },
   { id: 'rad-settings', title: 'Radiology · settings', note: 'The exams (side, contrast, what to tell the patient, film only) and three switches.', Page: RadSettings },
   { id: 'doctor', title: "Doctor · what comes back", note: 'To review: the pharmacy\'s questions beside the results; Answer opens the chart, where the question is a card.', Page: DoctorSide },
+  { id: 'book-desk', title: 'Bookings · the desk books', note: 'Book beside Send on the patient card: where, with whom (last doctor first), a session by number or by time, a note.', Page: BookDesk },
+  { id: 'book-consult', title: 'Bookings · /book in the consult', note: '/book 3m: the nearest free places with the same doctor; Done saves it with the visit. Not a record entry.', Page: BookConsult },
+  { id: 'book-today', title: 'Bookings · Booked today at the desk', note: 'Everyone expected across the clinics and benches it checks in for; Here is the ordinary check-in.', Page: BookToday },
+  { id: 'book-calls', title: "Bookings · tomorrow's calls", note: 'The desk phones each booking and marks what they said; SMS and WhatsApp later.', Page: BookCalls },
+  { id: 'book-queue', title: 'Bookings · the queue', note: 'Booked patients go in at their number or time; walk-ins fill the gaps (the core change you approved).', Page: BookQueue },
+  { id: 'book-diary', title: 'Bookings · the clinic\'s Diary', note: 'A column per session; each place free, booked, here, seen, missed, walk-in or cancelled; Move and Cancel with a reason.', Page: BookDiary },
+  { id: 'book-bench', title: 'Bookings · Radiology books a CT', note: 'The doctor\'s order waits in To book; Book folds out the CT room\'s times and what to tell the patient. A missed one: Book again.', Page: BookBench },
+  { id: 'book-walkin', title: 'Bookings · a walk-in at Radiology', note: 'Who, what for, then when: Now (always offered) or a time; booked, the order is made now.', Page: BookWalkIn },
+  { id: 'book-settings', title: 'Bookings · a clinic\'s settings', note: 'Sessions (by time or number, doctor or anyone, overbook and walk-in places), leave and closed days, what to tell the patient.', Page: BookSettings },
 ]
 
 export function Pictures() {
