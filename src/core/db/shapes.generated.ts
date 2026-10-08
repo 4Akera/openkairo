@@ -140,6 +140,16 @@ export interface CheckedIn {
   priority?: 'routine' | 'urgent' | 'asap' | 'stat'
   reason?: string
 }
+/** chronic_care.target v1 (chronic_care) */
+export interface ChronicCareTarget {
+  condition: string
+  measure: string
+  op: '<' | '<=' | '>' | '>='
+  reason?: string
+  status?: 'active' | 'ended'
+  value: number
+  value2?: number
+}
 /** crossed_out v1 (base) */
 export interface CrossedOut {
   reason: 'typo' | 'wrong_value' | 'wrong_patient' | 'late_information' | 'other'
@@ -423,6 +433,26 @@ export interface Transferred {
 export interface Urgent {
   urgent: boolean
 }
+/** vaccines.dose v1 (vaccines) */
+export type VaccinesDose = {
+  dose?: Quantity
+  drug?: Concept
+  expiry?: string
+  lot?: string
+  medication?: string
+  note?: string
+  reason?: string
+  route?: string
+  site?: string
+  status: 'completed' | 'not-done'
+  vaccines?: {
+    dose?: number
+    given_by?: string
+    given_on?: string
+    source?: 'here' | 'card'
+    vaccine: string
+  }
+} & ({ medication: string } | { drug: Concept })
 /** vitals v1 (base) */
 export interface Vitals {
   bmi?: Quantity
@@ -468,6 +498,28 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
+/** setting chronic_care.conditions (chronic_care; owner organization) */
+export interface ChronicCareConditionsSetting {
+  conditions: {
+    checks?: {
+      codes: string[]
+      every_months: number
+      key?: string
+      name: string
+      off_target_months?: number
+    }[]
+    codes: string[]
+    key: string
+    name: string
+    targets?: {
+      measure: string
+      op: '<' | '<=' | '>' | '>='
+      value: number
+      value2?: number
+    }[]
+  }[]
+  window_months?: number
+}
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
   after: 'next' | 'queue'
@@ -506,6 +558,27 @@ export interface DepartmentSetupSetting {
 export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
+}
+/** setting family_medicine.checks (family_medicine; owner organization) */
+export interface FamilyMedicineChecksSetting {
+  checks: {
+    bmi_age_from?: number
+    bmi_from?: number
+    codes: string[]
+    every_years?: number
+    from?: number
+    met_by?: string
+    name: string
+    once?: boolean
+    order?: string
+    sex?: 'any' | 'female' | 'male'
+    to?: number
+    who?: string
+  }[]
+}
+/** setting family_medicine.files (family_medicine; owner organization) */
+export interface FamilyMedicineFilesSetting {
+  ask_at_new_patient?: boolean
 }
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
@@ -639,6 +712,43 @@ export interface ServiceSetting {
   section?: string
   steps?: string[]
 }
+/** setting vaccines.national (vaccines; owner organization) */
+export interface VaccinesNationalSetting {
+  rows: {
+    age: string
+    cvx?: string
+    dose: number
+    earliest_days: number
+    how?: string
+    interval_days?: number
+    key: string
+    latest_days?: number
+    name: string
+    route?: string
+    site?: string
+    vaccine: string
+  }[]
+  sample?: boolean
+  source?: string
+  version?: string
+}
+/** setting vaccines.optional (vaccines; owner organization) */
+export interface VaccinesOptionalSetting {
+  rows: {
+    age?: string
+    cvx?: string
+    dose: number
+    earliest_days?: number
+    how?: string
+    interval_days?: number
+    latest_days?: number
+    name: string
+    pregnancy?: boolean
+    route?: string
+    site?: string
+    vaccine: string
+  }[]
+}
 
 /** each entry type's data, by its key */
 export interface EntryData {
@@ -651,6 +761,7 @@ export interface EntryData {
   'breastfeeding': Breastfeeding
   'called': Called
   'checked_in': CheckedIn
+  'chronic_care.target': ChronicCareTarget
   'crossed_out': CrossedOut
   'died': Died
   'discharged': Discharged
@@ -681,6 +792,7 @@ export interface EntryData {
   'step': Step
   'transferred': Transferred
   'urgent': Urgent
+  'vaccines.dose': VaccinesDose
   'vitals': Vitals
 }
 /** each setting's data, by its key */
@@ -690,6 +802,7 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
+  'chronic_care.conditions': ChronicCareConditionsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
@@ -699,6 +812,8 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
+  'family_medicine.checks': FamilyMedicineChecksSetting
+  'family_medicine.files': FamilyMedicineFilesSetting
   'lis.large': LisLargeSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
@@ -715,4 +830,6 @@ export interface SettingData {
   'radiology.options': RadiologyOptionsSetting
   'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
+  'vaccines.national': VaccinesNationalSetting
+  'vaccines.optional': VaccinesOptionalSetting
 }

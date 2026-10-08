@@ -21,3 +21,22 @@ begin
   perform demo.screen(ph, 'pharmacy.stock');
   perform demo.screen(ph, 'billing.today');
 end $$;
+
+-- Family medicine uses chronic care and the immunisation pack too (§5.7 Q16), after its own and in that order, with the immunisation
+-- list as a tab; the desk asks for a family file at New patient (§5.7 C4), so it ticks the family medicine pack, whose door it writes
+-- the file through. Skipped while the family medicine pack is off; each other pack only while it is on.
+do $$
+declare c uuid := demo.base('clinic'); fm uuid := demo.id('family_medicine', 'department');
+begin
+  if not (core.packs_used(c) @> array['family_medicine']) then return; end if;
+  perform demo.tick(demo.base('desk'), 'family_medicine');
+  if core.packs_used(c) @> array['chronic_care'] then perform demo.tick(fm, 'chronic_care'); end if;
+  if core.packs_used(c) @> array['vaccines'] then
+    perform demo.tick(fm, 'vaccines');
+    -- its line as drawn: the queue first, Families, the immunisation list (which stands in for the queue only where it is the line alone)
+    if core.setting_at(c, 'department.screens', fm) is null then
+      perform demo.as(demo.base('owner'));
+      perform public.write_setting(jsonb_build_object('key', 'department.screens', 'owner_id', fm, 'data', '{"screens":["base.queue","family_medicine.files","vaccines.room"],"opens":"base.queue"}'::jsonb));
+    end if;
+  end if;
+end $$;
