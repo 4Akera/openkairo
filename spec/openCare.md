@@ -1513,11 +1513,17 @@ numbered as on its picture.
   kitchen, care plans, wound and pressure-area charts, fall and pressure-risk scores, APACHE II, the ICU census, monitor and
   ventilator feeds, mass casualty, the ER's and dialysis's monthly returns.
 
-### 5.7 The clinics: ObGyn, paediatrics, internal medicine and its branches, surgery with anaesthesia, family medicine (pictures 2026-10-08; nothing decided, nothing built)
+### 5.7 The clinics: ObGyn, paediatrics, internal medicine and its branches, surgery with anaesthesia, family medicine (pictures 2026-10-08; the owner chose every drawn answer, 2026-10-08; building)
 The owner asked for this last group on 2026-10-08 ("make last obgyn, peds, IM and it's branches, surgery anasthesia, family medicine").
 The pictures `/pictures.html#clinics-map` … `#family-checks` (36: `src/pictures/clinics.tsx` shared parts, `obgyn.tsx`, `paeds.tsx`,
 `medicine.tsx`, `haemonc.tsx`, `surgery.tsx`, `family.tsx`; shots in `spec/shots/2026-10-08/clinics/`) were drawn by Claude.
-*Everything below is proposed by Claude, awaiting the owner*; the questions continue the beds' numbering, Q15–Q50, each on its picture.
+The questions continue the beds' numbering, Q15–Q50, each on its picture. **The owner, 2026-10-08: "drawn choice for all, start
+building in parallel make it fast like 8 hrs all"** — every question's drawn choice below is his answer, the pictures are the agreed
+screens, and the core and base changes the drawn choices need are approved: a pack's one line under the base's `/rx` card and under
+`/v` (Q23, Q33, Q22's z-scores); `/v` reading length and head (Q22); `/transfuse`, a pack's command that is not an order, offered where
+the department using the pack works for this one (Q36); a step of a pack's in the desk's New patient for the family file (Q49); and,
+as drawn on the chemotherapy day unit, today's cycles not yet in a chair as the pack's rows under the board (the base change of beds
+Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core or base without a yes.
 - **The shape** (Q15, Q16): as the beds, shared packs for what many departments do and small packs for a specialty's own. *Vaccines*
   (the schedule, `/vax`, due and overdue, the vaccination room's list) and *Chronic care* (registers worked out from the problem list,
   each condition's targets and checks due, `/review`) are shared; on top, *ObGyn* (its clinic part beside the labour ward's),
