@@ -1503,26 +1503,41 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
-- *Built 2026-10-09 (Critical care, key intensive, piece I1; chosen by Claude in the build, awaiting the owner):* role block d2 and one
+- *Built 2026-10-09 (Critical care, key intensive, piece I1, in two commits I1a and I1b; chosen by Claude in the build, awaiting the owner):* role block d2 and one
   migration, 19, ending with `core.lock_pack('intensive')`; pieces I2 and I3 add to it. Its starter setup `intensive.icu`: six beds (ICU
-  1–6), inpatient stays (IMP), review of critical results, the line `{"screens":["base.beds"],"opens":"base.beds"}` (the ICU chart tab
-  joins it in I1b), and the unit's setting `intensive.unit` (the hour the ICU day starts, 8 by default, and the unit's nine infusions,
-  each with its usual bag and its kind), drawn on the ICU's card in Settings → Departments. The ICU chart will be a pack tab beside the
+  1–6), inpatient stays (IMP), review of critical results, the line `{"screens":["base.beds","intensive.chart"],"opens":"base.beds"}`, and the unit's setting `intensive.unit` (the hour the ICU day starts, 8 by default, and the unit's nine infusions,
+  each with its usual bag and its kind), drawn on the ICU's card in Settings → Departments. The ICU chart is the pack's screen `intensive.chart` (work stays, read:record), a tab beside the
   board, not the chart's center: a pack's view in the center is a core door (`chart/model/at.ts`, `center/EncounterPane.tsx`), noted
-  for the owner, who may choose it later. The ICU chart (I1b) writes one column an hour as one set, signed once by the nurse: the base's vitals (with ACVPU and air
+  for the owner, who may choose it later; the record panel's section is too narrow for an hourly grid, and the composer writes one entry
+  per draft. The tile's button "ICU chart" opens the tab on that patient (`?tab=intensive.chart&stay=`). The tab: the ICU's patients as
+  chips, one line about the one chosen ("Open the chart"), "Since 08:00" (the ICU day) or "Last 24 h", and the grid, hours across, in
+  groups: vitals (heart rate, BP, MAP, SpO₂, RR, temperature, glucose, CVP, GCS from the base's GCS score, ACVPU, air or O₂), the
+  ventilator (mode, FiO₂ · PEEP, Vt · rate, PS), one row per infusion that ran (its dose; "off" the hour it stopped), in and out (in,
+  urine, "Output total" from 9257-7 in its own row, and the balance "in − urine" over the ICU day's hours; a column holds the hour up to it, so the day-start column closes the day before) and who signed (initials;
+  "due" for the hour now). A carried setting and a MAP worked out from the BP are faint (the MAP's title says so); a MAP under 65 and an
+  hour's urine under 0.5 mL/kg carry ↓ in amber. Under the grid, the hour card (for whoever writes vitals): the hour now or one of the
+  two before as chips; the vitals (the BP shows the MAP it gives); on a ventilator, the mode chips and FiO₂, PEEP, Vt, rate, PS with the
+  setting in force faint, and its end chip ("Extubated", "Off NIV"); off it, air or oxygen with its flow, ACVPU, and "Start ventilation"
+  or "Start NIV"; each running infusion's dose or rate (the other half shown at once, "= 5.9 mL/h") and Stop; "+ Infusion" with the
+  unit's rows as chips, a card for the dose, the bag and the weight; in and urine. A change at an earlier hour than its item's latest version, a rate of 0 and an FiO₂ under 21 are problems (the server would refuse them). It writes one column an hour as one set, signed once by the nurse: the base's vitals (with ACVPU and air
   or oxygen, the owner's Q5), the base's observations for MAP (8478-0), CVP (60985-9), fluid in (9103-3) and urine (9188-4) (the
   owner's B1), the base's procedure for the time on a ventilator (`local.procedure` invasive or non-invasive ventilation, in progress
   until a version ends it), and the pack's own two types for what the base lacks: `intensive.vent`, the ventilator's settings (one item
   an episode, a version whenever a setting changes: the settings are one set and the mode is a word, so not one base observation each),
   and `intensive.infusion`, an infusion's rate (one item an infusion, a version for each rate change, stopped to end it; as an
-  extension of `given` its FHIR could not carry the rate). A setting carried on from the hour before is never written again (the chart, I1b),
+  extension of `given` its FHIR could not carry the rate). A setting carried on from the hour before is never written again (a blank keeps it),
   and a MAP not typed is never written (it is worked out from the BP when drawn). The dose is always the dose the pump's rate gives (rate × the
   bag's amount ÷ its volume, by the weight for a dose per kg), and the server checks it (`rate_mismatch` beyond half a step: its
   arithmetic, not a clinical stop; the bag's volume must be in mL and the weight in kg, both above 0). UCUM only where exact: µg/kg/min and mg/h carry it; µg/min, µg/h, mg/kg/h, g/h and units/h are
-  words with no code (insulin and heparin never U/h). In the chart (I1b), an infusion links to the patient's prescription only when it is the same drug (an
-  equal ATC code, or the same whole name once normalised); otherwise the nurse's "Link to" (I1b). Fluids are the base's observations,
+  words with no code (insulin and heparin never U/h). An infusion started links to the patient's prescription only when it is the same drug (an
+  equal ATC code, which also puts the prescription's drug on it, or the same whole name once normalised, the drug staying the unit's
+  row); a prescription sharing only the first word is a "Link to" chip the nurse taps, and with none "No prescription for … on the
+  record" shows, never a stop. Fluids are the base's observations,
   shared with Ward nursing: the four codes (9103-3, 9187-6, 9188-4, 9257-7) are to be agreed with its fluid piece, so both draw one
-  balance. A value outside its usual range will be a notice and "Sign anyway", never a stop (I1b). Lines read "Ventilator VC · FiO2 80%
+  balance. Only what cannot be written greys the sign (a BP with one side, FiO₂ typed as a fraction, the dose and the
+  rate both typed, a dose per kg with no weight); a value outside its usual range (HR 15 in an arrest) is a notice under its field and
+  "Sign anyway", never a stop. Sign (⌘↵) writes the column as one set through the writer, each change a version with the version it was
+  typed against (`seen`). Lines read "Ventilator VC · FiO2 80%
   · PEEP 10 · Vt 420 · rate 18" and "Started: Noradrenaline 0.3 µg/kg/min · 17.6 mL/h · 4 mg in 50 mL"; FHIR: an Observation with a
   component for each setting, a MedicationAdministration with its rate. The tile's words come from the op `intensive.board` (the
   owner's C1): the airway ("Ventilated d3" in blue, "NIV d1", "Extubated 09:15" for a day after a completed or stopped version, else "On air", "O₂ 2 L/min"), one infusion
@@ -1531,7 +1546,7 @@ numbered as on its picture.
   typed MAP never hides a falling pressure), and "urine 0.4 mL/kg/h" in amber under 0.5 over the last hours. Demo: the ICU (position 10), its
   nurse Mariam Saad and its doctor Dr. Hany Salem; Nabil (septic shock, ventilated, noradrenaline titrated 0.2 → 0.25 → 0.2 → 0.15)
   and Samy (DKA with kidney injury, on air, insulin, little urine), six hours charted each. The clinic also ticks Ward nursing on the
-  ICU, after Critical care. Drawn in the picture and not in the chart (I1b) either: RASS (the base has no RASS score), the "By day" chip, lactate under
+  ICU, after Critical care. Drawn in the picture and not built: RASS (the base has no RASS score), the "By day" chip, lactate under
   Bloods (no LOINC row in the base's subset), FiO₂ as a fraction (written and drawn in %); LOINC rows for the ventilator's settings and
   UCUM rows for every dose rate would each be a base change.
 
@@ -2162,4 +2177,12 @@ types, parked pack calls with per-call Retry, Postgres enums.
   checks clean; `db:demo` twice (37 patients, 17 open visits and stays, 397 entries); `test:intensive` 1 group (tileWords), and composer
   18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis
   12, billing 19, bedside 12; lint 0 errors; typecheck and `vite build` clean but for `src/pictures/bookings.tsx` (another session's).
+- 2026-10-09: **Critical care, piece I1b: the ICU chart, one column an hour signed once** (§5.6; lane `beds-icu`; no core or base
+  change): the screen `intensive.chart` declared in migration 19 and on the setup's line; `src/packs/intensive` (rates, hours, items,
+  chart, hour, useIcu, StayPicker, Grid, HourParts, HourCard, IcuChart; the tile's ICU chart button). As run in the lane: `db:test`
+  34 suites, 1656 checks, all green (`intensive` 64, `demo` 90); gen:shapes and gen:logins checks clean; `db:demo` twice (37 patients,
+  17 open visits and stays, 397 entries); `test:intensive` 7 groups (rates, hours, items, chartOf, entriesOf, problems and notices,
+  tileWords), and composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11,
+  registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; typecheck and `vite build` clean but for
+  `src/pictures/bookings.tsx` (another session's).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

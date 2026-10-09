@@ -3,6 +3,7 @@
 import type { Organization } from '@core/db/types'
 import type { IntensiveUnitSetting } from '@core/db/shapes.generated'
 import { settingIn } from '@core/screens/settings/form/model'
+import type { Bag } from './rates'
 
 /** one of the unit's infusions, as its setting holds it */
 export type UnitInfusion = IntensiveUnitSetting['infusions'][number]
@@ -21,3 +22,6 @@ export const isPressor = (row: UnitInfusion | null | undefined) => row?.kind ===
 export const shortOf = (row: UnitInfusion) => row.short?.trim() || row.name.charAt(0).toLowerCase() + row.name.slice(1)
 /** a dose unit in words, as the setting's form says it */
 export const DOSE_WORDS: Record<DoseUnit, string> = { 'ug/kg/min': 'µg/kg/min', 'ug/min': 'µg/min', 'ug/h': 'µg/h', 'mg/h': 'mg/h', 'mg/kg/h': 'mg/kg/h', 'g/h': 'g/h', 'units/h': 'units/h' }
+/** the row's usual bag, when it has one */
+export const bagOf = (row: UnitInfusion | null | undefined): Bag | null =>
+  row && typeof row.amount === 'number' && typeof row.volume === 'number' && row.amount_unit ? { amount: row.amount, unit: row.amount_unit, volume: row.volume } : null

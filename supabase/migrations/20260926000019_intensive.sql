@@ -282,11 +282,12 @@ select core.declare_setting('intensive.unit', 'intensive', 'department', $j${"ty
     {"key":"infusions.amount_unit","labels":{"en":"Bag: amount in"},"choices":{"ug":{"en":"µg"},"mg":{"en":"mg"},"g":{"en":"g"},"units":{"en":"units"}}},
     {"key":"infusions.volume","labels":{"en":"Bag: volume"},"unit":"mL"}]$j$::jsonb);
 
+select core.declare_screen('intensive.chart', 'intensive', 'stays', '{"en":"ICU chart","ar":"جدول العناية المركزة"}', 'read:record');
 select core.declare_op('intensive.board', 'intensive', 'intensive.board(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
 
--- its starter setup (§5.2): six ICU beds, inpatient stays, the board, the unit's day and its infusions
+-- its starter setup (§5.2): six ICU beds, inpatient stays, the board and the ICU chart, the unit's day and its infusions
 select core.declare_setup('intensive.icu', 'intensive', 'stays', '{"en":"ICU","ar":"العناية المركزة"}', packs => array['intensive'],
-  screens => '{"screens":["base.beds"],"opens":"base.beds"}',
+  screens => '{"screens":["base.beds","intensive.chart"],"opens":"base.beds"}',
   settings => $j${"department.encounter_class":{"class":"IMP"},"department.review_results":{"level":"critical"},"intensive.unit":{"day_starts":8,"infusions":[
     {"key":"noradrenaline","name":"Noradrenaline","short":"noradrenaline","kind":"vasopressor","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50},
     {"key":"adrenaline","name":"Adrenaline","short":"adrenaline","kind":"vasopressor","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50},
