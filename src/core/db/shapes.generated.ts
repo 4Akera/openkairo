@@ -130,6 +130,17 @@ export interface Breastfeeding {
 export interface Called {
   note?: string
 }
+/** casualty.disposition v1 (casualty) */
+export interface CasualtyDisposition {
+  brought_in_dead?: boolean
+  department_id?: string
+  facility?: string
+  note?: string
+  police_report?: string
+  signed_by?: string
+  to: 'home' | 'ward' | 'icu' | 'ccu' | 'operating_room' | 'other_facility' | 'left_unseen' | 'against_advice' | 'died'
+  why?: string
+}
 /** casualty.triage v1 (casualty) */
 export interface CasualtyTriage {
   casualty: {
@@ -138,6 +149,10 @@ export interface CasualtyTriage {
     complaint?: 'chest_pain' | 'breath' | 'injury_road' | 'fall' | 'abdominal_pain' | 'fever' | 'poisoning' | 'sting_bite' | 'burn' | 'fits' | 'weakness_one_side' | 'bleeding_pregnancy' | 'wound'
     danger?: ('airway' | 'breathing' | 'fitting' | 'bleeding' | 'chest_cardiac' | 'stroke' | 'severe_pain' | 'violent')[]
     level: number
+    police?: {
+      case: boolean
+      why?: 'road_accident' | 'assault' | 'burn' | 'poisoning' | 'fall' | 'other'
+    }
     scale: 'ats' | 'mts'
     scale_version?: string
     suggested?: {
@@ -643,6 +658,7 @@ export interface EntryData {
   'back_to_waiting': BackToWaiting
   'breastfeeding': Breastfeeding
   'called': Called
+  'casualty.disposition': CasualtyDisposition
   'casualty.triage': CasualtyTriage
   'checked_in': CheckedIn
   'crossed_out': CrossedOut

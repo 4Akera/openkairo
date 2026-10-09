@@ -1,8 +1,11 @@
 -- Emergency's day (spec/openCare.md §5.6): three of the pack's own patients, each arrived through the ER's door as the base's admitted
 -- with no place, then triaged by Heba Nabil: the vitals (the base's), the triage (the pack's, on the Australasian scale), the base's
 -- urgent for a level 1 or 2, a resus bay when one is free. Karim (a road accident, level 2) waits in Resus 2 with no doctor yet, past his
--- ten minutes; Hany (a cut hand, level 4) waits on the chairs past his hour; Nadia has just arrived, not triaged yet. Times relative to the
--- load, all within today's five hours; ids in the pack's namespace; a reload erases these patients first.
+-- ten minutes; Hany (a cut hand, level 4) waits on the chairs past his hour; Nadia has just arrived, not triaged yet. Salwa (COPD, level 3
+-- though the vitals suggested 2, the nurse said why) was seen by Dr. Tamer Ezz, and the decision to admit her to the Medical Ward was made
+-- forty minutes ago: she is boarding. Mostafa (9, a scorpion sting, observed) is decided for home. Karim is a police case, the report
+-- number not come yet. Times relative to the load, all within today's five hours; ids in the pack's namespace; a reload erases these
+-- patients first.
 select demo.layer('casualty');
 
 -- the ER's place named, when free, else its first free one; none free: null (the chairs). A patient the app admitted since keeps theirs
@@ -41,14 +44,28 @@ begin
   return last;
 end $$;
 
+-- the doctor takes the stay p_min minutes ago (the base's assigned, to himself); returns its id
+create or replace function pg_temp.take(p_stay uuid, p_after uuid, p_min int) returns uuid language plpgsql as $$
+declare a uuid := gen_random_uuid();
+begin
+  perform demo.w(demo.id('casualty', 'doctor'), jsonb_build_array(demo.move('assigned', demo.id('casualty', 'department'), p_stay, demo.ago(p_min), p_after,
+    jsonb_build_object('user_id', demo.id('casualty', 'doctor')), a)));
+  return a;
+end $$;
+
+-- the doctor writes one entry in the stay p_min minutes ago
+create or replace function pg_temp.dr(p_type text, p_stay uuid, p_min int, p_data jsonb) returns void language sql as $$
+  select demo.w(demo.id('casualty', 'doctor'), jsonb_build_array(demo.e(p_type, demo.id('casualty', 'department'), p_stay, demo.ago(p_min), p_data)));
+$$;
+
 do $$
-declare s uuid;
+declare s uuid; last uuid;
 begin
   -- Karim, 34: a road accident by ambulance; level 2 (suggested 2: RR 28 and severe pain), in Resus 2, no doctor yet
   perform demo.patient(demo.id('casualty', 'patient:karim'), array['Karim', 'Ashraf'], 'Mahmoud', 'male', demo.born(34, 80), '+201009917345');
   s := pg_temp.arrive(16, 'other', 'road accident');
   perform pg_temp.triage(s, s, 12, 2, demo.vitals(96, 60, 124, 36.8, 92, 28) || '{"consciousness":"a","oxygen":{"on":"air"}}',
-    '{"arrival":"ambulance","arrival_ref":"4471","complaint":"injury_road","danger":["severe_pain"],"suggested":{"level":2,"signs":["rr","severe_pain"]}}',
+    '{"arrival":"ambulance","arrival_ref":"4471","complaint":"injury_road","danger":["severe_pain"],"suggested":{"level":2,"signs":["rr","severe_pain"]},"police":{"case":true,"why":"road_accident"}}',
     'motorbike vs microbus, helmet, pain left chest and left thigh', 'resus_2');
 
   -- Hany, 45: a cut hand, walked in; level 4, on the chairs past his hour
@@ -56,6 +73,29 @@ begin
   s := pg_temp.arrive(80, 'other', 'cut hand');
   perform pg_temp.triage(s, s, 72, 4, demo.vitals(132, 84, 88, 36.9, 98, 16) || '{"consciousness":"a","oxygen":{"on":"air"}}',
     '{"arrival":"walked_in","complaint":"wound"}', 'glass cut, left palm, bleeding stopped with pressure');
+
+  -- Salwa, 71: COPD, short of breath; suggested 2 from SpO₂ 88, but that is her own baseline, so the nurse chose 3 and said why; Cubicle 1.
+  -- Dr. Tamer took her twenty-two minutes after she came; the decision to admit her to the Medical Ward was forty minutes ago: boarding
+  perform demo.patient(demo.id('casualty', 'patient:salwa'), array['Salwa', 'Mahmoud'], 'Hamed', 'female', demo.born(71, 40), '+201006632218');
+  s := pg_temp.arrive(125, 'other', 'short of breath');
+  last := pg_temp.triage(s, s, 122, 3, demo.vitals(142, 86, 108, 37.6, 88, 22) || '{"consciousness":"a","oxygen":{"on":"air"}}',
+    '{"arrival":"family","complaint":"breath","suggested":{"level":2,"signs":["spo2"]},"why":"known COPD: her usual SpO₂ is 88 %; talking in full sentences"}',
+    'COPD, breathless for two days, worse since last night', 'cubicle_1');
+  last := pg_temp.take(s, last, 103);
+  perform pg_temp.dr('allergy', s, 100, jsonb_build_object('concept', demo.concept('local.allergen', 'sulfonamide_antibiotics', 'Sulfonamide antibiotics'),
+    'type', 'allergy', 'category', '["medication"]'::jsonb, 'criticality', 'high', 'clinical_status', 'active', 'verification', 'confirmed',
+    'reactions', jsonb_build_array(jsonb_build_object('manifestation', jsonb_build_object('text', 'rash and lip swelling'), 'severity', 'severe'))));
+  perform pg_temp.dr('note', s, 98, demo.note('emergency', E'hx: COPD, oxygen at home at night; two days more breathless, green sputum\nex: wheeze both sides, SpO₂ 88 % on air, alert\nplan: nebulisers, steroids, antibiotics; oxygen by Venturi 24 % only if SpO₂ falls below 88 % (target 88–92 %); blood gas; admit to the Medical Ward'));
+  perform pg_temp.dr('casualty.disposition', s, 40, jsonb_build_object('to', 'ward', 'department_id', demo.base('ward')));
+
+  -- Mostafa, 9: a scorpion sting, observed four hours; level 3 (under 16: nothing suggested), Cubicle 3; decided for home
+  perform demo.patient(demo.id('casualty', 'patient:mostafa'), array['Mostafa', 'Ahmed'], 'Saeed', 'male', demo.born(9, 200), '+201114490037');
+  s := pg_temp.arrive(290, 'other', 'scorpion sting');
+  last := pg_temp.triage(s, s, 286, 3, demo.vitals(104, 66, 112, 37.1, 99, 24) || '{"consciousness":"a","oxygen":{"on":"air"}}',
+    '{"arrival":"family","complaint":"sting_bite"}', 'scorpion sting on the right foot an hour ago; pain, no sweating, no vomiting', 'cubicle_3');
+  last := pg_temp.take(s, last, 280);
+  perform pg_temp.dr('note', s, 275, demo.note('emergency', E'hx: scorpion sting right foot, pain only\nex: local swelling; no sweating, no vomiting, no fast breathing\nplan: pain relief, watch four hours; home if well'));
+  perform pg_temp.dr('casualty.disposition', s, 15, '{"to":"home"}');
 
   -- Nadia, 52: just arrived, not triaged yet
   perform demo.patient(demo.id('casualty', 'patient:nadia'), array['Nadia', 'Fathy'], 'Ibrahim', 'female', demo.born(52, 230), '+201220475513');

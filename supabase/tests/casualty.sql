@@ -2,7 +2,9 @@
 -- its action and the triage nurse, the clinic's scale, the Patients screen and the starter setup (two resus bays, six cubicles, EMER);
 -- in a department made from it: Arrived (the base's admitted with no place), the triage set (the vitals, the triage, the base's urgent
 -- for a level 1 or 2, a move to a bay), retriage as a new entry, Arrived and triage in one Done, the pack's refusals, the record's line,
--- the board's read (each stay's latest triage, and when a doctor first wrote in it), the export, the clinic's scale, and the pack off.
+-- the board's read (each stay's latest triage, and when a doctor first wrote in it), the export; Where to (piece E3: the decision and its
+-- refusals, the leaving in one Done, to the ward through E1's pass, home, died, the free beds, the police case); the clinic's scale, and
+-- the pack off.
 \set org   '00000000-0000-0000-0000-0000000000a1'
 \set im    '00000000-0000-0000-0000-0000000000d1'
 \set desk  '00000000-0000-0000-0000-0000000000d4'
@@ -21,6 +23,21 @@
 \set v1    '00000000-0000-0000-0000-00000000e221'
 \set u1    '00000000-0000-0000-0000-00000000e231'
 \set m1    '00000000-0000-0000-0000-00000000e241'
+\set p4    '00000000-0000-0000-0000-0000000000fa'
+\set p5    '00000000-0000-0000-0000-0000000000fb'
+\set p6    '00000000-0000-0000-0000-0000000000fc'
+\set p7    '00000000-0000-0000-0000-0000000000fd'
+\set s5    '00000000-0000-0000-0000-00000000e205'
+\set s6    '00000000-0000-0000-0000-00000000e206'
+\set s7    '00000000-0000-0000-0000-00000000e207'
+\set s8    '00000000-0000-0000-0000-00000000e208'
+\set d1    '00000000-0000-0000-0000-00000000e261'
+\set d2    '00000000-0000-0000-0000-00000000e262'
+\set n5    '00000000-0000-0000-0000-00000000e263'
+\set a5    '00000000-0000-0000-0000-00000000e264'
+\set note5 '00000000-0000-0000-0000-00000000e265'
+\set er2   '00000000-0000-0000-0000-0000000000d8'
+\set bed4  '00000000-0000-0000-0000-000000000004'
 \set ow    '11111111-0000-0000-0000-0000000000b9'
 \set dr    '11111111-0000-0000-0000-0000000000b1'
 \set nurse '11111111-0000-0000-0000-0000000000b3'
@@ -202,6 +219,123 @@ select t.ok(r -> 'code' ->> 'text' = 'Triage level (Australasian scale)' and r -
 select t.ok(r -> 'class' ->> 'code' = 'EMER', 'the stay: an emergency Encounter') from res where r ->> 'resourceType' = 'Encounter' and r ->> 'id' = :'s1';
 select t.ok(not exists (select 1 from res, unnest(core.fhir_problems(r)) q where r ->> 'resourceType' <> 'Bundle'), 'no resource has a problem');
 set role authenticated;
+
+\echo '── Where to: the decision, the leaving, one Done to a ward, the free beds'
+reset role;
+select t.ok(y.layer = 'casualty' and y.base_type is null and y.resources = '{}' and y.in_record and y.line = 'casualty.disposition_line(jsonb)'::regprocedure
+  and y.checks = array['casualty.disposition_check(jsonb,jsonb)']::regprocedure[],
+  'casualty.disposition v1: the pack''s own, no base type, nothing exported, in the record, its line and its check')
+  from core.types y where y.key = 'casualty.disposition' and y.version = 1;
+select t.ok(a.layer = 'casualty' and a.scope = 'department' and a.everyday, 'write:casualty.disposition: the pack''s, per department, everyday')
+  from core.actions a where a.key = 'write:casualty.disposition';
+select t.ok(o.action = 'read:queue' and not o.patients, 'casualty.beds: read as the queue is, naming no patient') from core.ops o where o.key = 'casualty.beds';
+select t.ok(y.shape #> '{properties,casualty,properties,police}' is not null, 'the triage asks police case') from core.types y where y.key = 'casualty.triage' and y.version = 1;
+select t.ok(array_agg(casualty.disposition_line(jsonb_build_object('organization_id', :'org', 'data', d)) order by n) = array['Where to: home',
+    'Where to: the operating room, then Ward · police report 2214/2026', 'Where to: Al Salam Hospital', 'Left before being seen',
+    'Left against advice · signed by his brother Ahmed', 'Died in the ER', 'Brought in dead'],
+  'the decision''s lines: home, the operating room then a ward with the report number, a facility, left unseen, against advice, died, brought in dead')
+  from jsonb_array_elements(jsonb_build_array('{"to":"home"}'::jsonb, jsonb_build_object('to', 'operating_room', 'department_id', :'ward', 'police_report', '2214/2026'),
+    '{"to":"other_facility","facility":"Al Salam Hospital"}'::jsonb, '{"to":"left_unseen"}'::jsonb, '{"to":"against_advice","signed_by":"his brother Ahmed"}'::jsonb,
+    '{"to":"died","brought_in_dead":false}'::jsonb, '{"to":"died","brought_in_dead":true}'::jsonb)) with ordinality x(d, n);
+select t.as(:'ow');
+select public.save('department', jsonb_build_object('id', :'er2', 'name', 'Emergency 2', 'work', 'stays')) ->> 'id' as er2;
+select public.write_setting(jsonb_build_object('key', 'department.encounter_class', 'owner_id', :'er2', 'data', '{"class":"EMER"}'::jsonb)) ->> 'key' as er2_emer;
+set role authenticated;
+select t.as(:'rc');
+select public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', x.id, 'given', jsonb_build_array(x.given),
+  'family', x.family, 'gender', x.gender, 'birth_date', x.born))) is not null as registered
+  from (values (:'p4'::uuid, 'Samy', 'Fahmy', 'male', '1960-03-03'), (:'p5'::uuid, 'Rasha', 'Nour', 'female', '1992-07-07'),
+               (:'p6'::uuid, 'Lotfy', 'Amin', 'male', '1948-09-09'), (:'p7'::uuid, 'Hala', 'Sami', 'female', '1999-01-15')) x(id, given, family, gender, born);
+select t.as(:'tn');
+select t.landed(t.w(t.e('admitted', x.p, :'er', '{"admit_source":"other","reason":"breathless"}', x.s, x.s)), 'arrived: ' || x.s)
+  from (values (:'p4'::uuid, :'s5'::uuid), (:'p5'::uuid, :'s6'::uuid), (:'p6'::uuid, :'s7'::uuid), (:'p7'::uuid, :'s8'::uuid)) x(p, s);
+
+select t.as(:'dr');
+select t.as(:'tn');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', '{"to":"home"}', null, :'s5')), 'not_allowed', 'the triage nurse may not decide where a patient goes');
+select t.as(:'dr');
+select t.landed(t.w(t.e('casualty.disposition', :'p4', :'er', jsonb_build_object('to', 'ward', 'department_id', :'ward'), :'d1', :'s5')), 'Samy: decided for the ward');
+select t.ok(t.entry(t.record(:'p4', :'er'), :'d1') ->> 'line' = 'Where to: admit to Ward', 'its line: Where to: admit to Ward');
+select t.ok(b -> 'stays' -> :'s5' -> 'decided' ->> 'to' = 'ward' and b -> 'stays' -> :'s5' -> 'decided' ->> 'department_id' = :'ward'
+  and b -> 'stays' -> :'s5' -> 'decided' ->> 'entry' = :'d1' and b -> 'stays' -> :'s5' -> 'decided' ? 'at', 'the board reads the decision: to the ward, its entry, when')
+  from (select pg_temp.board(:'er') b) x;
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', '{"to":"ward"}', null, :'s5')), 'unknown_destination', 'an admission with no department');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', jsonb_build_object('to', 'ward', 'department_id', :'er'), null, :'s5')), 'unknown_destination', 'to the ER itself');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', jsonb_build_object('to', 'ward', 'department_id', :'desk'), null, :'s5')), 'unknown_destination', 'to the front desk');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', jsonb_build_object('to', 'icu', 'department_id', :'er2'), null, :'s5')), 'unknown_destination',
+  'to another department of stays whose encounters are EMER');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', jsonb_build_object('to', 'home', 'department_id', :'ward'), null, :'s5')), 'unknown_destination',
+  'home, naming a department');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', '{"to":"other_facility","facility":" "}', null, :'s5')), 'facility_missing', 'another facility, unnamed');
+select t.refused(t.w(t.e('casualty.disposition', :'p2', :'er', '{"to":"home"}', null, :'s2')), 'not_in_stay', 'a stay on the ward');
+select t.landed(t.w(t.e('note', :'p4', :'er', '{"kind":"progress","text":"nebulised"}', :'n5', :'s5')), 'a note in Samy''s stay');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', '{"to":"home"}', null, :'s5', :'n5', 'changes')), 'wrong_target', 'a decision that changes a note');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', '{"to":"home"}', null, :'s5')), 'wrong_target', 'a second decision in the stay, not changing the standing one');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', '{"to":"died"}', null, :'s5')), 'not_leaving', 'died, with no leaving in the same Done');
+select t.refused(t.w(t.e('casualty.disposition', :'p4', :'er', '{"to":"left_unseen"}', null, :'s5')), 'not_leaving', 'left before being seen, alone');
+select t.landed(t.w(t.e('casualty.disposition', :'p4', :'er', jsonb_build_object('to', 'ward', 'department_id', :'ward', 'police_report', '2214/2026'), :'d2', :'s5',
+  :'d1', 'changes')), 'the decision changed: the police report number has come');
+select t.ok(b -> 'stays' -> :'s5' -> 'decided' ->> 'police_report' = '2214/2026' and b -> 'stays' -> :'s5' -> 'decided' ->> 'entry' = :'d2',
+  'the board reads the standing decision, with its report number') from (select pg_temp.board(:'er') b) x;
+select t.ok((b -> 'stays' -> :'s5' -> 'decided' ->> 'at')::timestamptz = (t.entry(t.record(:'p4', :'er'), :'d1') ->> 'occurred_at')::timestamptz
+  and (t.entry(t.record(:'p4', :'er'), :'d1') ->> 'occurred_at')::timestamptz < (t.entry(t.record(:'p4', :'er'), :'d2') ->> 'occurred_at')::timestamptz,
+  'a report number added keeps when it was decided (boarding does not restart)') from (select pg_temp.board(:'er') b) x;
+select t.ok(t.entry(t.record(:'p4', :'er'), :'d2') ->> 'line' = 'Where to: admit to Ward · police report 2214/2026', 'its line names the report');
+
+select t.landed(t.w(jsonb_build_array(
+  t.e('discharged', :'p4', :'er', '{"disposition":"oth","note":"to Ward"}', null, :'s5', t.latest(:'s5'), 'changes'),
+  t.e('admitted', :'p4', :'er', jsonb_build_object('department_id', :'ward', 'place_id', '00000000-0000-0000-0000-000000000001', 'admit_source', 'emd', 'reason', 'COPD exacerbation'), :'a5', :'a5', :'s5', 'about'),
+  t.e('note', :'p4', :'er', '{"kind":"emergency","text":"For the ward: nebulisers every four hours."}', :'note5', :'a5'))),
+  'the leaving, one Done: the ER''s discharge, the ward''s stay about it, the ER''s note in it');
+select t.ok(count(*) = 2 and bool_and(coalesce(case r ->> 'item'
+    when :'s5' then r ->> 'state' = 'discharged'
+    when :'a5' then r ->> 'state' = 'admitted' and r ->> 'department_id' = :'ward' and r ->> 'came_from' = :'s5' and r ->> 'place_id' = '00000000-0000-0000-0000-000000000001' end, false)),
+  'the ER stay discharged; the ward stay admitted, from it, in Bed 1')
+  from t.rows('base.presence', :'ward', jsonb_build_object('patient_id', :'p4')) r;
+select t.ok(t.entry(t.record(:'p4', :'ward'), :'note5') ->> 'visit_id' = :'a5', 'the ER''s note is in the ward''s stay');
+select t.landed(t.w(jsonb_build_array(t.e('casualty.disposition', :'p5', :'er', '{"to":"home"}', null, :'s6'),
+  t.e('discharged', :'p5', :'er', '{"disposition":"home"}', null, :'s6', t.latest(:'s6'), 'changes'))), 'Rasha: home, in one Done');
+select t.ok(count(*) = 1 and bool_and(r ->> 'state' = 'discharged'), 'her stay is discharged') from t.rows('base.presence', :'er', jsonb_build_object('item', :'s6')) r;
+select t.landed(t.w(jsonb_build_array(t.e('casualty.disposition', :'p6', :'er', '{"to":"died","brought_in_dead":false}', null, :'s7'),
+  t.e('died', :'p6', :'er', '{"cause":{"text":"cardiac arrest"}}', null, :'s7'),
+  t.e('discharged', :'p6', :'er', '{"disposition":"exp"}', null, :'s7', t.latest(:'s7'), 'changes'))), 'Lotfy died in the ER: the decision, died, discharged');
+reset role;
+select t.ok(exists (select 1 from base.deceased d where d.patient_id = :'p6'), 'he is deceased');
+select t.ok(state = 'discharged', 'his stay is discharged') from base.presence where item = :'s7';
+set role authenticated;
+select t.as(:'tn');
+select t.refused(t.w(jsonb_build_array(t.e('casualty.disposition', :'p7', :'er', '{"to":"left_unseen"}', null, :'s8'),
+  t.e('discharged', :'p7', :'er', '{"disposition":"oth","note":"left before being seen"}', null, :'s8', t.latest(:'s8'), 'changes'))), 'not_allowed',
+  'the triage nurse may not record a leaving');
+select t.as(:'dr');
+select t.landed(t.w(jsonb_build_array(t.e('casualty.disposition', :'p7', :'er', '{"to":"left_unseen"}', null, :'s8'),
+  t.e('discharged', :'p7', :'er', '{"disposition":"oth","note":"left before being seen"}', null, :'s8', t.latest(:'s8'), 'changes'))), 'the doctor does: left before being seen');
+
+create function pg_temp.beds() returns jsonb language sql as $$
+  select public.pack_op(jsonb_build_object('op', 'casualty.beds', 'department_id', '00000000-0000-0000-0000-0000000000d7',
+    'args', jsonb_build_object('departments', jsonb_build_array('00000000-0000-0000-0000-0000000000d6', '00000000-0000-0000-0000-0000000000d7',
+      '00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000d4', '00000000-0000-0000-0000-0000000000d8'))))
+$$;
+select t.ok(jsonb_array_length(b -> 'departments') = 1 and b -> 'departments' -> 0 ->> 'id' = :'ward'
+  and (select array_agg(f ->> 'name' order by n) from jsonb_array_elements(b -> 'departments' -> 0 -> 'free') with ordinality f(f, n)) = array['Bed 2', 'Bed 3', 'Bed 4'],
+  'the free beds: the ward alone (never the ER, a clinic, the desk or another EMER), in order; a bed an admitted stay holds is not free') from (select pg_temp.beds() b) x;
+select t.as(:'ow');
+select public.write_setting(jsonb_build_object('key', 'place.closed', 'owner_id', :'bed4', 'data', '{"closed":true,"reason":"cleaning"}'::jsonb)) ->> 'key' as closed;
+select t.as(:'dr');
+select t.ok((select array_agg(f ->> 'name' order by n) from jsonb_array_elements(b -> 'departments' -> 0 -> 'free') with ordinality f(f, n)) = array['Bed 2', 'Bed 3'],
+  'a closed bed is not free') from (select pg_temp.beds() b) x;
+select t.ok(jsonb_array_length(public.pack_op(jsonb_build_object('op', 'casualty.beds', 'department_id', :'er',
+    'args', '{"departments":["------------------------------------","00000000-0000-0000-0000-0000000000d6x"]}'::jsonb)) -> 'departments') = 0
+  and jsonb_array_length(public.pack_op(jsonb_build_object('op', 'casualty.beds', 'department_id', :'er', 'args', '{"departments":"x"}'::jsonb)) -> 'departments') = 0,
+  'ids that are not ids, or no list, are passed over');
+select t.as(:'rc');
+select t.refuses('select pg_temp.beds()', 'not_allowed');
+
+select t.as(:'tn');
+select t.landed(t.w(t.e('casualty.triage', :'pt', :'er', pg_temp.tri(3, 'ats', '{"police":{"case":true,"why":"assault"}}'), null, :'s1')), 'a retriage: a police case, an assault');
+select t.as(:'dr');
+select t.ok((b -> 'stays' -> :'s1' ->> 'police')::boolean and not (b -> 'stays' -> :'s4' ? 'police'), 'the board: Ahmed a police case; the unknown man unanswered')
+  from (select pg_temp.board(:'er') b) x;
 
 \echo '── the clinic''s scale'
 select t.as(:'ow');

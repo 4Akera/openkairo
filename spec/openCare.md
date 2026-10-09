@@ -1574,6 +1574,34 @@ numbered as on its picture.
   stay's latest level here, "2 · Very urgent" (red for 1–2, amber for 3). Its two refusals in words. *Question for the owner*: when
   the clinic's scale is Manchester, should the card offer this suggestion at all, or none? (The Manchester Triage System triages by
   its own flowcharts and discriminators, which are not used; openCare takes only its five categories and times.)
+- *Built 2026-10-09, E3a (chosen by Claude at the owner's request, awaiting the owner; the pass is the owner's Q3)*: Where to, the
+  server (migration 18, in place). **The decision** is the pack's own type `casualty.disposition` (no base type, nothing exported: the
+  Encounter's dischargeDisposition says where the patient went; in the record): where to (home, a ward, ICU, CCU, the operating room
+  then a department, another facility, left before being seen, left against advice, died), the department of an admission, the
+  facility, why, who signed, brought in dead, the police report number and a note. Its time is the decision's: boarding counts from
+  it. A new decision changes the standing one. Its line: "Where to: home", "Where to: admit to Medical Ward", "Where to: the operating
+  room, then …", "Where to: <facility>", "Left before being seen", "Left against advice · signed by …", "Died in the ER" or "Brought
+  in dead", then " · police report …". Its check refuses a decision outside a stay admitted here (`not_in_stay`), an admission to no
+  live department of stays other than this one or to one whose encounters are EMER or AMB (another ER, a dialysis unit), or a
+  department named on a choice that is no admission (`unknown_destination`), another facility unnamed (`facility_missing`), left
+  before being seen, against advice or died with no leaving in the same Done (`not_leaving`; died with the base's `died` too), a
+  second decision in a stay or any target but the decision it changes (`wrong_target`), and a decision by anyone who may not
+  discharge here (`not_allowed`: where the patient goes is a doctor's, never the triage nurse's). `write:casualty.disposition` is
+  everyday. **The leaving** is one Done of base
+  entries, written by the client (E3b): the decision when it differs, then the base's `discharged` with FHIR's codes — home `home`,
+  an admission `oth` ("to Medical Ward"), another facility `other-hcf`, left before being seen `oth`, against advice `aadvice`, died
+  `exp` (after the base's `died`); never `hosp`, which is hospice — and for an admission the next department's `admitted` about the
+  stay (admit source `emd`, the bed chosen or none) with the ER's note (`emergency`) in it, through E1's pass. Only who holds
+  `write:discharged` (the ER's doctors, not the triage nurse) records a leaving. **The free beds** (`casualty.beds`, read as the
+  queue, naming no patient): for the departments the client names, each checked as the decision's check does, its places not
+  retired or closed that no admitted stay holds, in order. **The police case**: the triage's `casualty.police` (case, and why: road
+  accident, assault, burn, poisoning, fall, other); the report number lives on the decision, never a stop. **The board's read** adds
+  each stay's standing decision (where to, department, facility, report number, its entry, and when: the first version since where
+  to last changed, so a report number added does not restart boarding) and the police case of the latest
+  triage that answered it. The ER's times (door to doctor, in the ER, boarding) are worked out on screen, never stored. Demo: Salwa
+  Hamed (71, COPD, level 3 though 2 was suggested, why written; seen by Dr. Tamer after 22 minutes; decided for the Medical Ward 40
+  minutes ago: boarding), Mostafa Saeed (9, a scorpion sting, observed; decided for home), Karim a police case (a road accident, no
+  report number yet). No pass, discharge or death in the demo.
 
 ---
 
@@ -2207,4 +2235,10 @@ types, parked pack calls with per-call Retry, Postgres enums.
   word), `scripts/test-casualty.ts`. Node: composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7,
   demo 8, setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12, casualty 10; lint 0 errors; tsc stops only on
   `src/pictures/bookings.tsx` (another session's). No SQL change.
+- 2026-10-09: **Emergency, piece E3a: the server for Where to** (§5.6; lane `beds-er`): migration 18 in place (the triage's police
+  case, `casualty.disposition` with its line and check, `write:casualty.disposition`, `casualty.beds`, the board's decided and
+  police), the demo's Salwa and Mostafa and Karim's police case, the regenerated shapes. Suites: all 35 green, 1727 checks (`casualty` 107,
+  `demo` 92); db:demo twice (40 patients, 352 entries); node tests unchanged (casualty 10 groups); lint 0 errors; tsc stops only on
+  `src/pictures/bookings.tsx`; vite build ok. No browser pass (no client change: E2b's client ignores the board's new fields until
+  E3b; E3b's words.ts names `not_leaving`).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
