@@ -2,10 +2,12 @@
 // haemodialysis.board reads, once per board, each stay's session (with the fluid to take off and the dry weight Before copied), its latest
 // blood pressure and fluid taken off, the weight before and the last session's weight after, and the patient's isolation. The tile says
 // the session ("on · 1:30 left", "over by 0:10" in amber, "ended · not discharged" or "no session" in amber), "off 1.4 of 2.8 L" once
-// there is a target, "BP 146/84" (amber under 100 systolic, red under 90), "gained 2.3 kg" in amber over 4 % of the dry weight, and a
-// chair that does not fit the patient's isolation, in amber. Pure: npm run test:haemodialysis.
+// there is a target, the dialysis event of the last hour ("low BP, cramps": red with Low BP, else amber), "BP 146/84" (amber under 100
+// systolic, red under 90), "gained 2.3 kg" in amber over 4 % of the dry weight, and a chair that does not fit the patient's isolation,
+// in amber. Pure: npm run test:haemodialysis.
 import type { PresenceRow } from '@core/db/types'
 import type { TileCtx, TileWord, TileWords } from '@core/screens/ward/tiles'
+import { eventIsRecent, eventWords } from './event'
 import { chairWarning, keptFor, unitOf } from './unit'
 
 export interface StayFacts {
@@ -70,6 +72,8 @@ export function tileWords(row: PresenceRow, ctx: Pick<TileCtx, 'place' | 'org' |
   const f = b.stays[row.item] ?? {}
   const words: (string | TileWord)[] = [sessionWord(f.session, now)]
   const fluid = fluidWord(f); if (fluid) words.push(fluid)
+  // the event of the last hour, before the BP: the pressure is the alarm, the event says what was done about it
+  const ev = f.event && typeof f.event.heading === 'string' && eventIsRecent(f.event.at, now) ? eventWords(f.event.heading) : null; if (ev) words.push(ev)
   const bp = bpWord(f.bp); if (bp) words.push(bp)
   const gained = gainedWord(f); if (gained) words.push(gained)
   if (ctx.place?.name) {

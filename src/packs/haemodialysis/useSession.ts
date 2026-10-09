@@ -1,8 +1,8 @@
-// The Session tab's reads and its one write door (spec/openCare.md §5.6, D2b): the stay's entries (the session, the readings, the base's
-// vitals, notes and givens, with the patient's lists), the patient's standing prescription (its latest version), and the patient's last
-// weight before the stay began (the base's values). Each read is for treatment (or the patient's break-the-glass reason) and its key
-// starts with the pack's, so a write reads them again, the board's words too. A write that comes back with warnings shows them, and Sign
-// anyway sends it again with them confirmed.
+// The Session tab's reads and its one write door (spec/openCare.md §5.6, D2b, D2c): the stay's entries (the session, the readings, the
+// base's vitals, notes and givens, with the patient's lists), the patient's standing prescription (its latest version), the patient's
+// last weight before the stay began (the base's values), and the unit's drugs (the patient's medicines and every given). Each read is
+// for treatment (or the patient's break-the-glass reason) and its key starts with the pack's, so a write reads them again, the board's
+// words too. A write that comes back with warnings shows them, and Sign anyway sends it again with them confirmed.
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { oneSet } from '@core/db/entries'
@@ -40,6 +40,17 @@ export function usePrescription(dept: Dept, patientId: string | null) {
     queryFn: async () => { const [rec, crossed] = await Promise.all([read<ServerRecord>({ shape: 'record', patient_id: patientId!, department_id: dept.id,
       types: ['haemodialysis.prescription'], include: [], limit: 20, ...purposeFor(patientId!) }), crossedOut(dept, patientId!)])
       return currentRx([...rec.entries, ...crossed]) } })
+}
+
+/** the unit's drugs' read (D2c): the patient's medicines (the base's lists) and every given, of any stay, so "last given" reaches back
+ *  past this session; with the cross-outs, so a given crossed out is not "last given" */
+export function useDrugs(dept: Dept, patientId: string | null) {
+  return useQuery({ queryKey: [KEY, 'drugs', dept.id, patientId], enabled: !!patientId, retry: false,
+    queryFn: async (): Promise<ServerRecord> => {
+      const [rec, crossed] = await Promise.all([read<ServerRecord>({ shape: 'record', patient_id: patientId!, department_id: dept.id, types: ['given'],
+        include: ['base.lists'], limit: 500, ...purposeFor(patientId!) }), crossedOut(dept, patientId!)])
+      return { ...rec, entries: [...rec.entries, ...crossed] }
+    } })
 }
 
 /** the last session's weight after: the patient's newest weight before the stay began (none: null) */

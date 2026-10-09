@@ -1823,6 +1823,28 @@ numbered as on its picture.
   of the tab. A write that comes back with warnings shows them with Sign anyway; a refusal shows its words above the button. The
   tile now reads "off 1.4 of 2.8 L" after the time once Before set a target ("off 0 of 2.8 L" before the first reading), then the BP,
   then "gained 2.3 kg" in amber over 4 % of the dry weight; Start's stay takes the access as its reason ("Haemodialysis · AV fistula").
+- **Built 2026-10-09, D2c: Dialysis's events, the unit's drugs and End (chosen by Claude at the owner's request, awaiting the
+  owner)**: on the Session tab, under Before and the prescription while the session is on, **an event**: what happened (several: Low
+  BP, Cramps, Nausea or vomiting, Chest pain, Headache, Clotting in the circuit, Bleeding at the needles, Fever or rigors, Other), what
+  was done (Saline 200 mL or 100 mL, one at a time; Taking off paused; Blood flow lowered; Doctor called) and words (Other needs words), with a BP or pulse
+  taken then; Sign writes one set: the base's note (kind `dialysis_event`, its heading the events joined by " · ", its text what was
+  done and the words), the base's given for the saline ("Sodium chloride 0.9 %", 200 or 100 mL IV, no code: none in the ATC subset)
+  and a reading with the BP or pulse (the machine's numbers carried from the last reading; with no reading yet, the base's vitals).
+  The stay's events show under the readings, the newest first. **The unit's drugs today**: the patient's current medicines given IV or
+  SC (the base's medication list, active), "Epoetin alfa 4000 IU IV" with the doctor's timing words and "last given today 10:20" (the
+  newest completed base given linked to it, of any stay, as each given stands now: one crossed out or corrected to not done is not
+  counted); nothing is due by a rule; the nurse ticks and Sign writes the base's given for each,
+  linked to its medicine. **End** (the patient line's "End session", or the tile's **End**, `&card=end`, for whoever may discharge):
+  the weight after (required; "72.6 kg: 0.6 above dry", under dry in amber), BP and pulse, the fluid taken off (the last reading's figure as written,
+  editable; litres from 0 to 10, as the reading card), the needle sites (Dry, no bleeding · Bled, pressure held · Haematoma, and words), ended early with a reason, an outcome
+  and the time it came off the machine (blank: now; a time typed when signing late, the last such minute); one Done writes the base's
+  vitals, the session changed to completed (or stopped, with the reason) with the fluid taken off, the needles, the outcome and the
+  time, and the base's Discharge (home) changing the stay's latest entry; a stay whose session is not on is discharged with the vitals
+  alone. After it the tab says "Ended · Said Abdelaziz · 13:05" and moves on to the next chair. The tile shows the event of the last
+  hour after the fluid words and before the BP ("low BP, cramps" in red when it has Low BP, else amber), so Nadia's reads "low BP,
+  cramps · BP 88/54", both red. The banner's word, where the department uses the pack: the open stay here with its session on, "off
+  1.4 of 2.8 L", or "on dialysis" before Before. Noted, not built: the base's Discharge alone (a patient leaving mid-session) leaves the
+  session on, End is the way; the unit's drugs are not worked out as due from their timing.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -3039,4 +3061,8 @@ types, parked pack calls with per-call Retry, Postgres enums.
   Session tab (Before and the fluid to take off, the prescription and its editor, the readings grid and card); `test:haemodialysis` 15
   groups (the session's in `scripts/test-haemodialysis-session.ts`); no server change; no core file. The screen's file is
   `SessionTab.tsx`, since `Session.tsx` and the pure `session.ts` collide on a case-insensitive disk.
+- 2026-10-09: **Dialysis, piece D2c** (§5.6; lane `beds-dialysis`): the pack's client, the session part 2 (`src/packs/haemodialysis`:
+  event, drugs, end, banner, EventCard, DrugsCard, EndCard; SessionTab, board's event words, useSession's drugs read, the tile's End
+  button and the banner word registered): events as the base's note and given, the unit's drugs as the base's given, End with the
+  base's Discharge; `test:haemodialysis` 20 groups (the end's in `scripts/test-haemodialysis-end.ts`); no server change; no core file.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
