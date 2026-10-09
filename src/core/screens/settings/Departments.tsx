@@ -78,7 +78,7 @@ export function DepartmentsPage({ org }: { org: Organization }) {
       onSave={() => save.mutate({ id: e.id!, d, was: existing }, { onSuccess: e.done })}
       aside={existing && <><RetireButton what={existing.name} onRetire={() => retire.mutate(existing.id, { onSuccess: e.done })} /><DeleteButton what={existing.name} onDelete={() => del.mutate(existing.id, { onSuccess: e.done })} /></>}>
       <div className={cn('grid gap-3', sites.length ? 'sm:grid-cols-[1fr_11rem_11rem]' : 'sm:grid-cols-[1fr_11rem]')}>
-        <Field label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Dermatology" required autoFocus /></Field>
+        <Field label="Name" changed={e.changed('name')}><Input value={d.name} onChange={(x) => e.set({ name: x.target.value })} placeholder="Cardiology" required autoFocus /></Field>
         <Field label="Work" changed={e.changed('work')} hint={WORKS.find(([k]) => k === d.work)?.[2]}><Select value={d.work} onChange={(x) => setWork(x.target.value as Department['work'])}>{WORKS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
         {sites.length > 0 && <Field label="Site" changed={e.changed('site_id')}><Select value={d.site_id ?? ''} onChange={(x) => e.set({ site_id: x.target.value || null })}>
           <option value="">none</option>{sites.map((s) => <option key={s.id} value={s.id}>{s.name}{s.retired_at ? ' (retired)' : ''}</option>)}</Select></Field>}

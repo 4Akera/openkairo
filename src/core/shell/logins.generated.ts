@@ -43,20 +43,20 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'xray@demo.com', name: 'Ahmed Saber', role: 'Radiographer' },
     { email: 'radiology@demo.com', name: 'Dr. Mai Farouk', role: 'Radiologist' },
   ] },
-  { department: 'Cardiology clinic', departmentId: 'b7f2c032-387e-53ac-99a8-1972334ae452', people: [
-    { email: 'cardiology@demo.com', name: 'Dr. Wael Ghoneim', role: 'Cardiologist' },
+  { department: 'Cardiology clinic', departmentId: 'ed61e81d-35ff-5ebd-aab9-65bc3fe69f83', people: [
+    { email: 'cardio@demo.com', name: 'Dr. Wael Ghoneim', role: 'Cardiologist' },
   ] },
-  { department: 'Echo room', departmentId: '09b1bcbf-e9f1-5de2-8577-0001f94335c0', people: [
+  { department: 'Echo room', departmentId: 'b524ff70-a7b0-5080-b2f4-8915a319c743', people: [
     { email: 'echo@demo.com', name: 'Dr. Rasha Nabil', role: 'Echo doctor' },
   ] },
   { department: 'Nephrology clinic', departmentId: '9412aa38-749f-5311-8ad0-558233c3b577', people: [
     { email: 'nephrology@demo.com', name: 'Dr. Medhat Sorour', role: 'Nephrologist' },
   ] },
-  { department: 'Chest clinic', departmentId: 'd85ce768-08aa-51f5-a0be-034b46c3361f', people: [
+  { department: 'Chest clinic', departmentId: '5eff2909-14f0-5be8-981e-a1b908dca0bd', people: [
     { email: 'chest@demo.com', name: 'Dr. Dalia Mostafa', role: 'Chest physician' },
   ] },
-  { department: 'Haematology clinic', departmentId: '00a31aa6-ee16-5478-b31c-e36707f29107', people: [
-    { email: 'haematology@demo.com', name: 'Dr. Ola Kandil', role: 'Haematologist' },
+  { department: 'Haematology clinic', departmentId: '2d09bc93-774e-5a31-b19a-daf3c47fd223', people: [
+    { email: 'haemato@demo.com', name: 'Dr. Ola Kandil', role: 'Haematologist' },
   ] },
   { department: 'Blood bank', departmentId: 'a6a74dcb-0181-5115-be6a-f37885eb78b3', people: [
     { email: 'bloodbank@demo.com', name: 'Mahmoud Fekry', role: 'Lab technician' },

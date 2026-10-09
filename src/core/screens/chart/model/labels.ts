@@ -9,7 +9,7 @@ type Types = Organization['types'] | undefined
 export const words = (key: string) => { const s = key.replace(/[._]+/g, ' ').trim(); return s ? s[0].toUpperCase() + s.slice(1) : s }
 /** a type's plain label: the registry's own (org.types[].labels.en), else its key in words without the pack's prefix */
 export const typeLabel = (type: string, types?: Types) => types?.find((t) => t.key === type)?.labels.en ?? words(type.replace(/^[a-z0-9]+\./, ''))
-const FIELD: Record<string, string> = { bp: 'Blood pressure', hr: 'Heart rate', rr: 'Breathing rate', temp: 'Temperature', spo2: 'SpO₂', bmi: 'BMI', prn: 'When needed',
+const FIELD: Record<string, string> = { bp: 'Blood pressure', hr: 'Heart rate', rr: 'Respiratory rate', temp: 'Temperature', spo2: 'SpO₂', bmi: 'BMI', prn: 'When needed',
   as_needed_for: 'When needed for', duration_days: 'Days', status_reason: 'Why', body_site: 'Body site', lot: 'Lot', specimen: 'Specimen' }
 /** a field's label for the Fallback block: never the raw key (the _text, _on and _id endings go, underscores become spaces) */
 export const fieldLabel = (key: string) => FIELD[key] ?? words(key.replace(/_(text|on|id)$/, ''))
@@ -74,7 +74,7 @@ export const ROUTE: Record<string, string> = { oral: 'by mouth', sc: 'under the 
 export const VITALS: { key: string; code: string; short: string; name: string }[] = [
   { key: 'bp.sys', code: 'loinc:8480-6', short: 'BP', name: 'Blood pressure' }, { key: 'bp.dia', code: 'loinc:8462-4', short: 'BP', name: 'Diastolic BP' },
   { key: 'hr', code: 'loinc:8867-4', short: 'HR', name: 'Heart rate' }, { key: 'temp', code: 'loinc:8310-5', short: 'T', name: 'Temperature' },
-  { key: 'spo2', code: 'loinc:59408-5', short: 'SpO₂', name: 'SpO₂' }, { key: 'rr', code: 'loinc:9279-1', short: 'RR', name: 'Breathing rate' },
+  { key: 'spo2', code: 'loinc:59408-5', short: 'SpO₂', name: 'SpO₂' }, { key: 'rr', code: 'loinc:9279-1', short: 'RR', name: 'Respiratory rate' },
   { key: 'weight', code: 'loinc:29463-7', short: 'Wt', name: 'Weight' }, { key: 'height', code: 'loinc:8302-2', short: 'Ht', name: 'Height' },
   { key: 'bmi', code: 'loinc:39156-5', short: 'BMI', name: 'BMI' }, { key: 'pain', code: 'loinc:72514-3', short: 'Pain', name: 'Pain' },
   { key: 'glucose', code: 'loinc:41653-7', short: 'Glucose', name: 'Glucose (capillary)' }, { key: 'head', code: 'loinc:9843-4', short: 'Head', name: 'Head circumference' },

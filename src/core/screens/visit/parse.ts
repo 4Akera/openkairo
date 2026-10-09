@@ -4,7 +4,7 @@
 //   /rx metformin 500mg bd 30d for dm    prescription (dose, route, frequency, days, "for <problem>", "; instructions")
 //   /dx type 2 diabetes since 2019 ; poorly controlled   problem ("?" = suspected; since 2019 · 2019-03 · 3y · 6m)
 //   /al penicillin: rash severe · /al none   allergy · no known allergies
-//   /order hba1c, lipid · /order dermatology: itchy rash for a month   services, or a department and its question (a consult)
+//   /order hba1c, lipid · /order cardiology: chest pain on effort   services, or a department and its question (a consult)
 //   /note                                the long note, inline under the line
 //   hx: … · ex: … · plan: … · proc: …    a note line under that heading; anything else is today's progress note
 
@@ -195,7 +195,7 @@ function consult(rest: string, ctx: Ctx): Result {
     if (d) { const q = words.slice(n).join(' ').trim(); if (!q) return { error: `Type the question for ${d.name}` }
       return { ok: [{ function: 'order', kind: 'consult', params: { to_department_id: d.id, question_text: q, priority: 'routine' }, line: `Consult ${d.name}: ${q}` }] } }
   }
-  return { error: 'Start with the department: /order dermatology: itchy rash for a month' }
+  return { error: 'Start with the department: /order cardiology: chest pain on effort' }
 }
 
 function problem(rest: string, now: Date): Result {
@@ -297,13 +297,13 @@ const NONE = /^(none|nka|nkda|no known (drug )?allerg(y|ies))$/i
 registerCommand({ name: 'al', group: 'record', title: 'Allergy', aliases: ['allergy'], label: 'Allergy', example: '/al penicillin: rash severe · /al none', action: 'write:allergy', writes: ['allergy', 'list_review'],
   parse: (rest) => !rest ? null : NONE.test(rest.trim()) ? { ok: [{ function: 'list_review', kind: 'review', params: { list: 'allergies', outcome: 'none_known' }, line: 'No known allergies' }] } : allergy(rest),
   empty: () => [{ function: 'allergy', kind: 'allergy', line: '', params: { action: 'add', substance: { name: '' }, kind: 'allergy', reactions_text: null, severity: null } }] })
-registerCommand({ name: 'order', group: 'orders', title: 'Order', label: 'Request — a service, or a department with a question', example: '/order hba1c, lipid · /order cxr ? pneumonia · /order dermatology: rash', action: 'write:order', writes: ['order'],
+registerCommand({ name: 'order', group: 'orders', title: 'Order', label: 'Request — a service, or a department with a question', example: '/order hba1c, lipid · /order cxr ? pneumonia · /order cardiology: chest pain', action: 'write:order', writes: ['order'],
   parse: (rest, ctx) => {
     if (!rest) return null
-    const m = rest.match(/^([^:,]+):\s*([\s\S]+)$/)                                   // "dermatology: itchy rash" is a consult
+    const m = rest.match(/^([^:,]+):\s*([\s\S]+)$/)                                   // "cardiology: chest pain on effort" is a consult
     if (m && findNamed(ctx.departments.filter((d) => d.id !== ctx.departmentId), m[1].trim())) return consult(`${m[1].trim()} ${m[2]}`, ctx)
     const r = requests(rest, ctx)
-    if (r && 'error' in r) { const c = consult(rest, ctx); if (c && 'ok' in c) return c }  // "dermatology rash": no such test, but a department
+    if (r && 'error' in r) { const c = consult(rest, ctx); if (c && 'ok' in c) return c }  // "cardiology chest pain": no such test, but a department
     return r
   } })
 registerCommand({ name: 'note', group: 'record', title: 'Long note', label: 'Long note under the line', example: '/note · or just type: hx: … · ex: … · plan: …', action: 'write:note', writes: ['note'],

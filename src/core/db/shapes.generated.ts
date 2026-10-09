@@ -172,8 +172,8 @@ export type Given = {
   site?: string
   status: 'completed' | 'not-done'
 } & ({ medication: string } | { drug: Concept })
-/** haematology.plan v1 (haematology) */
-export interface HaematologyPlan {
+/** haemato.plan v1 (haemato) */
+export interface HaematoPlan {
   medicine?: string
   note?: string
   reason: string
@@ -184,8 +184,8 @@ export interface HaematologyPlan {
     low: number
   }
 }
-/** haematology.programme v1 (haematology) */
-export interface HaematologyProgramme {
+/** haemato.programme v1 (haemato) */
+export interface HaematoProgramme {
   condition?: string
   every_weeks: number
   hb: {
@@ -196,8 +196,8 @@ export interface HaematologyProgramme {
   note?: string
   status?: 'active' | 'stopped'
 }
-/** haematology.week v1 (haematology) */
-export interface HaematologyWeek {
+/** haemato.week v1 (haemato) */
+export interface HaematoWeek {
   bleeding?: 'none' | 'minor' | 'major'
   days: number[]
   food?: 'as usual' | 'more greens' | 'fewer greens'
@@ -571,8 +571,8 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
-/** setting cardiology.hf_targets (cardiology; owner organization) */
-export interface CardiologyHfTargetsSetting {
+/** setting cardio.hf_targets (cardio; owner organization) */
+export interface CardioHfTargetsSetting {
   targets: {
     atc: string
     group: 'ras' | 'bb' | 'mra' | 'sglt2'
@@ -619,8 +619,8 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
-/** setting haematology.inr (haematology; owner organization) */
-export interface HaematologyInrSetting {
+/** setting haemato.inr (haemato; owner organization) */
+export interface HaematoInrSetting {
   table: {
     change: number
     from: number
@@ -792,9 +792,9 @@ export interface EntryData {
   'discharged': Discharged
   'done': Done
   'given': Given
-  'haematology.plan': HaematologyPlan
-  'haematology.programme': HaematologyProgramme
-  'haematology.week': HaematologyWeek
+  'haemato.plan': HaematoPlan
+  'haemato.programme': HaematoProgramme
+  'haemato.week': HaematoWeek
   'here': Here
   'left': Left
   'lis.blood': LisBlood
@@ -831,7 +831,7 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
-  'cardiology.hf_targets': CardiologyHfTargetsSetting
+  'cardio.hf_targets': CardioHfTargetsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
@@ -841,7 +841,7 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
-  'haematology.inr': HaematologyInrSetting
+  'haemato.inr': HaematoInrSetting
   'lis.large': LisLargeSetting
   'nephrology.renal_list': NephrologyRenalListSetting
   'organization.packs_used': OrganizationPacksUsedSetting

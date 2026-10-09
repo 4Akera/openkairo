@@ -46,7 +46,7 @@ export function Rows() {
         <Row open={false} muted onToggle={noop}><span>Old clinic</span><span className="text-12">retired</span></Row>
       </ul>
       <div className="grid gap-4 border-t border-line p-4">
-        <NewCard title="New department"><div className="grid gap-3 p-4"><Field label="Name"><Input placeholder="Dermatology" /></Field></div></NewCard>
+        <NewCard title="New department"><div className="grid gap-3 p-4"><Field label="Name"><Input placeholder="Cardiology" /></Field></div></NewCard>
         <Fieldset title="A group of settings"><FormRow label="Frequency" inline>{FREQUENCIES.map(([k, l]) => <Chip key={k} on={freq === k} onClick={() => setFreq(k)}>{l}</Chip>)}</FormRow>
           <FormRow label="Duration" inline><Input dense className="w-20 tnum" defaultValue="30" /><span className="text-12 text-faint">days</span></FormRow></Fieldset>
         <div className="flex flex-wrap items-center gap-4"><SaveState state="unsaved" /><SaveState state="saved" /></div>
