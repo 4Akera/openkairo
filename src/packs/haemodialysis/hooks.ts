@@ -1,9 +1,10 @@
 // Dialysis's reads (spec/openCare.md §5.6), each through the pack's one door (public.pack_op, which logs each patient it names) or the
 // reader: who is due under the board (the clinics' C5 rows, read again each minute and on the clinic's hints), the board's words for the
 // tiles (C7's read: once per board, for treatment, again when the stays change and on the clinic's hints, never on a timer; its clock
-// moves each minute so the time left moves), the patients' names, and one patient's isolation alerts.
+// moves each minute so the time left moves), the patients' names, one patient's isolation alerts, the Schedule tab's week, and the
+// schedule's one write door (haemodialysis.plan: add or end a slot, move one session, undo a move).
 import { useEffect, useMemo, useState } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { packOp, read } from '@core/db/rpc'
 import { banner, mayIn } from '@core/db/views'
 import { useLive } from '@core/hooks/live'
@@ -14,6 +15,7 @@ import type { BoardRowsRead } from '@core/screens/ward/rows'
 import { staysKey, type Board } from './board'
 import { boardRow, dueOf, isolationOf, orderRows } from './due'
 import { chairsOf, unitOf } from './unit'
+import { weekOfData } from './week'
 
 export const KEY = 'haemodialysis'
 const live = (orgId: string | undefined) => orgId ? `organization:${orgId}` : null
@@ -77,10 +79,28 @@ export function useBoard(dept: Pick<Department, 'id'>): Board | undefined {
   return useMemo(() => q.isError || !q.data ? undefined : { ...q.data, now }, [q.data, q.isError, now])
 }
 
-/** one patient's isolation for the chairs, from their active isolation alerts (the Add card's warning) */
+/** one patient's isolation for the chairs, from their active isolation alerts (the Add card's warning), with whether it is still being
+ *  read or could not be read (then the card says so: no warning is not the same as none) */
 export function useIsolation(dept: Pick<Department, 'id'>, patientId: string | null) {
   const q = useQuery({ queryKey: [KEY, 'isolation', dept.id, patientId], enabled: !!patientId, staleTime: 60_000,
     queryFn: async () => isolationOf((await read<ServerRecord>({ shape: 'record', patient_id: patientId, department_id: dept.id, types: ['alert', 'crossed_out'], include: [], limit: 50,
       ...purposeFor(patientId!) })).entries) })
-  return q.data ?? []
+  return { iso: q.data ?? [], pending: !!patientId && q.isPending, failed: q.isError }
+}
+
+/** the Schedule tab's week from its Saturday: the slots, the moves, each patient's isolation (again on the clinic's hints). Another week
+ *  is read afresh, never drawn from the last one's answer, so a column's date and its patients are always one week's */
+export function useWeek(dept: Pick<Department, 'id'>, from: string) {
+  const { org } = useDepartment()
+  useLive(live(org?.organization.id), [[KEY]])
+  const q = useQuery({ queryKey: [KEY, 'week', dept.id, from], enabled: !!org, retry: false,
+    queryFn: () => packOp('haemodialysis.week', dept.id, { from }) })
+  return { ...q, week: useMemo(() => weekOfData(q.data), [q.data]) }
+}
+
+/** the schedule's one door: add a slot, end one, move one session (or take it off a day), undo a move; then the week and who is due again */
+export function usePlan(dept: Pick<Department, 'id'>) {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (args: Record<string, unknown>) => packOp<{ id: string }>('haemodialysis.plan', dept.id, args),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }) })
 }

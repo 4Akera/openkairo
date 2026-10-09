@@ -1751,6 +1751,21 @@ numbered as on its picture.
   discharged" or "no session" in amber, "BP 146/84" (amber under 100 systolic, red under 90), and the chair's mismatch in amber;
   nothing while it reads, or for a visit. A patient with both HBV and HCV fits the HBV chair (HBV is the one that needs its own
   chair): no warning there. The refusals have the pack's words. No tile button yet (D2 adds Readings and End).
+- **Built 2026-10-09, D1d: Dialysis's Schedule tab (chosen by Claude at the owner's request, awaiting the owner)**: the week from
+  its Saturday (`haemodialysis.week`, read:queue; on a Friday the week to come), one shift at a time (chips "Shift 1 · 07:00" …, the
+  shift on now first), this week or next: a row a chair, a column a day Sat … Thu (today's in the accent); each cell the patient, a
+  session moved away struck through ("moved to Thu", or "off this day"), one moved in with "this week only", "kept for HBV" (or HCV)
+  for a kept chair, or "free"; a patient in a chair that does not fit their isolation shows the amber glyph (its words for a screen
+  reader), never a stop. The view "The week" counts the week's sessions over every shift. For whoever may change the schedule
+  (`write:haemodialysis.schedule`), cards fold out under the table, never over it, each through `haemodialysis.plan` with the
+  refusal's words under it: Add a patient (from the toolbar, or a free cell preset to its chair, pattern and shift: who by one
+  search, Sat · Mon · Wed or Sun · Tue · Thu, the shift, the chair, a chair the server would refuse as taken from that day off and
+  saying "taken", from when, a note; the patient's HBV or HCV isolation against the chair in amber once read, Add still on, and a
+  failed isolation read said in amber); a patient's cell: move this one session to a day up to two weeks ahead (Fridays included),
+  another shift or chair (a chair taken then off, the new chair's isolation mismatch in amber), with a reason, or take it off that
+  day, or end the slot from a day (a slot already ending says when); a moved session's cell: its reason and "Undo the move", off with
+  the refusal's words when another session was moved into the chair that day or the patient comes that day by another move. Another
+  week is read afresh: its columns and cells are always one week's.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2952,4 +2967,7 @@ types, parked pack calls with per-call Retry, Postgres enums.
 - 2026-10-09: **Dialysis, piece D1c** (§5.6; lane `beds-dialysis`): the pack's client, part 1 (`src/packs/haemodialysis`: days, unit,
   due, board, words, hooks, index): who is due under the board with Start and Missed (the clinics' C5) and the tile's words (C7's
   read); `test:haemodialysis` 7 groups; `test:board`, `test:clinics-core`, `test:bedside` and `test:oncology` unchanged; no core file.
+- 2026-10-09: **Dialysis, piece D1d** (§5.6; lane `beds-dialysis`): the pack's client, part 2 (`src/packs/haemodialysis`: week,
+  Schedule, PlanCards, hooks' useWeek and usePlan, the screen registered): the Schedule tab (the week by shift, Add a patient, move one
+  session, take it off a day, end a slot, undo a move); `test:haemodialysis` 8 groups; no server change; no core file.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

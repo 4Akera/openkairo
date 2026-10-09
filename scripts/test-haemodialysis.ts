@@ -1,6 +1,6 @@
 // Dialysis's client (spec/openCare.md §5.6): the unit's days (Sat · Mon · Wed, Sun · Tue · Thu; a week Saturday … Thursday), its setting
 // (shifts, hours, the chairs kept for HBV and HCV, shown, never a stop), who is due under the board (the clinics' C5 rows: their words,
-// Start's session and Missed), the tile's words from the board's read (C7), and the refusals' words. Pure: no browser, no database.
+// Start's session and Missed), the tile's words from the board's read (C7), the Schedule tab's week, and the refusals' words. Pure: no browser, no database.
 //   npm run test:haemodialysis
 import assert from 'node:assert/strict'
 import { setClinicTimeZone } from '../src/core/ui/time'
@@ -13,6 +13,7 @@ import { chairWarning, chairsOf, keptFor, shiftNow, shiftWords, unitOf } from '.
 import { SESSION, boardRow, dueOf, dueWords, fromKey, isolationOf, keyOf, missedEntry, missedShows, orderRows, startEntries, type DueRow } from '../src/packs/haemodialysis/due'
 import { boardOf, hmm, staysKey, tileWords, type Board } from '../src/packs/haemodialysis/board'
 import { REFUSALS } from '../src/packs/haemodialysis/words'
+import { awayWords, grid, inWords, nameOf, patternTaken, slotCount, taken, undoBlocked, weekOfData, type Week } from '../src/packs/haemodialysis/week'
 import { E, presence } from './chart-fixtures'
 
 setClinicTimeZone('Africa/Cairo')
@@ -155,6 +156,47 @@ test('the tile: the session\'s time, the blood pressure, a chair that does not f
   assert.deepEqual(tileLineOf(lines, st(), tc(['haemodialysis']), { other: b }), [], 'never another pack\'s read')
   const a = [presence('s2', { version: 3 }), presence('s1', { version: 1, has_vitals: true })]
   assert.equal(staysKey(a), staysKey([...a].reverse())); assert.equal(staysKey(a), 's1@1:1,s2@3:0')
+})
+
+test('the week: a row a chair, a cell a day; a move in, a slot (moved away or not), a kept chair, free; the count and what is taken', () => {
+  const week = weekOfData({ from: '2026-10-10', to: '2026-10-15', today: '2026-10-10', patient_ids: ['pt', 'p2', 'p3', 'p4', 'p5'],
+    isolation: { p2: ['hcv'], p4: ['hbv'], pt: [] },
+    slots: [{ id: 's1', patient_id: 'pt', days: 'sat_mon_wed', shift: 1, place_id: 'c1', starts_on: '2026-09-01' },
+      { id: 's2', patient_id: 'p2', days: 'sun_tue_thu', shift: '1', place_id: 'c1', starts_on: '2026-10-13', note: 'new here' },
+      { id: 's3', patient_id: 'p3', days: 'sun_tue_thu', shift: 1, place_id: 'c3', starts_on: '2026-09-01', ends_on: '2026-10-12' },
+      { id: 's4', patient_id: 'p4', days: 'sat_mon_wed', shift: 2, place_id: 'c8', starts_on: '2026-09-01' },
+      { id: 'junk', patient_id: 'p9', days: 'mon_wed', shift: 1, place_id: 'c3', starts_on: '2026-09-01' }],
+    moves: [{ id: 'm1', patient_id: 'pt', slot_id: 's1', from_on: '2026-10-12', to_on: '2026-10-15', shift: 1, place_id: 'c3', reason: 'family wedding' },
+      { id: 'm2', patient_id: 'p5', to_on: '2026-10-14', shift: 1, place_id: 'c7', reason: 'extra' }, { id: 'm3', patient_id: 'p6', reason: 'nowhere' }] }) as Week
+  assert.ok(week); assert.equal(week.slots.length, 4, 'a slot of no pattern passed over'); assert.equal(week.moves.length, 2, 'a move from and to nowhere passed over')
+  assert.equal(week.slots[1].shift, 1); assert.equal(week.slots[1].note, 'new here'); assert.equal(weekOfData(null), null); assert.equal(weekOfData({ from: '2026-10-10', slots: 'x', moves: [] }), null)
+  const say = (c: ReturnType<typeof grid>[number]['cells'][number]['cell']) => c.kind === 'slot' ? `slot ${c.slot.id}${c.warn ? ` ! ${c.warn}` : ''}`
+    : c.kind === 'away' ? `away ${c.slot.id} ${awayWords(c.move)}` : c.kind === 'in' ? `in ${c.move.id}${c.warn ? ` ! ${c.warn}` : ''}` : c.kind === 'kept' ? `kept ${c.kept}` : 'free'
+  const g = grid(week, 1, chairsOf(org, 'hd'), U)
+  assert.deepEqual(g.map((r) => r.chair.name), ['Chair 1', 'Chair 3', 'HCV chair 7', 'HBV chair 8'])
+  assert.deepEqual(g[0].cells.map((c) => c.on), ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'])
+  assert.deepEqual(g[0].cells.map((c) => say(c.cell)), ['slot s1', 'free', 'away s1 moved to Thu', 'slot s2 ! HCV: Chair 1 is not kept for HCV', 'slot s1', 'slot s2 ! HCV: Chair 1 is not kept for HCV'],
+    'the other pattern\'s slot only from its first day; the one moved away struck')
+  assert.deepEqual(g[1].cells.map((c) => say(c.cell)), ['free', 'slot s3', 'free', 'free', 'free', 'in m1'], 'a slot until its last day; a move in')
+  assert.deepEqual(g[2].cells.map((c) => say(c.cell)), ['kept hcv', 'kept hcv', 'kept hcv', 'kept hcv', 'in m2 ! HCV chair 7 is kept for HCV', 'kept hcv'])
+  assert.deepEqual(g[3].cells.map((c) => say(c.cell)), Array(6).fill('kept hbv'), 'another shift\'s slot absent')
+  assert.deepEqual(grid(week, 2, chairsOf(org, 'hd'), U)[3].cells.map((c) => say(c.cell)), ['slot s4', 'kept hbv', 'slot s4', 'kept hbv', 'slot s4', 'kept hbv'], 'HBV in the HBV chair: no warning')
+  assert.equal(awayWords({}), 'off this day'); assert.equal(inWords, 'this week only')
+  assert.equal(slotCount(week), 10, 's1 twice (Monday moved away), s2 twice, s3 once, s4 three times, two moves in')
+  assert.equal(taken(week, 'c1', '2026-10-10', 1), true); assert.equal(taken(week, { id: 'c1' }, '2026-10-12', 1), false, 'moved away: free that day')
+  assert.equal(taken(week, 'c3', '2026-10-15', 1), true, 'a move in'); assert.equal(taken(week, 'c7', '2026-10-10', 1), false); assert.equal(taken(week, 'c1', '2026-10-10', 2), false)
+  assert.equal(patternTaken(week, 'c1', 'sat_mon_wed', 1), true); assert.equal(patternTaken(week, 'c3', 'sat_mon_wed', 1), false); assert.equal(patternTaken(week, 'c3', 'sun_tue_thu', 1), true)
+  assert.equal(patternTaken(week, 'c3', 'sun_tue_thu', 1, '2026-10-13'), true, 'from Tue: the move into Chair 3 on Thu holds it')
+  assert.equal(patternTaken(week, 'c3', 'sun_tue_thu', 1, '2026-10-16'), false, 'from Fri: the slot ended Mon, the move in was Thu')
+  assert.equal(patternTaken(week, 'c1', 'sat_mon_wed', 1, '2026-11-01'), true, 'an open slot holds its chair from any day')
+  assert.equal(patternTaken(week, 'c7', 'sun_tue_thu', 1), false, 'a move in on another pattern\'s day')
+  const m1 = week.moves[0]; const plus = (m: Week['moves'][number]) => ({ ...week, moves: [...week.moves, m] })
+  assert.equal(undoBlocked(week, m1), null, 'Chair 1 free on Mon: the session can come back')
+  assert.equal(undoBlocked(plus({ id: 'm9', patient_id: 'p5', to_on: '2026-10-12', shift: 1, place_id: 'c1', reason: 'x' }), m1), 'chair_taken', 'another session moved into Chair 1 that Mon')
+  assert.equal(undoBlocked(plus({ id: 'm9', patient_id: 'p5', to_on: '2026-10-12', shift: 2, place_id: 'c1', reason: 'x' }), m1), null, 'another shift')
+  assert.equal(undoBlocked(plus({ id: 'm9', patient_id: 'pt', to_on: '2026-10-12', shift: 1, place_id: 'c7', reason: 'x' }), m1), 'already_due', 'the patient comes that Mon by another move')
+  assert.equal(undoBlocked(week, week.moves[1]), null, 'an extra session: nothing comes back')
+  assert.equal(nameOf(who), 'Hassan Morsy'); assert.equal(nameOf(undefined), 'Patient')
 })
 
 test('words: the refusals in the pack\'s words', () => {
