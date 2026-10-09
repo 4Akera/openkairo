@@ -40,4 +40,8 @@ export const DEMO_GROUPS: DemoGroup[] = [
   { department: 'Cashier', departmentId: '1d5d62c1-1b7d-5d6a-8375-6f9cd8f0fc9a', people: [
     { email: 'cashier@demo.com', name: 'Mona Saad', role: 'Cashier' },
   ] },
+  { department: 'ICU', departmentId: '91fdec43-773f-5952-9026-a4d666c81df9', people: [
+    { email: 'hany@demo.com', name: 'Dr. Hany Salem', role: 'Doctor' },
+    { email: 'mariam@demo.com', name: 'Mariam Saad', role: 'Nurse' },
+  ] },
 ]

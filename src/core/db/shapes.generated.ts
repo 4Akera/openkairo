@@ -176,6 +176,33 @@ export type Given = {
 export interface Here {
   note?: string
 }
+/** intensive.infusion v1 (intensive) */
+export interface IntensiveInfusion {
+  amount?: Quantity
+  dose?: Quantity
+  dose_unit?: 'ug/kg/min' | 'ug/min' | 'ug/h' | 'mg/h' | 'mg/kg/h' | 'g/h' | 'units/h'
+  drug: Concept
+  key?: string
+  medication?: string
+  note?: string
+  rate?: Quantity
+  reason?: string
+  status: 'running' | 'stopped'
+  volume?: Quantity
+  weight?: Quantity
+}
+/** intensive.vent v1 (intensive) */
+export interface IntensiveVent {
+  fio2?: Quantity
+  mode: 'vc' | 'pc' | 'prvc' | 'simv' | 'ps' | 'cpap' | 'other'
+  mode_text?: string
+  note?: string
+  peep?: Quantity
+  pinsp?: Quantity
+  ps?: Quantity
+  rate?: Quantity
+  vt?: Quantity
+}
 /** left v1 (base) */
 export interface Left {
   reason?: string
@@ -489,6 +516,21 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
+/** setting intensive.unit (intensive; owner department) */
+export interface IntensiveUnitSetting {
+  day_starts: number
+  infusions: {
+    amount?: number
+    amount_unit?: 'ug' | 'mg' | 'g' | 'units'
+    atc?: string
+    dose_unit: 'ug/kg/min' | 'ug/min' | 'ug/h' | 'mg/h' | 'mg/kg/h' | 'g/h' | 'units/h'
+    key: string
+    kind?: 'vasopressor' | 'inotrope' | 'sedative' | 'opioid' | 'insulin' | 'anticoagulant' | 'antiarrhythmic' | 'vasodilator' | 'electrolyte' | 'other'
+    name: string
+    short?: string
+    volume?: number
+  }[]
+}
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
   analysers: false
@@ -624,6 +666,8 @@ export interface EntryData {
   'done': Done
   'given': Given
   'here': Here
+  'intensive.infusion': IntensiveInfusion
+  'intensive.vent': IntensiveVent
   'left': Left
   'list_review': ListReview
   'medication': Medication
@@ -665,6 +709,7 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
+  'intensive.unit': IntensiveUnitSetting
   'lis.large': LisLargeSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting

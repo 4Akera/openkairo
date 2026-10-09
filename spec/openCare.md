@@ -1503,6 +1503,37 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- *Built 2026-10-09 (Critical care, key intensive, piece I1; chosen by Claude in the build, awaiting the owner):* role block d2 and one
+  migration, 19, ending with `core.lock_pack('intensive')`; pieces I2 and I3 add to it. Its starter setup `intensive.icu`: six beds (ICU
+  1–6), inpatient stays (IMP), review of critical results, the line `{"screens":["base.beds"],"opens":"base.beds"}` (the ICU chart tab
+  joins it in I1b), and the unit's setting `intensive.unit` (the hour the ICU day starts, 8 by default, and the unit's nine infusions,
+  each with its usual bag and its kind), drawn on the ICU's card in Settings → Departments. The ICU chart will be a pack tab beside the
+  board, not the chart's center: a pack's view in the center is a core door (`chart/model/at.ts`, `center/EncounterPane.tsx`), noted
+  for the owner, who may choose it later. The ICU chart (I1b) writes one column an hour as one set, signed once by the nurse: the base's vitals (with ACVPU and air
+  or oxygen, the owner's Q5), the base's observations for MAP (8478-0), CVP (60985-9), fluid in (9103-3) and urine (9188-4) (the
+  owner's B1), the base's procedure for the time on a ventilator (`local.procedure` invasive or non-invasive ventilation, in progress
+  until a version ends it), and the pack's own two types for what the base lacks: `intensive.vent`, the ventilator's settings (one item
+  an episode, a version whenever a setting changes: the settings are one set and the mode is a word, so not one base observation each),
+  and `intensive.infusion`, an infusion's rate (one item an infusion, a version for each rate change, stopped to end it; as an
+  extension of `given` its FHIR could not carry the rate). A setting carried on from the hour before is never written again (the chart, I1b),
+  and a MAP not typed is never written (it is worked out from the BP when drawn). The dose is always the dose the pump's rate gives (rate × the
+  bag's amount ÷ its volume, by the weight for a dose per kg), and the server checks it (`rate_mismatch` beyond half a step: its
+  arithmetic, not a clinical stop; the bag's volume must be in mL and the weight in kg, both above 0). UCUM only where exact: µg/kg/min and mg/h carry it; µg/min, µg/h, mg/kg/h, g/h and units/h are
+  words with no code (insulin and heparin never U/h). In the chart (I1b), an infusion links to the patient's prescription only when it is the same drug (an
+  equal ATC code, or the same whole name once normalised); otherwise the nurse's "Link to" (I1b). Fluids are the base's observations,
+  shared with Ward nursing: the four codes (9103-3, 9187-6, 9188-4, 9257-7) are to be agreed with its fluid piece, so both draw one
+  balance. A value outside its usual range will be a notice and "Sign anyway", never a stop (I1b). Lines read "Ventilator VC · FiO2 80%
+  · PEEP 10 · Vt 420 · rate 18" and "Started: Noradrenaline 0.3 µg/kg/min · 17.6 mL/h · 4 mg in 50 mL"; FHIR: an Observation with a
+  component for each setting, a MedicationAdministration with its rate. The tile's words come from the op `intensive.board` (the
+  owner's C1): the airway ("Ventilated d3" in blue, "NIV d1", "Extubated 09:15" for a day after a completed or stopped version, else "On air", "O₂ 2 L/min"), one infusion
+  (the first vasopressor or inotrope in amber, "noradrenaline 0.15", else the first running, "insulin 4 units/h"), "MAP n" while a
+  pressor runs or under 65 (amber; of the last two hours, the newer of the typed MAP and the one worked out from the BP, so an older
+  typed MAP never hides a falling pressure), and "urine 0.4 mL/kg/h" in amber under 0.5 over the last hours. Demo: the ICU (position 10), its
+  nurse Mariam Saad and its doctor Dr. Hany Salem; Nabil (septic shock, ventilated, noradrenaline titrated 0.2 → 0.25 → 0.2 → 0.15)
+  and Samy (DKA with kidney injury, on air, insulin, little urine), six hours charted each. The clinic also ticks Ward nursing on the
+  ICU, after Critical care. Drawn in the picture and not in the chart (I1b) either: RASS (the base has no RASS score), the "By day" chip, lactate under
+  Bloods (no LOINC row in the base's subset), FiO₂ as a fraction (written and drawn in %); LOINC rows for the ventilator's settings and
+  UCUM rows for every dose rate would each be a base change.
 
 ---
 
@@ -2124,4 +2155,11 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **Critical care, piece I1a: the ICU, its types, its demo and the board's words** (§5.6; lane `beds-icu`; no core or base
+  change): migration 19 (`intensive`: `intensive.vent`, `intensive.infusion`, `intensive.unit`, the op `intensive.board`, the setup
+  `intensive.icu`), seed and demo (Mariam Saad, Dr. Hany Salem; Nabil, Samy), `src/packs/intensive` (codes, unit, board, the tile
+  line). As run in the lane: `db:test` 34 suites, 1655 checks, all green (`intensive` 63, new; `demo` 90); gen:shapes and gen:logins
+  checks clean; `db:demo` twice (37 patients, 17 open visits and stays, 397 entries); `test:intensive` 1 group (tileWords), and composer
+  18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis
+  12, billing 19, bedside 12; lint 0 errors; typecheck and `vite build` clean but for `src/pictures/bookings.tsx` (another session's).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
