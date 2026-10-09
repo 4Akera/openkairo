@@ -1683,7 +1683,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (recovery@demo.com); Hamed Sakr (pre-op today, Hb 9.8), Marwa Shalaby (Bay 2, Aldrete 6), Yara Abdelsalam (7, Bay 3, Aldrete 7 → 9).
   Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
   ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet waits for printing;
-  recovery's ward nursing tick waits for the beds lane.
+  recovery's ward nursing tick waits for the beds lane; Recovery's line shows at the board's next render (a pack's tile line is pure and
+  cannot ask the board to render again when its read lands: a core question).
 
 ---
 
