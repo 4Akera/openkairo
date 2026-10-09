@@ -1,5 +1,5 @@
 // The family pack's client (spec/openCare.md §5.8, Q16, Q49, Q50; pictures #family-folder, #family-day, #family-checks). Family medicine
-// ticks five packs (its own, chronic care, immunisation, paediatrics, ObGyn), never copies of them. Its own: the household as the pack's own
+// ticks five packs (its own, chronic care, immunisation, paediatrics, obstetrics), never copies of them. Its own: the household as the pack's own
 // table — the Family section (the file and what each member is due, from the packs the department uses) and the Families screen; the
 // checks due by age and sex (the Checks section, /checks, a banner word); and the desk's New patient asking to join a file or start one.
 import { registerCommand } from '@core/screens/visit/commands'

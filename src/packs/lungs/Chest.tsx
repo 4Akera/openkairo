@@ -1,6 +1,6 @@
 // The Chest section (spec/openCare.md §5.1 rule 2, §5.8; the picture #chest-spiro): the smoking, the GOLD group with CAT, mMRC and the
 // flares (for asthma, ACT and the reversibility instead), the flares of the last year, the last spirometry, the inhalers and the technique,
-// the eosinophils, the vaccines, the action plan in Arabic. Read-only; a row opens its entry. The plan prints later (printing is not in
+// the eosinophils, the immunisations, the action plan in Arabic. Read-only; a row opens its entry. The plan prints later (printing is not in
 // openCare yet).
 import type { ReactNode } from 'react'
 import type { SectionBody } from '@core/screens/chart/sections'
@@ -36,7 +36,7 @@ export function Chest({ p, own }: SectionBody) {
     <Row k="Inhalers">{inh.length ? inh.map((m) => `${m.drug_name}${m.dose_number != null ? ` ${m.dose_number} ${m.dose_unit ?? ''}` : ''} ${m.frequency ?? ''}${m.prn ? ' when needed' : ''}`.replace(/\s+/g, ' ').trim()).join(' · ') : <span className="text-muted">none on the list</span>}</Row>
     <Row k="Technique" tone={tech && !techniqueOk(tech) ? 'warn' : undefined}>{tech ? <>{shortDate(tech.occurred_at)} · {valueText(tech)}</> : <span className="text-muted">not checked: /technique</span>}</Row>
     {eos && <Row k="Eosinophils">{eos.value} /µL <Faint>{shortDate(eos.at)}</Faint></Row>}
-    <Row k="Vaccines">{flu ? `flu ${shortDate(flu.occurred_at)} ✓` : <span className="text-warn">flu not this season</span>} · pneumococcal {pneumo ? `${shortDate(pneumo.occurred_at)} ✓` : <span className="text-warn">never · due</span>}</Row>
+    <Row k="Immunisations">{flu ? `flu ${shortDate(flu.occurred_at)} ✓` : <span className="text-warn">flu not this season</span>} · pneumococcal {pneumo ? `${shortDate(pneumo.occurred_at)} ✓` : <span className="text-warn">never · due</span>}</Row>
     <Label>The action plan · Arabic</Label>
     {plan.length ? plan.map(([w, tone, ar]) => <p key={w} className="flex items-start gap-2 py-0.5"><Tag tone={tone} className="mt-0.5 w-20 shrink-0 justify-center">{w}</Tag>
       <span dir="rtl" lang="ar" className="text-13 text-fg">{ar}</span></p>) : <p className="text-13 text-muted">none yet: /plan</p>}

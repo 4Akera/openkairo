@@ -57,7 +57,7 @@ export function WeekCard({ q, set, ctx }: CardEditorProps) {
         <span className="ms-2 pb-1.5 text-13 text-fg">= <b className="font-semibold">{total(w.days)} mg</b> a week <span className="text-muted">· was {was}{was ? ` · ${total(w.days) >= was ? '+' : ''}${Math.round((total(w.days) / was - 1) * 100)} %` : ''}{now && changed(now.days, w.days) ? ` · ${changed(now.days, w.days)}` : ''}</span></span></div>
       <p className="text-12 text-muted">{tabletsEn(w.days, tablet)}</p></div>
     <label className="flex flex-wrap items-center gap-2 text-13"><K>Next INR</K><Input dense type="date" value={w.next_inr ?? ''} onChange={(e) => put({ next_inr: e.target.value || undefined })} className="w-40" />
-      <span className="text-12 text-faint">booking a time is the bookings pack's</span></label>
+      <span className="text-12 text-faint">booking a time is the diary's</span></label>
   </div>
 }
 

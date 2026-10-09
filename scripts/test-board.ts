@@ -310,7 +310,6 @@ test('a pack that charges (core change (d)): asked of the department without nam
   assert.equal(chargesHere({ packs: ['pharmacy'] }), false); assert.equal(chargesHere(null), false)
 })
 test('a list\'s pack data is read once for its patients and orders, whatever their order', () => {
-  const a = [prow([order({ item: 'o1' })]), packRowOf('p2', { patient_id: 'p2', visit_id: null, orders: [order({ item: 'o9', patient_id: 'p2' })] })]
-  assert.equal(rowsKey(a), rowsKey([...a].reverse())); assert.notEqual(rowsKey(a), rowsKey(a.slice(0, 1)))
+  const a = [prow([order({ item: 'o1' })]), packRowOf('p2', { patient_id: 'p2', visit_id: null, orders: [order({ item: 'o9', patient_id: 'p2' })] })]; assert.equal(rowsKey(a), rowsKey([...a].reverse())); assert.notEqual(rowsKey(a), rowsKey(a.slice(0, 1)))
 })
 console.log(`board: ${n} groups passed`)

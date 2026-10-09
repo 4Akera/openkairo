@@ -1,6 +1,6 @@
 // A pack's step in the desk's New patient (spec/openCare.md §5.8, the owner 2026-10-08, Q49; core change C4): a pack on for the clinic
 // may ask one more thing as a patient is registered — the family pack's "join a family file or start one" (its setting
-// family.ask_at_new_patient), as bookings' walk-in part asks when. The core registers the patient as it does today, then hands the
+// family.ask_at_new_patient), as a pack's walk-in part asks when. The core registers the patient as it does today, then hands the
 // pack the new patient and what its part chose; what the pack says joins the desk's words. Once per pack. Pure: a node test imports it.
 import type { ComponentType } from 'react'
 import type { Organization, PatientHit } from '../db/types'

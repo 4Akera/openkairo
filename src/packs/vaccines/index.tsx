@@ -1,5 +1,5 @@
 // The vaccines pack's client (spec/openCare.md §5.8, Q25, Q26; pictures #vax-chart, #vax-room): a shared pack, ticked by paediatrics,
-// family medicine, the vaccination room and ObGyn (tetanus in pregnancy). /vax writes each dose as the pack's type extending the base's
+// family medicine, the vaccination room and the obstetric clinic (tetanus in pregnancy). /vax writes each dose as the pack's type extending the base's
 // given (its card: site, lot, expiry, who gave it, here or from the card, or not given and why; under it the child's schedule worked
 // out). The Vaccines section lists the national rows by age and the optional ones apart; the banner says what is overdue. The room's own
 // list (Due today, This week, Overdue · to call, Given today) stands in for its queue, with its walk-in.

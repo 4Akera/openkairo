@@ -95,7 +95,7 @@ select core.declare_listener('anaesthesia', array['score', 'vitals', 'crossed_ou
 select core.declare_type('anaesthesia.preop', 1, 'anaesthesia',
   '{"type":"object","additionalProperties":false,"required":["asa","verdict"],"properties":{
     "op":{"type":"string","format":"uuid"},"operation":{"type":"string"},
-    "history":{"type":"object","additionalProperties":false,"properties":{"heart":{"type":"string"},"lungs":{"type":"string"},"sleep":{"type":"string"},
+    "history":{"type":"object","additionalProperties":false,"properties":{"heart":{"type":"string"},"chest":{"type":"string"},"sleep":{"type":"string"},
       "diabetes":{"type":"string"},"bleeding":{"type":"string"},"teeth":{"type":"string"},"before":{"type":"string"}}},
     "airway":{"type":"object","additionalProperties":false,"properties":{"mallampati":{"enum":["I","II","III","IV"]},"mouth_cm":{"type":"number"},"tm_cm":{"type":"number"},
       "neck_cm":{"type":"number"},"neck_moves":{"type":"boolean"}}},
