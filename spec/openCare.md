@@ -1626,9 +1626,9 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   or delayed, is not listed; "Not today" is not built: it would change the oncologist's order from the day unit). Demo: the
   Oncology clinic and the Chemotherapy day unit; Dr. Hesham Abdallah (oncology@demo.com) and Asmaa Farid (chemo@demo.com); Wafaa Shaker
   (in consult for AC 3), Samir Tolba (FOLFOX 5, in Chair 2), Nesma Sabry (paclitaxel week 3 signed for today, not in a chair). Tests:
-  `supabase/tests/oncology.sql`, `npm run test:oncology`. *Not yet, and why:* changing a recorded cancer's stage, intent, plan or regimen
-  from the line needs a pack draft that changes its own entry (`refers_to`, a core door not in C1–C5): `/cancer` on a recorded cancer
-  writes ECOG only and shows the rest; the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
+  `supabase/tests/oncology.sql`, `npm run test:oncology`. Since C6 (2026-10-09) `/cancer` on a recorded cancer changes its stage,
+  intent or side ("IIIA (was IIB)", the next version of the same item); its site, plan and regimen are corrected on its entry. Since C7
+  the chairs' line reads today's cycles through its own read. *Not yet, and why:* the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
   ward nursing's (`bedside`, beds lane), not in this base: the cycle is ended by the unit's note until then; the composer reads no
   setting, so `/chemo` takes the regimens the chart last read (the Cancer section's).
 - *Built 2026-10-08 (lane `clinics-theatre`), theatre* (`theatre`, migration 35, role block ea): the operation `theatre.op` (the base's order
@@ -1657,8 +1657,7 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   the Theatre ticks the surgical and anaesthesia packs, the Anaesthetic record on its line, the surgeon and anaesthetist hold their roles there, the
   Laboratory offers histopathology. Tests: `supabase/tests/theatre.sql`, `npm run test:theatre`. *Differences:* printing the list and the
   consent form waits for printing (not in core-v3); the pre-op clinic's booking is the bookings pack's; the operating list's Pre-op
-  column fills once the pre-op refers to the operation (a composer draft cannot refer: the same core question as the cancer's change),
-  its ASA from the anaesthetic record meanwhile; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
+  column reads the pre-op about the operation (`/preop` is about it since C6, 2026-10-09), else the anaesthetic record's ASA; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
   anaesthesia out of the theatre pack).
 - *Built 2026-10-08 (lane `clinics-theatre`), surgery* (`surgical`, migration 34, role block e9): the operation note `surgical.opnote`
   (the base's note plus `surgical` {the operation, surgeon, assistant, anaesthetist and technique, the times, why, findings, steps, closure,
@@ -1692,8 +1691,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (recovery@demo.com); Hamed Sakr (pre-op today, Hb 9.8), Marwa Shalaby (Bay 2, Aldrete 6), Yara Abdelsalam (7, Bay 3, Aldrete 7 → 9).
   Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
   ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet waits for printing;
-  recovery's ward nursing tick waits for the beds lane; Recovery's line shows at the board's next render (a pack's tile line is pure and
-  cannot ask the board to render again when its read lands: a core question); EtCO₂, the agent and FiO₂ stay the pack's own on each
+  recovery's ward nursing tick waits for the beds lane; Recovery's line reads through its own read (C7, 2026-10-09), so the bays'
+  words come as each Aldrete or pain lands; `/preop` is about the operation (C6); EtCO₂, the agent and FiO₂ stay the pack's own on each
   column, as drawn: FiO₂ moves to the base's key at integration if the beds lane's FiO₂ and O₂ flow rows land.
 
 ---

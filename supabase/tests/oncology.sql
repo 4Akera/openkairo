@@ -42,6 +42,12 @@ select t.landed(t.w(pg_temp.cancer('IIB')), 'the cancer, IIB, curative');
 select t.refused(t.w(pg_temp.cancer('IIB', 'hopeful')), 'bad_shape', 'intent is curative or palliative');
 select t.ok((select count(*) from t.rows('base.lists', :'onc', jsonb_build_object('patient_id', :'pt', 'list', 'problems')) r where r ->> 'item' = '00000000-0000-0000-0000-0000000000ca') = 1,
   'on the problem list (the base''s problem, extended)');
+-- restaged from the line (core change C6): the draft's refers is written as refers_to, relation changes — the same cancer, next version
+select t.landed(t.w(t.e('oncology.cancer', :'pt', :'onc', pg_temp.cancer('IIIA') -> 'data', null, null, '00000000-0000-0000-0000-0000000000ca', 'changes')), 'restaged IIIA (C6)');
+select t.ok((select jsonb_agg(e ->> 'item_version' order by (e ->> 'item_version')::int) = '["1","2"]'::jsonb
+    and (jsonb_agg(e -> 'data' -> 'oncology' ->> 'stage' order by (e ->> 'item_version')::int)) = '["IIB","IIIA"]'::jsonb
+  from jsonb_array_elements(public.read(jsonb_build_object('shape', 'item', 'department_id', :'onc', 'item', '00000000-0000-0000-0000-0000000000ca')) -> 'entries') e
+  where e ->> 'type' = 'oncology.cancer'), 'the same cancer: IIB, then IIIA');
 select t.as(:'dr');
 select t.refused(t.w(t.e('oncology.cancer', :'pt', :'im', '{"concept":{"text":"x","codings":[]},"clinical_status":"active","verification":"confirmed"}')), 'not_allowed', 'not where the pack is not used');
 
@@ -71,7 +77,7 @@ select t.as(:'on');
 create temp table bundle as select public.read(jsonb_build_object('shape', 'fhir', 'patient_id', :'pt', 'department_id', :'onc')) b;
 grant select on bundle to authenticated;
 select t.ok((select e -> 'resource' -> 'stage' -> 0 -> 'summary' ->> 'text' from bundle, jsonb_array_elements(b -> 'entry') e
-  where e -> 'resource' ->> 'resourceType' = 'Condition' and e -> 'resource' ->> 'id' = '00000000-0000-0000-0000-0000000000ca') = 'IIB', 'the Condition''s stage: IIB');
+  where e -> 'resource' ->> 'resourceType' = 'Condition' and e -> 'resource' ->> 'id' = '00000000-0000-0000-0000-0000000000ca') = 'IIIA', 'the Condition''s stage: IIIA, as restaged');
 select t.ok((select count(*) from bundle, jsonb_array_elements(b -> 'entry') e, jsonb_array_elements(e -> 'resource' -> 'orderDetail') d
   where e -> 'resource' ->> 'id' = '00000000-0000-0000-0000-00000000c301' and d ->> 'text' like 'BSA 1.78%') = 1, 'the ServiceRequest says the BSA');
 

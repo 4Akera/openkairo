@@ -3,7 +3,8 @@
 // Aldrete first → last, pain, ready for the ward at 9 or more), /preop's draft about the operation.   npm run test:anaesthesia
 import assert from 'node:assert/strict'
 import { arabicSheet, carried, columns, perKg, recoveryWords, stopLines, type StopRule } from '../src/packs/anaesthesia/model'
-import { keepForTest, recoveryLine } from '../src/packs/anaesthesia/recovery'
+import { recoveryLine } from '../src/packs/anaesthesia/recovery'
+import { draftEntries } from '../src/core/db/entries'
 import { sawOps } from '../src/packs/anaesthesia/seen'
 import { parsePreop } from '../src/packs/anaesthesia/preopLine'
 import type { Ctx } from '../src/core/screens/visit/parse'
@@ -33,12 +34,17 @@ test('recovery\'s line: minutes in, Aldrete first → last, pain, ready for the 
     { patient_id: 'g', kind: 'pain' as const, value: 2, at: '2026-10-08T10:20:00Z' }, { patient_id: 'g', kind: 'aldrete' as const, value: 4, at: '2026-10-07T10:00:00Z' }]
   assert.deepEqual(recoveryWords(rows, 'g', since, now), ['in 30 min', { text: 'Aldrete 8 → 10', tone: 'ok' }, 'pain 2', { text: 'ready for the ward', tone: 'ok' }])
   assert.deepEqual(recoveryWords([{ patient_id: 'm', kind: 'aldrete', value: 6, at: '2026-10-08T10:21:00Z' }], 'm', '2026-10-08T10:20:00Z', now), ['in 5 min', { text: 'Aldrete 6', tone: 'warn' }])
-  keepForTest('rec', rows)
-  assert.deepEqual(recoveryLine({ patient_id: 'g', checked_in_at: since } as PresenceRow, { dept: { id: 'rec', packs: ['anaesthesia'] } }, now)?.words[1], { text: 'Aldrete 8 → 10', tone: 'ok' })
+  assert.deepEqual(recoveryLine({ patient_id: 'g', checked_in_at: since } as PresenceRow, { read: rows }, now)?.words[1], { text: 'Aldrete 8 → 10', tone: 'ok' }, 'from its read (C7)')
+  assert.deepEqual(recoveryLine({ patient_id: 'g', checked_in_at: since } as PresenceRow, {}, now)?.words, ['in 30 min'], 'while it reads: the minutes only')
 })
 test('/preop: the pack\'s pre-op about the patient\'s operation, as the chart last read it', () => {
   sawOps('hamed', [{ item: 'op1', name: 'Inguinal hernia repair, open mesh', status: 'active', ordered_at: '2026-07-20' }])
   const r = parsePreop('', { services: [], departments: [], problems: [], departmentId: 'pre', templates: [], record: { patient: { id: 'hamed' } } } as unknown as Ctx)
   assert.ok(r && 'ok' in r); assert.equal(r.ok[0].function, 'anaesthesia.preop'); assert.equal(r.ok[0].params.op, 'op1'); assert.equal(r.ok[0].action, 'write:anaesthesia.preop')
+  const [e] = draftEntries({ id: 'pre1', function: r.ok[0].function, params: r.ok[0].params }, { patientId: 'hamed', departmentId: 'pre' })
+  assert.equal(e.refers_to, 'op1'); assert.equal(e.relation, 'about', 'about the operation (C6): the operating list reads it'); assert.ok(!('refers' in (e.data as object)))
+  sawOps('nobody', [])
+  const none = parsePreop('', { services: [], departments: [], problems: [], departmentId: 'pre', templates: [], record: { patient: { id: 'nobody' } } } as unknown as Ctx)
+  assert.ok(none && 'ok' in none); assert.equal(draftEntries({ id: 'pre2', function: 'anaesthesia.preop', params: none.ok[0].params }, { patientId: 'nobody', departmentId: 'pre' })[0].refers_to, undefined, 'no operation yet: about nothing')
 })
 console.log(`anaesthesia: ${n} groups passed`)

@@ -9,7 +9,7 @@ import { banner } from '@core/db/views'
 import type { Department, PresenceRow, TableRead } from '@core/db/types'
 import type { BoardRow, BoardRows } from '@core/screens/ward/rows'
 import { regimensOf } from './model'
-import { clinicDay, keepCycles, keepRegimens, notInAChair, type CycleRow } from './unit'
+import { clinicDay, notInAChair, type CycleRow } from './unit'
 
 function useCycleRows(dept: Department): { rows: BoardRow[]; isLoading?: boolean; error?: unknown } {
   const { org } = useDepartment()
@@ -17,7 +17,6 @@ function useCycleRows(dept: Department): { rows: BoardRow[]; isLoading?: boolean
   const q = useQuery({ queryKey: ['oncology.cycles', 'rows', dept.id, day], staleTime: 15_000, refetchInterval: 30_000,
     queryFn: async () => {
       const cycles = await read<TableRead<CycleRow>>({ shape: 'table', table: 'oncology.cycles', department_id: dept.id, where: { to_department_id: dept.id, due: day } })
-      keepCycles(dept.id, cycles.rows); if (org) keepRegimens(regimensOf(org))   // the chairs' tile line reads the same
       const stays = await read<TableRead<PresenceRow>>({ shape: 'table', table: 'base.presence', department_id: dept.id, where: { department_id: dept.id, kind: 'stay', day }, entries: false })
       return { cycles, stays: stays.rows }
     } })

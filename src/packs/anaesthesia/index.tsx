@@ -13,10 +13,8 @@ import { AnaesthesiaSection, operationsIn } from './Section'
 import { PreopCard } from './Preop'
 import { parsePreop, preopLine } from './preopLine'
 import { AnaesRecord } from './Record'
-import { read } from '@core/db/rpc'
-import type { TableRead } from '@core/db/types'
-import { recoveryLine, setRecoveryReader } from './recovery'
-import type { RecRow } from './model'
+import { recoveryLine } from './recovery'
+import { useRecoveryRead } from './recoveryRead'
 import { sawOps } from './seen'
 import { preopAction } from './rowAction'
 import { PreopView, RecordView } from './Views'
@@ -37,8 +35,7 @@ registerScreen('anaesthesia.record', AnaesRecord)
 // the pre-op's ASA and verdict on a list's row where the department uses the pack (the operating list's Pre-op), its summary folded out
 registerRowAction('anaesthesia', preopAction)
 
-setRecoveryReader(async (deptId, patients) => (await read<TableRead<RecRow>>({ shape: 'table', table: 'anaesthesia.recovery', department_id: deptId, where: { patient_id: patients }, entries: false })).rows)
-registerTileLine('anaesthesia', (row, ctx) => recoveryLine(row, ctx))
+registerTileLine('anaesthesia', (row, ctx) => recoveryLine(row, ctx), useRecoveryRead)
 // Aldrete opens the patient's chart with the /score card on the line (the base's score; the server adds it up)
 registerTileButton('anaesthesia', { label: 'Aldrete', path: (row) => { for (const ms of [500, 1200, 2500]) setTimeout(() => compose({ text: '/score aldrete ' }), ms); return `/visit/${row.item}` } })
 registerTileButton('anaesthesia', { label: 'Record', path: (row) => `/patient/${row.patient_id}` })

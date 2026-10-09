@@ -7,7 +7,7 @@
 // drug the base's medication, sent where prescriptions go. It is offered wherever the day unit works for this department (rule 1).
 import { ordersFrom } from '@core/screens/visit/commands'
 import type { Ctx, Parsed, Result } from '@core/screens/visit/parse'
-import { ASKED, TOXICITIES, anthracycline, cancersOf, checksOf, ckdEpi2021, cyclesOf, dosesOf, mg, nextCycle, regimenNamed, type CycleWords, type Entry, type Regimen, type Regimens, type Value } from './model'
+import { ASKED, TOXICITIES, anthracycline, cancersOf, checksOf, ckdEpi2021, cyclesOf, dosesOf, mg, nextCycle, regimenNamed, type CancerWords, type CycleWords, type Entry, type Regimen, type Regimens, type Value } from './model'
 
 export const ECOG = { system: 'loinc', code: '89247-1', display: 'ECOG performance status' }
 type Rec = NonNullable<Ctx['record']>
@@ -32,10 +32,19 @@ export function parseCancer(rest: string, ctx: Ctx, entries: Entry[]): Result {
   const out: Parsed[] = []
   const was = latestEcog(ctx)
   if (on) {
-    // a cancer on record: today ECOG is a new observation; the cancer itself is changed only by a correction of its entry
-    if (stage || intent || side || other.length) return { error: `The cancer on record (${on.name}) is changed by correcting its entry: the line adds today's ECOG — /cancer ecog 1` }
-    if (ecog == null) return words.length ? null : { ok: [] }
-    out.push(ecogItem(ecog, was))
+    // a cancer on record: its stage, intent or side changes it (the next version of the same item, core change C6); its site is
+    // corrected on its entry; ECOG is today's own observation
+    if (other.length) return { error: `The cancer on record is ${on.name}: /cancer changes its stage, intent or side (/cancer IIIA) and adds today's ECOG; its site is corrected on its entry` }
+    if (stage || intent || side) {
+      const latest = entries.filter((e) => e.item === on.entry.item).sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0] ?? on.entry
+      const d = (latest.data ?? {}) as Record<string, unknown>; const before = (d.oncology ?? {}) as CancerWords
+      const now: CancerWords = { ...before, ...(stage ? { stage } : {}), ...(intent ? { intent } : {}), ...(side ? { side } : {}) }
+      const restaged = stage && before.stage && before.stage !== stage ? ` (was ${before.stage})` : ''
+      out.push({ function: 'oncology.cancer', action: 'write:oncology.cancer', kind: 'problem', line: cancerLine(on.name, now.stage && `${now.stage}${restaged}`, now.intent),
+        params: { ...d, ...(side ? { laterality: side } : {}), oncology: now, refers: { entry_id: latest.id, relation: 'changes' } } })
+    }
+    if (ecog != null) out.push(ecogItem(ecog, was))
+    if (!out.length) return words.length ? null : { ok: [] }
     return { ok: out }
   }
   const site = other.join(' ')

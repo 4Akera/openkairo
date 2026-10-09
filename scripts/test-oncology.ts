@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { anthracycline, bannerWords, cancersOf, checksOf, chipWord, cockcroftGault, cyclesOf, dosesOf, mg, mosteller, nextCycle, regimenNamed, roundTo, type Entry, type Regimen } from '../src/packs/oncology/model'
 import { chemoLine, chemoWords, parseCancer, parseChemo } from '../src/packs/oncology/line'
-import { keepForTest, notInAChair, tileWords, type CycleRow } from '../src/packs/oncology/unit'
+import { notInAChair, tileWords, type CycleRow, type UnitRead } from '../src/packs/oncology/unit'
 import { draftEntries } from '../src/core/db/entries'
 import type { Ctx } from '../src/core/screens/visit/parse'
 import type { PresenceRow } from '../src/core/db/types'
@@ -90,29 +90,36 @@ test('Delay sends nothing on; Reduce works every dose out again; no day unit or 
   const nolist = parseChemo('ac 3', ctx(), { regimens: { regimens: [], plans: [] }, entries: [] })
   assert.ok(nolist && 'error' in nolist)
 })
-test('/cancer: a new cancer\'s card; on one recorded, today\'s ECOG (the base\'s observation); the cancer itself is not retyped', () => {
+test('/cancer: a new cancer\'s card; on one recorded, today\'s ECOG (the base\'s observation), and its stage changes it (C6)', () => {
   const fresh = parseCancer('breast left iib curative ecog 0', ctx(), [])
   assert.ok(fresh && 'ok' in fresh); assert.deepEqual(fresh.ok.map((p) => p.function), ['oncology.cancer', 'observation'])
   assert.equal((fresh.ok[0].params.oncology as { stage: string }).stage, 'IIB')
   const on = parseCancer('ecog 1', ctx(), [cancer])
   assert.ok(on && 'ok' in on); assert.deepEqual(on.ok.map((p) => p.function), ['observation'])
   assert.equal(((on.ok[0].params.code as { codings: { code: string }[] }).codings[0].code), '89247-1')
-  const again = parseCancer('iiia', ctx(), [cancer]); assert.ok(again && 'error' in again)
+  const restaged = parseCancer('iiia ecog 1', ctx(), [cancer])
+  assert.ok(restaged && 'ok' in restaged); assert.deepEqual(restaged.ok.map((p) => p.function), ['oncology.cancer', 'observation'])
+  assert.equal(restaged.ok[0].line, 'Cancer · Breast cancer, left · IIIA (was IIB) · curative')
+  const [change] = draftEntries({ id: 'k2', function: 'oncology.cancer', params: restaged.ok[0].params }, { patientId: 'wafaa', departmentId: 'onc' })
+  assert.equal(change.refers_to, cancer.id); assert.equal(change.relation, 'changes', 'the next version of the same cancer')
+  assert.equal(((change.data as { oncology: { stage: string } }).oncology).stage, 'IIIA'); assert.ok(!('refers' in (change.data as object)), 'the link is not data')
+  assert.equal((change.data as { concept: { text: string } }).concept.text, (cancer.data as { concept: { text: string } }).concept.text, 'the rest as recorded')
+  const site = parseCancer('lung', ctx(), [cancer]); assert.ok(site && 'error' in site, 'its site is corrected on its entry')
 })
 test('the words: the banner\'s ("Breast · IIB", "AC 2 of 4"), the chip\'s, the anthracycline so far', () => {
   const cs = cyclesOf([cycle(1, '2026-08-27'), cycle(2, '2026-09-17')]); const k = cancersOf([cancer])[0]
   assert.deepEqual(bannerWords(k, cs), ['Breast · IIB', 'AC 2 of 4']); assert.equal(chipWord(k, cs), 'IIB · AC 2')
   assert.equal(anthracycline(cs), 120)
 })
-test('the day unit: the tile says the cycle, a dose reduced, the reaction watch in the first 30 minutes; rows not in a chair', () => {
+test('the day unit: the tile says the cycle from its read (C7), a dose reduced, the reaction watch in the first 30 minutes; rows not in a chair', () => {
   const row = (r: Partial<CycleRow>): CycleRow => ({ item: 'x', patient_id: 'p1', to_department_id: 'unit', from_department_id: 'onc', regimen: 'ac', name: 'AC', cycle: 3, of_cycles: 4, day: 1, decision: 'give', percent: 100,
     due: today, status: 'active', ordered_at: '2026-10-08T06:00:00Z', ...r })
-  keepForTest('unit', [row({}), row({ item: 'y', patient_id: 'p2', regimen: 'pacw', name: 'Paclitaxel weekly', cycle: 3, percent: 80 })], { regimens: [AC, PAC], plans: [] })
+  const read: UnitRead = { rows: [row({}), row({ item: 'y', patient_id: 'p2', regimen: 'pacw', name: 'Paclitaxel weekly', cycle: 3, percent: 80 })], regimens: { regimens: [AC, PAC], plans: [] } }
   const stay = (p: string, minAgo: number) => ({ patient_id: p, checked_in_at: new Date(now.getTime() - minAgo * 60_000).toISOString() }) as PresenceRow
-  assert.deepEqual(tileWords(stay('p1', 40), { dept: { id: 'unit', packs: ['oncology'] } }, now.getTime())?.words, ['AC C3 D1'])
-  assert.deepEqual(tileWords(stay('p2', 10), { dept: { id: 'unit', packs: ['oncology'] } }, now.getTime())?.words,
+  assert.deepEqual(tileWords(stay('p1', 40), { read }, now.getTime())?.words, ['AC C3 D1'])
+  assert.deepEqual(tileWords(stay('p2', 10), { read }, now.getTime())?.words,
     ['Paclitaxel W3', { text: '80 % dose', tone: 'info' }, { text: 'reaction watch · paclitaxel', tone: 'warn' }])
-  assert.equal(tileWords(stay('p3', 10), { dept: { id: 'unit', packs: ['oncology'] } }, now.getTime()), null)
+  assert.equal(tileWords(stay('p3', 10), { read }, now.getTime()), null)
   assert.deepEqual(notInAChair([row({}), row({ item: 'y', patient_id: 'p2' }), row({ item: 'z', patient_id: 'p3', decision: 'delay' })], [{ patient_id: 'p1', department_id: 'unit' }]).map((r) => r.patient_id), ['p2'])
 })
 console.log(`oncology: ${n} groups passed`)

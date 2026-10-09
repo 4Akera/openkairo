@@ -12,8 +12,8 @@ import { parseCancer, parseChemo } from './line'
 import { CancerCard, CancerNote, CycleCard, cancerCardLine, cycleCardLine } from './Cards'
 import { CancerSection, entriesOf, valuesIn } from './Section'
 import { saw, seenEntries, seenRegimens } from './seen'
-import { setCycleReader, tileWords } from './unit'
-import { readCycles } from './unitRead'
+import { tileWords } from './unit'
+import { useUnitRead } from './unitRead'
 import { cycleRows } from './rows'
 
 const TYPES = ['oncology.cancer', 'oncology.cycle']
@@ -39,8 +39,7 @@ registerCommand({ name: 'chemo', pack: 'oncology', orders: true, section: 'Chemo
 registerCard({ function: 'oncology.cycle', pack: 'oncology', Editor: CycleCard, line: cycleCardLine })
 registerCard({ function: 'oncology.cancer', pack: 'oncology', Editor: CancerCard, line: cancerCardLine })
 
-setCycleReader(readCycles)
-registerTileLine('oncology', (row, ctx) => tileWords(row, ctx))
+registerTileLine('oncology', (row, ctx) => tileWords(row, ctx), useUnitRead)
 // today's cycles not in a chair yet, under the board, each with the base's Admit here as its Start (core change C5)
 registerBoardRows('oncology', cycleRows)
 export const key = 'oncology'

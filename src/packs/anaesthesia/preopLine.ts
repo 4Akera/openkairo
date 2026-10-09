@@ -7,7 +7,8 @@ import { seenOps } from './seen'
 export function parsePreop(_rest: string, ctx: Ctx): Result {
   const op = seenOps(ctx.record?.patient?.id)[0]
   return { ok: [{ function: 'anaesthesia.preop', action: 'write:anaesthesia.preop', kind: 'assessment', line: `Pre-op assessment${op ? ` · ${op.name}` : ''}`,
-    params: { ...(op ? { op: op.item, operation: op.name } : {}), asa: 'II', verdict: 'fit', history: {}, airway: {} } }] }
+    // about the operation (core change C6): what refers to it is what the operating list reads for its Pre-op column
+    params: { ...(op ? { op: op.item, operation: op.name, refers: { entry_id: op.item, relation: 'about' } } : {}), asa: 'II', verdict: 'fit', history: {}, airway: {} } }] }
 }
 export const preopLine = (p: Record<string, unknown>) => {
   const plan = PLANS.find(([k]) => k === p.plan)?.[1]
