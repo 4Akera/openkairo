@@ -11,7 +11,7 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'admin@demo.com', name: 'Amira Lotfy', role: 'Owner' },
   ] },
   { department: 'Front desk', departmentId: '00000000-0000-0000-0000-00000000d001', people: [
-    { email: 'reception@demo.com', name: 'Mai Samir', role: 'Booking desk · Reception' },
+    { email: 'reception@demo.com', name: 'Mai Samir', role: 'Reception' },
   ] },
   { department: 'General Practice', departmentId: '00000000-0000-0000-0000-00000000d002', people: [
     { email: 'dr.ali@demo.com', name: 'Dr. Ali Hassan', role: 'Doctor' },
@@ -33,9 +33,6 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'pharm@demo.com', name: 'Dr. Reem Hamdy', role: 'Cashier · Pharmacist' },
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
   ] },
-  { department: 'ECG room', departmentId: '8a750cf3-d235-53b6-87b4-c93cb73cfa3c', people: [
-    { email: 'ecg@demo.com', name: 'Tamer Wahba', role: 'Books its rooms' },
-  ] },
   { department: 'Main store', departmentId: '1d64cf4d-60f9-5945-a245-e9764b6c294f', people: [
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
   ] },
@@ -46,13 +43,17 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'xray@demo.com', name: 'Ahmed Saber', role: 'Radiographer' },
     { email: 'radiology@demo.com', name: 'Dr. Mai Farouk', role: 'Radiologist' },
   ] },
-  { department: 'Vaccination room', departmentId: 'f98715c0-781c-57a9-90a2-fd7c7fb129eb', people: [
-    { email: 'vaccines@demo.com', name: 'Rokaya Ghoneim', role: 'Vaccinator' },
+  { department: 'Paediatrics clinic', departmentId: 'eea2eb4f-e68c-504c-9cad-75e256702c06', people: [
+    { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
   ] },
-  { department: 'Diabetes clinic', departmentId: '043f9d6c-1d02-59f7-9e62-46aa91a5c248', people: [
-    { email: 'diabetes@demo.com', name: 'Dr. Iman Sherif', role: 'Doctor' },
+  { department: 'Children\'s ward', departmentId: '46cacda0-b807-52f8-be95-0b98ece5e191', people: [
+    { email: 'children.nurse@demo.com', name: 'Doha Wagdy', role: 'Nurse' },
+    { email: 'kandil@demo.com', name: 'Dr. Hassan Kandil', role: 'Paediatrician' },
+    { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
   ] },
-  { department: 'Family medicine', departmentId: '15566c3b-bdc9-520b-a8ca-62a8ae46dcbc', people: [
-    { email: 'family@demo.com', name: 'Dr. Hazem Ouda', role: 'Doctor' },
+  { department: 'ObGyn clinic', departmentId: '16f24bcc-90d4-50fa-8afb-eafa79bca011', people: [
+    { email: 'midwife@demo.com', name: 'Samah Lotfy', role: 'Midwife' },
+    { email: 'zaki@demo.com', name: 'Dr. Ahmed Zaki', role: 'Obstetrician' },
+    { email: 'obgyn@demo.com', name: 'Dr. Nermeen Fathy', role: 'Obstetrician' },
   ] },
 ]

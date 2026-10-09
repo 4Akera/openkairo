@@ -1,4 +1,4 @@
--- 15 · privileges, asserted once after everything is declared (spec §1, §8): the API reaches only the doors; the base and packs call
+-- 99 · privileges, asserted once after everything is declared (spec §1, §8): the API reaches only the doors; the base and packs call
 -- only the core helpers granted to them. Per-schema default privileges cannot take PUBLIC's EXECUTE away, so it is taken here, from
 -- every routine (functions and procedures), and again by core.create_pack for a pack's own schema.
 
@@ -13,6 +13,8 @@ revoke all on all routines in schema radiology from public, anon, authenticated;
 revoke all on all routines in schema vaccines from public, anon, authenticated;
 revoke all on all routines in schema chroniccare from public, anon, authenticated;
 revoke all on all routines in schema familycare from public, anon, authenticated;
+revoke all on all routines in schema paeds from public, anon, authenticated;
+revoke all on all routines in schema obgyn from public, anon, authenticated;
 revoke all on all routines in schema public from public, anon, authenticated;
 alter default privileges for role base_role revoke execute on functions from public;
 alter default privileges for role pack_pharmacy revoke execute on functions from public;
@@ -22,6 +24,8 @@ alter default privileges for role pack_radiology revoke execute on functions fro
 alter default privileges for role pack_vaccines revoke execute on functions from public;
 alter default privileges for role pack_chroniccare revoke execute on functions from public;
 alter default privileges for role pack_familycare revoke execute on functions from public;
+alter default privileges for role pack_paeds revoke execute on functions from public;
+alter default privileges for role pack_obgyn revoke execute on functions from public;
 
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
   public.save(text, jsonb), public.remove(text, uuid), public.save_patient(jsonb), public.merge_patients(jsonb), public.write_setting(jsonb),

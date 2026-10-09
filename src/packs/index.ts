@@ -7,4 +7,6 @@ import * as bookings from './bookings'
 import * as vaccines from './vaccines'
 import * as chroniccare from './chroniccare'
 import * as familycare from './familycare'
-export const packs = { pharmacy, lis, billing, radiology, bookings, vaccines, chroniccare, familycare }
+import * as paeds from './paeds'
+import * as obgyn from './obgyn'
+export const packs = { pharmacy, lis, billing, radiology, bookings, vaccines, chroniccare, familycare, paeds, obgyn }

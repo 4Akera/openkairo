@@ -242,6 +242,100 @@ export type Note = {
   language?: string
   text?: string
 } & ({ text: string } | { attachments: Attachment[] })
+/** obgyn.anc v1 (obgyn) */
+export interface ObgynAnc {
+  code: Concept
+  interpretation?: string
+  method?: string
+  note?: string
+  obgyn?: {
+    booking?: {
+      antibodies?: string
+      before?: string
+      blood_group?: 'A' | 'B' | 'AB' | 'O'
+      gravida?: number
+      miscarriages?: number
+      para?: number
+      rh?: 'positive' | 'negative'
+      risk_note?: string
+      risks?: ('previous_caesarean' | 'preeclampsia_risk' | 'diabetes')[]
+    }
+    days?: number
+    fhr?: number
+    lie?: 'cephalic' | 'breech' | 'transverse' | 'not sure'
+    moves?: 'felt' | 'less'
+    next_weeks?: number
+    oedema?: 'none' | 'feet' | 'face, hands'
+    protein?: 'nil' | 'trace' | '+' | '++' | '+++'
+    sfh?: number
+    taken?: string[]
+    weeks?: number
+  }
+  value: {
+    boolean?: boolean
+    concept?: Concept
+    date?: PartialDate
+    quantity?: Quantity
+    text?: string
+  }
+}
+/** obgyn.periods v1 (obgyn) */
+export interface ObgynPeriods {
+  code: Concept
+  interpretation?: string
+  method?: string
+  note?: string
+  obgyn?: {
+    clots?: boolean
+    cycle_from?: number
+    cycle_to?: number
+    days_from?: number
+    days_to?: number
+    flow?: 'light' | 'normal' | 'heavy'
+    lmp?: string
+    note?: string
+    pads?: number
+    pain?: 'none' | 'mild' | 'moderate' | 'severe'
+  }
+  value: {
+    boolean?: boolean
+    concept?: Concept
+    date?: PartialDate
+    quantity?: Quantity
+    text?: string
+  }
+}
+/** obgyn.postnatal v1 (obgyn) */
+export interface ObgynPostnatal {
+  code: Concept
+  interpretation?: string
+  method?: string
+  note?: string
+  obgyn?: {
+    birth?: {
+      baby?: 'boy' | 'girl'
+      baby_id?: string
+      days?: number
+      grams?: number
+      how: 'normal' | 'vacuum' | 'forceps' | 'caesarean'
+      on: string
+      place?: string
+      weeks?: number
+      where: 'here' | 'elsewhere'
+      why?: string
+    }
+    bleeding?: 'none' | 'light' | 'heavy'
+    days?: number
+    wound?: 'healed' | 'red' | 'oozing' | 'opened'
+  }
+  value: {
+    boolean?: boolean
+    concept?: Concept
+    date?: PartialDate
+    quantity?: Quantity
+    text?: string
+  }
+}
 /** observation v1 (base) */
 export interface Observation {
   code: Concept
@@ -281,6 +375,33 @@ export interface Order {
     name: string
   }
   status: 'active' | 'on-hold' | 'revoked' | 'completed'
+}
+/** paeds.development v1 (paeds) */
+export interface PaedsDevelopment {
+  code: Concept
+  interpretation?: string
+  method?: string
+  note?: string
+  paeds?: {
+    age_months?: number
+    items: {
+      area: 'movement' | 'hands' | 'talking' | 'social'
+      short?: string
+      text: string
+      yes: boolean
+    }[]
+    list: string
+    months?: number
+    plan?: string[]
+    version?: string
+  }
+  value: {
+    boolean?: boolean
+    concept?: Concept
+    date?: PartialDate
+    quantity?: Quantity
+    text?: string
+  }
 }
 /** pharmacy.dispense v1 (pharmacy) */
 export interface PharmacyDispense {
@@ -598,6 +719,44 @@ export interface LisLargeSetting {
   }
   turnaround: boolean
 }
+/** setting obgyn.gynaecology (obgyn; owner organization) */
+export interface ObgynGynaecologySetting {
+  methods: {
+    every: number
+    method: string
+    unit: 'weeks' | 'months' | 'years'
+  }[]
+  screening: 'pap3' | 'hpv5' | 'both5'
+}
+/** setting obgyn.notices (obgyn; owner organization) */
+export interface ObgynNoticesSetting {
+  bp_dia: number
+  bp_sys: number
+  dvp_high: number
+  dvp_low: number
+  efw_high: number
+  efw_low: number
+  protein: '+' | '++' | '+++'
+}
+/** setting obgyn.schedule (obgyn; owner organization) */
+export interface ObgynScheduleSetting {
+  rows: {
+    from: number
+    to: number
+    what: string
+    whom: 'everyone' | 'rh_negative' | 'previous_caesarean' | 'age_35' | 'preeclampsia_risk' | 'diabetes'
+    word?: string
+  }[]
+}
+/** setting obgyn.visits (obgyn; owner organization) */
+export interface ObgynVisitsSetting {
+  every: {
+    until: number
+    weeks: number
+  }[]
+  fundus_band: number
+  fundus_from: number
+}
 /** setting organization.packs_used (core; owner organization) */
 export interface OrganizationPacksUsedSetting {
   packs: string[]
@@ -609,6 +768,29 @@ export interface OrganizationRecordViewSetting {
 /** setting organization.time_zone (core; owner organization) */
 export interface OrganizationTimeZoneSetting {
   zone: string
+}
+/** setting paeds.doses (paeds; owner organization) */
+export interface PaedsDosesSetting {
+  doses: {
+    drug: string
+    from: number
+    most?: number
+    per: 'day' | 'dose'
+    route?: 'oral' | 'iv' | 'im' | 'pr' | 'inhaled'
+    times_from?: number
+    times_to?: number
+    to: number
+  }[]
+}
+/** setting paeds.milestones (paeds; owner organization) */
+export interface PaedsMilestonesSetting {
+  milestones: {
+    area: 'movement' | 'hands' | 'talking' | 'social'
+    months: number
+    short?: string
+    text: string
+  }[]
+  source: string
 }
 /** setting pharmacy.counselling (pharmacy; owner organization) */
 export interface PharmacyCounsellingSetting {
@@ -775,9 +957,13 @@ export interface EntryData {
   'not_here': NotHere
   'not_private': NotPrivate
   'note': Note
+  'obgyn.anc': ObgynAnc
+  'obgyn.periods': ObgynPeriods
+  'obgyn.postnatal': ObgynPostnatal
   'observation': Observation
   'opened_anyway': OpenedAnyway
   'order': Order
+  'paeds.development': PaedsDevelopment
   'pharmacy.dispense': PharmacyDispense
   'pregnancy': Pregnancy
   'private': Private
@@ -815,9 +1001,15 @@ export interface SettingData {
   'familycare.checks': FamilycareChecksSetting
   'familycare.files': FamilycareFilesSetting
   'lis.large': LisLargeSetting
+  'obgyn.gynaecology': ObgynGynaecologySetting
+  'obgyn.notices': ObgynNoticesSetting
+  'obgyn.schedule': ObgynScheduleSetting
+  'obgyn.visits': ObgynVisitsSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
+  'paeds.doses': PaedsDosesSetting
+  'paeds.milestones': PaedsMilestonesSetting
   'pharmacy.counselling': PharmacyCounsellingSetting
   'pharmacy.keep_stock': PharmacyKeepStockSetting
   'pharmacy.late_after': PharmacyLateAfterSetting
