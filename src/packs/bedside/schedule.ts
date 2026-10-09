@@ -4,6 +4,8 @@
 // migration: npm run test:drug-round holds the copies equal. Pure.
 import type { Organization } from '@core/db/types'
 import { settingIn } from '@core/screens/settings/form/model'
+import { FREQUENCY } from '@core/screens/chart/model/labels'
+import { shortDate } from '@core/ui/time'
 
 export type Timing = 'OD' | 'BD' | 'q12h' | 'TDS' | 'q8h' | 'QDS' | 'q6h' | 'q4h'
 export interface Round { times: { timing: Timing; at: string }[]; late_after: number; night: string }
@@ -78,3 +80,40 @@ export function nextTime(r: Round, now: number, zone: string): number | null {
 /** a time's state at now, as the server reads it (bedside.stay_doses) */
 export type SlotState = 'given' | 'not_given' | 'upcoming' | 'due' | 'late' | 'missed'
 
+// ── the first dose (3b): what /rx says under its card on a ward ──
+/** "14:00" in the zone */
+export function localHm(ms: number, zone: string): string { const p = partsOf(ms, zone); return `${p.hour}:${p.minute}` }
+/** R5 for one medicine signed at `signed`: a first dose (none as needed, at night or with no ward times; stat and once that dose
+ *  alone); the ward times it stands for (from the late time before it to the greater of twice the late time and the cover after it);
+ *  its next ward time after it (a night medicine: its first night time at or after it) */
+export function firstCover(r: Round, timing: string | null, instructions: string | null | undefined, signed: number, zone: string): { first: boolean; stands: number[]; next: number | null } {
+  if (timing === 'stat' || timing === 'once') return { first: true, stands: [], next: null }
+  const day = localYmd(signed, zone)
+  const around = (hms: string[]) => [-1, 0, 1, 2, 3].flatMap((k) => hms.map((hm) => zoned(addDays(day, k), hm, zone))).sort((a, b) => a - b)
+  if (isNight(timing, instructions)) return { first: false, stands: [], next: around([r.night]).find((x) => x >= signed) ?? null }
+  const hms = timesFor(r, timing, instructions); if (!hms) return { first: false, stands: [], next: null }
+  const late = r.late_after * 60_000; const cover = Math.max(2 * late, (COVER_MIN[timing ?? ''] ?? 0) * 60_000)
+  const all = around(hms); const stands = all.filter((x) => x > signed - late && x <= signed + cover)
+  return { first: true, stands, next: all.find((x) => x > signed && !stands.includes(x)) ?? null }
+}
+/** a time's words from the day it is signed: "22:00", "08:00 tomorrow", "08:00 on 12 Mar" */
+function whenWords(ms: number, from: number, zone: string): string {
+  const d = localYmd(ms, zone); const today = localYmd(from, zone)
+  return `${localHm(ms, zone)}${d === today ? '' : d === addDays(today, 1) ? ' tomorrow' : ` on ${shortDate(new Date(ms).toISOString())}`}`
+}
+/** the note under a /rx medication draft on a ward (only a start; null with no frequency yet): when its first dose will be due */
+export function firstDoseWords(q: Record<string, unknown>, r: Round, now: number, zone: string): { text: string; tone?: 'warn' } | null {
+  if (q.action !== 'start') return null
+  if (q.prn) return { text: 'As needed: on the round\'s As needed list' }
+  const timing = timingOf(typeof q.frequency === 'string' ? q.frequency : null); if (!timing) return null
+  if (timing === 'stat' || timing === 'once') return { text: 'One dose, as soon as it is signed' }
+  const instructions = typeof q.instructions_text === 'string' ? q.instructions_text : null
+  const c = firstCover(r, timing, instructions, now, zone)
+  if (isNight(timing, instructions)) return { text: `On this ward: at night, ${r.night} — the first dose ${c.next !== null && localYmd(c.next, zone) !== localYmd(now, zone) ? 'tomorrow night' : 'tonight'}, ${r.night}` }
+  const hms = timesFor(r, timing, instructions)
+  if (!hms) return { text: `This ward has no times for ${FREQUENCY[timing] ?? timing}: it waits under "Times not set · ask the doctor" until the ward sets them (Settings → Departments)`, tone: 'warn' }
+  const days = new Set(c.stands.map((x) => localYmd(x, zone)))
+  const stands = !c.stands.length ? '' : days.size === 1 ? ` (it stands for the ${c.stands.map((x) => localHm(x, zone)).join(' and ')} ${c.stands.length > 1 ? 'doses' : 'dose'}${whenWords(c.stands[0], now, zone).slice(5)})`
+    : ` (it stands for the ${c.stands.map((x) => whenWords(x, now, zone)).join(' and ')} doses)`
+  return { text: `On this ward: ${hms.join(' · ')} — the first dose as soon as it is signed${stands}${c.next !== null ? `, then ${whenWords(c.next, now, zone)}` : ''}` }
+}

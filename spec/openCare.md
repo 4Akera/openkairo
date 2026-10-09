@@ -1727,7 +1727,26 @@ numbered as on its picture.
   plain given counting for the nearest time within half the interval; a dose given outranking a refusal of the same time; the
   medicines not prescribed in this stay listed with no Give; the six reasons; the round reading every minute; the screen's file is
   `DrugRound.tsx` (the views' pure file is `round.ts`, and the two names differ only in case).
-- **Questions for the owner (the drug round)**: (5) a current prescription not written in this stay (a clinic's, later an ER's) is
+  *Built, piece 3b (2026-10-09)*: the Treatment sheet in the record panel (`bedside.sheet` section, shown with the pack's own doses):
+  Today · Yesterday · The whole stay, each medicine's times ("✓ 02:00 Nour", "08:00 late 6 h", "14:00 due", "22:00", "✕ 08:00
+  Vomiting", "02:00 no record"), each opening its dose, then the doses that took no time; not prescribed in this stay and the stopped
+  medicines fold at the foot. The banner's "1 dose late" (rank 1, red) and "times not set" (rank 2, amber), worked out in the client by
+  the server's rule (`twin.ts`, held to the SQL suite's own case by `test:drug-round`), because banner words read the record alone;
+  known drift: the record's medication list leaves out a medicine whose latest version a patient or a machine wrote, which the server
+  counts. The doctor's `/rx` on a ward says under the card when the first dose will be due ("On this ward: 06:00 · 14:00 · 22:00 — the
+  first dose as soon as it is signed (it stands for the 14:00 dose), then 22:00"; a night medicine "the first dose tonight, 22:00"; a
+  timing the ward has no times for, in amber). *Chosen by Claude in the build, awaiting the owner*: the client's twin for the banner;
+  the sheet in the narrow record panel; the note in place of the picture's three chips.
+- **Questions for the owner (the drug round)**: (1) the doctor's first-dose choice on /rx (the picture's "Now, then 22:00 · At 14:00 ·
+  At 22:00"): inside the addition the medication draft has no id yet; the core could give a command's own drafts their ids before the
+  additions see them (then a pack draft about the medication carries the chips), or /rx could write the base medication's `started`
+  from them; built instead: "first dose now" by rule and the note under /rx. (2) the banner's word works the rule out in the client; a
+  core option: banner words may read a pack's data once per chart, as the tiles do since C1, and the twin goes. (3) the sheet sits in
+  the narrow record panel; the picture draws it wide in the chart's center (core). (4) /rx nocte and hs write once a day with the words
+  "at night"; a core option: /rx writes the base timing's `when`. (9) the stay's day lists every dose as its own block; a round's doses
+  could fold into one group (core). (12) a time inside Cairo's spring-forward gap reads as the hour after it. (13) a round day from
+  08:00 to 08:00 waits for the Shifts card; the sheet's days are the clinic's calendar days.
+  (5) a current prescription not written in this stay (a clinic's, later an ER's) is
   listed with no times and no Give until a doctor continues it in the stay: should it be timed and given as written? (6) the tiles
   turn "late" only at the board's next read (never on a timer); should the board refresh every minute? (7) the ward's times are read
   as they stand, so a change redraws past days; (8) not given is coded but exported as words (a coded export needs a code system), and
@@ -2933,4 +2952,8 @@ types, parked pack calls with per-call Retry, Postgres enums.
   `src/packs/bedside` (schedule.ts, doses.ts, round.ts, DrugRound.tsx, DoseCard.tsx; the tile's words and Give). New suite
   `drug_round` 110 checks; `bedside` 55, `demo` 91, `registry` 16, `boundary` 10, `pack_contract` 35, `export` 50, `rebuild` 11 (the
   full run: the lead's, at the lane's end); `db:demo` twice (96 patients, 952 entries); node `test:drug-round` 7 groups, bedside 12, registries 9, demo 8, board 27, setups 11, screens 11; typecheck clean; lint 0 errors.
+- 2026-10-09: **Ward nursing, piece 3b: the treatment sheet, the banner's dose word and the note under /rx** (§5.6; lane `beds`; no
+  core or base change): `src/packs/bedside` (twin.ts, Sheet.tsx, rx.tsx; firstCover and firstDoseWords, the chart's words, byDay).
+  Node `test:drug-round` 12 groups (the shared case through the twin, the first dose's cover, matching, the banner and the sheet's
+  words, the /rx note), bedside 12, banner 13, sections 19, composer 19, chart 24 + 16, registries 9; typecheck clean; lint 0 errors.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

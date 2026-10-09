@@ -3,14 +3,15 @@
 // writes, the last dose beside Give. Pure: no browser, no database.   npm run test:drug-round
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { setClinicTimeZone } from '../src/core/ui/time'
-import { COVER_MIN, DEFAULT_ROUND, HALF_HOURS, PER_DAY, isNight, localYmd, nextTime, roundOf, timesFor, timingOf, zoned } from '../src/packs/bedside/schedule'
-import { REASON_KEYS, doseData, doseTileWords, hasDose, howWords, shortName, wardTile, type MedicineRead, type RoundRead } from '../src/packs/bedside/doses'
-import { countsOf, elsewhereOf, lastGiven, matches, nextRound, nowDue, roundWords, rowsOf, unsetOf } from '../src/packs/bedside/round'
+import { setClinicTimeZone, shortDate } from '../src/core/ui/time'
+import { COVER_MIN, DEFAULT_ROUND, HALF_HOURS, PER_DAY, firstCover, firstDoseWords, isNight, localHm, localYmd, nextTime, roundOf, timesFor, timingOf, zoned, type Round } from '../src/packs/bedside/schedule'
+import { REASON_KEYS, doseBannerWords, doseData, doseTileWords, hasDose, howWords, sheetChip, sheetSummary, shortName, wardTile, type MedicineRead, type RoundRead } from '../src/packs/bedside/doses'
+import { byDay, countsOf, elsewhereOf, lastGiven, matches, nextRound, nowDue, roundWords, rowsOf, unsetOf } from '../src/packs/bedside/round'
+import { readingOf, type GivenDose, type MedVersion } from '../src/packs/bedside/twin'
 import { NEWS2 } from '../src/packs/bedside/line'
 import { tileLineOf, type TileCtx } from '../src/core/screens/ward/tiles'
-import { org, presence } from './chart-fixtures'
-import type { Organization, PresenceRow, ScoreTable } from '../src/core/db/types'
+import { E, listRow, org, presence, record, table } from './chart-fixtures'
+import type { Identity, Organization, PresenceRow, ScoreTable } from '../src/core/db/types'
 
 setClinicTimeZone('Africa/Cairo')
 let n = 0
@@ -109,6 +110,9 @@ test('the round\'s views', () => {
   assert.deepEqual(due.filter((r) => matches(r, 'PARA', words)).map((r) => r.med.medication), ['m2'])
   assert.equal(roundWords(R), '14:00 round · now 14:06'); assert.equal(roundWords({ ...R, round_at: null }), 'now 14:06')
   assert.equal(nextRound(DEFAULT_ROUND, at('2026-03-10 14:06'), Z), '18:00')
+  const two = med('m2', 'Paracetamol', { slots: [{ due: iso('2026-03-09 20:00'), state: 'given', dose: 'a', at: iso('2026-03-09 20:10') }, { due: iso('2026-03-09 14:00'), state: 'not_given', dose: 'b', at: iso('2026-03-09 14:05') },
+    { due: iso('2026-03-10 08:00'), state: 'late' }, { due: iso('2026-03-10 02:00'), state: 'missed' }], extra: [{ dose: 'c', at: iso('2026-03-10 03:00'), status: 'completed' }] })
+  assert.deepEqual(byDay(two), [{ day: '2026-03-09', given: 1, not: 1, late: 0, missed: 0 }, { day: '2026-03-10', given: 1, not: 0, late: 1, missed: 1 }])
 })
 test('the dose the round writes', () => {
   assert.deepEqual(doseData(para, iso('2026-03-10 14:00'), { given: true }),
@@ -133,5 +137,120 @@ test('the last dose beside Give, and a late row\'s next time', () => {
   assert.equal(lastGiven(ondan, at('2026-03-10 17:00'))!.near, true, 'as needed: near within 4 h'); assert.equal(lastGiven(ondan, at('2026-03-10 17:31'))!.near, false)
   assert.equal(lastGiven(salb, at('2026-03-10 14:00')), null)
   assert.equal(nowDue(para), '14:00'); assert.equal(nowDue(furo), null)
+})
+// ── 3b: the client's twin of the rule, on the SQL suite's own case (drug_round.sql c–h) ──
+const rx = (item: string, drug: string, timing: string | null, local: string, more: Record<string, unknown> = {}, v = 1, visit: string | null = 'st'): MedVersion =>
+  ({ id: `${item}v${v}`, item, item_version: v, occurred_at: iso(local), visit_id: visit, data: { basis: 'prescribed', drug: { text: drug }, dosage: timing ? { timing: { code: timing } } : {}, status: 'active', ...more } as MedVersion['data'] })
+const given = (id: string, medication: string, local: string, due: string | null, status = 'completed'): GivenDose =>
+  ({ id, occurred_at: iso(local), data: { medication, status, ...(due ? { bedside: { due: iso(due) } } : {}) } })
+const VS = [rx('m1', 'Ceftriaxone', 'OD', '2026-03-09 09:30', { duration_days: 7 }), rx('m2', 'Paracetamol', 'q6h', '2026-03-09 09:30'),
+  rx('m3', 'Omeprazole', 'OD', '2026-03-09 09:30', { instructions: 'at night' }), rx('m4', 'Salbutamol', 'q4h', '2026-03-09 09:30'),
+  rx('m5', 'Ondansetron', null, '2026-03-09 09:30', { dosage: { as_needed: true, as_needed_for: 'nausea' } }), rx('m6', 'Metronidazole', 'TDS', '2026-03-10 13:50', { duration_days: 5 }),
+  rx('m8', 'Furosemide', 'stat', '2026-03-10 12:00'), rx('m7', 'Amlodipine', 'OD', '2026-03-01 10:00', {}, 1, null)]
+const DS = [given('d1', 'm1', '2026-03-09 09:40', '2026-03-09 09:30'), given('d2', 'm1', '2026-03-10 08:10', '2026-03-10 08:00'), given('d3', 'm2', '2026-03-09 09:45', '2026-03-09 09:30'),
+  given('d4', 'm2', '2026-03-09 14:05', '2026-03-09 14:00'), given('d5', 'm2', '2026-03-09 20:10', '2026-03-09 20:00', 'not-done'), given('d6', 'm2', '2026-03-10 02:20', null),
+  given('d7', 'm3', '2026-03-09 09:50', '2026-03-09 09:30'), given('d8', 'm3', '2026-03-09 22:05', '2026-03-09 22:00'), given('d9', 'm5', '2026-03-10 03:10', null), given('d10', 'm5', '2026-03-10 13:30', null)]
+const day = (d: string, vs: MedVersion[], ds: GivenDose[], now: string, r: Round = DEFAULT_ROUND) => readingOf(vs, ds, 'st', r, Z, at(`${d} 00:00`), at(`${d} 00:00`) + 86_400_000, at(now))
+const states = (x: ReturnType<typeof readingOf>, item: string) => x.slots.filter((s) => s.item === item).map((s) => `${localHm(s.due, Z)} ${s.state}${s.first ? ' first' : ''}`)
+const extra = (x: ReturnType<typeof readingOf>, ds: GivenDose[], item: string) => ds.filter((d) => d.data.medication === item && !x.slots.some((s) => s.dose === d.id)).map((d) => d.id)
+
+test('the shared case: the twin gives the server\'s states', () => {
+  const t = day('2026-03-10', VS, DS, '2026-03-10 14:06')
+  assert.deepEqual(states(t, 'm1'), ['08:00 given']); assert.deepEqual(states(t, 'm2'), ['02:00 given', '08:00 late', '14:00 due', '20:00 upcoming'])
+  assert.deepEqual(states(t, 'm3'), ['22:00 upcoming']); assert.deepEqual(states(t, 'm4'), []); assert.deepEqual(states(t, 'm5'), [])
+  assert.deepEqual(states(t, 'm6'), ['13:50 due first', '22:00 upcoming']); assert.deepEqual(states(t, 'm8'), ['12:00 late first'])
+  assert.deepEqual(t.unset, ['m4']); assert.deepEqual(t.elsewhere, ['m7'])
+  const y = day('2026-03-09', VS, DS, '2026-03-10 14:06')
+  assert.deepEqual(states(y, 'm1'), ['09:30 given first']); assert.deepEqual(states(y, 'm2'), ['09:30 given first', '20:00 not_given']); assert.deepEqual(extra(y, DS, 'm2').filter((d) => d === 'd4'), ['d4'])
+  assert.deepEqual(states(y, 'm3'), ['22:00 given']); assert.ok(extra(y, DS, 'm3').includes('d7'))
+  const w = readingOf(VS, DS, 'st', DEFAULT_ROUND, Z, at('2026-03-10 14:06') - 25 * 3_600_000, at('2026-03-10 14:06') + 2 * 3_600_000, at('2026-03-10 14:06'))
+  assert.equal(w.slots.filter((s) => s.state === 'late').length, 2); assert.equal(w.slots.filter((s) => s.state === 'due').length, 2); assert.deepEqual(w.unset, ['m4'])
+  const later = readingOf(VS, DS, 'st', DEFAULT_ROUND, Z, at('2026-03-09 09:00'), at('2026-03-21 00:00'), at('2026-03-20 12:00'))
+  assert.equal(later.slots.filter((s) => s.item === 'm1').length, 7); assert.equal(later.slots.filter((s) => s.item === 'm6').length, 15)
+  // the changes: amlodipine continued here, ceftriaxone stopped, paracetamol 500 mg, zopiclone at night with no timing, d3 crossed out, d11
+  const vs = [...VS, rx('m7', 'Amlodipine', 'OD', '2026-03-10 09:00', {}, 2), rx('m1', 'Ceftriaxone', 'OD', '2026-03-10 10:00', { duration_days: 7, status: 'stopped' }, 2),
+    rx('m2', 'Paracetamol', 'q6h', '2026-03-10 10:30', { dosage: { timing: { code: 'q6h' }, dose: { value: '500', unit: 'mg' } } }, 2), rx('m10', 'Zopiclone', null, '2026-03-10 11:00', { instructions: 'at night' })]
+  const ds = [...DS.filter((d) => d.id !== 'd3'), given('d11', 'm2', '2026-03-10 14:05', '2026-03-10 14:00')]
+  const c = day('2026-03-10', vs, ds, '2026-03-10 14:06')
+  assert.deepEqual(states(c, 'm7'), []); assert.deepEqual(c.elsewhere, []); assert.deepEqual(states(c, 'm1'), ['08:00 given'])
+  assert.deepEqual(states(c, 'm2'), ['02:00 given', '08:00 late', '14:00 given', '20:00 upcoming']); assert.deepEqual(c.unset.sort(), ['m10', 'm4'])
+  assert.deepEqual(states(day('2026-03-09', vs, ds, '2026-03-10 14:06'), 'm2'), ['09:30 missed first', '20:00 not_given'])
+  const d12 = [...ds, given('d12', 'm2', '2026-03-10 14:07', '2026-03-10 08:00', 'not-done')]
+  assert.ok(states(day('2026-03-10', vs, d12, '2026-03-10 14:10'), 'm2').includes('08:00 not_given'))
+  const d13 = day('2026-03-10', vs, [...d12, given('d13', 'm2', '2026-03-10 14:08', '2026-03-10 08:00')], '2026-03-10 14:10')
+  assert.equal(d13.slots.find((s) => s.item === 'm2' && localHm(s.due, Z) === '08:00')!.dose, 'd13', 'a dose given outranks a refusal of the same time')
+  // a stopped medicine's unrecorded time is missed, never late (drug_round.sql h: furosemide stopped at 14:11)
+  const stop = day('2026-03-10', [...vs, rx('m8', 'Furosemide', 'stat', '2026-03-10 14:11', { status: 'stopped' }, 2)], ds, '2026-03-10 14:12')
+  assert.deepEqual(states(stop, 'm8'), ['12:00 missed first'])
+  const r30 = { ...DEFAULT_ROUND, late_after: 30 }
+  assert.deepEqual(states(day('2026-03-10', VS, DS, '2026-03-10 14:15', r30), 'm6')[0], '13:50 due first'); assert.deepEqual(states(day('2026-03-10', VS, DS, '2026-03-10 14:25', r30), 'm6')[0], '13:50 late first')
+})
+test('the first dose\'s cover', () => {
+  const cov = (timing: string, local: string, r: Round = DEFAULT_ROUND, ins?: string) => { const c = firstCover(r, timing, ins, at(local), Z)
+    return { first: c.first, stands: c.stands.map((x) => new Date(x).toISOString()), next: c.next === null ? null : new Date(c.next).toISOString() } }
+  assert.deepEqual(cov('TDS', '2026-03-10 14:06'), { first: true, stands: [iso('2026-03-10 14:00')], next: iso('2026-03-10 22:00') })
+  assert.deepEqual(cov('TDS', '2026-03-10 12:30').stands, [iso('2026-03-10 14:00')]); assert.deepEqual(cov('TDS', '2026-03-10 15:30'), { first: true, stands: [], next: iso('2026-03-10 22:00') })
+  assert.deepEqual(cov('TDS', '2026-03-10 19:00'), { first: true, stands: [iso('2026-03-10 22:00')], next: iso('2026-03-11 06:00') })
+  assert.deepEqual(cov('q6h', '2026-03-10 11:30'), { first: true, stands: [iso('2026-03-10 14:00')], next: iso('2026-03-10 20:00') })
+  assert.deepEqual(cov('q6h', '2026-03-10 09:30').stands, [iso('2026-03-10 14:00')], 'exactly 4 h 30 min: inclusive'); assert.deepEqual(cov('q6h', '2026-03-10 09:29').stands, [])
+  assert.deepEqual(cov('OD', '2026-03-10 07:50'), { first: true, stands: [iso('2026-03-10 08:00')], next: iso('2026-03-11 08:00') }); assert.deepEqual(cov('OD', '2026-03-10 05:30').stands, [iso('2026-03-10 08:00')])
+  assert.deepEqual(cov('OD', '2026-03-10 19:00'), { first: true, stands: [], next: iso('2026-03-11 08:00') })
+  assert.deepEqual(cov('OD', '2026-03-10 21:00'), { first: true, stands: [iso('2026-03-11 08:00')], next: iso('2026-03-12 08:00') })
+  const q4: Round = { ...DEFAULT_ROUND, late_after: 180, times: [{ timing: 'q4h', at: '02:00 06:00 10:00 14:00 18:00 22:00' }] }
+  assert.deepEqual(cov('q4h', '2026-03-10 11:00', q4).stands, [iso('2026-03-10 10:00'), iso('2026-03-10 14:00')])
+  assert.deepEqual(cov('OD', '2026-03-10 09:30', DEFAULT_ROUND, 'at night'), { first: false, stands: [], next: iso('2026-03-10 22:00') })
+  assert.equal(cov('OD', '2026-03-10 22:30', DEFAULT_ROUND, 'at night').next, iso('2026-03-11 22:00'))
+  const one = (v: MedVersion, now = '2026-03-20 12:00') => readingOf([v], [], 'st', DEFAULT_ROUND, Z, at('2026-03-01 00:00'), at('2026-03-21 00:00'), at(now)).slots
+  assert.equal(one(rx('s', 'Furosemide', 'stat', '2026-03-10 12:00')).length, 1)
+  assert.ok(!readingOf([rx('c', 'Amlodipine', 'OD', '2026-03-01 10:00', {}, 1, null), rx('c', 'Amlodipine', 'OD', '2026-03-10 09:00', {}, 2)], [], 'st', DEFAULT_ROUND, Z,
+    at('2026-03-10 00:00'), at('2026-03-12 00:00'), at('2026-03-11 12:00')).slots.some((x) => x.first), 'continued in the stay: no first dose')
+  const od = one(rx('o', 'X', 'OD', '2026-03-10 09:30', { duration_days: 7 })); assert.equal(od.length, 7); assert.equal(new Date(od[6].due).toISOString(), iso('2026-03-16 08:00'))
+  assert.equal(one(rx('b', 'X', 'BD', '2026-03-10 09:30', { duration_days: 7 })).length, 14)
+  const tds = one(rx('t', 'X', 'TDS', '2026-03-10 09:30', { duration_days: 5 })); assert.equal(tds.length, 15); assert.equal(new Date(tds[14].due).toISOString(), iso('2026-03-15 06:00'))
+})
+test('matching a dose to a time', () => {
+  const vs = [rx('c', 'X', 'q6h', '2026-03-01 10:00', {}, 1, null), rx('c', 'X', 'q6h', '2026-03-10 07:00', {}, 2)]
+  const run = (ds: GivenDose[]) => readingOf(vs, ds, 'st', DEFAULT_ROUND, Z, at('2026-03-10 00:00'), at('2026-03-11 00:00'), at('2026-03-10 23:00')).slots.map((s) => `${localHm(s.due, Z)} ${s.dose ?? ''}`.trim())
+  assert.deepEqual(run([given('a', 'c', '2026-03-10 13:50', '2026-03-10 08:00')]), ['08:00 a', '14:00', '20:00'], 'a named dose takes its time though a nearer one is free')
+  assert.deepEqual(run([given('b', 'c', '2026-03-10 08:20', '2026-03-10 08:00'), given('a', 'c', '2026-03-10 08:10', '2026-03-10 08:00')]), ['08:00 a', '14:00', '20:00'], 'two naming one: the first given')
+  assert.deepEqual(run([given('a', 'c', '2026-03-10 08:05', '2026-03-10 08:00', 'not-done'), given('b', 'c', '2026-03-10 08:40', '2026-03-10 08:00')]), ['08:00 b', '14:00', '20:00'], 'given before not given')
+  assert.deepEqual(run([given('a', 'c', '2026-03-10 04:59', null)]), ['08:00', '14:00', '20:00'], 'beyond half the interval: extra')
+  assert.deepEqual(run([given('a', 'c', '2026-03-10 07:40', null), given('b', 'c', '2026-03-10 08:10', null)]), ['08:00 b', '14:00', '20:00'], 'two near one time: the nearer')
+  const f = [rx('f', 'X', 'q6h', '2026-03-10 11:30')]
+  const fx = readingOf(f, [given('a', 'f', '2026-03-10 11:35', '2026-03-10 11:30'), given('b', 'f', '2026-03-10 14:05', '2026-03-10 14:00')], 'st', DEFAULT_ROUND, Z, at('2026-03-10 00:00'), at('2026-03-11 00:00'), at('2026-03-10 23:00'))
+  assert.deepEqual(fx.slots.map((s) => s.dose ?? null), ['a', null], 'a dose naming a time under the first dose is extra')
+  assert.deepEqual(run([given('a', 'c', '2026-03-10 14:07', '2026-03-10 08:00', 'not-done'), given('b', 'c', '2026-03-10 14:08', '2026-03-10 08:00')]), ['08:00 b', '14:00', '20:00'],
+    'an outranked refusal is extra: never the free 14:00 by nearness')
+  assert.deepEqual(run([given('a', 'c', '2026-03-10 08:05', '2026-03-10 08:00'), given('b', 'c', '2026-03-10 11:10', '2026-03-10 08:00')]), ['08:00 a', '14:00', '20:00'],
+    'a second dose naming a time is extra, never the next free time')
+})
+test('the banner\'s word, the sheet\'s chip and Summary line (the twin on the record)', () => {
+  const es = VS.map((v) => E('medication', { id: v.id, item: v.item, item_version: v.item_version, occurred_at: v.occurred_at, visit_id: v.visit_id, data: v.data as Record<string, unknown> }))
+  const rec = record({ 'base.lists': table(es.map((e) => listRow('medications', [e], 'active')), es), 'base.presence': table([presence('st', { kind: 'stay', state: 'admitted', department_id: 'ward' })]) })
+  const own = (ds: GivenDose[]) => ({ shown: [...ds.map((d) => E('bedside.dose', { id: d.id, occurred_at: d.occurred_at, data: d.data })), E('x.transfusion', { data: { status: 'completed' } }),
+    E('x.vaccine', { data: { medication: 'v1', status: 'completed' } })], hidden: [] })
+  const o = { ...org, organization: { id: 'o', name: 'Demo', time_zone: Z, record_view: 'visits' }, settings: [], settingKeys: [], datatypes: {},
+    allDepartments: [{ id: 'ward', name: 'Medical Ward', packs: ['bedside'] }, { id: 'gp', name: 'General Practice', packs: [] }] } as unknown as Organization
+  const x = { rec, ctx: { org: o, me: 'rn', departmentId: 'ward' }, identity: {} as Identity, own: own(DS) }; const NOW = at('2026-03-10 14:06')
+  assert.deepEqual(doseBannerWords(x, NOW), [{ word: '2 doses late', rank: 1, tone: 'danger' }, { word: 'times not set', rank: 2, tone: 'warn' }])
+  assert.deepEqual(doseBannerWords({ ...x, own: own([...DS, given('f1', 'm8', '2026-03-10 13:00', '2026-03-10 12:00')]) }, NOW)[0], { word: '1 dose late', rank: 1, tone: 'danger' })
+  assert.deepEqual(doseBannerWords({ ...x, rec: record({ 'base.lists': rec.tables['base.lists']! }) }, NOW), [], 'no open stay')
+  const gp = record({ 'base.lists': rec.tables['base.lists']!, 'base.presence': table([presence('st', { kind: 'stay', state: 'admitted', department_id: 'gp' })]) })
+  assert.deepEqual(doseBannerWords({ ...x, rec: gp }, NOW), [], 'a stay on a ward without Ward nursing has no round: nothing late')
+  assert.deepEqual(sheetChip({ ...x, own: own(DS) }, NOW), { word: '2 late', tone: 'danger' })
+  assert.equal(sheetSummary({ ...x, own: own(DS) }, NOW), '2 late · 2 due · times not set for 1')
+})
+test('the note under /rx: the first dose on this ward', () => {
+  const w = (frequency: string | null, local: string, more: Record<string, unknown> = {}) => firstDoseWords({ action: 'start', frequency, ...more }, DEFAULT_ROUND, at(local), Z)
+  const tds = 'On this ward: 06:00 · 14:00 · 22:00 — the first dose as soon as it is signed'
+  assert.deepEqual(w('TDS', '2026-03-10 14:06'), { text: `${tds} (it stands for the 14:00 dose), then 22:00` })
+  assert.deepEqual(w('TDS', '2026-03-10 15:30'), { text: `${tds}, then 22:00` }); assert.deepEqual(w('TDS', '2026-03-10 19:00'), { text: `${tds} (it stands for the 22:00 dose), then 06:00 tomorrow` })
+  assert.deepEqual(w('OD', '2026-03-10 19:00'), { text: 'On this ward: 08:00 — the first dose as soon as it is signed, then 08:00 tomorrow' })
+  assert.deepEqual(w('OD', '2026-03-10 21:00'), { text: `On this ward: 08:00 — the first dose as soon as it is signed (it stands for the 08:00 dose tomorrow), then 08:00 on ${shortDate(iso('2026-03-12 08:00'))}` })
+  assert.deepEqual(w('OD', '2026-03-10 09:30', { instructions_text: 'at night' }), { text: 'On this ward: at night, 22:00 — the first dose tonight, 22:00' })
+  assert.deepEqual(w('stat', '2026-03-10 09:30'), { text: 'One dose, as soon as it is signed' })
+  assert.deepEqual(w('PRN', '2026-03-10 09:30', { prn: true }), { text: 'As needed: on the round\'s As needed list' })
+  assert.deepEqual(w('q4h', '2026-03-10 09:30'), { text: 'This ward has no times for every 4 hours: it waits under "Times not set · ask the doctor" until the ward sets them (Settings → Departments)', tone: 'warn' })
+  assert.equal(w(null, '2026-03-10 09:30'), null); assert.equal(firstDoseWords({ action: 'change', frequency: 'TDS' }, DEFAULT_ROUND, at('2026-03-10 09:30'), Z), null)
 })
 console.log(`drug round: ${n} groups passed`)

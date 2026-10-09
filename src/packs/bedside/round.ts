@@ -2,7 +2,7 @@
 // top, then by time, bed and medicine), Late (the oldest first), As needed, and Given this round (every dose recorded since the round
 // opened, the newest first, a dose not given among them); the medicines whose times are not set, and those not prescribed in this stay,
 // folded apart and counted in none. Beside each row the last dose given, a fact shown and never a stop. Pure.
-import { hm } from '@core/ui/time'
+import { hm, ymd } from '@core/ui/time'
 import { drugWords, type DoseRead, type MedicineRead, type RoundRead, type SlotState } from './doses'
 import { halfHours, nextTime, type Round } from './schedule'
 
@@ -75,3 +75,13 @@ export function nextRound(round: Round, now: number, zone: string): string | nul
   return t === null ? null : hm(new Date(t).toISOString())
 }
 
+/** the whole stay, per clinic day (3b): how many given, not given, late and missed */
+export function byDay(m: MedicineRead): { day: string; given: number; not: number; late: number; missed: number }[] {
+  const days = new Map<string, { day: string; given: number; not: number; late: number; missed: number }>()
+  for (const x of m.slots) {
+    const d = ymd(x.due); const c = days.get(d) ?? { day: d, given: 0, not: 0, late: 0, missed: 0 }; days.set(d, c)
+    if (x.state === 'given') c.given++; else if (x.state === 'not_given') c.not++; else if (x.state === 'late') c.late++; else if (x.state === 'missed') c.missed++
+  }
+  for (const x of m.extra) { const d = ymd(x.at); const c = days.get(d) ?? { day: d, given: 0, not: 0, late: 0, missed: 0 }; days.set(d, c); if (x.status === 'not-done') c.not++; else c.given++ }
+  return [...days.values()].sort((a, b) => a.day.localeCompare(b.day))
+}

@@ -1,13 +1,17 @@
 // The drug round's reads and their words (spec/openCare.md §5.6, piece 3): what the pack's ops answer (bedside.round, bedside.sheet,
 // and the board's doses), a medicine and its dose in words, the dose the round writes (the base's given as Ward nursing's dose, naming
 // the time it is for; not given, one of six coded reasons with the base's reason in words), and the tile's words from the board's read
-// (C7): "1 dose late" in red, "times not set" in amber, after the NEWS2 word. A dose is never stopped for a clinical reason. Pure.
+// (C7): "1 dose late" in red, "times not set" in amber, after the NEWS2 word. A dose is never stopped for a clinical reason. 3b: the
+// banner's dose word, the Treatment sheet's chip and Summary line, by the client's twin of the rule (twin.ts). Pure.
 import type { Concept, EntryData, Quantity } from '@core/db/shapes.generated'
 import type { PresenceRow } from '@core/db/types'
+import type { ChipWord, SectionInput } from '@core/screens/chart/sections'
+import type { BannerWord, WordsInput } from '@core/screens/chart/words'
 import type { TileCtx, TileWord, TileWords } from '@core/screens/ward/tiles'
 import { FREQUENCY } from '@core/screens/chart/model/labels'
 import { tileWords, type News2Board } from './news2'
 import type { SlotState } from './schedule'
+import { lateIn } from './twin'
 export type { SlotState }
 
 export const DOSE = 'bedside.dose'
@@ -90,3 +94,21 @@ export function wardTile(row: PresenceRow, ctx: Pick<TileCtx, 'org' | 'identity'
   return words.length ? { words } : null
 }
 
+// ── the chart's words (3b), worked out in the client by the server's rule (twin.ts) ──
+/** the banner: "1 dose late" / "n doses late" (red, rank 1), "times not set" (amber, rank 2) for the open stay */
+export function doseBannerWords(x: WordsInput, now = Date.now()): BannerWord[] {
+  const d = lateIn(x.rec, x.own, x.ctx.org, now); if (!d) return []
+  return [...(d.late ? [{ word: d.late === 1 ? '1 dose late' : `${d.late} doses late`, rank: 1, tone: 'danger' as const }] : []),
+    ...(d.unset ? [{ word: 'times not set', rank: 2, tone: 'warn' as const }] : [])]
+}
+/** the Treatment sheet's chip: "2 late" in red, else nothing */
+export function sheetChip(x: SectionInput, now = Date.now()): ChipWord | null {
+  const d = lateIn(x.rec, x.own, x.ctx.org, now)
+  return d?.late ? { word: `${d.late} late`, tone: 'danger' } : null
+}
+/** its Summary line: "1 late · 2 due · times not set for 1"; nothing to say, null */
+export function sheetSummary(x: SectionInput, now = Date.now()): string | null {
+  const d = lateIn(x.rec, x.own, x.ctx.org, now); if (!d) return null
+  const out = [d.late ? `${d.late} late` : '', d.due ? `${d.due} due` : '', d.unset ? `times not set for ${d.unset}` : ''].filter(Boolean)
+  return out.length ? out.join(' · ') : null
+}
