@@ -2,8 +2,11 @@
 -- with tests sent to the Laboratory. Magdy owes his visit, a blood count and an HbA1c (To pay; the Laboratory has Pay first, so both his
 -- tests wait for payment on its Collect); Hoda paid her visit and a lipid profile
 -- at the Cashier, in cash (Paid today, her receipt); Waleed owes his visit and a lithium level priced At the order, which the cashier
--- prices on the payment card. Times relative to the load; ids in the pack's namespace; a reload erases these patients first (their
--- payments keep their amounts and receipt numbers and lose the patient, as an Erase leaves them, §5.4).
+-- prices on the payment card. The GP's visit fee is charged at check-in (owner, 2026-10-08), so everyone checked in there today owes
+-- it from the moment they arrive, the waiting room included (the base's day: Heba, not yet called). Its Pay first at the Laboratory
+-- shows on the doctor's chart too: Magdy's two tests read "Waiting for payment" on their lines. Times relative to the load; ids in the
+-- pack's namespace; a reload erases these patients first (their payments keep their amounts and receipt numbers and lose the patient,
+-- as an Erase leaves them, §5.4).
 
 select demo.layer('billing');
 
@@ -35,9 +38,9 @@ begin
     demo.lab_order('lithium', demo.base('gp'), v, demo.ago(27), demo.id('billing', 'order:waleed lithium'))), 25);
 end $$;
 
--- billing hears the visits and orders after commit (its listener); the demo runs that background work now, as the job would, so the
+-- billing hears the check-ins and orders after commit (its listener); the demo runs that background work now, as the job would, so the
 -- Cashier can take Hoda's payment in the same load
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 
 -- Hoda pays her visit and lipid profile in cash at the Cashier, through the pack's door as the payment card writes it
 do $$

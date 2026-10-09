@@ -1,6 +1,6 @@
 // Billing → Prices (billing.prices, spec §5.4; owner, 2026-10-08, D27: billing's own page, apart from Settings → Services): each
 // department that uses billing, its Pay first (as on the department's card: its priced work waits for payment, a soft check), its visit
-// fee (once a patient is seen there) and each of its services — a price, At the order (the cashier types it on the payment card), or
+// fee (charged at check-in there: owner, 2026-10-08) and each of its services — a price, At the order (the cashier types it on the payment card), or
 // none (free, and it never waits). A price is the setting of the thing it prices, kept with who changed it and when; a change is for
 // later orders only. Written by whoever sets prices in that department.
 import { useState } from 'react'
@@ -78,7 +78,7 @@ function FeeRow({ dept, row, may }: { dept: Department; row?: SettingRow & { dat
     ? writeSetting({ key: 'billing.visit_fee', owner_id: dept.id, thing_id: row!.thing_id, retired: true })
     : writeSetting({ key: 'billing.visit_fee', owner_id: dept.id, thing_id: row?.thing_id ?? null, data: { amount: wire(c) } }))
   return <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2 text-13">
-    <span className="w-56 text-fg">Visit fee</span><span className="text-12 text-muted">charged once a patient is seen here</span>
+    <span className="w-56 text-fg">Visit fee</span><span className="text-12 text-muted">charged when a patient is checked in here</span>
     <Input dense inputMode="decimal" value={amount} disabled={!may} placeholder="no fee" aria-label={`${dept.name}: visit fee`} onChange={(e) => setAmount(e.target.value)}
       className={cn('ms-auto w-28 text-end tnum', bad && 'ring-danger')} />
     <SaveBit s={s} show={may && changed && !bad && (c !== null || !!row)} onSave={save} />

@@ -1,4 +1,4 @@
-import { createElement, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from 'react'
+import { createElement, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type Ref } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, MapPin, X } from 'lucide-react'
 import { savePatient } from '../../db/rpc'
@@ -11,7 +11,9 @@ import { Button, Input, Kbd, Select, Tag, cn, errorText, minutesSince } from '..
 import { ageSex, duration, fullName, type ClinicRow } from './words'
 import { GlanceVisits } from '../chart/glance/ChartGlance'
 import { walkInOrders } from '../bench/walkins'
-import { walkInStepFor } from '../bench/WhatFor'
+import { packRowOf } from '../rows'
+import { usePackRows } from '../useRows'
+import { useWalkInPart, walkInStepFor } from '../bench/WhatFor'
 
 /** a key for each clinic: its first free letter ("P" Psychiatry); M U L G E ↵ are the card's own */
 function clinicKeys(clinics: Department[]) {
@@ -33,6 +35,8 @@ export function PatientCard({ handle, p, clinics, benches = [], usual, rows, can
   onSaid: (s: string) => void; onSent: (clinicId: string) => void; onDone: () => void; onEscape: () => void
 }) {
   const visits = useVisitActions(); const { dept } = useDepartment(); const w = useWrite(); const [walkTo, setWalkTo] = useState<Department | null>(null)
+  const part = useWalkInPart(walkTo ?? { id: '', name: '', packs: [] }, walkTo ? p.id : null)   // the bench's pack part after what for (core change (j))
+  const [starting, setStarting] = useState(false)   // from Start until the part has done its own (a second Start never writes twice)
   const [moving, setMoving] = useState(false); const [editing, setEditing] = useState(false); const [past, setPast] = useState(false)
   const keys = clinicKeys(clinics)
   const open = p.open_visits.find((v) => clinics.some((c) => c.id === v.department_id))
@@ -40,6 +44,9 @@ export function PatientCard({ handle, p, clinics, benches = [], usual, rows, can
   const clinic = open ? clinics.find((c) => c.id === open.department_id) : undefined
   const busy = visits.open.isPending || visits.transfer.isPending || visits.priority.isPending || visits.present.isPending || visits.left.isPending
   const nationalId = p.identifiers.find((i) => i.system === 'eg-national-id')?.value
+  // a pack's button on the card (core change (i), §5.7: Book beside Send), its card folded out under the patient's
+  const cardRow = useMemo(() => packRowOf(`card ${p.id}`, { patient_id: p.id, visit_id: open?.id ?? null, orders: [] }), [p.id, open?.id])
+  const packs = usePackRows('card', useMemo(() => [cardRow], [cardRow]))
 
   async function send(to: Department, isUrgent = false) {
     if (busy) return
@@ -74,7 +81,7 @@ export function PatientCard({ handle, p, clinics, benches = [], usual, rows, can
   }))
 
   function onKey(e: KeyboardEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest('input, select, textarea')) return
+    if ((e.target as HTMLElement).closest('input, select, textarea, [data-pack-card]')) return   // a pack's card under the card keeps its own keys
     if (e.key === 'Enter' && e.target !== e.currentTarget) return   // ↵ on one of the card's buttons is that button
     const k = e.key.toLowerCase()
     if (e.key === 'Escape') { e.preventDefault(); if (walkTo) setWalkTo(null); else if (moving) setMoving(false); else if (editing) setEditing(false); else onEscape(); return }
@@ -121,14 +128,19 @@ export function PatientCard({ handle, p, clinics, benches = [], usual, rows, can
         {waitingUnseen && canSend && <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={doLeft}>Left <Kbd className="ms-1">L</Kbd></Button>}
         {row?.status === 'pending' && open?.present && canSend && <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={doGone}>Gone <Kbd className="ms-1">G</Kbd></Button>}
         {!p.died_on && benches.map((b) => <Button key={b.id} size="sm" variant="outline" aria-expanded={walkTo?.id === b.id} onClick={() => { setWalkTo(walkTo?.id === b.id ? null : b); w.reset() }}>{b.name}…</Button>)}
+        {!p.died_on && packs.buttons(cardRow)}
         {canEdit && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit details <Kbd className="ms-1">E</Kbd></Button>}
       </div>}
+    {!editing && <div data-pack-card>{packs.below(cardRow)}</div>}
     {walkTo && dept && <div className="grid gap-2 rounded-lg bg-sunken p-3">
       <p className="flex items-center gap-2 text-12 text-muted"><span className="font-semibold uppercase tracking-[0.06em] text-faint">{walkTo.name} · what for</span>a walk-in
         <button type="button" onClick={() => setWalkTo(null)} aria-label="Close" className="ms-auto inline-flex items-center gap-1 rounded-md px-1 text-faint hover:text-fg focus-ring"><Kbd>esc</Kbd><X className="size-3.5" /></button></p>
-      {createElement(walkInStepFor(walkTo.packs), { key: walkTo.id, bench: walkTo, busy: w.isPending, error: w.error, note: `Joins ${walkTo.name}'s To do.`,
-        onStart: (services, askedBy) => w.mutate(oneSet(walkInOrders({ patientId: p.id, from: dept.id, to: walkTo.id, services, askedBy })), {
-          onSuccess: () => { rememberPatient(p); onSaid(`${fullName(p)} → ${walkTo.name} · ${services.map((s) => s.name).join(', ')}`); onDone() } }) })}
+      {createElement(walkInStepFor(walkTo.packs), { key: walkTo.id, bench: walkTo, busy: w.isPending || starting, error: w.error, note: `Joins ${walkTo.name}'s To do.`,
+        extra: part.extra, start: part.start,
+        onStart: (services, askedBy) => { if (starting) return; const es = walkInOrders({ patientId: p.id, from: dept.id, to: walkTo.id, services, askedBy }); setStarting(true)
+          w.mutate(oneSet(es), { onError: () => setStarting(false), onSuccess: async () => {
+            const more = await part.after({ from: dept.id, orders: es.map((e, i) => ({ id: e.id!, service: services[i] })) }).catch((x: unknown) => `not booked: ${errorText(x)}`)
+            setStarting(false); rememberPatient(p); onSaid(`${fullName(p)} → ${walkTo.name} · ${services.map((s) => s.name).join(', ')}${more ? ` · ${more}` : ''}`); onDone() } }) } })}
     </div>}
     {moving && <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-sunken p-2"><span className="text-12 text-faint">Move to</span>
       {clinics.filter((c) => c.id !== clinic?.id).map((c) => <Button key={c.id} size="sm" variant="outline" disabled={busy} onClick={() => void moveTo(c)}>{c.name}{keys.get(c.id) && <Kbd className="ms-1">{keys.get(c.id)!.toUpperCase()}</Kbd>}</Button>)}

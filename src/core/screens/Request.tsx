@@ -24,7 +24,8 @@ function RequestBody({ requestId }: { requestId?: string }) {
   // an order this department answers is on its worklist; the worklist row is what an answer is built from
   const row = queue.data?.requests.find((r) => r.id === requestId) ?? null
   // a pack may hold this order waiting (spec §5.4, a soft check): its word shows, Release and Start are greyed (not done, a stop, and
-  // declining still work), and whoever may answer may Answer anyway… with a reason the pack records
+  // declining still work), and whoever answers here may Answer anyway… with a reason the pack records (D4; the pack lets anyone working
+  // the department's bench record it: owner, 2026-10-08)
   const prow = useMemo(() => row ? packRowOf(row.id, benchMarkRow({ patient: row.patient, rows: [row] })) : null, [row])
   const packs = usePackRows('request', useMemo(() => prow ? [prow] : [], [prow]))
   const wait = row && !packs.isFree(row.order.item) ? packs.waits.get(row.order.item) ?? null : null

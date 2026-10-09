@@ -86,8 +86,8 @@ create or replace function pg_temp.icu_day() returns timestamptz language sql st
   select case when demo.now() >= demo.midnight() + interval '8 hours' then demo.midnight() + interval '8 hours' else demo.midnight() - interval '16 hours' end
 $$;
 -- a SOFA as the server adds it up
-create or replace function pg_temp.icu_sofa(resp text, coag text, liver text, cardio text, cns text, renal text) returns jsonb language sql as $$
-  select demo.score('intensive.sofa', jsonb_build_object('resp', resp, 'coag', coag, 'liver', liver, 'cardio', cardio, 'cns', cns, 'renal', renal))
+create or replace function pg_temp.icu_sofa(resp text, coag text, liver text, cardiovascular text, cns text, renal text) returns jsonb language sql as $$
+  select demo.score('intensive.sofa', jsonb_build_object('resp', resp, 'coag', coag, 'liver', liver, 'cardiovascular', cardiovascular, 'cns', cns, 'renal', renal))
 $$;
 -- a line (central, arterial, urinary) as the base's procedure, in progress since it went in
 create or replace function pg_temp.icu_line(p_code text, p_words text, p_at timestamptz, p_site text default null) returns jsonb language sql stable as $$

@@ -215,8 +215,8 @@ test('the tile: the airway, one infusion, the MAP and a low urine, from the boar
     ['Vasopressin 2 units/h'], 'a drug the unit\'s list lacks: not a pressor, its own words')
   for (const d of [undefined, null, 'x', { stays: null }, board('other', nabil)]) assert.equal(tileWords(row('st1'), tc, d, NOW), null)
   assert.equal(tileWords({ ...row('st1'), kind: 'visit' }, tc, board('st1', nabil), NOW), null, 'only a stay')
-  // through the core's line
-  registerTileLine('intensive', (r, c, d) => tileWords(r, c, d, NOW))
+  // through the core's line, its read (C7) reaching it as ctx.read (the board's hook is not called here)
+  registerTileLine('intensive', (r, c) => tileWords(r, c, c.read, NOW), () => undefined)
   const ctx: TileCtx = { dept: { id: 'icu', packs: ['intensive'] }, place: null, identity: null, day: 3, can: () => true, org }
   assert.deepEqual(tileLineOf(tileLineDefs(), row('st1'), ctx, { intensive: board('st1', nabil) }),
     [{ pack: 'intensive', words: [{ text: 'Ventilated d3', tone: 'info' }, { text: 'noradrenaline 0.15', tone: 'warn' }, { text: 'MAP 67' }] }])

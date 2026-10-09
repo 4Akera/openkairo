@@ -15,6 +15,10 @@ select demo.setup(demo.base('psychiatry'), 'clinic', 'Psychiatry', 3);
 select demo.setup(demo.base('ward'), 'ward', 'Medical Ward', 4);
 select demo.setup(demo.base('lab'), 'laboratory', 'Laboratory', 5);
 
+-- the clinic's header on every printout (§3.13 Printing, the owner's (p3)): its name, address, phone and tax number (no logo), as the
+-- owner sets it in Settings → Organization; the demo's own words (chosen in the build, awaiting the owner)
+select demo.setting('organization.header', null, null, '{"name":"Demo Clinic","address":"14 Qasr El Nil St, Downtown, Cairo","phone":"+20 2 2392 4410","tax_number":"512-338-907"}');
+
 -- what this clinic changed since, as staff would in Settings: a private department (spec §4.3: every note and result written there is
 -- private); a psychiatry consult
 select demo.setting('department.private', demo.base('psychiatry'), null, '{"private":true}');

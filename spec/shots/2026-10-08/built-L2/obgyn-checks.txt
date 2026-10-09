@@ -1,0 +1,40 @@
+ObGyn clinic part — browser checks 2026-10-09 ~01:30 (Cairo), as the demo users, dev servers 3062 (Dr. Nermeen Fathy) and 3063
+(Dr. Ahmed Zaki). The Browser pane was hidden, so these are the pages' text (document.querySelector('main').innerText), not images.
+
+1 · the queue (#ob-queue), Dr. Ahmed Zaki — ObGyn's one word a row:
+  Next 51 Reham Nassar 35 F urgent · 1st visit · vitals taken · BP 150/100 · 14m
+  Waiting 49 Eman Abdelaal 42 F · vitals taken · IUD change due · 13m
+          50 Aya Ramadan 27 F · 1st visit · birth not written · 11m
+  With a doctor 48 Nahla Gaber 26 F · with Dr. Ahmed Zaki · tetanus toxoid due (after the fix: growth scan due)
+                47 Rania Saad 29 F · with Dr. Nermeen Fathy · OGTT due (after the fix, hers first: anti-D due)
+
+2 · Rania Saad (#anc-visit), Dr. Nermeen Fathy — banner "Pregnant · 28 wk · G3 P1+1 · Rh negative"; chip "Pregnancy 28+3 w"
+  PREGNANCY  Dates LMP 24 Mar · EDD 29 Dec by the LMP · 28+3 w today · Before G3 P1+1 · caesarean 2 years ago (breech) · miscarriage
+  last year at 9 w · Blood group O Rh negative · antibodies none at 12 w · Risks previous caesarean · Rh negative
+  VISITS 12+1 112/70 62 — 158 nil — · 16+0 110/68 64 — 150 nil — · 20+2 114/72 66 20 148 nil — · 24+4 116/74 68.5 25 146 trace ceph
+  TESTS Hb 10.4 g/dL at 24 w
+  /anc bp 118/74 wt 71 sfh 29 fhr 144 ceph nil →
+    vitals · BP 118/74 · Wt 71
+    antenatal · Antenatal visit · 28+3 w · fundus 29 · FHR 144 · cephalic · urine nil
+    "Antenatal visit · 28+3 w — the weeks from the EDD, never typed" · Fundus … fits 28 w (±2) · Lie/Moves/Urine protein/Oedema chips
+    G3 P1+1 · O Rh negative · caesarean 2 years ago (breech) · miscarriage last year at 9 w
+    DUE AT 28 WEEKS · THE CLINIC'S SCHEDULE: [rh negative] Anti-D 1500 IU IM · given here (Take) · OGTT 75 g · Laboratory (Take) · CBC (Take)
+    Next visit at 30 w by the clinic's intervals.
+
+3 · Eman Abdelaal (#ob-gyn), Dr. Nermeen Fathy — banner "IUD change due"; chip "Gynaecology IUD due"
+  GYNAECOLOGY  PERIODS Last 22 Sept · day 17 today · Cycle every 26–28 days · bleeds 8–9 days · Flow heavy · clots · 8 pads a day · Pain moderate
+  CONTRACEPTION Method Copper IUD · T380A · since Mar 2016 · Change due 10 Mar · 7 months past
+  CERVICAL SCREENING Last Pap smear · normal (NILM) · Nov 2023 · Next Nov 2026 · every 3 years, the clinic's
+  /fp hormonal iud → contraception · "Contraception · hormonal iud from today" (Method chips, Device, lot) +
+    procedure · "Hormonal IUD inserted · no problems" (How it went, Sounds, threads cut at, The old one)
+
+4 · Nahla Gaber (#ob-scan), Dr. Ahmed Zaki — banner "Pregnant · 32 wk · G1 P0"; chip "Pregnancy 32+0 w"; SCANS 28+1 1,090 g 18th 4.1 cm
+  /obus bpd 78 hc 288 ac 245 fl 57 dvp 1.8 post ceph fhr 146 →
+    scan · Scan in the clinic · 32+0 w · EFW 1 419 g, 2nd centile · AC 245 mm · deepest pool 1.8 cm · posterior · cephalic · FHR 146
+    MEASURE BPD 78 31+2 w · HC 288 31+5 w · AC 245 28+5 w · FL 57 29+6 w · EFW 1,419 g 2nd centile (Hadlock)
+    Liquor … reduced · under 2 cm · Placenta/Presentation chips · "Small for the weeks — EFW on the 2nd centile, the AC fits 28+5 w,
+    the deepest pool 1.8 cm. A notice only: the doctor decides …"
+
+5 · Aya Ramadan (#ob-postnatal), Dr. Ahmed Zaki — banner "Pregnancy · check (45 wk) · G2 P1"; chip "Pregnancy 45+0 w" (expected "not ended")
+  /pn bp 122/78 bleeding none wound healed breast → vitals BP 122/78 · postnatal "Visit after the birth · no bleeding · wound healed"
+    with THE BIRTH · NOT IN HER RECORD: WRITE IT HERE (Born, weeks, Where, How, Baby, grams) · pregnancy "Pregnancy ended" · feeding Breastfeeding

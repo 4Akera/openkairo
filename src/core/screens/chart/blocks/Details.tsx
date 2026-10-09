@@ -67,7 +67,7 @@ function Facts({ item, all, env, onClose }: { item: ChartItem; all: ServerEntry[
   if (answers.length) rows.push(['Answers', <ul className="grid gap-0.5">{answers.map((a) => <li key={a.id}>
     {env.onOpen ? <button type="button" onClick={() => env.onOpen!(a.id)} className="rounded-sm text-start text-accent hover:underline focus-ring">{a.line}</button> : a.line}
     <span className="text-faint tnum"> · {when(a.recorded_at)} · {by(a)}</span></li>)}</ul>])
-  if (reviews.length) rows.push(['Reviewed', reviews.map((r) => `${personName(env, r.author_id) ?? '—'} · ${when(r.recorded_at)}`).join('; ')])
+  if (reviews.length) rows.push(['Reviewed', reviews.map((r) => `${personName(env, r.author_id) ?? '—'} · ${when(r.recorded_at)}${r.data?.note ? ` · ${String(r.data.note)}` : ''}`).join('; ')])
   if (findings.length) rows.push(['Warnings', <ul className="grid gap-0.5">{findings.map((f, i) => <li key={i}>{f.detail ?? f.code}{f.confirmed && <span className="text-faint"> · signed anyway</span>}</li>)}</ul>])
   return <>
     <Line onClose={onClose}>{line}</Line>

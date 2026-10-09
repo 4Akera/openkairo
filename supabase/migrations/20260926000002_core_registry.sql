@@ -953,6 +953,11 @@ $$;
 create function core.base_of(p_type text) returns text language sql stable security definer set search_path = '' as $$
   select coalesce((select base_type from core.types where key = p_type and base_type is not null limit 1), p_type)
 $$;
+-- the action that writes a type: write:<type>, except a pack's type extending the base's order (an order carrying the pack's own words,
+-- radiology's side), which whoever may order writes with the base's write:order, wherever they order from (spec §5.5, core change (a))
+create function core.write_action(p_type text) returns text language sql stable security definer set search_path = '' as $$
+  select case when exists (select 1 from core.types t where t.key = p_type and t.layer <> 'base' and t.base_type = 'order') then 'write:order' else 'write:' || p_type end
+$$;
 
 -- ── the core's own layer, actions and settings keys ──
 select core.declare_layer('core', 'postgres', 'core', '{"en":"Core"}');
@@ -969,6 +974,15 @@ select core.declare_setting('organization.time_zone', 'core', 'organization',
   '{"type":"object","required":["zone"],"additionalProperties":false,"properties":{"zone":{"type":"string"}}}', labels => '{"en":"Time zone"}');
 select core.declare_setting('organization.packs_used', 'core', 'organization',
   '{"type":"object","required":["packs"],"additionalProperties":false,"properties":{"packs":{"type":"array","items":{"type":"string"}}}}', labels => '{"en":"Packs used"}');
+-- the clinic's header on every printout (§3.13 Printing, the owner's (p3), 2026-10-08): its name, logo, address, phone and tax number;
+-- the logo a small picture kept in the setting itself (a data: URI, PNG, JPEG or WebP, no larger than 100,000 characters), since it
+-- goes with every directory read; edited in Settings → Organization by whoever changes settings everywhere
+select core.declare_setting('organization.header', 'core', 'organization',
+  '{"type":"object","required":["name"],"additionalProperties":false,"properties":{
+    "name":{"type":"string","minLength":1,"maxLength":120},
+    "logo":{"type":"string","maxLength":100000,"pattern":"^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$"},
+    "address":{"type":"string","maxLength":300},"phone":{"type":"string","maxLength":60},"tax_number":{"type":"string","maxLength":60}}}',
+  labels => '{"en":"The clinic''s header on printouts"}');
 
 -- a score signed off for this clinic (§5.1 rule 8): who and when are the setting's; a version unsigned still works. One live sign-off
 -- per score version; written by sign:score (a clinician's act, held in any department), never by manage:settings

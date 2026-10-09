@@ -3,8 +3,9 @@
 -- ward's nurse, with the totals the server adds up. Samira (pneumonia, day 3) climbs from NEWS2 2 to 6, medium; Abdelmoneim (COPD,
 -- type 2 respiratory failure, day 3) is on SpO₂ scale 2 and settles from 8 to 3; Tahany arrived 90 minutes ago, has no bed yet and no
 -- obs, so her tile says "no obs yet". Times relative to the load; ids in the pack's namespace; a reload erases these patients first.
--- Exactly two take beds (6 and 7, else the next free): at demo.sql's third load the eight beds are then full (the base's three, these
--- two, the app's two and the journey's one).
+-- Only Samira takes a bed (7, else the next free): the Medical Ward's eight are shared with the base's three, the Blood bank's one,
+-- the journey's one and, at demo.sql's third load, the app's two, while a reload still holds the last load's stays until each layer
+-- erases its own; so Abdelmoneim waits on the ward with no bed yet, as Tahany does.
 select demo.layer('bedside');
 
 -- one set of obs, as /v signs it on the ward: the vitals (ACVPU and air or oxygen, with the oxygen's device, flow and FiO₂ when given)
@@ -29,7 +30,7 @@ begin
   perform demo.patient(demo.id('bedside', 'patient:samira'), array['Samira', 'Fawzy'], 'Abdelaal', 'female', demo.born(63, 140), '+201006645512');
   s := gen_random_uuid();
   perform demo.w_bed(doctor, jsonb_build_array(demo.e('admitted', ward, s, d2 + interval '10 hours', jsonb_build_object('department_id', ward,
-    'admit_source', 'emd', 'reason', 'community-acquired pneumonia'), s)), 6);
+    'admit_source', 'emd', 'reason', 'community-acquired pneumonia'), s)), 7);
   perform demo.w(doctor, jsonb_build_array(demo.e('note', ward, s, d2 + interval '10 hours 20 minutes', demo.note('history_physical',
     E'hx: cough and fever for five days, breathless since yesterday\nex: crackles at the right base; alert\nplan: IV antibiotics, fluids, obs with NEWS2'))));
   perform pg_temp.obs(s, d2 + interval '10 hours 30 minutes', 128, 78, 96, 38.0, 95, 20, 'air', 'a');   -- 2
@@ -43,8 +44,9 @@ begin
   -- 4 L/min (28 %), down to 2 L/min (24 %), then nasal cannula at 1 L/min
   perform demo.patient(demo.id('bedside', 'patient:abdelmoneim'), array['Abdelmoneim', 'Hassan'], 'Shahin', 'male', demo.born(72, 30), '+201227760394');
   s := gen_random_uuid();
-  perform demo.w_bed(doctor, jsonb_build_array(demo.e('admitted', ward, s, d2 + interval '21 hours', jsonb_build_object('department_id', ward,
-    'admit_source', 'emd', 'reason', 'COPD exacerbation, type 2 respiratory failure'), s)), 7);
+  -- on the ward with no bed yet (the ward's beds are full at demo.sql's third load: see the top)
+  perform demo.w(doctor, jsonb_build_array(demo.e('admitted', ward, s, d2 + interval '21 hours', jsonb_build_object('department_id', ward,
+    'admit_source', 'emd', 'reason', 'COPD exacerbation, type 2 respiratory failure'), s)));
   perform demo.w(doctor, jsonb_build_array(demo.e('note', ward, s, d2 + interval '21 hours 15 minutes', demo.note('history_physical',
     E'hx: COPD, oxygen at home at night, worse for three days\nex: wheeze both sides; alert; blood gas pCO₂ 58 mmHg\nplan: nebulisers, steroids, controlled oxygen: target SpO₂ 88–92 % (NEWS2 on SpO₂ scale 2)'))));
   perform pg_temp.obs(s, d2 + interval '21 hours 30 minutes', 146, 88, 112, 37.8, 86, 26, 'oxygen', 'a', '86_87', 'venturi_mask', 4, 28);   -- 8, high

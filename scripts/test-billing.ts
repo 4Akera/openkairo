@@ -3,12 +3,17 @@
 // words; billing names no other pack, in its screens or its server.   npm run test:billing
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { blankCard, cardLines, cardSum, cents, drawerWords, egp, owedMarks, owedWords, payArgs, receiptLines, signed, wire, type Card, type Lines, type Payment } from '../src/packs/billing/money'
+import { blankCard, cardLines, cardSum, cents, drawerWords, egp, owedMarks, owedWords, payArgs, printedWords, receiptLines, receiptView, signed, wire, type Card, type Lines, type Payment } from '../src/packs/billing/money'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { ReceiptPaper } from '../src/packs/billing/ReceiptPaper'
+import { ReceiptSlip } from '../src/packs/billing/ReceiptSlip'
+import { setClinicTimeZone } from '../src/core/ui/time'
 import { REFUSALS } from '../src/packs/billing/words'
-import { WORD, anywayDue, asHanded, asSent, centsOf, dueOf, handedDue, noData, ordersOf, restOf, rowButton, rowData, rowWaits, type RowData } from '../src/packs/billing/rows'
+import { WORD, anywayDue, asHanded, asSent, centsOf, chartData, dueOf, handedDue, noData, ordersOf, restOf, rowButton, rowData, rowWaits, type RowData } from '../src/packs/billing/rows'
 import { REFUSALS as PHARMACY_WORDS } from '../src/packs/pharmacy/answers'
 import type { OrderRow } from '../src/core/db/types'
-import type { PackRow } from '../src/core/screens/rows'
+import { chartRowOf, chartWait, waitsOf, type PackRow, type RowCtx } from '../src/core/screens/rows'
 import { registerWords, words } from '../src/core/db/words'
 
 let n = 0
@@ -37,7 +42,7 @@ test('money in piastres: typed or sent, at most two decimals, never below nothin
 test('the card\'s lines: each charge with where and when it came from; a sending department\'s lines as one; an open price empty', () => {
   const c = cardLines(lines, nameOf, hm)
   assert.deepEqual(c.map((l) => l.words), ['Visit · Internal Medicine', 'CBC', 'Chest X-ray', 'Pharmacy · Augmentin 1 g, Panadol Extra × 2'])
-  assert.deepEqual(c.map((l) => l.source), ['Internal Medicine · seen 10:12', 'Laboratory · ordered 10:24', 'Laboratory · ordered 10:25', 'Pharmacy · sent 10:30'])
+  assert.deepEqual(c.map((l) => l.source), ['Internal Medicine · checked in 10:12', 'Laboratory · ordered 10:24', 'Laboratory · ordered 10:25', 'Pharmacy · sent 10:30'])
   assert.deepEqual(c.map((l) => l.price), [15000, 8000, null, 12650]); assert.deepEqual(c.map((l) => l.open), [false, false, true, false])
   assert.deepEqual(c[3].sent, ['s1', 's2'])
   const h = cardLines({ charges: [], sent: [] }, nameOf, hm, [{ name: 'Nexium 40', quantity: 1, amount: '75', order_item: 'rx2' }], 'ph')
@@ -88,6 +93,41 @@ test('the receipt\'s lines: each charge, a department\'s sent or handed lines as
   assert.deepEqual(receiptLines(p, nameOf), [{ words: 'Visit · Internal Medicine', amount: 15000 }, { words: 'Chest X-ray', amount: 30000 },
     { words: 'Pharmacy · Augmentin 1 g, Panadol Extra × 2', amount: 12650 }])
   assert.deepEqual(receiptLines({ lines: [{ n: 1, kind: 'charge', department_id: 'lab', name: 'CBC', quantity: null, amount: '-80.00', typed: false }] }, nameOf), [{ words: 'CBC', amount: -8000 }])
+})
+// the receipt printed (§3.13 Printing, owner 2026-10-08): the same drawing as the screen's, on the 80 mm roll
+setClinicTimeZone('Africa/Cairo')
+const paid: Payment = { payment_id: 'p1', receipt: 'R-00412', department_id: 'cash', patient_id: 'pt', method: 'cash', total: '480.00', discount: '20.00', discount_reason: 'Staff',
+  received: '500.00', change: '20.00', at: '2026-10-08T07:05:00Z', author_id: 'u', by: 'Mona Saad', reason: null, refund_of: null, refunded_by: null,
+  lines: [{ n: 1, kind: 'charge', department_id: 'im', name: null, quantity: null, amount: '150.00', typed: false }, { n: 2, kind: 'charge', department_id: 'lab', name: 'CBC', quantity: null, amount: 80, typed: false },
+    { n: 3, kind: 'sent', department_id: 'ph', name: 'Augmentin 1 g', quantity: 1, amount: 270, typed: false }], prints: [] }
+const header = { name: 'Nile Clinic', logo: null, address: '12 Nile St, Cairo', phone: '02 2345 6789', tax_number: '123-456-789' }
+const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim()
+test('the receipt as kept: the clinic, its number, date and time, the patient, each line with its amount, the discount, the total, cash and change, who took it', () => {
+  const v = receiptView(paid, nameOf, { name: 'Magdy Rizk', number: 3301 })
+  assert.deepEqual([v.title, v.number, v.patient, v.total, v.by, v.refunded, v.gives_back], ['Receipt', 'R-00412', 'Magdy Rizk · 3301', 48000, 'Taken by Mona Saad', null, null])
+  assert.deepEqual(v.lines.map((l) => [l.words, l.amount]), [['Visit · Internal Medicine', 15000], ['CBC', 8000], ['Pharmacy · Augmentin 1 g', 27000]])
+  assert.deepEqual(v.discount, { words: 'Discount · Staff', amount: -2000 }); assert.deepEqual(v.tender, [{ words: 'Cash received', amount: 50000 }, { words: 'Change', amount: 2000 }])
+  assert.deepEqual(receiptView({ ...paid, method: 'card', received: null, change: null }, nameOf, null).tender, [{ words: 'Card', amount: 48000 }])
+  assert.equal(receiptView({ ...paid, patient_id: null }, nameOf, null).patient, 'No patient on record', 'erased: no patient')
+  const t = text(renderToStaticMarkup(createElement(ReceiptPaper, { view: v, header })))
+  for (const w of ['Nile Clinic', '12 Nile St, Cairo', 'Tel. 02 2345 6789 · Tax no. 123-456-789', 'Receipt R-00412 · 2026-10-08 10:05', 'Magdy Rizk · 3301', 'Visit · Internal Medicine 150.00',
+    'CBC 80.00', 'Pharmacy · Augmentin 1 g 270.00', 'Discount · Staff −20.00', 'Total 480.00', 'Cash received 500.00', 'Change 20.00', 'Taken by Mona Saad']) assert.ok(t.includes(w), `${w} in: ${t}`)
+})
+test('printed, it says what the screen says; a later copy is marked Reprint with its time; a refund slip names the receipt it undoes; a refunded receipt says so', () => {
+  const v = receiptView(paid, nameOf, { name: 'Magdy Rizk', number: 3301 })
+  const screen = text(renderToStaticMarkup(createElement(ReceiptPaper, { view: v, header })))
+  assert.equal(text(renderToStaticMarkup(createElement(ReceiptSlip, { data: v, header, reprint: null }))), screen, 'the first copy: the screen\'s words, nothing more')
+  assert.equal(text(renderToStaticMarkup(createElement(ReceiptSlip, { data: v, header, reprint: '10:50' }))), `Reprint · 10:50 ${screen}`)
+  const back = receiptView({ ...paid, receipt: 'R-00413', total: '-480.00', discount: 0, discount_reason: null, received: null, change: null, refund_of: 'R-00412', reason: 'charged twice', by: 'Mona Saad' }, nameOf, null)
+  assert.deepEqual([back.title, back.gives_back, back.by, back.total], ['Refund slip', 'Gives back receipt R-00412 · charged twice', 'Given back by Mona Saad', -48000])
+  assert.match(text(renderToStaticMarkup(createElement(ReceiptSlip, { data: back, header, reprint: null }))), /Refund slip R-00413 · .*Gives back receipt R-00412 · charged twice.*Total −480\.00/)
+  const refunded = receiptView({ ...paid, refunded_by: 'R-00413' }, nameOf, null)
+  assert.equal(refunded.refunded, 'Refunded · given back on R-00413'); assert.match(text(renderToStaticMarkup(createElement(ReceiptPaper, { view: refunded, header }))), /Refunded · given back on R-00413/)
+  assert.equal(printedWords([], (x) => x), ''); assert.equal(printedWords([{ at: '10:42', by: null }, { at: '10:50', by: null }, { at: '11:02', by: null }], (x) => x), 'Printed 10:42 · again 10:50, 11:02')
+  const src = read('src/packs/billing/Receipt.tsx')
+  assert.match(src, /record: recordCopy\(p, \(id\) => packOp<PrintCopy>\('billing\.print'/, 'the copy recorded inside the print, by billing\'s own operation')
+  assert.doesNotMatch(src.slice(0, src.indexOf("key: 'billing.receipt'")), /packOp[^\n]*'billing\.print'/, 'never before the print has begun')
+  assert.match(src, /patientId: p\.patient_id, purpose: 'PATADMIN'/, 'the print of the patient\'s receipt logged like a read')
 })
 test('a drawer counted: even, short or over, by how much', () => {
   assert.deepEqual(drawerWords(411000, 409000), { word: '20.00 short', tone: 'warn', difference: -2000 })
@@ -204,6 +244,26 @@ test('Pay first, per order: what billing holds unpaid, and under the department\
   assert.deepEqual(anywayDue(physio(sessions), ['s2'], own('none', { s2: [{ name: 'Session · 45 min', quantity: 1, amount: 250, paid: false }] })).lines, [],
     'already on an open bill as they stand: nothing goes twice')
 })
+test('the doctor\'s chart (owner, 2026-10-08): billing\'s word on an open order it holds unpaid, wherever performed; the word alone, nothing the chart prices', () => {
+  const d = chartData([{ waiting: ['lab1'] }, { waiting: ['s2'] }])
+  assert.deepEqual([...d.waiting].sort(), ['lab1', 's2']); assert.equal(d.payFirst, false); assert.equal(d.desk, 'none'); assert.equal(d.own.size, 0); assert.equal(d.owes.size, 0)
+  const row = { ...physio(undefined, ['s1', 's2', 'lab1']), key: 'chart pt' }
+  assert.deepEqual(rowWaits(row, d), [{ order: 's2', word: WORD, tone: 'warn' }, { order: 'lab1', word: WORD, tone: 'warn' }], 'what billing holds unpaid; s1 is not held')
+  assert.deepEqual(rowWaits(row, chartData(null)), [], 'not allowed to read (no read:record): nothing')
+  // through the core's rules, as the chart draws it: only where the reader's department uses billing; the word and its tone
+  const check = [{ pack: 'billing', waiting: (r: PackRow, _c: RowCtx, data: unknown) => rowWaits(r, (data as RowData | undefined) ?? noData()), anyway: () => {} }]
+  const rows = chartRowOf('pt', [{ ...order('s2'), status: 'active' }, { ...order('lab1'), status: 'completed' }] as OrderRow[])
+  const ctx = (packs: string[]): RowCtx => ({ list: 'chart', dept: { id: 'im', name: 'Internal Medicine', packs, declared: {} }, can: () => true })
+  const w = waitsOf(check, rows[0], ctx(['billing']), { billing: d })
+  assert.deepEqual(chartWait('s2', 'active', w, new Set()), { word: 'Waiting for payment', tone: 'warn', packs: ['billing'] })
+  assert.equal(w.has('lab1'), false, 'answered: not on the chart\'s row, so no word')
+  assert.equal(waitsOf(check, rows[0], ctx(['pharmacy']), { billing: d }).size, 0, 'a department that does not use billing sees no money word')
+  const index = read('src/packs/billing/index.tsx')
+  assert.match(index, /ctx\.list === 'chart' \? chartOf\(rows, ctx\)/, 'the chart reads billing.chart, never a list\'s read')
+  assert.match(index, /if \(!ctx\.can\('read:record'\)\) return chartData\(null\)/, 'for whoever reads the record there')
+  assert.match(index, /packOp<ChartWaiting>\('billing\.chart', ctx\.dept\.id, \{ patient_id: r\.patient_id, orders \}\)/)
+  assert.doesNotMatch(index, /anywhere/, 'no list read widened for it')
+})
 const sql = read('supabase/migrations/20260926000013_billing.sql')
 const code = (t: string) => t.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 test('billing\'s own words answer its own codes: none is the core\'s or another pack\'s (the first to register a code keeps it)', () => {
@@ -229,8 +289,8 @@ test('billing names no other pack, in its screens or its server (it learns of an
 })
 test('money never reaches the chart: billing draws its own screens, one button and one soft check on a row, never a mark, a banner word or a section', () => {
   const index = read('src/packs/billing/index.tsx')
-  assert.deepEqual([...index.matchAll(/register(\w+)\('([^']+)'/g)].map((m) => `${m[1]}:${m[2]}`),
-    ['Screen:billing.cashier', 'Screen:billing.today', 'Screen:billing.prices', 'RowAction:billing', 'SoftCheck:billing'])
+  assert.deepEqual([...index.matchAll(/register(\w+)(?:<\w+>)?\('([^']+)'/g)].map((m) => `${m[1]}:${m[2]}`),
+    ['Screen:billing.cashier', 'Screen:billing.today', 'Screen:billing.prices', 'Printout:billing.receipt', 'RowAction:billing', 'SoftCheck:billing'])
   assert.doesNotMatch(index, /registerRowMark|registerBannerWords|registerSection|registerTileLine|registerRenderer/)
 })
 console.log(`billing: ${n} groups passed`)

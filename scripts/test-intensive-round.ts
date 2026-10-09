@@ -66,9 +66,9 @@ function drip(key: string, doses: [number, number][], dose_unit = 'ug/kg/min') {
   for (const [d, h] of doses.slice(1)) { e = next(e, 'intensive.infusion', { key, status: 'running', dose: { value: String(d) }, dose_unit }, { occurred_at: ago(h) }); all.push(e) }
   return all
 }
-const card = (...es: ServerEntry[][]) => sofaFrom(input({ infusions: itemsOf(es.flat()).filter((i) => i.type === 'intensive.infusion'), values: [v(MAP, 80, 1)] })).cardio
+const card = (...es: ServerEntry[][]) => sofaFrom(input({ infusions: itemsOf(es.flat()).filter((i) => i.type === 'intensive.infusion'), values: [v(MAP, 80, 1)] })).cardiovascular
 
-test('cardio: the pressors in µg/kg/min, else the lowest MAP', () => {
+test('cardiovascular: the pressors in µg/kg/min, else the lowest MAP', () => {
   const nor = card(drip('noradrenaline', [[0.25, 10], [0.15, 5]]))
   assert.equal(nor.choice, '4'); assert.deepEqual(nor.words, ['noradrenaline 0.25 µg/kg/min, the most in 24 h'])
   assert.equal(card(drip('noradrenaline', [[0.3, 30], [0.08, 20]])).choice, '4', 'the version in force at the window\'s start counts')
@@ -76,12 +76,12 @@ test('cardio: the pressors in µg/kg/min, else the lowest MAP', () => {
   assert.equal(card(drip('dobutamine', [[5, 3]])).choice, '2')
   assert.equal(card(drip('dopamine', [[6, 3]])).choice, '3')
   assert.equal(card(drip('dopamine', [[16, 3]])).choice, '4')
-  assert.deepEqual(sofaFrom(input({ values: [v(MAP, 58, 4), v(MAP, 72, 2)] })).cardio, { choice: '1', words: [`MAP 58 at ${hm(ago(4))}`] })
+  assert.deepEqual(sofaFrom(input({ values: [v(MAP, 58, 4), v(MAP, 72, 2)] })).cardiovascular, { choice: '1', words: [`MAP 58 at ${hm(ago(4))}`] })
   const bp = E('vitals', { occurred_at: ago(2) })
-  assert.equal(sofaFrom(input({ values: [{ ...val('bp.sys', 'loinc:8480-6', 120, ago(2), bp) }, { ...val('bp.dia', 'loinc:8462-4', 80, ago(2), bp) }] })).cardio.choice, '0', 'BP 120/80: MAP 93')
+  assert.equal(sofaFrom(input({ values: [{ ...val('bp.sys', 'loinc:8480-6', 120, ago(2), bp) }, { ...val('bp.dia', 'loinc:8462-4', 80, ago(2), bp) }] })).cardiovascular.choice, '0', 'BP 120/80: MAP 93')
   assert.equal(card(drip('noradrenaline', [[0.3, 3]], 'mg/h')).choice, '0', 'a dose in mg/h is not counted: the MAP 80')
   assert.equal(card(drip('noradrenaline', [[0, 3]])).choice, '0', 'a pump at 0 is not counted: the MAP 80')
-  assert.equal(sofaFrom(input()).cardio.choice, null)
+  assert.equal(sofaFrom(input()).cardiovascular.choice, null)
 })
 
 const gcs = (total: number, h: number) => E('score', { occurred_at: ago(h), data: { score: 'gcs', total } })
@@ -112,7 +112,7 @@ test('goals: the data, the round\'s set, the lines', () => {
     map_target: { value: '65', unit: 'mmHg', ucum: 'mm[Hg]' }, balance_target: { value: '-500', unit: 'mL', ucum: 'mL' } })
   assert.equal(goalsMissing({ lines: {} }), 'Choose at least one goal, or write the goals')
   assert.equal(goalsMissing({ lines: {}, text: 'MAP ≥ 65' }), null); assert.equal(goalsMissing({ lines: {}, text: 'x', mapTarget: 'a' }), 'The MAP target: a number')
-  const p: ScoreParams = { score: SOFA, version: '1996', short: 'SOFA', inputs: { resp: '3', coag: '2', liver: '1', cardio: '4', cns: '0', renal: '1' }, result: null }
+  const p: ScoreParams = { score: SOFA, version: '1996', short: 'SOFA', inputs: { resp: '3', coag: '2', liver: '1', cardiovascular: '4', cns: '0', renal: '1' }, result: null }
   p.result = { score: SOFA, version: '1996', retired: false, items: [], so_far: 11, total: 11, complete: true, band: { key: 'sofa', labels: { en: 'of 24' }, min: 0, max: 24, tone: null },
     missing: [], problems: [], for: keyOf(p) } as unknown as ScoreParams['result']
   const [s, g] = roundEntries(p, { lines: {}, feeding: 'enteral' }, where, id)

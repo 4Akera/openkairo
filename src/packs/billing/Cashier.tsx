@@ -74,7 +74,7 @@ export function Cashier({ dept }: ScreenProps) {
     : <Card><ul>{o!.none.length ? o!.none.map((r) => { const p = who(r.patient_id)
         return <ListRow key={`${r.patient_id}:${r.department_id}`} number={p?.record_number ?? ''} name={fullName(p)} age={ageSex(p)} minutes={null}
           status={<span className="truncate text-muted">Nothing owed · {nameOfDept(r.department_id)}</span>} /> })
-        : <li><Empty>No one seen today is free of charges yet.</Empty></li>}</ul></Card>}
-    <p className="text-12 text-faint">A patient appears once something priced was ordered or seen, or a department sent its lines here, and while money paid for work not done is to be given back. The amount is the sum of the lines.</p>
+        : <li><Empty>No one here today is free of charges yet.</Empty></li>}</ul></Card>}
+    <p className="text-12 text-faint">A patient appears once checked in where a visit is priced, or something priced was ordered, or a department sent its lines here, and while money paid for work not done is to be given back. The amount is the sum of the lines.</p>
   </ScreenFrame>
 }

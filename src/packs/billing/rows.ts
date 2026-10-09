@@ -31,6 +31,12 @@ export function rowData(desk: Desk, w: Waiting | null, owed: { patient_id: strin
     owes: new Map((owed ?? []).map((r) => [r.patient_id, { total: cents(r.total) ?? 0, unpriced: r.unpriced ?? 0 }])) }
 }
 
+/** what billing.chart answers for a record's open orders: those waiting for payment, wherever performed (the words' orders alone) */
+export interface ChartWaiting { waiting: string[] }
+/** billing's reading of the doctor's chart (owner, 2026-10-08): the orders waiting, and nothing else — no desk, no Pay first of the
+ *  reader's department, no lines, nothing owed — so the chart's rows wait only on what billing holds (none read: nothing) */
+export const chartData = (parts: readonly ChartWaiting[] | null): RowData => ({ ...noData(), waiting: new Set((parts ?? []).flatMap((p) => p.waiting ?? [])) })
+
 /** the orders on these rows, each once (what the waiting read asks about), in reads of at most 500 */
 export function ordersOf(rows: readonly PackRow[]): string[][] {
   const all = [...new Set(rows.flatMap((r) => r.orders.map((o) => o.item)))].sort(); const out: string[][] = []

@@ -10,7 +10,7 @@ import type { ScoreParams } from '@core/screens/visit/score'
 import { Card } from '@core/ui'
 import { SOFA_ITEMS, type Evidence, type SofaItem } from './sofa'
 
-const LABEL: Record<SofaItem, string> = { resp: 'Breathing', coag: 'Platelets', liver: 'Bilirubin', cardio: 'Blood pressure', cns: 'GCS', renal: 'Kidney' }
+const LABEL: Record<SofaItem, string> = { resp: 'Breathing', coag: 'Platelets', liver: 'Bilirubin', cardiovascular: 'Blood pressure', cns: 'GCS', renal: 'Kidney' }
 
 export function SofaCard({ dept, params, set, evidence, history }: { dept: Department; params: ScoreParams; set: (patch: Record<string, unknown>) => void
   evidence: Record<SofaItem, Evidence>; history: { total: number; words: string }[] }) {

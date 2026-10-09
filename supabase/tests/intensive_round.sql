@@ -26,22 +26,22 @@ select t.as(null);
 \echo '── SOFA (1996): a declared table, six items of five choices, one band over 0–24'
 select t.ok(s.layer = 'intensive' and s.version = '1996' and s.short = 'SOFA' and s.alias = 'sofa' and s.source like 'Vincent JL%' and s.coding is null
   and s.labels ->> 'en' = 'SOFA (1996)', 'intensive.sofa 1996: SOFA, /sofa, Vincent 1996, no coding') from core.scores s where s.key = 'intensive.sofa';
-select t.ok((select array_agg(i ->> 'key' order by n) from jsonb_array_elements(s.items) with ordinality x(i, n)) = array['resp', 'coag', 'liver', 'cardio', 'cns', 'renal']
+select t.ok((select array_agg(i ->> 'key' order by n) from jsonb_array_elements(s.items) with ordinality x(i, n)) = array['resp', 'coag', 'liver', 'cardiovascular', 'cns', 'renal']
   and (select bool_and(i ->> 'input' = 'choice' and (select array_agg(c ->> 'value' order by m) from jsonb_array_elements(i -> 'choices') with ordinality y(c, m)) = array['0', '1', '2', '3', '4']
         and (select bool_and((c ->> 'points')::int = (c ->> 'value')::int) from jsonb_array_elements(i -> 'choices') c)) from jsonb_array_elements(s.items) i),
-  'its items resp, coag, liver, cardio, cns, renal: each five choices ''0''…''4'', the points their value') from core.scores s where s.key = 'intensive.sofa';
+  'its items resp, coag, liver, cardiovascular, cns, renal: each five choices ''0''…''4'', the points their value') from core.scores s where s.key = 'intensive.sofa';
 select t.ok(jsonb_array_length(s.bands) = 1 and s.bands -> 0 ->> 'key' = 'sofa' and (s.bands -> 0 ->> 'min')::int = 0 and (s.bands -> 0 ->> 'max')::int = 24
   and coalesce(s.bands -> 0 ->> 'tone', 'none') = 'none' and s.bands -> 0 -> 'labels' ->> 'en' = 'of 24', 'one band 0–24, no tone: "of 24"') from core.scores s where s.key = 'intensive.sofa';
 
 \echo '── its totals, as the server adds them up'
-select t.ok((core.score('intensive.sofa', '1996', '{"resp":"0","coag":"0","liver":"0","cardio":"0","cns":"0","renal":"0"}') ->> 'total')::int = 0, 'all 0: 0');
-select t.ok((core.score('intensive.sofa', '1996', '{"resp":"4","coag":"4","liver":"4","cardio":"4","cns":"4","renal":"4"}') ->> 'total')::int = 24, 'all 4: 24');
+select t.ok((core.score('intensive.sofa', '1996', '{"resp":"0","coag":"0","liver":"0","cardiovascular":"0","cns":"0","renal":"0"}') ->> 'total')::int = 0, 'all 0: 0');
+select t.ok((core.score('intensive.sofa', '1996', '{"resp":"4","coag":"4","liver":"4","cardiovascular":"4","cns":"4","renal":"4"}') ->> 'total')::int = 24, 'all 4: 24');
 select t.ok((r ->> 'total')::int = 11 and r -> 'band' ->> 'key' = 'sofa', '3 2 1 4 0 1: 11, band sofa')
-  from (select core.score('intensive.sofa', '1996', '{"resp":"3","coag":"2","liver":"1","cardio":"4","cns":"0","renal":"1"}') r) x;
+  from (select core.score('intensive.sofa', '1996', '{"resp":"3","coag":"2","liver":"1","cardiovascular":"4","cns":"0","renal":"1"}') r) x;
 select t.ok(not (r ->> 'complete')::boolean and r -> 'missing' = '["renal"]'::jsonb, 'no kidney: not complete, renal missing')
-  from (select core.score('intensive.sofa', '1996', '{"resp":"3","coag":"2","liver":"1","cardio":"4","cns":"0"}') r) x;
+  from (select core.score('intensive.sofa', '1996', '{"resp":"3","coag":"2","liver":"1","cardiovascular":"4","cns":"0"}') r) x;
 select t.ok(r -> 'problems' @> '[{"item":"coag","code":"unknown_choice"}]', 'platelets ''5'': unknown_choice')
-  from (select core.score('intensive.sofa', '1996', '{"resp":"3","coag":"5","liver":"1","cardio":"4","cns":"0","renal":"1"}') r) x;
+  from (select core.score('intensive.sofa', '1996', '{"resp":"3","coag":"5","liver":"1","cardiovascular":"4","cns":"0","renal":"1"}') r) x;
 
 \echo '── the daily goals, their action and screen; the ICU''s setup and the unit''s SOFA drugs'
 select t.ok(y.resources = array['CarePlan'] and y.base_type is null and y.to_fhir is not null and cardinality(y.checks) = 1,
@@ -68,7 +68,7 @@ create function pg_temp.line(p_code text, p_words text, p_site text default null
 $$;
 create function pg_temp.sofa(p_total int, p_dept uuid default '00000000-0000-0000-0000-0000000000d6', p_id uuid default null) returns jsonb language sql as $$
   select pg_temp.e('score', jsonb_build_object('score', 'intensive.sofa', 'version', '1996',
-    'inputs', '{"resp":"3","coag":"2","liver":"1","cardio":"4","cns":"0","renal":"1"}'::jsonb, 'total', p_total, 'band', 'sofa'), p_id, null, null, p_dept)
+    'inputs', '{"resp":"3","coag":"2","liver":"1","cardiovascular":"4","cns":"0","renal":"1"}'::jsonb, 'total', p_total, 'band', 'sofa'), p_id, null, null, p_dept)
 $$;
 create function pg_temp.goals(p_lines jsonb, p_id uuid default null) returns jsonb language sql as $$
   select pg_temp.e('intensive.goals', jsonb_build_object('feeding', 'enteral', 'head_up', true, 'lines', p_lines,

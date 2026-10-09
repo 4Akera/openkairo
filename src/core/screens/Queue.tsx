@@ -9,8 +9,23 @@ import { Card, Empty, Input, ListRow, ListSection, Spinner, Tag, minutesSince, m
 import { ageSex, backIn, matches, nextPatient, pendingWords, since, yearsOld } from './clinic/words'
 import { benchMarkRow, visitMarkRow } from './marks'
 import { useRowMarks } from './useMarks'
-import { packRowOf } from './rows'
-import { usePackRows } from './useRows'
+import { inTurn, packRowOf } from './rows'
+import { usePackRows, usePlaces } from './useRows'
+
+/** the clinic's rows in their turn (§5.7, core change (h)): the waiting band reordered by the places the packs give (a booked patient at
+ *  their time or number, walk-ins in the gaps), the rest as read; the queue and the chart's Done → next follow the same order. The clock
+ *  moves on its own, so a place that comes moves its patient up */
+export function useInTurn(rows: QueueRow[]): QueueRow[] {
+  const packRows = useMemo(() => rows.map((r) => packRowOf(r.id, visitMarkRow(r))), [rows])
+  const place = usePlaces('queue', packRows)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t) }, [])
+  const placeKey = packRows.map((r) => `${r.key}:${place(r) ?? ''}`).join(',')
+  return useMemo(() => { const at = new Map(packRows.map((r) => [r.key, place(r)]))
+    const waiting = inTurn(rows.filter((r) => r.band === 'waiting'), (r) => r.priority === 'routine' ? 1 : 0, (r) => Date.parse(r.arrived_at), (r) => at.get(r.id) ?? null, now)
+    return [...rows.filter((r) => r.band !== 'waiting'), ...waiting]
+  }, [rows, placeKey, now]) // eslint-disable-line react-hooks/exhaustive-deps
+}
 
 
 /** The clinic's list (spec 05): who is next, and who needs me. Next · Back · Waiting · With a doctor, then Waiting for
@@ -26,10 +41,12 @@ export function QueueList({ departmentId, compact = false, keys = false, frame }
   const [kbd, setKbd] = useState(false)                  // the keys are in use (arrows, typing): no hover
   const [arrows, setArrows] = useState(false)            // the arrows moved the cursor: show it as a bar
   const input = useRef<HTMLInputElement>(null); const list = useRef<HTMLUListElement>(null)
-  const all = useMemo(() => q.data?.rows ?? [], [q.data])
+  const read = useMemo(() => q.data?.rows ?? [], [q.data])
   // the packs on the rows (spec §5.4): a pack's button (Pay) and its card under the row; the words of orders waiting
-  const packRows = useMemo(() => all.map((r) => packRowOf(r.id, visitMarkRow(r))), [all])
+  const packRows = useMemo(() => read.map((r) => packRowOf(r.id, visitMarkRow(r))), [read])
   const packs = usePackRows('queue', packRows)
+  // the waiting in their turn (§5.7, core change (h)): urgent first, then a booked patient at their place, walk-ins in the gaps
+  const all = useInTurn(read)
   const f = filter.trim()
   // a search is for someone in particular: while one is typed, nobody is pinned as Next and the matches read plainly
   const next = compact || f ? null : nextPatient(all, org?.me.id)

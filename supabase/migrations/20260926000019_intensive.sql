@@ -507,7 +507,7 @@ select core.declare_score('intensive.sofa', 'intensive', '1996',
   {"key":"liver","labels":{"en":"Bilirubin mg/dL","ar":"البيليروبين"},"input":"choice","choices":[
    {"value":"0","points":0,"labels":{"en":"< 1.2"}},{"value":"1","points":1,"labels":{"en":"1.2–1.9"}},{"value":"2","points":2,"labels":{"en":"2.0–5.9"}},
    {"value":"3","points":3,"labels":{"en":"6.0–11.9"}},{"value":"4","points":4,"labels":{"en":"≥ 12.0"}}]},
-  {"key":"cardio","labels":{"en":"Blood pressure · drugs in µg/kg/min","ar":"ضغط الدم"},"input":"choice","choices":[
+  {"key":"cardiovascular","labels":{"en":"Blood pressure · drugs in µg/kg/min","ar":"ضغط الدم"},"input":"choice","choices":[
    {"value":"0","points":0,"labels":{"en":"MAP ≥ 70"}},{"value":"1","points":1,"labels":{"en":"MAP < 70"}},
    {"value":"2","points":2,"labels":{"en":"dopamine ≤ 5 or dobutamine"}},
    {"value":"3","points":3,"labels":{"en":"dopamine > 5, adrenaline ≤ 0.1 or noradrenaline ≤ 0.1"}},

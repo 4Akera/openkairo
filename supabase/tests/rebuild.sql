@@ -6,7 +6,7 @@ select t.fixture();
 select t.ok((select count(*) from core.entries where organization_id = '00000000-0000-0000-0000-00000000a001') > 150, 'the demo wrote ' ||
   (select count(*) from core.entries where organization_id = '00000000-0000-0000-0000-00000000a001') || ' entries');
 select t.ok(not exists (select 1 from core.stale), 'no pack is stale');
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 select t.ok(not exists (select 1 from core.outbox), 'the outbox drained');
 select t.ok(r = '[]'::jsonb, 'rebuild = live: ' || left(r::text, 300)) from core.rebuild_check() r;
 select t.ok(count(*) > 0, 'the rebuilt tables are not empty: ' || count(*) || ' presence rows') from base.presence where organization_id = '00000000-0000-0000-0000-00000000a001';

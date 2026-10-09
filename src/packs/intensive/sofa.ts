@@ -11,8 +11,8 @@ import { inForce, itemsOf, latestOf, type Item } from './items'
 import { infusionOf, shortOf, type UnitInfusion, type UnitSetting } from './unit'
 
 export const SOFA = 'intensive.sofa'
-export type SofaItem = 'resp' | 'coag' | 'liver' | 'cardio' | 'cns' | 'renal'
-export const SOFA_ITEMS: SofaItem[] = ['resp', 'coag', 'liver', 'cardio', 'cns', 'renal']
+export type SofaItem = 'resp' | 'coag' | 'liver' | 'cardiovascular' | 'cns' | 'renal'
+export const SOFA_ITEMS: SofaItem[] = ['resp', 'coag', 'liver', 'cardiovascular', 'cns', 'renal']
 /** a row's suggestion (null: the doctor picks it) and the words it rests on; warn: those of them shown in amber */
 export interface Evidence { choice: string | null; words: string[]; warn?: string[] }
 export interface SofaInput { values: ValueRow[]; infusions: Item[]; unit: UnitSetting; gcs: ServerEntry[]; airway: boolean; fio2: number | null
@@ -42,7 +42,7 @@ function ranIn(it: Item, since: string, now: string): ServerEntry[] {
 }
 const rowOf = (it: Item, unit: UnitSetting): UnitInfusion | null => infusionOf(unit, String(dataOf(it.versions[0]).key ?? ''))
 
-function cardio(x: SofaInput, inWindow: (r: ValueRow) => boolean): Evidence {
+function cardiovascular(x: SofaInput, inWindow: (r: ValueRow) => boolean): Evidence {
   const most: Partial<Record<NonNullable<UnitInfusion['sofa']>, { dose: number; name: string }>> = {}
   for (const it of x.infusions) {
     const row = rowOf(it, x.unit); if (!row?.sofa) continue
@@ -120,7 +120,7 @@ export function sofaFrom(x: SofaInput): Record<SofaItem, Evidence> {
   const support = x.airway ? `on the ventilator${x.fio2 !== null ? `, FiO₂ ${fmt(x.fio2)} %` : ''}`
     : x.oxygen ? `on ${x.oxygen === 'Air' ? 'air' : x.oxygen}` : null
   const resp: Evidence = { choice: null, words: [...(support ? [support] : []), PAO2_WORDS], warn: [PAO2_WORDS] }
-  return { resp, coag, liver, cardio: cardio(x, inWindow), cns, renal: renal(x, inWindow) }
+  return { resp, coag, liver, cardiovascular: cardiovascular(x, inWindow), cns, renal: renal(x, inWindow) }
 }
 
 /** the suggestions as the score card's inputs: only the rows the record supports */
