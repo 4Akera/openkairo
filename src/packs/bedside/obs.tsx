@@ -7,6 +7,8 @@ import { CircleAlert, TriangleAlert } from 'lucide-react'
 import { addToCommand } from '@core/screens/visit/commands'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
 import { news2From, obsNotes, type ObsNote } from './line'
+import { adultRules } from './obsdue'
+import { useWardRules } from './response'
 
 /** the kit's glyphs for a caution and a danger, as its callouts draw them */
 const GLYPH = { warn: TriangleAlert, danger: CircleAlert }
@@ -14,7 +16,7 @@ const TONE: Record<NonNullable<ObsNote['tone']> | 'none', string> = { danger: 't
 
 /** under the cards: each note on its own line */
 export function ObsNotes({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
-  const notes = obsNotes(items, ctx); if (!notes.length) return null
+  const notes = obsNotes(items, ctx, adultRules(useWardRules(ctx.departmentId), ctx.record?.patient)); if (!notes.length) return null
   return <ul aria-label="NEWS2 notes" className="grid gap-0.5">{notes.map((n) => { const Glyph = n.tone ? GLYPH[n.tone] : null
     return <li key={n.text} className={`flex items-start gap-1 text-12 ${TONE[n.tone ?? 'none']}`}>
       {Glyph && <Glyph aria-hidden className="mt-px size-3.5 shrink-0" />}<span>{n.text}</span></li> })}</ul>

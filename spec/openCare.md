@@ -1698,6 +1698,40 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- **Built, W1 (Ward nursing: obs due and the ward's NEWS2 response; 2026-10-09; lane beds-ward2)**: a department setting,
+  `bedside.response` ("NEWS2 · the response", on the department's card), gives each of five levels how often the obs are due and whom
+  to tell, with RCP 2017's response as its defaults: NEWS2 0 every 12 hours; 1–4 every 4 hours, the nurse in charge; a 3 in any one
+  sign hourly, the doctor caring for the patient; 5–6 hourly, the doctor now; 7 or more every 30 minutes, the doctor now, think of ICU.
+  A level a ward saves replaces RCP's whole (an empty Tell stays empty). The op `bedside.obs_due` reads each admitted stay's latest
+  NEWS2 (as `bedside.board` reads it), its level by the server's own points (the band first, then a 3 in one sign, then 0), the
+  ward's rule, and when the next obs are due (the NEWS2's time plus the rule's interval); the client decides "overdue" from that and
+  the clock. The board's tile says "obs due 15:06" (or "tomorrow 01:30") or "obs overdue 20 min" in amber right after "NEWS2 n"; the
+  new tab **Obs due** (`bedside.obs`, at the end of the starter setup's Screens line) lists every stay here, the most overdue first,
+  then those with no NEWS2 yet, with an Overdue view and its count; a row opens the stay. Under the cards, `/v`'s response line now
+  comes from the ward's setting and ends with "next obs due HH:MM". All of it only where the department's Screens line holds Obs due
+  (the line set there, else its default; an ICU or ER that ticks the pack for NEWS2 alone sets its own line and keeps piece 1's
+  words), and only for 16 and over (NEWS2's own rule; a child's row says "NEWS2 is for 16 and over"). The demo's Tahany has her first
+  obs 80 minutes before the load: NEWS2 4 with a 3 in systolic (88), hourly, so her tile reads "NEWS2 4 · obs overdue 20 min";
+  Samira's 6 is due 10 minutes after the load, Abdelmoneim's 3 (scale 2) two hours after it. In migration `…38_bedside_ward2.sql`,
+  apart from 17, so the parallel beds lane (pieces 3 and 4) merges without conflict there. Where W1 differs from plan piece 4: no
+  setting `bedside.obs_score` (NEWS2 is the pack's only obs score; it comes back when a second is declared); no derived table fed by a
+  listener (an op reads on demand: nothing to keep in step, the same answer, the server still decides the level); no banner word (the
+  banner's words come from the record, which lacks the ward's rule); no inline obs card in the tab (a row opens the chart, where `/v`
+  writes the set); no tile button Obs yet (piece 3's Give is one of the two a tile allows). The tile's words come from the board's
+  one read through the core's tile read (C7): `bedside.board`'s answer with `bedside.obs_due`'s beside it, read again when the stays
+  change and on the clinic's hints, never on a timer. *Chosen by Claude, awaiting the owner*: (1) NEWS2 1–4 defaults to 4 hours, the
+  shorter end of RCP's 4–6; 7 or more to a 30-minute clock where RCP says continuous monitoring; each ward can change both. (2) The
+  level order: the band first, so a 7 holding a 3 is treated as 7 or more. (3) Only a full set with NEWS2 restarts the clock; a
+  partial `/v` does not. (4) "Tell" is words only: nobody is paged or messaged. (5) Nothing stops a ward from making 7 or more slower
+  than 1–4: should the setting refuse that? (6) A doctor's own frequency for one patient, ceilings of care and end of life are not read
+  yet: the ward's rule applies to everyone. (7) The demo's Tahany now has her first obs; piece 1's "no obs for 1 h" is no longer in the
+  demo (any new admission still shows it). (8) The board has no clock of its own: the tile's "obs overdue N min" changes at its next
+  re-read (a change of the stays, a hint, a reload); the Obs due tab's minutes tick by themselves, its read is never on a timer (C1).
+  (9) The due word and the ward's response line only where the department's line holds Obs due. (10)–(14) plan piece 4's
+  `bedside.obs_score`, derived table, banner word, inline obs card and tile button Obs, dropped or deferred as above. (15) The clock
+  starts at the ward stay: a NEWS2 taken in the ER before the stay was passed on (Q3) is not counted, so the ward shows "no obs yet"
+  and, an hour on, amber; reading the previous stay's NEWS2 would need to know the stay it came from. (16) The response line names the
+  ward's "Tell" words, not a person (`#ward-obs` reads "Tell Dr. Ali Hassan now"). (17) A child's tile and row get no due word, and a child's `/v` line keeps piece 1's words with no due time.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2888,4 +2922,17 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **Ward nursing W1, obs due** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` (the setting
+  `bedside.response`, the screen `bedside.obs` at the end of `bedside.ward`'s line, the op `bedside.obs_due` with `rcp_response`,
+  `response_rules`, `level` and `obs_here`); `src/packs/bedside/` `response.ts`, `obsdue.ts`, `ObsDueTab.tsx` (the tab; `ObsDue.tsx`
+  would clash with `obsdue.ts` on a case-insensitive disk), `ward2.ts` (the tab, the rules hook, `useWardRead`: the tile line's read,
+  `bedside.board`'s with `bedside.obs_due`'s beside it under `obs`), a few lines in `index.tsx`, `line.ts`, `obs.tsx`; Tahany's first
+  obs in `supabase/demo/bedside.sql`; suites `bedside_ward2` (46: a new stay's clock starts afresh, a clinic that ticks the pack gets
+  no Obs due) and `bedside_ward2_demo` (7), `bedside` (55) and `demo` (84) with one and three checks changed, all green (the lane ran
+  this piece's suites, the demo's and those whose files it touched; the full `db:test` is the lead's, at the lane's end); node
+  `test:ward2` (10 groups), bedside 12, board 27, settings 12, composer 19, chart 16, screens 11, sections 19, banner 13, scores 7,
+  demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2; typecheck clean; lint 0 errors (71 warnings, none in these files);
+  `npm run build` builds; shapes regenerated (`BedsideResponseSetting`), logins unchanged. Reviewed: a child's `/v` gets piece 1's
+  words with no due time; the tab says nothing of a stay's NEWS2 until its read has answered; a time due just before midnight never
+  reads "tomorrow". Browser pass by the lead (`spec/shots/2026-10-09/ward2-w1/`).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

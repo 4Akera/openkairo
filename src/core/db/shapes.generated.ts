@@ -1003,6 +1003,29 @@ export interface AnaesthesiaStopListSetting {
     what: string
   }[]
 }
+/** setting bedside.response (bedside; owner department) */
+export interface BedsideResponseSetting {
+  high: {
+    every: number
+    tell?: string
+  }
+  low: {
+    every: number
+    tell?: string
+  }
+  medium: {
+    every: number
+    tell?: string
+  }
+  single: {
+    every: number
+    tell?: string
+  }
+  zero: {
+    every: number
+    tell?: string
+  }
+}
 /** setting billing.desk (billing; owner department) */
 export interface BillingDeskSetting {
   float?: string
@@ -1548,6 +1571,7 @@ export interface EntryData {
 /** each setting's data, by its key */
 export interface SettingData {
   'anaesthesia.stop_list': AnaesthesiaStopListSetting
+  'bedside.response': BedsideResponseSetting
   'billing.desk': BillingDeskSetting
   'billing.pay_first': BillingPayFirstSetting
   'billing.price': BillingPriceSetting

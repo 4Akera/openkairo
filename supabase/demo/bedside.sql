@@ -1,8 +1,8 @@
 -- Ward nursing's day (spec/openCare.md §5.6): three of the pack's own patients on the Medical Ward. Each set of obs is the base's
 -- vitals, ACVPU and air or oxygen among them, and NEWS2 (the base's score, bedside.news2 or, for a target of 88–92 %, bedside.news2_s2) in one set, by Nour Adel, the
 -- ward's nurse, with the totals the server adds up. Samira (pneumonia, day 3) climbs from NEWS2 2 to 6, medium; Abdelmoneim (COPD,
--- type 2 respiratory failure, day 3) is on SpO₂ scale 2 and settles from 8 to 3; Tahany arrived 90 minutes ago, has no bed yet and no
--- obs, so her tile says "no obs yet". Times relative to the load; ids in the pack's namespace; a reload erases these patients first.
+-- type 2 respiratory failure, day 3) is on SpO₂ scale 2 and settles from 8 to 3; Tahany arrived 90 minutes ago, has no bed yet, and
+-- her first obs (NEWS2 4, a 3 in systolic) are now overdue. Times relative to the load; ids in the pack's namespace; a reload erases these patients first.
 -- Only Samira takes a bed (7, else the next free): the Medical Ward's eight are shared with the base's three, the Blood bank's one,
 -- the journey's one and, at demo.sql's third load, the app's two, while a reload still holds the last load's stays until each layer
 -- erases its own; so Abdelmoneim waits on the ward with no bed yet, as Tahany does.
@@ -54,9 +54,12 @@ begin
   perform pg_temp.obs(s, d1 + interval '18 hours', 134, 80, 98, 37.2, 90, 20, 'oxygen', 'a', '88_92', 'venturi_mask', 2, 24);     -- 3
   perform pg_temp.obs(s, demo.ago(120), 132, 80, 96, 37.1, 91, 20, 'oxygen', 'a', '88_92', 'nasal_cannula', 1);                  -- 3
 
-  -- Tahany, 58: just arrived with pyelonephritis, no bed yet and no obs
+  -- Tahany, 58: just arrived with pyelonephritis, no bed yet; her first obs 80 minutes ago
   perform demo.patient(demo.id('bedside', 'patient:tahany'), array['Tahany', 'Ibrahim'], 'Gaafar', 'female', demo.born(58, 200), '+201114428863');
   s := gen_random_uuid();
   perform demo.w(doctor, jsonb_build_array(demo.e('admitted', ward, s, demo.ago(90), jsonb_build_object('department_id', ward,
     'admit_source', 'emd', 'reason', 'pyelonephritis; diabetes'), s)));
+  -- her first obs, ten minutes after she arrived: NEWS2 4, low, but a 3 in one sign (systolic 88), so RCP 2017 asks for hourly obs and
+  -- the doctor caring for her to be told; nobody has repeated them, so the board and Obs due say "obs overdue 20 min" (W1)
+  perform pg_temp.obs(s, demo.ago(80), 88, 54, 98, 38.0, 96, 18, 'air', 'a');   -- 4, low; 3 in sbp
 end $$;

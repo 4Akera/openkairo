@@ -5,6 +5,7 @@
 // 2017's response: a notice, never a stop). Pure: npm run test:bedside.
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
 import { current, draft, keyOf, offered, tableOf, type Inputs, type ScoreParams } from '@core/screens/visit/score'
+import { ruleNote, type Rules } from './response'
 export const NEWS2 = 'bedside.news2'
 export const NEWS2_S2 = 'bedside.news2_s2'
 export type Oxygen = 'air' | 'oxygen'
@@ -67,8 +68,8 @@ const en = (l?: Record<string, string>) => l?.en ?? ''
 const and = (xs: string[]) => xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs.join('')
 
 /** the lines under the cards: why there is no NEWS2, scale 2's reminder, pregnancy's caution, what NEWS2 still needs, a value the two
- *  cards no longer agree on, and once the server has added it up, RCP 2017's response for the total */
-export function obsNotes(items: Parsed[], ctx: Pick<Ctx, 'scores' | 'facts' | 'can' | 'packs'>): ObsNote[] {
+ *  cards no longer agree on, and once the server has added it up, RCP 2017's response for the total (the ward's own, given its rules) */
+export function obsNotes(items: Parsed[], ctx: Pick<Ctx, 'scores' | 'facts' | 'can' | 'packs'>, rules?: Rules, now = Date.now()): ObsNote[] {
   const out: ObsNote[] = []
   const sp = items.find(isNews2)
   const p = sp?.params as unknown as ScoreParams | undefined
@@ -95,7 +96,7 @@ export function obsNotes(items: Parsed[], ctx: Pick<Ctx, 'scores' | 'facts' | 'c
     else if (WORDS.has(sk) ? String(a) !== b : Number(a) !== Number(b)) out.push({ text: `The ${label} on the vitals (${a}) and on NEWS2 (${b}) differ: change it on the vitals card`, tone: 'warn' })
   }
   if (p?.score === NEWS2_S2) out.push(...scale2Notes(p, vit, ctx))
-  if (p && current(p) && p.result?.complete) out.push(response(p, ctx))
+  if (p && current(p) && p.result?.complete) out.push(rules ? ruleNote(p, ctx, rules, now) : response(p, ctx))
   return out
 }
 
@@ -116,7 +117,7 @@ function scale2Notes(p: ScoreParams, vit: Record<string, unknown> | undefined, c
   return out
 }
 
-/** RCP 2017's response to a total (piece 4 gives the ward its own) */
+/** RCP 2017's response to a total (no rules given: the node tests; the ward's own is ruleNote's) */
 function response(p: ScoreParams, ctx: Pick<Ctx, 'scores'>): ObsNote {
   const r = p.result!; const t = r.total ?? 0; const band = r.band?.key
   if (band === 'high') return { text: `NEWS2 ${t} · high · emergency response: watch continuously; tell the doctor now; think of ICU`, tone: 'danger' }
