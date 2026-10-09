@@ -1450,14 +1450,15 @@ picture says "held", read "waiting" (the soft check, below).
   for it would be the chargeables door, *Later*); a visit sent on to a department that bills is charged that department's fee too, and a
   visit that left unseen keeps its fee (*What is charged*, chosen in the build); a line a row hands with no order cannot be told paid,
   so it is handed again after it is paid (every line the pharmacy hands has its order); a service of a department that hands its own
-  lines (the pharmacy's Dispensing) can be priced in Billing → Prices, and then every prescription is charged that price as a service
-  besides the medicines its rows hand (and under Pay first waits on it too), and billing cannot tell such a service apart without naming
-  its pack (old audit F31; pinned by a test: a paid service charge never stands for the medicines' lines, which are still handed); a
-  department cannot withdraw an open bill it sent (only its order's stop voids it; a refund makes a paid open bill owed again unless its
-  order was stopped): whether it may, with a reason, is his to say; money a department's own lines took for more than was then given (a
+  lines (the pharmacy's Dispensing) can still be priced in Billing → Prices, but **an order its department priced itself (it handed or
+  sent its own lines for it) is never also charged from the price list**: not owed at the cashier, refused if paid (`priced_at_its_counter`),
+  never waiting on it under Pay first (`billing.self_priced`; chosen by Claude at the owner's request, 2026-10-08: "make best choices",
+  "simpler one"; old audit F31); a department **does not withdraw** an open bill it sent: a resend for the order replaces what was not
+  paid, and its order's stop voids it (a refund makes a paid open bill owed again unless its order was stopped) (chosen by Claude at the
+  owner's request, 2026-10-08); money a department's own lines took for more than was then given (a
   part paid, the rest not given) is not listed to give back — billing knows those lines only as handed — so its receipt is given back by
   hand; Given today hands its lines for the 24 hours the list keeps a row, so a medicine given and neither paid nor sent in that time is
-  not handed again; a part paid at one price and its rest handed at a later one is priced by name at the line's own price now.
+  not handed again; a part paid at one price and its rest handed at a later one is priced by name at the line's own price now (today's price: chosen by Claude at the owner's request, 2026-10-08).
 
 #### Core and base changes the owner approved
 Exactly these, approved by the owner on 2026-10-08 (afternoon) in place of the earlier list, with (c) extended to the doctor's chart's

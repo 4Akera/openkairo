@@ -255,6 +255,13 @@ create function billing.accounted(p_org uuid, p_order uuid, p_department uuid, p
        + case when p_sent then coalesce((select sum(s.amount) from billing.sent s where s.organization_id = p_org and s.order_item = p_order and s.department_id = p_department
                      and billing.sent_owed(p_org, s.id)), 0) else 0 end
 $$;
+-- an order its performing department prices itself: it handed or sent its own lines for it (paid or not). Such an order is never also
+-- charged from the price list, so nobody pays twice (chosen by Claude at the owner's request, 2026-10-08: "make best choices", "simpler one")
+create function billing.self_priced(p_org uuid, p_order uuid, p_department uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from billing.sent s where s.organization_id = p_org and s.order_item = p_order and s.department_id = p_department)
+      or exists (select 1 from billing.payment_lines l where l.organization_id = p_org and l.order_item = p_order and l.department_id = p_department
+                   and l.kind in ('handed', 'sent'))
+$$;
 -- an order the charges have not heard yet (billing listens after commit; a parked listener never): priced, or At the order, as the
 -- price stood when it was written, where the department performing it used billing then — what the charge will be (§5.4 Pay first)
 create function billing.priced_order(p_org uuid, p_order uuid) returns boolean language sql stable security definer set search_path = '' as $$
@@ -385,7 +392,8 @@ begin
       'from_department_id', c.from_department_id, 'visit_id', c.visit_id, 'at', c.at) || coalesce(billing.price(p_org, c.kind, c.service_id, c.department_id, c.priced_at), '{}')
       order by c.kind <> 'visit', c.at, c.name, c.item), '[]') into ch
     from billing.charges c where c.organization_id = p_org and c.patient_id = any (v_fam) and c.open and v_desk <> 'none'
-     and (v_desk = 'everyone' or c.department_id = p_department) and billing.paid_charge(p_org, c.item, c.department_id) is null;
+     and (v_desk = 'everyone' or c.department_id = p_department) and billing.paid_charge(p_org, c.item, c.department_id) is null
+     and not (c.kind = 'service' and billing.self_priced(p_org, c.item, c.department_id));
   select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'bill_id', s.bill_id, 'department_id', s.department_id, 'order_item', s.order_item, 'name', s.name,
       'quantity', s.quantity, 'amount', s.amount, 'at', s.at) order by s.at, s.id), '[]') into sl
     from billing.sent s where s.organization_id = p_org and s.patient_id = any (v_fam) and v_desk <> 'none' and (v_desk = 'everyone' or s.department_id = p_department)
@@ -428,7 +436,8 @@ begin
     insert into billing_owed
     select core.survivor(p_org, c.patient_id), c.department_id, c.kind, c.at, (pr ->> 'amount')::numeric, pr ? 'at_order', case when c.kind = 'service' then c.item end, c.name
       from billing.charges c, lateral (select billing.price(p_org, c.kind, c.service_id, c.department_id, c.priced_at) pr) x
-     where c.organization_id = p_org and c.open and (v_desk = 'everyone' or c.department_id = p_department) and billing.paid_charge(p_org, c.item, c.department_id) is null;
+     where c.organization_id = p_org and c.open and (v_desk = 'everyone' or c.department_id = p_department) and billing.paid_charge(p_org, c.item, c.department_id) is null
+     and not (c.kind = 'service' and billing.self_priced(p_org, c.item, c.department_id));
     insert into billing_owed
     select core.survivor(p_org, s.patient_id), s.department_id, 'sent', s.at, s.amount, false, s.order_item, s.name
       from billing.sent s where s.organization_id = p_org and s.patient_id is not null and (v_desk = 'everyone' or s.department_id = p_department) and billing.sent_owed(p_org, s.id);
@@ -577,6 +586,7 @@ begin
     if not c.open then perform core.refuse('charge_void', coalesce(c.name, 'visit')); end if;
     if v_desk = 'own' and c.department_id <> p_department then perform core.refuse('not_this_desk', coalesce(c.name, 'visit')); end if;
     if billing.paid_charge(p_org, c.item, c.department_id) is not null then perform core.refuse('already_paid', coalesce(c.name, 'visit')); end if;
+    if c.kind = 'service' and billing.self_priced(p_org, c.item, c.department_id) then perform core.refuse('priced_at_its_counter', coalesce(c.name, 'service')); end if;
     v_pr := billing.price(p_org, c.kind, c.service_id, c.department_id, c.priced_at);
     if v_pr ? 'at_order' then
       -- an open price: typed here, above nothing and no more than 10,000,000 (chosen in the build, awaiting the owner)
@@ -771,7 +781,7 @@ begin
                       and billing.priced_order(p_org, (r ->> 'item')::uuid));
   end if;
   v_wait := array(select distinct c.item from billing.charges c where c.organization_id = p_org and c.item = any (v_orders) and (p_department is null or c.department_id = p_department)
-                    and c.open and billing.pay_first(p_org, c.department_id) and billing.paid_charge(p_org, c.item, c.department_id) is null
+                    and c.open and billing.pay_first(p_org, c.department_id) and billing.paid_charge(p_org, c.item, c.department_id) is null and not billing.self_priced(p_org, c.item, c.department_id)
                   union select distinct s.order_item from billing.sent s where s.organization_id = p_org and s.order_item = any (v_orders)
                     and (p_department is null or s.department_id = p_department) and billing.pay_first(p_org, s.department_id) and billing.sent_owed(p_org, s.id)
                   union select unnest(v_new)

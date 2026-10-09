@@ -913,6 +913,28 @@ select t.as(:'pm');
 select t.ok(not (w -> 'own') ? '00000000-0000-0000-0000-00000000e431', 'a service charge paid never stands for the medicines the row hands: billing holds none of them, so they are still handed')
   from pg_temp.op('billing.waiting', :'ph', '{"orders":["00000000-0000-0000-0000-00000000e431"],"lines":true}') w;
 
+\echo '── no double pay (chosen by Claude at the owner''s request, 2026-10-08): an order its department priced itself is never also charged from the price list'
+select t.as(:'dr');
+select t.landed(t.w(pg_temp.rx('00000000-0000-0000-0000-00000000e440', '00000000-0000-0000-0000-00000000e441', 'Lipitor 20')), 'a third prescription for Magdy, a medicine he has not had');
+reset role;
+select core.drain() as drained;
+set role authenticated;
+select t.as(:'cr');
+select t.ok(exists (select 1 from jsonb_array_elements(pg_temp.lines(:'p3') -> 'charges') c where c ->> 'item' = '00000000-0000-0000-0000-00000000e441'),
+  'before the Pharmacy hands anything, the Dispensing price is owed at the cashier');
+select t.as(:'pm');
+select t.ok((pg_temp.op('billing.send', :'ph', jsonb_build_object('patient_id', :'p3', 'lines', jsonb_build_array(jsonb_build_object('name', 'Lipitor 20 · box',
+  'quantity', 1, 'amount', '35', 'order_item', '00000000-0000-0000-0000-00000000e441')))) ->> 'lines')::int = 1, 'the Pharmacy sends its own line for that prescription');
+select t.as(:'cr');
+select t.ok(not exists (select 1 from jsonb_array_elements(pg_temp.lines(:'p3') -> 'charges') c where c ->> 'item' = '00000000-0000-0000-0000-00000000e441'),
+  'now the Dispensing price is not owed: its department priced the order itself');
+select t.ok(exists (select 1 from jsonb_array_elements(pg_temp.lines(:'p3') -> 'sent') s where s ->> 'order_item' = '00000000-0000-0000-0000-00000000e441'),
+  'only the line the Pharmacy sent is owed');
+select t.refuses(format($$select pg_temp.pay('%s', '{"charges":[{"item":"00000000-0000-0000-0000-00000000e441","department_id":"%s"}]}'::jsonb)$$, :'p3', :'ph'), 'priced_at_its_counter');
+select t.as(:'pm');
+select t.ok(not (w -> 'waiting') ? '00000000-0000-0000-0000-00000000e441', 'and the price list never makes it wait for payment')
+  from pg_temp.op('billing.waiting', :'ph', '{"orders":["00000000-0000-0000-0000-00000000e441"]}') w;
+
 \echo '── who owes, paged when patients share a moment: each once, none skipped (the order the cursor reads)'
 select t.as(:'rec');
 select t.ok(count(*) = 3, 'three more patients') from (select public.save_patient(jsonb_build_object('department_id', :'desk', 'patient', jsonb_build_object('id', x, 'given', jsonb_build_array('Same'),

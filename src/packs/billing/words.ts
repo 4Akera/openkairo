@@ -9,6 +9,7 @@ export const REFUSALS: Record<string, string> = {
   already_refunded: 'Already given back', is_a_refund: 'A refund is not given back', drawer_count: 'Count the drawer in pounds and piastres',
   already_priced: 'That already has a price — change that one', price_or_order: 'A price, or At the order — one of them', too_much: 'At most 10,000,000',
   not_its_service: 'Not one of this department\'s services', too_many: 'Too many at once',
+  priced_at_its_counter: 'Its department prices this itself: take it with that department\'s lines',
 }
 /** a small heading inside a card (the kit's label look) */
 export const LABEL = 'text-11 font-semibold uppercase tracking-[0.06em] text-faint'

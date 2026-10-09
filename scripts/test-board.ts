@@ -294,8 +294,9 @@ test('the chart\'s wiring: one live read a chart (the center), its word and tone
   const pane = src('src/core/screens/chart/center/EncounterPane.tsx'); const rowsTsx = src('src/core/screens/useRows.tsx')
   assert.match(pane, /useOrderWaits\(useMemo\(\(\) => chartRowOf\(c\.patientId, orders\), \[c\.patientId, orders\]\)\)/, 'the record\'s open orders, read once for the center')
   assert.match(pane, /tables: c\.r\.server\.tables, waitOf,/, 'handed to the blocks')
-  assert.match(rowsTsx, /list === 'chart' \? \[\] : rowActionDefs\(\)/, 'on the chart no row action is asked, so none loads or draws')
-  assert.match(rowsTsx, /export function useOrderWaits\(rows: PackRow\[\]\)[^]*usePackData\('chart', rows, null\)/, 'the reader\'s department, as on a list')
+  assert.match(rowsTsx, /checksOnly \|\| placesOnly \? \[\] : rowActionDefs\(\)/, 'a page that only shows words asks no row action, so none loads or draws')
+  assert.match(rowsTsx, /export function useOrderWaits\(rows: PackRow\[\]\)[^]*usePackData\('chart', rows, null, \{ checksOnly: true \}\)/,
+    'on the chart the waiting word reads soft checks only (no row action is asked), in the reader\'s department, as on a list')
   const orders = src('src/core/screens/chart/blocks/Orders.tsx'); const rx = src('src/core/screens/chart/blocks/Prescription.tsx')
   assert.match(orders, /const wait = row \? env\.waitOf\?\.\(row\.item, row\.status\) \?\? null : null/)
   assert.match(orders, /\{wait && <p className="text-13"><Tag tone=\{wait\.tone \?\? 'warn'\}>\{wait\.word\}<\/Tag><\/p>\}/, 'the word in its tone, alone')
