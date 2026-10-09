@@ -1584,7 +1584,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   a length is written as the base's `height` with `method` *lying*, the head as `head`; a length and a height in one line are refused; the
   card for a child under two is Wt, Length, Head, Temp, Pulse, RR, SpO₂, and anyone else's the adult card with length or head when said
   (`visit/vitals.ts`). **C3** a pack command declared `worksFor` is offered where the department ticks the pack or a department using it
-  works for this one (`Ctx.servedBy`), and typed elsewhere says where it is offered; migration 22 (`core.declare_served(type)`): a pack
+  works for this one (`Ctx.servedBy`), and typed elsewhere says where it is offered; the pack's cards draw wherever such a command is
+  offered (`cardFor`: the Blood bank's transfusion card on a ward); migration 22 (`core.declare_served(type)`): a pack
   type extending a base type (not order) declared *served* is written with the base type's action (`write:given` for a transfusion
   record), and the pack's own check asks `core.pack_serves(org, department, pack)` (granted to it by the declaration) to refuse
   `not_served` elsewhere. **C4** `registerNewPatientStep(pack, {show, Part, missing, after})` (`shell/newPatientSteps.ts`): asked in
@@ -1593,7 +1594,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   {title, view, useRows, start, buttons})` (`ward/rows.ts`, `PackRows.tsx`): a pack's rows of today's work not yet in a place, under the
   board (a patient with a stay here left out), counted as a view of the board's toolbar; Start is the base's admission into a free place
   chosen inline, with the pack's own entries in the same set; at most two buttons of the pack's own, never a base word. Tests:
-  `npm run test:clinics-core`, `supabase/tests/clinics_core.sql`. The privileges migration is now `20260926000099_privileges.sql`.
+  `npm run test:clinics-core`, `supabase/tests/clinics_core.sql`. The privileges migration is now `20260926000099_privileges.sql`, and
+  `core.lock_pack` is defined in `20260926000010_core_guards.sql` so a pack migration below 99 may call it (tag `clinics-core-ready-2`).
 
 ---
 

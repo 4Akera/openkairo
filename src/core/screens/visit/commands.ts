@@ -37,7 +37,7 @@ export interface Command {
 }
 /** a pack's version of a command in its own department type: its label, parser and empty card */
 export interface CommandOverride { pack: string; departmentType: string; name: string; label?: string; example?: string; parse?: Command['parse']; empty?: Command['empty'] }
-type Where = Pick<Ctx, 'departmentType' | 'packCards' | 'packs'>
+type Where = Pick<Ctx, 'departmentType' | 'packCards' | 'packs'> & Partial<Pick<Ctx, 'departments' | 'departmentId' | 'servedBy'>>
 
 const commands = new Map<string, Command>(); const names = new Map<string, string>(); const overrides: CommandOverride[] = []
 export function registerCommand(c: Command) {
@@ -111,7 +111,10 @@ export function registerCard(r: CardRegistration) {
   if (CORE.has(r.function) && !r.departmentType) { console.error(`openCare: a pack cannot replace the ${r.function} card for the whole clinic — give it its department type`); return }
   cards.push(r)
 }
-/** the card for a draft here: its department type's (if the department uses pack cards), else the pack's own; undefined: core draws it */
+/** a pack whose works-for command is offered here (C3): a department using it works for this one, so its cards draw here too */
+const servesHere = (pack: string, w: Where) => [...commands.values()].some((c) => c.pack === pack && c.worksFor) && servedFrom(pack, w).length > 0
+/** the card for a draft here: its department type's (if the department uses pack cards), else the pack's own — where the department
+ *  uses the pack, or the pack serves it by a works-for command (the Blood bank's /transfuse on a ward); undefined: core draws it */
 export const cardFor = (fn: string, w?: Where) =>
   (w?.departmentType && w.packCards !== false ? cards.find((c) => c.function === fn && c.departmentType === w.departmentType && (!w.packs || w.packs.includes(c.pack))) : undefined)
-  ?? cards.find((c) => c.function === fn && !c.departmentType && !CORE.has(fn) && (!w?.packs || w.packs.includes(c.pack)))
+  ?? cards.find((c) => c.function === fn && !c.departmentType && !CORE.has(fn) && (!w?.packs || w.packs.includes(c.pack) || servesHere(c.pack, w)))

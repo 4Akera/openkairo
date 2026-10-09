@@ -22,10 +22,5 @@ grant execute on function public.write(jsonb), public.read(jsonb), public.choose
   public.setup(jsonb), public.erase_patient(jsonb), public.redact(jsonb), public.retry_pack(jsonb), public.pack_op(jsonb), public.my_users() to authenticated;
 grant execute on function core.may_listen(text), core.may_read_file(text), core.may_upload_file(text) to authenticated;
 
--- a pack's schema: nothing callable by PUBLIC, now and later
-create or replace function core.lock_pack(p_key text) returns void language plpgsql as $$
-begin
-  execute format('revoke all on all routines in schema %I from public, anon, authenticated', p_key);
-  execute format('alter default privileges for role %I revoke execute on functions from public', 'pack_' || p_key);
-end $$;
-revoke all on function core.lock_pack(text) from public, anon, authenticated;
+-- core.lock_pack (a pack's schema: nothing callable by PUBLIC, now and later) is defined in 20260926000010_core_guards.sql, so a pack
+-- migration numbered below this one may call it
