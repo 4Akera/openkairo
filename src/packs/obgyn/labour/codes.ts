@@ -6,6 +6,8 @@ import type { EntryData } from '@core/db/shapes.generated'
 import type { ServerEntry } from '@core/db/types'
 
 export const EXAM = 'obgyn.labour_exam'
+/** the birth (L2c): the pack's own type, its entry the mother's, in her stay */
+export const BIRTH = 'obgyn.birth'
 export type ExamData = EntryData['obgyn.labour_exam']
 export type Position = NonNullable<ExamData['position']>
 export type Liquor = NonNullable<ExamData['liquor']>

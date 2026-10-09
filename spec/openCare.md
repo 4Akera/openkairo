@@ -1790,7 +1790,28 @@ numbered as on its picture.
   patients there too — awaiting the owner**, who approved the baby's record (Q10), not those. Demo: Heba (a normal birth this morning, signed by Hanan Fouad; Post 1, her girl 3.1 kg in Cot 1,
   Apgar 8 · 9, vitamin K and eye ointment) and Marwa (a caesarean yesterday by Dr. Nermeen Fathy, blood loss 700 mL; Post 2, her boy
   3.35 kg in Cot 2, hepatitis B given too). *Chosen by Claude in the build, awaiting the owner:* the birth's fields and words, the
-  oxytocin and vitamin K doses, Apgar's table and words, the PPH thresholds' words.
+  oxytocin and vitamin K doses, Apgar's table and words, the PPH thresholds' words. **L2c, the birth (client):** the **birth card**
+  on the Labour tab (an inline card under her line; Birth in the tab's actions, or the tile's **Birth** button beside Partograph while
+  she is in labour, `?birth=1`): born at (now by default; a time still to come today is last night's, said "yesterday"), delivered by (me, or the stay's doctor), how, the perineum with
+  episiotomy and repaired (gone, and cleared, at a caesarean; an episiotomy with no tear is said under it, as the check refuses it),
+  the third stage (oxytocin on, its words following how: "10 units IM" or "5 units slow IV"; the placenta; the blood loss, and at 500
+  mL or more after a vaginal birth, 1000 after a caesarean, "PPH: 600 mL … Tell the doctor now. Only a notice." in red), and each
+  baby (sex, grams, Apgar at 1 and 5 minutes as the five signs' chips in the table's words with the server's total and band, asked
+  once all five are chosen, breathing at birth, vitamin K "1 mg IM" or "0.5 mg IM" under 1500 g, eye ointment, hepatitis B in the
+  first 24 h off, the ward's free cots by name or "No cot here"); "Another baby (twins)" adds a baby of its own, up to four. **Sign
+  the birth** (⌘↵) writes the one set itself through the core's door (`write`, with the babies' `patients` and the pregnancy's
+  `seen`): the composer's Sign writes one patient's drafts, and the picture's place under the banner would be a core door (a pack's
+  action in the banner, a set of several patients from the chart), so it is on ObGyn's own tab — noted for the owner. Sign waits
+  while an Apgar is being added up; what blocks it is said under its field. Warnings are listed in words with **Sign anyway** (the
+  same set id and entries, the warnings confirmed: never a stop of the card's own); a refusal is said and the draft kept (a changed
+  draft is a new set). Signed: "Signed: Baby of Salma Ahmed Abdelrahman, #10421", and she leaves the women in labour. Only for whoever
+  holds `write:obgyn.birth` and `manage:patients` there (else "not for your role"). After birth the tile says the mother's "born
+  06:40 · normal", or "CS day 1" / "day 2 after birth", each baby "girl 3.1 kg", and PPH in red when over; a baby's tile "3.1 kg ·
+  Apgar 8 · 9 · vitamin K given · hepatitis B due" (vitamin K due, or hepatitis B late after 24 hours of the stay, in amber; the doses
+  found by their drug words, as the card writes them); her Partograph and Birth go. The banner after a birth in the open stay: "PPH n
+  mL" in red when over, nothing else. *Chosen by Claude in the build, awaiting the owner:* the card's fields and words, the tile's
+  words, the cots offered (the free places named "Cot …"; every free place when no cot is free, offered but never chosen for the
+  baby).
 - **Built 2026-10-09, L2a (the owner's Q10):** the core part only — a set may make the newborns it is about (§3.9 step 3b): each a
   new record, its mother the patient of the set's first entry as "mother of", its own entries (the cot stay, …) beside hers in the
   same Done, twins (up to eight) numbered in turn, all or nothing (a refused, warned or busy set leaves no record, relation, snapshot
@@ -3035,4 +3056,16 @@ types, parked pack calls with per-call Retry, Postgres enums.
   settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2, bedside 12, obgyn 10,
   clinics-core 11, labour 9; typecheck clean; lint 0 errors; `npm run build` and `npx vite build` build. MEOWS (L2d, L2e) waits for
   the owner's next round.
+- 2026-10-09: **ObGyn's labour ward, piece L2c: the birth, client** (§5.6; lane `beds-labour`): `src/packs/obgyn/labour/` apgar.ts,
+  birth.ts and after.ts (pure: Apgar's signs, the birth card's model and its one set, the tile's words after birth and a baby's),
+  BirthCard.tsx and BabyCard.tsx (the card, writing its own set: the set id kept until the draft changes, Sign anyway on warnings),
+  board.ts (the stay's birth and a baby's data, in labour only before them, the Birth button, the banner's PPH), codes.ts (`BIRTH`),
+  index.tsx (the Birth button, the banner reads the birth), Labour.tsx (Birth, `?birth=1`, the signed line), useLabour.ts (her
+  standing pregnancy, the free cots); new node test `test:birth` (6 groups). No SQL changed. A set built by birth.ts for Salma (a
+  normal birth with twins into Cot 3 and 4, and a caesarean with one baby) lands as Hanan Fouad with no finding (written and rolled
+  back by hand). Run: `supabase db reset`; `gen:shapes --check` and `gen:logins --check` pass; `db:test` every suite green (53, demo
+  107, labour 94, newborn 65, obgyn 28 among them); `db:demo` twice (103 patients). Node: composer 19, chart 24 + 16, screens 11,
+  sections 19, banner 13, settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 + 2,
+  bedside 12, obgyn 10, clinics-core 11, labour 9, birth 6; typecheck clean; lint 0 errors; `npm run build` and `npx vite build`
+  build. The browser pass waits for the lead.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

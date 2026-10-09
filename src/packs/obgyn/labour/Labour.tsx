@@ -2,16 +2,21 @@
 // The women in labour as chips ("Delivery 1 · Salma Ahmed"), the chosen one kept in the link (?stay=); one line about her (her name,
 // age, G and P as her exam said them, the weeks, the bed, since when in active labour); the notice when she is past the alert or the
 // action line (only a notice: the doctor decides); the WHO's modified partograph and the grid by time under it. Nothing is typed
-// here: the composer's /ve, /ctx, /fhr and /v in her chart write what this draws ("Open the chart").
+// here: the composer's /ve, /ctx, /fhr and /v in her chart write what this draws ("Open the chart"). Birth (L2c; ?birth=1 from the
+// tile's Birth button) opens the birth card under her line (BirthCard.tsx: one Done with each baby's record); once signed she leaves
+// the women in labour, and a quiet line says whose records were made ("Signed: Baby of …, #10421").
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Baby } from 'lucide-react'
 import { banner } from '@core/db/views'
+import type { NewPatient, Outcome } from '@core/db/rpc'
 import type { PresenceRow } from '@core/db/types'
 import { useDepartment } from '@core/hooks/organization'
 import type { ScreenProps } from '@core/screens/registry'
 import { Button, Callout, Card, Chip, Empty, ScreenFrame, Spinner, errorText } from '@core/ui'
 import { hm, ymd } from '@core/ui/time'
 import { gpOf, stayOf } from './board'
+import { BirthCard } from './BirthCard'
 import { Partograph } from './Chart'
 import { LabourGrid } from './LabourGrid'
 import { examPoints, gridOf, noticeOf } from './grid'
@@ -35,13 +40,22 @@ export function Labour({ dept }: ScreenProps) {
   const bed = (r: PresenceRow) => org?.places.find((x) => x.id === r.place_id && x.department_id === dept.id)?.name ?? 'No bed'
   const who = (r: PresenceRow) => l.stays?.patients[r.patient_id]
   const choose = (item: string) => setParams((was) => { const n = new URLSearchParams(was); n.set('stay', item); return n }, { replace: true })
-  const s = l.selected
+  const birth = (open: boolean) => setParams((was) => { const n = new URLSearchParams(was); if (open) n.set('birth', '1'); else n.delete('birth'); return n }, { replace: true })
+  const [signed, setSigned] = useState<string | null>(null)
+  const done = (o: Outcome, made: NewPatient[]) => {
+    setSigned(`Signed: ${made.map((m) => `${m.full_name}, #${o.patients?.find((x) => x.id === m.id)?.number ?? '…'}`).join('; ')}`); birth(false)
+  }
+  // the card opens only at the woman asked for (never at another, when the one asked for is no longer in labour here)
+  const s = l.selected; const asked = params.get('stay'); const open = params.get('birth') === '1' && !!s && (!asked || asked === s.item)
+  const quiet = signed && <Callout tone="ok" role="status">{signed}</Callout>
   const filters = l.list.length > 0 && <div className="flex flex-wrap items-center gap-1.5">{l.list.map((r) => { const i = who(r)
     return <Chip key={r.item} shape="pill" on={r.item === s?.item} onClick={() => choose(r.item)}>{bed(r)} · {i ? i.given.slice(0, 2).join(' ') || i.full_name : 'Patient'}</Chip> })}</div>
-  const action = s && <Button size="sm" variant="outline" onClick={() => navigate(`/visit/${s.item}`)}>Open the chart</Button>
+  const action = s && <div className="flex flex-wrap gap-2">
+    {!open && <Button size="sm" variant="outline" onClick={() => { setSigned(null); birth(true) }}><Baby aria-hidden className="size-4" />Birth</Button>}
+    <Button size="sm" variant="outline" onClick={() => navigate(`/visit/${s.item}`)}>Open the chart</Button></div>
   if (l.error) return <ScreenFrame><Callout tone="danger">{errorText(l.error)}</Callout></ScreenFrame>
   if (l.isLoading) return <ScreenFrame><Spinner /></ScreenFrame>
-  if (!s) return <ScreenFrame><Card><Empty>No one is in labour on this ward.</Empty></Card></ScreenFrame>
+  if (!s) return <ScreenFrame>{quiet}<Card><Empty>No one is in labour on this ward.</Empty></Card></ScreenFrame>
   const i = who(s); const b = i ? banner(i) : null
   const g = gestation(stayOf(l.board, s.item)?.pregnancy, ymd(new Date(now).toISOString()))
   const gp = gpOf(exams)
@@ -49,7 +63,9 @@ export function Labour({ dept }: ScreenProps) {
     p.start ? `active labour since ${hm(p.start.at)}` : p.latest ? 'latent phase' : null].filter(Boolean).join(' · ')
   const notice = noticeOf(p)
   return <ScreenFrame filters={filters} action={action}>
+    {quiet}
     <p className="text-14 text-fg">{line}</p>
+    {open && i && <BirthCard key={s.item} stay={s} patient={i} pregnancy={l.pregnancy} ready={l.factsReady} factsError={l.factsError} cots={l.cots} now={now} onDone={done} onCancel={() => birth(false)} />}
     {notice && <Callout tone={notice.tone} title={notice.title}>{notice.text}</Callout>}
     {l.entriesError ? <Callout tone="danger">{errorText(l.entriesError)}</Callout> : l.entriesLoading ? <Spinner /> : <>
       <Card className="grid content-start gap-2 p-3">
