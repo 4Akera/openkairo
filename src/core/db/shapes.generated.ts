@@ -1169,6 +1169,13 @@ export interface HaematoInrSetting {
     reason: string
   }[]
 }
+/** setting haemodialysis.unit (haemodialysis; owner department) */
+export interface HaemodialysisUnitSetting {
+  hbv_chairs?: string[]
+  hcv_chairs?: string[]
+  hours: number
+  shifts: string[]
+}
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
   analysers: false
@@ -1570,6 +1577,7 @@ export interface SettingData {
   'familycare.checks': FamilycareChecksSetting
   'familycare.files': FamilycareFilesSetting
   'haemato.inr': HaematoInrSetting
+  'haemodialysis.unit': HaemodialysisUnitSetting
   'lis.large': LisLargeSetting
   'nephrology.renal_list': NephrologyRenalListSetting
   'obgyn.gynaecology': ObgynGynaecologySetting

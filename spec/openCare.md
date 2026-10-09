@@ -1698,6 +1698,25 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- **Built 2026-10-09, D1a: Dialysis's schedule (chosen by Claude at the owner's request, awaiting the owner)**: migration 21 declares
+  the pack `haemodialysis` ("Dialysis"; the word dialysis is one core files use), role block d4, no requires. Its starter setup
+  `haemodialysis.unit` makes the Dialysis unit: eight chairs (Chair 1 … Chair 6, HCV chair 7, HBV chair 8, label chair), outpatient
+  stays (AMB), the Bed board and a Schedule tab. The unit's setting `haemodialysis.unit` holds its shifts (1–4 start times, in order;
+  07:00, 11:30, 16:00), a session's hours (4) and the chairs kept for HBV and for HCV, by name as on the board (a place has no key);
+  a patient in the wrong chair is shown, never stopped. The standing schedule is the pack's own two tables (the plan's Q13), not
+  entries: `haemodialysis.slots` (a patient, Sat · Mon · Wed or Sun · Tue · Thu, a shift, a chair, from and until; one live slot a
+  patient, one a chair, pattern and shift; a change ends the slot and adds the next; one ended the day before it starts blocks
+  nothing) and `haemodialysis.moves` (one session moved, taken off a day, or an extra one, with its reason; undone, never deleted).
+  Both are stores, so Erase removes a patient's rows. They are written only through the op `haemodialysis.plan` (add, end, move,
+  undo; action `write:haemodialysis.schedule`; the unit's changes take turns) and read through `haemodialysis.week` (Saturday …
+  Thursday, and the sessions moved to the Friday after, read:queue). A chair holds one patient a day and shift, whether by a slot or
+  a move (chair_taken, also when a move is undone back into it); a patient comes once a day (already_due; a session moved to
+  another chair or shift on its own day is not a second); ending a slot undoes its sessions moved off later days; the setting
+  cannot cut a shift a live slot or a coming move still uses (shift_in_use). The unit's
+  nurse (`haemodialysis.nurse`, built on Nurse, with admitted, discharged and the schedule) and doctor (`haemodialysis.doctor`, built on
+  Doctor, with the schedule); a base Nurse or Doctor there reads it. Seed: the clinic turns the pack on, the unit at position 12,
+  Rasha Mounir (nurse) and Dr. Walid Hamza (doctor). D1b adds the session (the pack's type on the base's procedure), who is due under
+  the board, the board's read and the demo's patients.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2888,4 +2907,8 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **Dialysis, piece D1a** (§5.6; lane `beds-dialysis`): migration 21 (the pack, the unit's setup and setting, the
+  standing schedule's two tables, `haemodialysis.plan` and `haemodialysis.week`, the unit's nurse and doctor), its seed (Rasha Mounir,
+  Dr. Walid Hamza), suite `haemodialysis` 58 checks, `demo` 84 (`registry` 16, `boundary` 10); `test:demo` with the unit's two people; shapes and logins
+  regenerated.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
