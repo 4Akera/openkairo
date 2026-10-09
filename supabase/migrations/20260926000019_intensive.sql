@@ -5,6 +5,9 @@
 -- types for what the base lacks: the ventilator's settings (intensive.vent) and an infusion's rate (intensive.infusion, each rate change a
 -- new version of its infusion). A setting carried on from the hour before is never written again. The board's words come from the op
 -- intensive.board (the owner's C1). No role and no table of its own. Chosen by Claude in the build, awaiting the owner.
+-- Piece I2: SOFA (1996) as a declared score table; the morning round's daily goals as the pack's own type (intensive.goals, a CarePlan),
+-- signed with the SOFA in one set; the lines (central, arterial, urinary) as the base's procedures, in progress until removed; and the
+-- board's latest SOFA and "goals not done" through intensive.board.
 
 set client_min_messages = warning;
 
@@ -169,6 +172,95 @@ begin
     'dosage', jsonb_build_object('text', intensive.infusion_line(o), 'route', jsonb_build_object('text', 'iv'), 'rateQuantity', core.fhir_quantity(o -> 'data' -> 'rate')))));
 end $$;
 
+-- ── the daily goals (piece I2): a change continues goals; the targets in mmHg and mL; each line it decides on is one of this patient's line
+-- procedures, once ──
+create function intensive.goals_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p_entry ->> 'organization_id')::uuid; f jsonb := intensive.same_item(p_entry, 'intensive.goals'); li jsonb; v_type text;
+begin
+  if jsonb_array_length(f) > 0 then return f; end if;
+  -- the targets are read as mmHg and mL (the line and the plan say so): any other unit, or a MAP not above 0, is refused
+  if p_entry -> 'data' ? 'map_target' and (p_entry -> 'data' -> 'map_target' ->> 'ucum' is distinct from 'mm[Hg]'
+      or coalesce((p_entry -> 'data' -> 'map_target' ->> 'value')::numeric, 0) <= 0) then
+    return jsonb_build_array(jsonb_build_object('code', 'target_unit', 'level', 'refuse', 'detail', 'the MAP target in mmHg, above 0'));
+  end if;
+  if p_entry -> 'data' ? 'balance_target' and (p_entry -> 'data' -> 'balance_target' ->> 'ucum' is distinct from 'mL'
+      or p_entry -> 'data' -> 'balance_target' ->> 'value' is null) then
+    return jsonb_build_array(jsonb_build_object('code', 'target_unit', 'level', 'refuse', 'detail', 'the fluid balance target in mL'));
+  end if;
+  if (select count(*) <> count(distinct y ->> 'item') from jsonb_array_elements(coalesce(p_entry -> 'data' -> 'lines', '[]')) as z(y)) then
+    return jsonb_build_array(jsonb_build_object('code', 'duplicate', 'level', 'refuse', 'detail', 'a line decided twice'));
+  end if;
+  -- each line is one of the patient's procedures coded as a line (central, arterial, urinary catheter)
+  for li in select y from jsonb_array_elements(coalesce(p_entry -> 'data' -> 'lines', '[]')) as z(y) loop
+    v_type := null;
+    select x.type into v_type from core.pack_entries(v_org, array[(li ->> 'item')::uuid]) x
+     where x.item = (li ->> 'item')::uuid and x.item_version = 1 and x.patient_id = any (core.family(v_org, (p_entry ->> 'patient_id')::uuid))
+       and exists (select 1 from jsonb_array_elements(x.data -> 'concept' -> 'codings') c
+                    where c ->> 'system' = 'local.procedure' and c ->> 'code' in ('central_line', 'arterial_line', 'urinary_catheter'));
+    if v_type is distinct from 'procedure' then
+      return jsonb_build_array(jsonb_build_object('code', 'unknown_line', 'level', 'refuse', 'detail', li ->> 'item'));
+    end if;
+  end loop;
+  return '[]';
+end $$;
+create function intensive.goals_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
+  select concat_ws(' · ', 'Daily goals', 'MAP ≥ ' || (e -> 'data' -> 'map_target' ->> 'value') || ' mmHg', 'balance ' || (e -> 'data' -> 'balance_target' ->> 'value') || ' mL',
+    (select nullif(count(*), 0) || case when count(*) = 1 then ' line to remove' else ' lines to remove' end
+       from jsonb_array_elements(coalesce(e -> 'data' -> 'lines', '[]')) as z(y) where y ->> 'decision' = 'remove'),
+    nullif(left(e -> 'data' ->> 'text', 80), ''))
+$$;
+-- the goals as a CarePlan: an activity for each goal, each line decided on (naming its Procedure), each target
+create function intensive.goals_fhir(p jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p ->> 'org')::uuid; l jsonb := p -> 'entries' -> (jsonb_array_length(p -> 'entries') - 1); o jsonb; a jsonb := '[]'; k record; li jsonb; v_words text;
+        v_info jsonb := '[]'; v_later boolean; v_status text;
+begin
+  select e into o from jsonb_array_elements(p -> 'entries') with ordinality x(e, n) where e ->> 'type' <> 'crossed_out' order by n desc limit 1;
+  if o is null then return '[]'; end if;
+  for k in select * from (values ('feeding', 'Feeding'), ('analgesia', 'Analgesia'), ('sedation', 'Sedation'), ('thrombo', 'Clot prevention'),
+      ('ulcer', 'Stomach protection'), ('glucose', 'Glucose'), ('bowels', 'Bowels'), ('antibiotics', 'Antibiotics'), ('wean', 'Trial off the ventilator')) v(key, words) loop
+    continue when o -> 'data' ->> k.key is null;
+    a := a || jsonb_build_array(jsonb_build_object('detail', jsonb_build_object('status', 'in-progress', 'description', k.words || ': ' || replace(o -> 'data' ->> k.key, '_', ' '))));
+  end loop;
+  if o -> 'data' ? 'head_up' then
+    a := a || jsonb_build_array(jsonb_build_object('detail', jsonb_build_object('status', 'in-progress',
+      'description', 'Head up 30°: ' || case when (o -> 'data' ->> 'head_up')::boolean then 'yes' else 'no' end)));
+  end if;
+  if o -> 'data' ? 'map_target' then
+    a := a || jsonb_build_array(jsonb_build_object('detail', jsonb_build_object('status', 'in-progress', 'description', 'MAP at least ' || intensive.q(o -> 'data' -> 'map_target'))));
+  end if;
+  if o -> 'data' ? 'balance_target' then
+    a := a || jsonb_build_array(jsonb_build_object('detail', jsonb_build_object('status', 'in-progress', 'description', 'Fluid balance today ' || intensive.q(o -> 'data' -> 'balance_target'))));
+  end if;
+  -- a round's goals stand until the next round in the same stay: then they are completed, and so is each of their activities
+  v_later := o ->> 'visit_id' is not null and exists (select 1 from core.pack_kind(v_org, (p ->> 'patient')::uuid, 'intensive.goals', '{"current":true}'::jsonb) x
+    where x.visit_id = (o ->> 'visit_id')::uuid and x.item <> (o ->> 'item')::uuid and x.occurred_at > (o ->> 'occurred_at')::timestamptz);
+  v_status := case when l ->> 'type' = 'crossed_out' or coalesce((l ->> 'redacted')::boolean, false) then 'entered-in-error'
+                   when v_later then 'completed' else 'active' end;
+  for li in select y from jsonb_array_elements(coalesce(o -> 'data' -> 'lines', '[]')) as z(y) loop
+    v_words := null;
+    select x.data -> 'concept' ->> 'text' into v_words from core.pack_entries(v_org, array[(li ->> 'item')::uuid]) x where x.item = (li ->> 'item')::uuid and x.item_version = 1;
+    a := a || jsonb_build_array(jsonb_build_object('detail', jsonb_build_object('status', case li ->> 'decision' when 'remove' then 'scheduled' else 'in-progress' end,
+        'description', coalesce(v_words, 'Line') || ': ' || (li ->> 'decision'))));
+    -- the line itself is what the plan is about, not its outcome: CarePlan.supportingInfo, never activity.outcomeReference
+    v_info := v_info || jsonb_build_array(jsonb_build_object('reference', 'Procedure/' || (li ->> 'item')));
+  end loop;
+  -- a plan no longer active: its activities end with it (an ended round's 'remove' is no longer scheduled work)
+  if v_status <> 'active' then
+    select coalesce(jsonb_agg(jsonb_set(y, '{detail,status}', to_jsonb(case v_status when 'completed' then 'completed' else 'entered-in-error' end))), '[]')
+      into a from jsonb_array_elements(a) as z(y);
+  end if;
+  return jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('resourceType', 'CarePlan', 'id', o ->> 'item',
+    'meta', core.fhir_meta(l, coalesce((p ->> 'private')::boolean, false)),
+    'status', v_status,
+    'intent', 'plan', 'title', 'ICU daily goals', 'supportingInfo', case when jsonb_array_length(v_info) > 0 then v_info end, 'description', nullif(o -> 'data' ->> 'text', ''),
+    'subject', jsonb_build_object('reference', 'Patient/' || (p ->> 'patient')),
+    'encounter', case when o ->> 'visit_id' is not null then jsonb_build_object('reference', 'Encounter/' || (o ->> 'visit_id')) end,
+    'period', jsonb_build_object('start', core.fhir_date((o ->> 'occurred_at')::timestamptz, o ->> 'precision', v_org)),
+    'created', core.fhir_date((o ->> 'occurred_at')::timestamptz, o ->> 'precision', v_org),
+    'author', jsonb_build_object('reference', 'PractitionerRole/' || (o ->> 'author_id')),
+    'activity', case when jsonb_array_length(a) > 0 then a end)));
+end $$;
+
 -- ── the unit's setting: each infusion's key once; a units/h dose takes a bag in units, a mass rate a bag by mass; a bag has all three ──
 create function intensive.unit_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select coalesce((select jsonb_agg(f) from (
@@ -232,6 +324,13 @@ begin
         'latest', jsonb_build_object('by', 'key', 'at', 'at'))) r limit 1;
       v := v || jsonb_build_object('urine', jsonb_build_object('ml', n.ml, 'hours', n.hours, 'kg', v_kg));
     end if;
+    -- the stay's latest SOFA, and when its goals were last signed
+    select (x.data ->> 'total')::int as total, x.occurred_at as at into n from core.pack_kind(p_org, v_pt, 'score',
+        jsonb_build_object('current', true, 'data', jsonb_build_object('score', 'intensive.sofa'), 'limit', 20)) x
+     where x.visit_id = v_stay order by x.occurred_at desc limit 1;
+    if found then v := v || jsonb_build_object('sofa', jsonb_build_object('total', n.total, 'at', n.at)); end if;
+    v := v || jsonb_build_object('goals_at', (select max(x.occurred_at) from core.pack_kind(p_org, v_pt, 'intensive.goals',
+      jsonb_build_object('current', true, 'limit', 50)) x where x.visit_id = v_stay));
     v_out := v_out || jsonb_build_object(v_stay::text, v);
   end loop;
   return jsonb_build_object('patient_ids', to_jsonb(v_ids), 'stays', v_out);
@@ -265,7 +364,8 @@ select core.declare_setting('intensive.unit', 'intensive', 'department', $j${"ty
         "atc":{"type":"string","pattern":"^[A-Z][0-9]{2}[A-Z]{2}[0-9]{2}$"},
         "kind":{"enum":["vasopressor","inotrope","sedative","opioid","insulin","anticoagulant","antiarrhythmic","vasodilator","electrolyte","other"]},
         "dose_unit":{"enum":["ug/kg/min","ug/min","ug/h","mg/h","mg/kg/h","g/h","units/h"]},
-        "amount":{"type":"number","exclusiveMinimum":0},"amount_unit":{"enum":["ug","mg","g","units"]},"volume":{"type":"number","exclusiveMinimum":0}}}}}}$j$::jsonb,
+        "amount":{"type":"number","exclusiveMinimum":0},"amount_unit":{"enum":["ug","mg","g","units"]},"volume":{"type":"number","exclusiveMinimum":0},
+        "sofa":{"enum":["noradrenaline","adrenaline","dopamine","dobutamine"]}}}}}}$j$::jsonb,
   'intensive.unit_check(jsonb,jsonb)', labels => '{"en":"ICU chart","ar":"جدول العناية المركزة"}', form => 'department',
   fields => $j$[{"key":"day_starts","labels":{"en":"The ICU day starts at"},"help":{"en":"The hour (0–23) the chart's day and its fluid balance begin: 8 is 08:00."}},
     {"key":"infusions","labels":{"en":"The unit's infusions"},"help":{"en":"Each drug the unit runs by pump, with its usual bag; the chart works out mL/h from the dose."}},
@@ -280,25 +380,68 @@ select core.declare_setting('intensive.unit', 'intensive', 'department', $j${"ty
       "mg/h":{"en":"mg/h"},"mg/kg/h":{"en":"mg/kg/h"},"g/h":{"en":"g/h"},"units/h":{"en":"units/h"}}},
     {"key":"infusions.amount","labels":{"en":"Bag: amount"}},
     {"key":"infusions.amount_unit","labels":{"en":"Bag: amount in"},"choices":{"ug":{"en":"µg"},"mg":{"en":"mg"},"g":{"en":"g"},"units":{"en":"units"}}},
-    {"key":"infusions.volume","labels":{"en":"Bag: volume"},"unit":"mL"}]$j$::jsonb);
+    {"key":"infusions.volume","labels":{"en":"Bag: volume"},"unit":"mL"},
+    {"key":"infusions.sofa","labels":{"en":"SOFA counts it as"},"help":{"en":"For SOFA's blood pressure: which of its four drugs this is (doses in µg/kg/min)."},
+      "choices":{"noradrenaline":{"en":"Noradrenaline"},"adrenaline":{"en":"Adrenaline"},"dopamine":{"en":"Dopamine"},"dobutamine":{"en":"Dobutamine"}}}]$j$::jsonb);
 
 select core.declare_screen('intensive.chart', 'intensive', 'stays', '{"en":"ICU chart","ar":"جدول العناية المركزة"}', 'read:record');
 select core.declare_op('intensive.board', 'intensive', 'intensive.board(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
 
--- its starter setup (§5.2): six ICU beds, inpatient stays, the board and the ICU chart, the unit's day and its infusions
+-- ── piece I2: SOFA (1996), a declared table; the daily goals, their action and the Round screen ──
+-- No coding: no SOFA code is in the base's LOINC subset. One band over 0–24, so the line reads "SOFA 11, 1996 · of 24"
+select core.declare_score('intensive.sofa', 'intensive', '1996',
+  'Vincent JL, Moreno R, Takala J, Willatts S, De Mendonça A, Bruining H, Reinhart CK, Suter PM, Thijs LG. The SOFA (Sepsis-related Organ Failure Assessment) score to describe organ dysfunction/failure. Intensive Care Med 1996;22:707–710',
+  $j$[
+  {"key":"resp","labels":{"en":"Breathing · PaO₂/FiO₂","ar":"التنفس"},"input":"choice","choices":[
+   {"value":"0","points":0,"labels":{"en":"≥ 400"}},{"value":"1","points":1,"labels":{"en":"< 400"}},{"value":"2","points":2,"labels":{"en":"< 300"}},
+   {"value":"3","points":3,"labels":{"en":"< 200 on respiratory support"}},{"value":"4","points":4,"labels":{"en":"< 100 on respiratory support"}}]},
+  {"key":"coag","labels":{"en":"Platelets ×10³/µL","ar":"الصفائح الدموية"},"input":"choice","choices":[
+   {"value":"0","points":0,"labels":{"en":"≥ 150"}},{"value":"1","points":1,"labels":{"en":"< 150"}},{"value":"2","points":2,"labels":{"en":"< 100"}},
+   {"value":"3","points":3,"labels":{"en":"< 50"}},{"value":"4","points":4,"labels":{"en":"< 20"}}]},
+  {"key":"liver","labels":{"en":"Bilirubin mg/dL","ar":"البيليروبين"},"input":"choice","choices":[
+   {"value":"0","points":0,"labels":{"en":"< 1.2"}},{"value":"1","points":1,"labels":{"en":"1.2–1.9"}},{"value":"2","points":2,"labels":{"en":"2.0–5.9"}},
+   {"value":"3","points":3,"labels":{"en":"6.0–11.9"}},{"value":"4","points":4,"labels":{"en":"≥ 12.0"}}]},
+  {"key":"cardio","labels":{"en":"Blood pressure · drugs in µg/kg/min","ar":"ضغط الدم"},"input":"choice","choices":[
+   {"value":"0","points":0,"labels":{"en":"MAP ≥ 70"}},{"value":"1","points":1,"labels":{"en":"MAP < 70"}},
+   {"value":"2","points":2,"labels":{"en":"dopamine ≤ 5 or dobutamine"}},
+   {"value":"3","points":3,"labels":{"en":"dopamine > 5, adrenaline ≤ 0.1 or noradrenaline ≤ 0.1"}},
+   {"value":"4","points":4,"labels":{"en":"dopamine > 15, adrenaline > 0.1 or noradrenaline > 0.1"}}]},
+  {"key":"cns","labels":{"en":"GCS","ar":"مقياس غلاسكو"},"input":"choice","choices":[
+   {"value":"0","points":0,"labels":{"en":"15"}},{"value":"1","points":1,"labels":{"en":"13–14"}},{"value":"2","points":2,"labels":{"en":"10–12"}},
+   {"value":"3","points":3,"labels":{"en":"6–9"}},{"value":"4","points":4,"labels":{"en":"< 6"}}]},
+  {"key":"renal","labels":{"en":"Kidney · creatinine mg/dL or urine","ar":"الكلى"},"input":"choice","choices":[
+   {"value":"0","points":0,"labels":{"en":"< 1.2"}},{"value":"1","points":1,"labels":{"en":"1.2–1.9"}},{"value":"2","points":2,"labels":{"en":"2.0–3.4"}},
+   {"value":"3","points":3,"labels":{"en":"3.5–4.9 or urine < 500 mL/day"}},{"value":"4","points":4,"labels":{"en":"≥ 5.0 or urine < 200 mL/day"}}]}]$j$,
+  '[{"key":"sofa","labels":{"en":"of 24","ar":"من ٢٤"},"min":0,"max":24,"tone":null}]', '{"en":"SOFA (1996)","ar":"مقياس SOFA لفشل الأعضاء"}', 'SOFA', 'sofa');
+
+select core.declare_action('write:intensive.goals', 'intensive', 'department', '{"en":"Write the daily goals"}', everyday => true);
+select core.declare_type('intensive.goals', 1, 'intensive', $j${"type":"object","additionalProperties":false,"minProperties":1,"properties":{
+    "feeding":{"enum":["enteral","nil_by_mouth","eating","parenteral"]},"analgesia":{"enum":["controlled","needs_more"]},
+    "sedation":{"enum":["light","deep","none"]},"thrombo":{"enum":["heparin","stockings","not_yet"]},"head_up":{"type":"boolean"},
+    "ulcer":{"enum":["yes","not_needed"]},"glucose":{"enum":["on_target","insulin_infusion","above_target"]},
+    "bowels":{"enum":["opened","not_opened"]},"antibiotics":{"enum":["keep","narrow","stop","none"]},"wean":{"enum":["not_today","today"]},
+    "lines":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["item","decision"],
+      "properties":{"item":{"type":"string","format":"uuid"},"decision":{"enum":["keep","remove"]}}}},
+    "map_target":{"$ref":"#/$defs/quantity"},"balance_target":{"$ref":"#/$defs/quantity"},"text":{"type":"string"},"note":{"type":"string"}}}$j$::jsonb,
+  'intensive.goals_line(jsonb)', array['CarePlan'], to_fhir => 'intensive.goals_fhir(jsonb)', checks => array['intensive.goals_check(jsonb,jsonb)']::regprocedure[],
+  labels => '{"en":"Daily goals","ar":"أهداف اليوم"}');
+select core.declare_screen('intensive.round', 'intensive', 'stays', '{"en":"Round","ar":"المرور"}', 'read:record');
+
+-- its starter setup (§5.2): six ICU beds, inpatient stays, the board, the ICU chart and the Round, the unit's day and its infusions (the four
+-- pressors with their SOFA drug)
 select core.declare_setup('intensive.icu', 'intensive', 'stays', '{"en":"ICU","ar":"العناية المركزة"}', packs => array['intensive'],
-  screens => '{"screens":["base.beds","intensive.chart"],"opens":"base.beds"}',
+  screens => '{"screens":["base.beds","intensive.chart","intensive.round"],"opens":"base.beds"}',
   settings => $j${"department.encounter_class":{"class":"IMP"},"department.review_results":{"level":"critical"},"intensive.unit":{"day_starts":8,"infusions":[
-    {"key":"noradrenaline","name":"Noradrenaline","short":"noradrenaline","kind":"vasopressor","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50},
-    {"key":"adrenaline","name":"Adrenaline","short":"adrenaline","kind":"vasopressor","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50},
-    {"key":"dopamine","name":"Dopamine","short":"dopamine","kind":"vasopressor","dose_unit":"ug/kg/min","amount":200,"amount_unit":"mg","volume":50},
-    {"key":"dobutamine","name":"Dobutamine","short":"dobutamine","kind":"inotrope","dose_unit":"ug/kg/min","amount":250,"amount_unit":"mg","volume":50},
+    {"key":"noradrenaline","name":"Noradrenaline","short":"noradrenaline","kind":"vasopressor","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50,"sofa":"noradrenaline"},
+    {"key":"adrenaline","name":"Adrenaline","short":"adrenaline","kind":"vasopressor","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50,"sofa":"adrenaline"},
+    {"key":"dopamine","name":"Dopamine","short":"dopamine","kind":"vasopressor","dose_unit":"ug/kg/min","amount":200,"amount_unit":"mg","volume":50,"sofa":"dopamine"},
+    {"key":"dobutamine","name":"Dobutamine","short":"dobutamine","kind":"inotrope","dose_unit":"ug/kg/min","amount":250,"amount_unit":"mg","volume":50,"sofa":"dobutamine"},
     {"key":"propofol","name":"Propofol 1%","short":"propofol","kind":"sedative","dose_unit":"mg/h","amount":500,"amount_unit":"mg","volume":50},
     {"key":"midazolam","name":"Midazolam","short":"midazolam","kind":"sedative","dose_unit":"mg/h","amount":50,"amount_unit":"mg","volume":50},
     {"key":"fentanyl","name":"Fentanyl","short":"fentanyl","kind":"opioid","dose_unit":"ug/h","amount":2500,"amount_unit":"ug","volume":50},
     {"key":"insulin","name":"Soluble insulin","short":"insulin","kind":"insulin","dose_unit":"units/h","amount":50,"amount_unit":"units","volume":50},
     {"key":"magnesium","name":"Magnesium sulfate","short":"MgSO₄","kind":"electrolyte","dose_unit":"g/h","amount":10,"amount_unit":"g","volume":100}]}}$j$::jsonb,
   places => (select jsonb_agg(jsonb_build_object('key', 'icu_' || n, 'name', 'ICU ' || n, 'label', 'bed') order by n) from generate_series(1, 6) n),
-  help => '{"en":"Six ICU beds on the board, inpatient stays, and Critical care''s ICU chart: vitals, the ventilator, infusions, in and out, signed once an hour."}');
+  help => '{"en":"Six ICU beds on the board, inpatient stays, and Critical care''s ICU chart: vitals, the ventilator, infusions, in and out, signed once an hour; the morning round: SOFA and the daily goals, signed once."}');
 
 select core.lock_pack('intensive');

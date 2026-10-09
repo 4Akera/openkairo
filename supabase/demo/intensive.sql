@@ -3,7 +3,8 @@
 -- settings and the infusions' rates. Nabil (septic shock from pneumonia, day 3) is on the ventilator, his noradrenaline titrated up to 0.25, then
 -- weaned to 0.15 µg/kg/min; Samy (diabetic ketoacidosis with kidney injury, day 3) is on air, on an insulin infusion, with little urine. The last
 -- six whole hours are charted; the one now is left to type. Times relative to the load; ids in the pack's namespace; a reload erases these
--- patients first.
+-- patients first. Piece I2: Nabil's three lines, his SOFAs (13 on admission, 12 at the round the ICU day before, 11 at today's round, signed
+-- with the daily goals in one set) and this morning's bloods by the Laboratory; Samy's SOFA 4 on admission and no round yet this ICU day.
 select demo.layer('intensive');
 
 -- a set whose first entry takes an ICU bed: the bed named, else the next free by position (a patient admitted in the app since keeps
@@ -68,13 +69,27 @@ create or replace function pg_temp.icu_hour_set(p_stay uuid, p_at timestamptz, p
     || coalesce((select jsonb_agg(demo.e('observation', demo.id('intensive', 'icu'), p_stay, p_at, o) order by n) from jsonb_array_elements(p_obs) with ordinality x(o, n)), '[]')
     || p_more);
 $$;
+-- the ICU day the load falls in: from the setup's 08:00
+create or replace function pg_temp.icu_day() returns timestamptz language sql stable as $$
+  select case when demo.now() >= demo.midnight() + interval '8 hours' then demo.midnight() + interval '8 hours' else demo.midnight() - interval '16 hours' end
+$$;
+-- a SOFA as the server adds it up
+create or replace function pg_temp.icu_sofa(resp text, coag text, liver text, cardio text, cns text, renal text) returns jsonb language sql as $$
+  select demo.score('intensive.sofa', jsonb_build_object('resp', resp, 'coag', coag, 'liver', liver, 'cardio', cardio, 'cns', cns, 'renal', renal))
+$$;
+-- a line (central, arterial, urinary) as the base's procedure, in progress since it went in
+create or replace function pg_temp.icu_line(p_code text, p_words text, p_at timestamptz, p_site text default null) returns jsonb language sql stable as $$
+  select jsonb_strip_nulls(jsonb_build_object('concept', demo.concept('local.procedure', p_code, p_words), 'status', 'in-progress',
+    'performed', jsonb_build_object('value', to_jsonb(p_at), 'precision', 'minute'), 'body_site', case when p_site is not null then jsonb_build_object('text', p_site) end))
+$$;
 
 do $$
 declare icu uuid := demo.id('intensive', 'icu'); dr uuid := demo.id('intensive', 'doctor'); rn uuid := demo.id('intensive', 'nurse');
   d2 timestamptz := demo.midnight() - interval '2 days'; d1 timestamptz := demo.midnight() - interval '1 day'; s uuid; at timestamptz;
   nor_rx uuid := gen_random_uuid(); pro_rx uuid := gen_random_uuid(); fen_rx uuid := gen_random_uuid(); ins_rx uuid := gen_random_uuid();
   vent uuid := gen_random_uuid(); nor uuid := gen_random_uuid(); pro uuid := gen_random_uuid(); fen uuid := gen_random_uuid(); ins uuid := gen_random_uuid();
-  v2 uuid; n2 uuid; p2 uuid;
+  v2 uuid; n2 uuid; p2 uuid; cvc uuid := gen_random_uuid(); art uuid := gen_random_uuid(); uc uuid := gen_random_uuid(); o1 uuid := gen_random_uuid();
+  o2 uuid := gen_random_uuid(); b timestamptz;
   nor_d jsonb := '{"text":"Noradrenaline"}'; pro_d jsonb := '{"text":"Propofol"}'; fen_d jsonb := '{"text":"Fentanyl"}';
   ins_d jsonb := demo.concept('atc', 'A10AB01', 'Soluble insulin (human)');
   air jsonb := '{"consciousness":"a","oxygen":{"on":"air"}}';
@@ -127,6 +142,31 @@ begin
   vent := v2; nor := n2;
   perform pg_temp.icu_hour_set(s, pg_temp.icu_hour(1), pg_temp.icu_vit(96, 104, 50, 95), pg_temp.icu_fluids(67, null, 140, 55));
 
+  -- his lines, put in after the tube, one set: central (right internal jugular), arterial (left radial), urinary catheter
+  at := d2 + interval '5 hours 45 minutes';
+  perform demo.w(dr, jsonb_build_array(
+    demo.e('procedure', icu, s, at, pg_temp.icu_line('central_line', 'Central venous catheter', at, 'right internal jugular'), cvc),
+    demo.e('procedure', icu, s, at, pg_temp.icu_line('arterial_line', 'Arterial line', at, 'left radial'), art),
+    demo.e('procedure', icu, s, at, pg_temp.icu_line('urinary_catheter', 'Urinary catheter', at), uc)));
+  -- his SOFA on admission (13) and at the round of the ICU day before (12, that day's 09:30: always after his admission)
+  perform demo.w(dr, jsonb_build_array(demo.e('score', icu, s, d2 + interval '6 hours', pg_temp.icu_sofa('3', '1', '1', '4', '2', '2'))));
+  perform demo.w(dr, jsonb_build_array(demo.e('score', icu, s, pg_temp.icu_day() - interval '22 hours 30 minutes', pg_temp.icu_sofa('3', '2', '1', '4', '0', '2'))));
+  -- this morning's bloods, ordered three hours before the round: platelets 96, creatinine 1.6 (abnormal, not critical)
+  b := least(pg_temp.icu_day() + interval '90 minutes', demo.now()) - interval '3 hours';
+  perform demo.w(dr, jsonb_build_array(demo.lab_order('cbc', icu, s, b, o1), demo.lab_order('creat', icu, s, b, o2)));
+  perform demo.lab(o1, b, demo.cbc(false, 11.2, 14.6, 96));
+  perform demo.lab(o2, b, demo.creat(1.6));
+  -- today's round, one set: SOFA 11 and the daily goals (each line kept)
+  at := least(pg_temp.icu_day() + interval '90 minutes', demo.now());
+  perform demo.w(dr, jsonb_build_array(
+    demo.e('score', icu, s, at, pg_temp.icu_sofa('3', '2', '1', '4', '0', '1')),
+    demo.e('intensive.goals', icu, s, at, jsonb_build_object('feeding', 'enteral', 'analgesia', 'controlled', 'sedation', 'light', 'thrombo', 'heparin', 'head_up', true,
+      'ulcer', 'yes', 'glucose', 'on_target', 'bowels', 'not_opened', 'antibiotics', 'narrow', 'wean', 'not_today',
+      'lines', jsonb_build_array(jsonb_build_object('item', cvc, 'decision', 'keep'), jsonb_build_object('item', art, 'decision', 'keep'),
+        jsonb_build_object('item', uc, 'decision', 'keep')),
+      'map_target', demo.q(65, 'mmHg', 'mm[Hg]'), 'balance_target', demo.q(-500, 'mL', 'mL'),
+      'text', 'Goals today: MAP ≥ 65 off noradrenaline by tonight; negative 500 mL; chase the sputum culture; family meeting at 17:00.'))));
+
   -- Samy, 47: diabetic ketoacidosis with acute kidney injury, day 3, on air in ICU 3, on an insulin infusion, with little urine
   perform demo.patient(demo.id('intensive', 'patient:samy'), array['Samy', 'Ragab'], 'Hegazy', 'male', demo.born(47, 160), '+201123359071');
   s := gen_random_uuid();
@@ -137,6 +177,8 @@ begin
       || '{"consciousness":"c","oxygen":{"on":"air"}}'::jsonb),
     demo.e('note', icu, s, d2 + interval '23 hours 10 minutes', demo.note('history_physical',
       E'hx: type 1 diabetes, vomiting for two days, missed his insulin\nex: dry, Kussmaul breathing, drowsy and confused, GCS 14; glucose 512 mg/dL, ketones high, creatinine 3.6\nplan: fluids, insulin infusion by the DKA protocol, potassium, hourly glucose and urine'))));
+  -- his SOFA on admission: GCS 14 (confused), creatinine 3.6, on air with a normal BP → 4; no round yet this ICU day
+  perform demo.w(dr, jsonb_build_array(demo.e('score', icu, s, d2 + interval '23 hours 40 minutes', pg_temp.icu_sofa('0', '0', '0', '0', '1', '3'))));
   perform demo.w(dr, jsonb_build_array(demo.e('medication', icu, s, d2 + interval '23 hours 20 minutes',
     pg_temp.icu_rx(ins_d, 'infusion by the DKA protocol: 0.1 units/kg/h, then by the glucose'), ins_rx)));
   perform demo.w(rn, jsonb_build_array(demo.e('intensive.infusion', icu, s, d2 + interval '23 hours 30 minutes',

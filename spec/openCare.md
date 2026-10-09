@@ -1549,6 +1549,32 @@ numbered as on its picture.
   ICU, after Critical care. Drawn in the picture and not built: RASS (the base has no RASS score), the "By day" chip, lactate under
   Bloods (no LOINC row in the base's subset), FiO₂ as a fraction (written and drawn in %); LOINC rows for the ventilator's settings and
   UCUM rows for every dose rate would each be a base change.
+- *Built 2026-10-09 (Critical care, piece I2; chosen by Claude in the build, awaiting the owner):* SOFA (1996) is a declared score
+  table, `intensive.sofa` (Vincent et al., Intensive Care Med 1996): six items, each a choice '0'–'4' worth its value (breathing ·
+  PaO₂/FiO₂, platelets, bilirubin, blood pressure · drugs in µg/kg/min, GCS, kidney · creatinine or urine), one band 0–24 "of 24" with
+  no tone, alias `/sofa`, no coding (no SOFA code in the base's LOINC subset); its line reads "SOFA 11, 1996 · of 24", Settings → Scores
+  lists it. A third ICU tab, Round (`intensive.round`, on the setup's line), opened on a patient by each taken bed's second button,
+  Goals. Its left card, "SOFA · this morning", suggests each row from the record's worst of the last 24 hours, read through the reader
+  (one `base.values` table read, the stay's scores, the ICU chart's reads): the lowest platelets, the highest bilirubin and creatinine
+  (µmol/L converted), the day's urine only when the 24 whole hours before the current one are all charted ("urine charted 6 of 24 hours:
+  not enough to score"), the highest pressor dose above 0 in µg/kg/min by the unit's setting (each infusion row's new `sofa` field names noradrenaline, adrenaline,
+  dopamine or dobutamine) else the lowest MAP typed or worked out from a BP, the lowest GCS (shown but not chosen under a sedative:
+  "sedated (propofol): score the GCS before sedation"). Nothing is suggested for PaO₂ (not in the base's codes: "score it from the blood
+  gas") or for a GCS not recorded;
+  the core's score card shows each row's chips and points, the doctor checks each one, and the server adds them up, the earlier SOFAs
+  beside it ("yesterday 12 · admission 13"). The right card, "Daily goals · ward round", is the pack's own type `intensive.goals` (a
+  CarePlan; a round's goals, and their activities, are completed by the next round's; its check takes only the patient's line
+  procedures and targets in mmHg and mL): FAST HUGS BID as chips (the trial off the ventilator only while
+  ventilated), each line's keep or remove, the targets (MAP at least, the day's fluid balance) and the goals in words. The lines are
+  the base's procedures (`local.procedure` central_line, arterial_line, urinary_catheter, with their site), in progress until "Removed
+  now" writes a version that ends them (outcome removed, its own set), with their day since they went in; "+ Line" puts one in, and a
+  line the last round decided to remove that is still in reads "remove decided 09:30" in amber. One round card and one Sign (⌘↵): the
+  SOFA and the goals as two entries in one set (Q8 as drawn, awaiting the owner's answer); `write:intensive.goals` is everyday like
+  `write:score`, so the Nurse may sign it too. The board adds "SOFA n" and, in amber, "goals not done" until the round is signed after
+  the ICU day began (08:00, the unit's setting), through the op `intensive.board`; the chart's banner, for a stay in a department that uses the pack, says "Ventilated d3",
+  "SOFA 11" and "goals not done" (never an infusion: the banner's types are read on every chart in one page, so a pressor word there is
+  noted for the owner). Demo: Nabil's three lines, his SOFAs 13 → 12 → 11 and this morning's bloods (platelets 96, creatinine 1.6),
+  today's round with its goals; Samy's SOFA 4 on admission, his goals not done.
 
 ---
 
@@ -2185,4 +2211,14 @@ types, parked pack calls with per-call Retry, Postgres enums.
   tileWords), and composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11,
   registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; typecheck and `vite build` clean but for
   `src/pictures/bookings.tsx` (another session's).
+- 2026-10-09: **Critical care, piece I2: SOFA (1996) and the daily goals, one round signed once** (§5.6; lane `beds-icu`; no core or
+  base change): migration 19 (`intensive.sofa` 1996, `intensive.goals` with its check, line and CarePlan, `write:intensive.goals`, the
+  screen `intensive.round`, the unit's `sofa` field, the board's SOFA and goals), the demo (Nabil's lines, SOFAs and round, Samy's
+  SOFA), `src/packs/intensive` (sofa, goals, words, useRound, SofaCard, GoalsCard, Lines, Round; the tile's Goals button and words; the
+  banner's words). As run: `db:test` 35 suites, 1700 ok (intensive 64, intensive_round 39 new, registry 16, demo 95), the gen:shapes
+  and gen:logins checks clean; `db:demo` twice (37 patients, 17 open visits and stays, 413 entries); node tests composer 18, chart 24
+  and 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 12,
+  billing 19, bedside 12, `test:intensive` 7 and `test-intensive-round` 8 groups (coag, liver, renal, cardio, cns, resp and the
+  history, goals and lines, words and tile); lint 0 errors; typecheck and `vite build` clean but for `src/pictures/bookings.tsx`
+  (another session's).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

@@ -217,6 +217,32 @@ select t.ok(w -> 'oxygen' ->> 'on' = 'air' and jsonb_array_length(w -> 'infusion
   from icu_board, icu_stays s, lateral (select b -> 'stays' -> s.item::text w) x where s.patient_id = demo.id('intensive', 'patient:samy');
 select t.ok(b -> 'patient_ids' ? demo.id('intensive', 'patient:nabil')::text and b -> 'patient_ids' ? demo.id('intensive', 'patient:samy')::text,
   'the board names both for the read log') from icu_board;
+select t.ok(array_agg((e.data ->> 'total')::int order by e.occurred_at) = array[13, 12, 11],
+  'Nabil''s SOFAs in his stay: ' || array_agg(e.data ->> 'total' order by e.occurred_at)::text)
+  from core.entries e, icu_stays s where e.organization_id = demo.base('clinic') and e.type = 'score' and e.data ->> 'score' = 'intensive.sofa'
+   and s.patient_id = demo.id('intensive', 'patient:nabil') and e.patient_id = s.patient_id and e.visit_id = s.item;
+select t.ok(g.set_id = f.set_id
+  and (select array_agg(l ->> 'item' order by l ->> 'item') from jsonb_array_elements(g.data -> 'lines') l)
+    = (select array_agg(p.item::text order by p.item::text) from core.entries p, jsonb_to_recordset(p.data -> 'concept' -> 'codings') c(system text, code text)
+        where p.organization_id = demo.base('clinic') and p.type = 'procedure' and p.patient_id = g.patient_id and p.visit_id = g.visit_id
+          and p.data ->> 'status' = 'in-progress' and not exists (select 1 from core.entries y where y.organization_id = p.organization_id
+            and y.item = p.item and y.item_version > p.item_version)
+          and c.system = 'local.procedure' and c.code in ('central_line', 'arterial_line', 'urinary_catheter')),
+  'his latest SOFA and his daily goals in one set; the goals decide on his three lines, all in progress')
+  from core.entries g, lateral (select e.set_id from core.entries e where e.organization_id = g.organization_id and e.type = 'score' and e.data ->> 'score' = 'intensive.sofa'
+    and e.patient_id = g.patient_id order by e.occurred_at desc limit 1) f
+ where g.organization_id = demo.base('clinic') and g.type = 'intensive.goals' and g.patient_id = demo.id('intensive', 'patient:nabil');
+select t.ok(not exists (select 1 from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'intensive.goals' and e.patient_id = demo.id('intensive', 'patient:samy')),
+  'Samy has no daily goals yet');
+select demo.as(demo.id('intensive', 'doctor'));
+create temp table icu_board2 as select public.pack_op(jsonb_build_object('op', 'intensive.board', 'department_id', demo.id('intensive', 'icu'), 'args', '{}'::jsonb,
+  'purpose', 'TREAT')) b;
+select t.ok((w -> 'sofa' ->> 'total')::int = 11 and (w ->> 'goals_at')::timestamptz >= case when demo.now() >= demo.midnight() + interval '8 hours'
+    then demo.midnight() + interval '8 hours' else demo.midnight() - interval '16 hours' end,
+  'the board as Dr. Hany, Nabil: SOFA 11, the goals signed this ICU day')
+  from icu_board2, icu_stays s, lateral (select b -> 'stays' -> s.item::text w) x where s.patient_id = demo.id('intensive', 'patient:nabil');
+select t.ok((w -> 'sofa' ->> 'total')::int = 4 and w -> 'goals_at' = 'null'::jsonb, 'the board as Dr. Hany, Samy: SOFA 4, no goals')
+  from icu_board2, icu_stays s, lateral (select b -> 'stays' -> s.item::text w) x where s.patient_id = demo.id('intensive', 'patient:samy');
 
 \echo '── billing''s demo and the clinic''s choices between its packs (§5.4): the Cashier and its person, Pay first at the Laboratory, the Pharmacy taking its own payment; one paid, one waiting, one sent from the Pharmacy'
 select t.ok(core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('billing', 'cashier')) ->> 'takes' = 'everyone'

@@ -176,6 +176,27 @@ export type Given = {
 export interface Here {
   note?: string
 }
+/** intensive.goals v1 (intensive) */
+export interface IntensiveGoals {
+  analgesia?: 'controlled' | 'needs_more'
+  antibiotics?: 'keep' | 'narrow' | 'stop' | 'none'
+  balance_target?: Quantity
+  bowels?: 'opened' | 'not_opened'
+  feeding?: 'enteral' | 'nil_by_mouth' | 'eating' | 'parenteral'
+  glucose?: 'on_target' | 'insulin_infusion' | 'above_target'
+  head_up?: boolean
+  lines?: {
+    decision: 'keep' | 'remove'
+    item: string
+  }[]
+  map_target?: Quantity
+  note?: string
+  sedation?: 'light' | 'deep' | 'none'
+  text?: string
+  thrombo?: 'heparin' | 'stockings' | 'not_yet'
+  ulcer?: 'yes' | 'not_needed'
+  wean?: 'not_today' | 'today'
+}
 /** intensive.infusion v1 (intensive) */
 export interface IntensiveInfusion {
   amount?: Quantity
@@ -528,6 +549,7 @@ export interface IntensiveUnitSetting {
     kind?: 'vasopressor' | 'inotrope' | 'sedative' | 'opioid' | 'insulin' | 'anticoagulant' | 'antiarrhythmic' | 'vasodilator' | 'electrolyte' | 'other'
     name: string
     short?: string
+    sofa?: 'noradrenaline' | 'adrenaline' | 'dopamine' | 'dobutamine'
     volume?: number
   }[]
 }
@@ -666,6 +688,7 @@ export interface EntryData {
   'done': Done
   'given': Given
   'here': Here
+  'intensive.goals': IntensiveGoals
   'intensive.infusion': IntensiveInfusion
   'intensive.vent': IntensiveVent
   'left': Left

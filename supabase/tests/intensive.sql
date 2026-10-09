@@ -52,8 +52,8 @@ select t.ok(o.action = 'read:record' and o.patients, 'intensive.board: read:reco
 select t.ok(s.work = 'stays' and s.packs = array['intensive'] and s.settings -> 'department.encounter_class' ->> 'class' = 'IMP'
   and (select array_agg(p ->> 'key' order by n) from jsonb_array_elements(s.places) with ordinality x(p, n)) = array['icu_1', 'icu_2', 'icu_3', 'icu_4', 'icu_5', 'icu_6']
   and (select array_agg(p ->> 'name' order by n) from jsonb_array_elements(s.places) with ordinality x(p, n)) = array['ICU 1', 'ICU 2', 'ICU 3', 'ICU 4', 'ICU 5', 'ICU 6']
-  and s.screens = '{"screens":["base.beds","intensive.chart"],"opens":"base.beds"}'::jsonb and jsonb_array_length(s.settings -> 'intensive.unit' -> 'infusions') = 9,
-  'intensive.icu: stays, six ICU beds, inpatient, the bed board and the ICU chart, the unit''s nine infusions') from core.setups s where s.key = 'intensive.icu';
+  and s.screens = '{"screens":["base.beds","intensive.chart","intensive.round"],"opens":"base.beds"}'::jsonb and jsonb_array_length(s.settings -> 'intensive.unit' -> 'infusions') = 9,
+  'intensive.icu: stays, six ICU beds, inpatient, the bed board, the ICU chart and the Round, the unit''s nine infusions') from core.setups s where s.key = 'intensive.icu';
 
 \echo '── the server''s arithmetic: the dose a pump rate gives'
 select t.ok(round(intensive.dose_exact(5.9, 4, 'mg', 50, 78, 'ug/kg/min'), 4) = 0.1009, 'noradrenaline 4 mg/50 mL at 5.9 mL/h for 78 kg: 0.1009 µg/kg/min');

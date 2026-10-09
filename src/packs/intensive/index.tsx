@@ -2,12 +2,16 @@
 // the CCU. Each bed's tile says its stay's airway, its one infusion that matters most, the MAP and a low urine, read once per board
 // through the pack's own op (the owner's C1), and its button ICU chart opens the pack's tab on that patient: the hourly chart, one
 // column an hour signed once (vitals, the ventilator, infusions, in and out). Its types (the ventilator's settings, an infusion's rate)
-// are the server's.
+// are the server's. Piece I2: the Round tab (SOFA from the record's worst of 24 hours and the daily goals, signed once), its button
+// Goals on each taken bed, and the banner's words: the ventilation's day, the stay's SOFA, "goals not done".
 import { packOp } from '@core/db/rpc'
+import { registerBannerWords } from '@core/screens/chart/words'
 import { registerScreen } from '@core/screens/registry'
 import { registerTileButton, registerTileLine, registerTileLoad } from '@core/screens/ward/tiles'
 import { tileWords, type IcuBoard } from './board'
 import { IcuChart } from './IcuChart'
+import { Round } from './Round'
+import { icuWords } from './words'
 
 // the ICU chart, a tab beside the board (a pack's view in the chart's center would be a core door)
 registerScreen('intensive.chart', IcuChart)
@@ -18,4 +22,9 @@ registerTileLoad('intensive', async (_rows, ctx) => ctx.can('read:record') ? pac
 registerTileLine('intensive', (row, ctx, data) => tileWords(row, ctx, data, Date.now()))
 // its button on a taken bed: the ICU chart on this patient
 registerTileButton('intensive', { label: 'ICU chart', path: (row) => `/?tab=intensive.chart&stay=${row.item}` })
+// the morning round, a tab beside the chart; its button on a taken bed
+registerScreen('intensive.round', Round)
+registerTileButton('intensive', { label: 'Goals', path: (row) => `/?tab=intensive.round&stay=${row.item}` })
+// the banner's words, only where the department uses the pack; never the infusions (the banner reads its types in one page)
+registerBannerWords({ key: 'intensive.icu', types: ['procedure', 'score', 'intensive.goals'], words: (x) => icuWords(x) })
 export const key = 'intensive'

@@ -1,12 +1,14 @@
 // The ICU's words on each bed's tile (spec/openCare.md §5.6; the owner's C1, 2026-10-08): from the board's one read (the op
 // intensive.board), in this order, at most one of each: the airway (on a ventilator or NIV and since which day of the stay, off it in
 // the last day, else air or oxygen); one infusion (the first vasopressor or inotrope in amber, else the first running); the MAP while a
-// pressor runs or when it is under 65; the urine when under 0.5 mL/kg/h over the last hours. Pure.
+// pressor runs or when it is under 65; the urine when under 0.5 mL/kg/h over the last hours; the stay's latest SOFA and, in amber,
+// "goals not done" until the round is signed after the ICU day began (piece I2). Pure.
 import type { PresenceRow } from '@core/db/types'
 import type { TileCtx, TileWord, TileWords } from '@core/screens/ward/tiles'
 import { stayDay } from '@core/screens/chart/model/encounter'
 import { hm } from '@core/ui/time'
 import { AIRWAY, airwayKind } from './codes'
+import { dayStart } from './hours'
 import { DOSE_WORDS, infusionOf, isPressor, shortOf, unitOf, type DoseUnit } from './unit'
 
 /** what the op says of one stay */
@@ -16,6 +18,8 @@ export interface StayWords {
   infusions?: { key?: string; drug?: string; dose?: string; unit?: string; rate?: string; at?: string }[]
   map?: { value: number; at: string; measured: boolean }
   urine?: { ml: number; hours: number; kg: number | null }
+  sofa?: { total: number; at: string }
+  goals_at?: string | null
 }
 type Running = NonNullable<StayWords['infusions']>[number]
 export interface IcuBoard { patient_ids: string[]; stays: Record<string, StayWords> }
@@ -68,5 +72,12 @@ export function tileWords(row: PresenceRow, ctx: Pick<TileCtx, 'org' | 'dept'>, 
     // near the threshold one more decimal, so a low rate never reads as 0.5
     if (rate < 0.5) words.push({ text: `urine ${rate >= 0.45 ? rate.toFixed(2) : rate.toFixed(1)} mL/kg/h`, tone: 'warn' })
   }
+  // the stay's latest SOFA; the goals not signed since the ICU day began (piece I2)
+  const sofa = isObj(stay.sofa) ? num(stay.sofa.total) : null
+  if (sofa !== null) words.push(`SOFA ${sofa}`)
+  if (!goalsDone(stay.goals_at, now, unit.dayStarts)) words.push({ text: 'goals not done', tone: 'warn' })
   return words.length ? { words } : null
 }
+/** the goals were signed since the ICU day began (the unit's hour) */
+export const goalsDone = (goalsAt: unknown, now: number, dayStarts: number) =>
+  typeof goalsAt === 'string' && Date.parse(goalsAt) >= Date.parse(dayStart(new Date(now).toISOString(), dayStarts))

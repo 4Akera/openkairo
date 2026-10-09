@@ -186,7 +186,8 @@ test('the tile: the airway, one infusion, the MAP and a low urine, from the boar
   const NOW = Date.parse('2026-10-09T12:20:00Z'); const ago = (h: number) => new Date(NOW - h * 3600_000).toISOString()
   const row = (item: string): PresenceRow => presence(item, { kind: 'stay', state: 'admitted', department_id: 'icu', checked_in_at: ago(55) })
   const tc = { org, dept: { id: 'icu', packs: ['intensive'] } }
-  const board = (item: string, w: StayWords): IcuBoard => ({ patient_ids: ['pt'], stays: { [item]: w } })
+  // the goals signed an hour ago, so this ICU day's round is done (piece I2's word is tested in test-intensive-round.ts)
+  const board = (item: string, w: StayWords): IcuBoard => ({ patient_ids: ['pt'], stays: { [item]: { goals_at: ago(1), ...w } } })
   const nabil: StayWords = { airway: { code: 'invasive_ventilation', status: 'in-progress', since: ago(55), at: ago(55) },
     infusions: [{ key: 'fentanyl', drug: 'Fentanyl', dose: '75', unit: 'ug/h', rate: '1.5' }, { key: 'noradrenaline', drug: 'Noradrenaline', dose: '0.15', unit: 'ug/kg/min', rate: '8.8' },
       { key: 'propofol', drug: 'Propofol', dose: '100', unit: 'mg/h', rate: '10' }], map: { value: 67, at: ago(1), measured: true } }
