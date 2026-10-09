@@ -1,6 +1,6 @@
 // The composer's line (spec 05): "/" starts one of six commands, "#" a preset, anything else is today's note.
 // Pure, so it can be tested without a screen. Core's commands are registered at the bottom, as a pack registers its own.
-//   /v 148/92 84 37 86                   vitals by position (BP, pulse, temperature, weight, SpO₂) or by name (p 84 t 37.2)
+//   /v 148/92 84 37 86                   vitals by position (BP, pulse, temperature, weight, SpO₂) or by name (p 84 t 37.2); air or oxygen (2l, fio2 40, a device), ACVPU (vitals.ts)
 //   /rx metformin 500mg bd 30d for dm    prescription (dose, route, frequency, days, "for <problem>", "; instructions")
 //   /dx type 2 diabetes since 2019 ; poorly controlled   problem ("?" = suspected; since 2019 · 2019-03 · 3y · 6m)
 //   /al penicillin: rash severe · /al none   allergy · no known allergies
@@ -31,16 +31,13 @@ import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, f
 import { aliasLine, emptyScore, parseScore, scoreLine, type ScoreParams } from './score'
 import type { ScoreTable } from '../../db/types'
 import { PLAIN_SEND, type SendWords } from './send'
+import { parseVitals, vitalsWords } from './vitals'
 
-/** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it */
-export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string; action?: string }
+/** typed: the fields the line said itself (the rest are defaults) · id: a draft id fixed in advance, so a later line of a preset can link to it
+ *  · by: the pack whose addition to a core command derived this draft (commands.ts addToCommand, the owner's C3) */
+export interface Parsed { function: string; params: Record<string, unknown>; line: string; kind: string; tag?: string; append?: boolean; typed?: string[]; id?: string; action?: string; by?: string }
 export type Result = { ok: Parsed[] } | { error: string } | null
 
-const VITALS: Record<string, [string, string]> = {
-  p: ['pulse', 'P'], hr: ['pulse', 'P'], pulse: ['pulse', 'P'], t: ['temperature', 'T'], temp: ['temperature', 'T'],
-  w: ['weight', 'Wt'], wt: ['weight', 'Wt'], weight: ['weight', 'Wt'], h: ['height', 'Ht'], ht: ['height', 'Ht'], height: ['height', 'Ht'],
-  spo2: ['spo2', 'SpO₂'], sat: ['spo2', 'SpO₂'], sats: ['spo2', 'SpO₂'], o2: ['spo2', 'SpO₂'], rr: ['respiratory_rate', 'RR'],
-}
 const FREQ: Record<string, string> = {
   od: 'OD', qd: 'OD', daily: 'OD', bd: 'BD', bid: 'BD', tds: 'TDS', tid: 'TDS', qds: 'QDS', qid: 'QDS', q4h: 'q4h', q6h: 'q6h', q8h: 'q8h', q12h: 'q12h',
   weekly: 'weekly', monthly: 'monthly', prn: 'PRN', once: 'once', stat: 'stat', nocte: 'OD', mane: 'OD', hs: 'OD',
@@ -87,33 +84,6 @@ export function matchesOf<T extends { name: string; code?: string }>(items: T[],
     (x) => s.length >= 2 && !s.includes(' ') && words(x).map((w) => w[0]).join('').includes(s)]
   for (const f of steps) { const hit = items.filter(f); if (hit.length) return hit }
   return []
-}
-
-const POSITIONAL: [string, string, number, number][] = [['pulse', 'P', 20, 250], ['temperature', 'T', 30, 45], ['weight', 'Wt', 1, 400], ['spo2', 'SpO₂', 50, 100]]
-function vitals(words: string[]): Result {
-  const params: Record<string, number> = {}; const parts: string[] = []; let pos = -1
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i].toLowerCase()
-    if (w === 'v' || w === 'vitals') continue
-    if (pos >= 0 && /^\d+(\.\d+)?$/.test(w)) {           // 148/92 84 37 86: after a BP, bare numbers go in order
-      const n = Number(w)
-      while (pos < POSITIONAL.length && params[POSITIONAL[pos][0]] !== undefined) pos++
-      if (pos >= POSITIONAL.length) return { error: `Too many numbers after the BP: ${w}` }
-      const [k, l, lo, hi] = POSITIONAL[pos]
-      if (n < lo || n > hi) return { error: `${l} ${n} is not plausible — type it with its name (e.g. ${l.toLowerCase().replace('₂', '2')} ${n})` }
-      params[k] = n; parts.push(`${l} ${n}`); pos++; continue
-    }
-    const bp = (w === 'bp' ? words[++i] ?? '' : w).match(/^(\d{2,3})\/(\d{2,3})$/)
-    if (bp) { params.systolic = +bp[1]; params.diastolic = +bp[2]; parts.push(`BP ${bp[1]}/${bp[2]}`); pos = 0; continue }
-    const glued = w.match(/^([a-z]+[a-z0-9]*?)(\d+(?:\.\d+)?)$/)          // p84 · t37.2 · spo2 is a key, so check key first
-    const key = VITALS[w] ? w : glued && VITALS[glued[1]] ? glued[1] : null
-    if (!key) return { error: `Not a vital: “${words[i]}”. Try bp 140/90 p 80 t 37 w 70 h 170 spo2 98 rr 16` }
-    const raw = VITALS[w] ? words[++i] : glued![2]
-    const n = Number(raw); if (raw === undefined || Number.isNaN(n)) return { error: `${VITALS[key][1]} needs a number` }
-    params[VITALS[key][0]] = n; parts.push(`${VITALS[key][1]} ${n}`)
-  }
-  if (!parts.length) return null
-  return { ok: [{ function: 'vitals', params, line: parts.join(' · '), kind: 'vitals' }] }
 }
 
 const DUR_UNIT = /^(d|days?|w|wk|wks|weeks?|m|mo|months?)$/
@@ -256,8 +226,7 @@ export function parse(input: string, ctx: Ctx): Result {
 export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & Pick<Partial<Ctx>, 'send'>): string {
   const q = p.params as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
   switch (p.function) {
-    case 'vitals': return ([['systolic', 'BP'], ['pulse', 'P'], ['temperature', 'T'], ['weight', 'Wt'], ['height', 'Ht'], ['spo2', 'SpO₂'], ['respiratory_rate', 'RR']] as const)
-      .flatMap(([k, l]) => k === 'systolic' ? (q.systolic != null ? [`BP ${q.systolic}/${q.diastolic ?? '?'}`] : []) : q[k] != null ? [`${l} ${q[k]}`] : []).join(' · ')
+    case 'vitals': return vitalsWords(q)
     case 'medication': return q.action === 'stop' ? `Stop ${q.drug?.name}${q.stop_reason_text ? ` — ${q.stop_reason_text}` : ''}`
       : [q.action === 'change' ? 'Change:' : q.action === 'repeat' ? 'Repeat' : null, q.drug?.name, q.dose_number != null ? `${q.dose_number} ${q.dose_unit ?? ''}`.trim() : null,
          q.route && q.route !== 'oral' ? q.route : null, q.frequency, q.prn ? `${q.frequency !== 'PRN' ? 'PRN ' : ''}${q.prn_reason_text ? `for ${q.prn_reason_text}` : ''}`.trim() || null : null, q.duration_days ? `× ${q.duration_days}d` : null,
@@ -280,7 +249,7 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & 
 
 // ── core's six commands, one per building block; a pack registers its own the same way ──
 registerCommand({ name: 'v', group: 'record', title: 'Vitals', aliases: ['vitals', 'bp'], label: 'Vitals', example: '/v 148/92 84 37 86', action: 'write:vitals', writes: ['vitals'],
-  parse: (rest) => rest ? vitals(rest.split(/\s+/)) : null, empty: () => [{ function: 'vitals', kind: 'vitals', params: {}, line: '' }] })
+  parse: (rest) => rest ? parseVitals(rest.split(/\s+/)) : null, empty: () => [{ function: 'vitals', kind: 'vitals', params: {}, line: '' }] })
 registerCommand({ name: 'rx', group: 'orders', title: 'Prescription', aliases: ['med'], label: 'Prescription', example: '/rx metformin 500 bd 30d for dm', action: 'write:medication', writes: ['medication'],
   parse: (rest, ctx) => prescription(rest, ctx),
   empty: () => [{ function: 'medication', kind: 'prescription', line: '', params: { action: 'start', drug: { name: '' }, dose_number: null, dose_unit: null, route: null, frequency: null, prn: false, prn_reason_text: null, duration_days: null, instructions_text: null, problems: [] } }] })

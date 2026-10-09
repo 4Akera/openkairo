@@ -6,7 +6,7 @@ import { news2Rows } from './news2'
 
 export function News2({ p, own }: SectionBody) {
   const rows = news2Rows(own, p.rec, p.ctx.org)
-  if (!rows.length) return <Empty size="sm">No NEWS2 yet — type /obs with the vitals</Empty>
+  if (!rows.length) return <Empty size="sm">No NEWS2 yet — it comes with the obs: /v with BP, P, RR, T and SpO₂</Empty>
   const stay = rows.filter((r) => r.thisStay)
   return <div className="grid gap-1.5">
     {stay.length >= 2 && <Sparkline points={[...stay].reverse().map((r) => ({ at: r.at, value: r.total }))} width={160} height={28} label="NEWS2 this stay" />}

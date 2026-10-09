@@ -39,7 +39,11 @@ function vitals(q: Q): EntryData['vitals'] {
   const sys = qty(q.systolic, 'mmHg', 'mm[Hg]'); const dia = qty(q.diastolic, 'mmHg', 'mm[Hg]')   // a pressure is both or neither
   return clean<EntryData['vitals']>({ bp: sys && dia ? { sys, dia } : undefined,
     hr: qty(q.pulse, 'bpm', '/min'), rr: qty(q.respiratory_rate, '/min', '/min'), temp: qty(q.temperature, '°C', 'Cel'), spo2: qty(q.spo2, '%', '%'),
-    weight: qty(q.weight, 'kg', 'kg'), height: qty(q.height, 'cm', 'cm'), glucose: qty(q.glucose, 'mg/dL', 'mg/dL'), pain: qty(q.pain, '/10', '{score}') })
+    weight: qty(q.weight, 'kg', 'kg'), height: qty(q.height, 'cm', 'cm'), glucose: qty(q.glucose, 'mg/dL', 'mg/dL'), pain: qty(q.pain, '/10', '{score}'),
+    // ACVPU and air or oxygen (the owner's Q5): air alone, or oxygen with its device, its flow and FiO₂ as a percentage
+    consciousness: q.consciousness || undefined,
+    oxygen: q.oxygen === 'air' ? { on: 'air' } : q.oxygen === 'oxygen' ? clean<NonNullable<EntryData['vitals']['oxygen']>>({ on: 'oxygen', device: q.o2_device || undefined,
+      flow: qty(q.o2_flow, 'L/min', 'L/min'), fio2: qty(q.fio2, '%', '%') }) : undefined })
 }
 function problemData(q: Q, was?: EntryData['problem']): EntryData['problem'] {
   const code = String(q.code ?? '').startsWith('icd10:') ? String(q.code).slice(6) : null

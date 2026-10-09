@@ -1,8 +1,9 @@
--- 17 · Ward nursing (spec/openCare.md §5.6), piece 1. Its key is bedside; a person always reads "Ward nursing". (The spec's `ward` is a
--- word core files already use, so the lint would refuse it as a pack key.) It declares NEWS2 (the Royal College of Physicians, 2017) as
--- two of the server's score tables: SpO₂ scale 1, and scale 2 for a patient whose doctor set a target of 88–92 %. The ward writes NEWS2
--- as the base's score beside the base's vitals, in one set, from the pack's /obs line. It also declares its starter setup: a ward with
--- Ward nursing ticked. No type, table, action or role of its own yet. Proposed by Claude, awaiting the owner.
+-- 17 · Ward nursing (spec/openCare.md §5.6). Its key is bedside; a person always reads "Ward nursing". (The spec's `ward` is a word
+-- core files already use, so the lint would refuse it as a pack key.) It declares NEWS2 (the Royal College of Physicians, 2017) as two
+-- of the server's score tables: SpO₂ scale 1, and scale 2 for a patient whose doctor set a target of 88–92 %. NEWS2 is written by the
+-- base's /v, which Ward nursing adds NEWS2 to wherever a department uses the pack (the owner's C3): the base's score beside the base's
+-- vitals, in one set. The board shows each stay's latest NEWS2 through the pack's own op (the owner's C1). It also declares its starter
+-- setup: a ward with Ward nursing ticked. Still no type, table, action or role of its own. Proposed by Claude, awaiting the owner.
 
 set client_min_messages = warning;
 
@@ -69,6 +70,28 @@ select core.declare_setup('bedside.ward', 'bedside', 'stays', '{"en":"Ward with 
   screens => '{"screens":["base.beds"],"opens":"base.beds"}',
   settings => '{"department.encounter_class":{"class":"IMP"},"department.review_results":{"level":"critical"}}',
   places => (select jsonb_agg(jsonb_build_object('key', 'bed_' || n, 'name', 'Bed ' || n, 'label', 'bed') order by n) from generate_series(1, 8) n),
-  help => '{"en":"Eight beds on the board, inpatient stays, and Ward nursing: obs and NEWS2 in one line (/obs)."}');
+  help => '{"en":"Eight beds on the board, inpatient stays, and Ward nursing: NEWS2 with every full set of obs on /v."}');
+
+-- ── the board's words (the owner's C1, 2026-10-08): each stay admitted here and its latest NEWS2 written in it, as the reader may see
+-- it (the doors mask; a hidden entry comes back without its data and is passed over). This department's stays only, read here, never
+-- ids from the client; each patient it names is read-logged by the door ──
+set role pack_bedside;
+create function bedside.board(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare s jsonb; n record; v_ids uuid[] := '{}'; v_news jsonb := '{}';
+begin
+  for s in select r from core.pack_rows(p_org, 'base.presence', jsonb_build_object('where', jsonb_build_object('department_id', p_department, 'state', 'admitted'))) r loop
+    v_ids := v_ids || (s ->> 'patient_id')::uuid;
+    select x.data, x.occurred_at into n from core.pack_kind(p_org, (s ->> 'patient_id')::uuid, 'score', '{"current":true}'::jsonb) x
+     where x.visit_id = (s ->> 'item')::uuid and x.data ->> 'score' in ('bedside.news2', 'bedside.news2_s2')
+     order by x.occurred_at desc, x.recorded_at desc, x.id desc limit 1;
+    if found then
+      v_news := v_news || jsonb_build_object(s ->> 'item', jsonb_build_object('score', n.data ->> 'score', 'version', n.data ->> 'version',
+        'total', (n.data ->> 'total')::int, 'band', n.data ->> 'band', 'at', n.occurred_at));
+    end if;
+  end loop;
+  return jsonb_build_object('patient_ids', to_jsonb(v_ids), 'news2', v_news);
+end $$;
+reset role;
+select core.declare_op('bedside.board', 'bedside', 'bedside.board(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
 
 select core.lock_pack('bedside');

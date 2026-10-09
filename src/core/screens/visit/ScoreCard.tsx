@@ -6,7 +6,7 @@ import { read } from '../../db/rpc'
 import { useDepartment } from '../../hooks/organization'
 import { Badge, Button, Chip, Input } from '../../ui'
 import type { CardEditorProps } from './commands'
-import { cardState, current, draft, keyOf, offered, previewer, signOffOf, tableOf, type Inputs, type ScoreParams, type ScoreResult } from './score'
+import { cardState, current, draft, failedNow, keyOf, offered, previewer, signOffOf, tableOf, type Inputs, type ScoreParams, type ScoreResult } from './score'
 
 export function ScoreCard({ q, set, ctx }: CardEditorProps) {
   const p = q as ScoreParams
@@ -23,6 +23,9 @@ export function ScoreCard({ q, set, ctx }: CardEditorProps) {
     const now = live.current.p; if (now.score && !current(now) && Object.keys(now.inputs).length) pv.request(now)
     return () => { pv.cancel(); preview.current = null }
   }, [])
+  const k = keyOf(p); const holds = current(p) || !!failedNow(p)
+  // inputs changed from outside the card (a score a pack derives from the vitals card, C3), or its answer reset: ask for what it holds now
+  useEffect(() => { const now = live.current.p; if (now.score && !holds && Object.keys(now.inputs).length) preview.current?.request(now) }, [k, holds])
 
   const t = tableOf(ctx.scores, p.score, p.version)
   if (!t) return <div className="flex flex-wrap items-center gap-1.5"><span className="text-12 text-faint">Which score?</span>

@@ -48,11 +48,23 @@ create function base.note_line(e jsonb) returns text language sql stable securit
     coalesce(' · ' || nullif(left(regexp_replace(trim(e -> 'data' ->> 'text'), '\s*\n\s*', ' · ', 'g'), 160), ''), '') ||
     case when jsonb_array_length(coalesce(e -> 'data' -> 'attachments', '[]')) > 0 then ' · ' || jsonb_array_length(e -> 'data' -> 'attachments') || ' file(s)' else '' end
 $$;
+-- a device for oxygen in words (spec §4.1, the owner's Q5)
+create function base.o2_device(d text) returns text language sql immutable as $$
+  select case d when 'nasal_cannula' then 'nasal cannula' when 'simple_mask' then 'simple mask' when 'venturi_mask' then 'Venturi mask'
+    when 'reservoir_mask' then 'reservoir mask' when 'humidified' then 'humidified' when 'high_flow_nasal' then 'high-flow nasal'
+    when 'tracheostomy_mask' then 'tracheostomy mask' when 'cpap' then 'CPAP' when 'niv' then 'NIV' when 'other' then 'another device' end
+$$;
+-- air or oxygen in words: Air, or O2 with its flow, its device and FiO2
+create function base.oxygen_words(o jsonb) returns text language sql immutable as $$
+  select case o ->> 'on' when 'air' then 'Air' when 'oxygen' then concat_ws(' ', 'O2', base.q(o -> 'flow'), base.o2_device(o ->> 'device'),
+    'FiO2 ' || (o -> 'fio2' ->> 'value') || '%') end
+$$;
 create function base.vitals_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
   select concat_ws(' · ',
     case when e -> 'data' ? 'bp' then 'BP ' || (e -> 'data' -> 'bp' -> 'sys' ->> 'value') || '/' || (e -> 'data' -> 'bp' -> 'dia' ->> 'value') end,
     'HR ' || (e -> 'data' -> 'hr' ->> 'value'), 'RR ' || (e -> 'data' -> 'rr' ->> 'value'), 'T ' || (e -> 'data' -> 'temp' ->> 'value'),
-    'SpO2 ' || (e -> 'data' -> 'spo2' ->> 'value') || '%', 'Wt ' || base.q(e -> 'data' -> 'weight'), 'Ht ' || base.q(e -> 'data' -> 'height'),
+    'SpO2 ' || (e -> 'data' -> 'spo2' ->> 'value') || '%', base.oxygen_words(e -> 'data' -> 'oxygen'), 'ACVPU ' || upper(e -> 'data' ->> 'consciousness'),
+    'Wt ' || base.q(e -> 'data' -> 'weight'), 'Ht ' || base.q(e -> 'data' -> 'height'),
     'BMI ' || (e -> 'data' -> 'bmi' ->> 'value'), 'HC ' || base.q(e -> 'data' -> 'head'), 'Pain ' || (e -> 'data' -> 'pain' ->> 'value') || '/10',
     'Glucose ' || base.q(e -> 'data' -> 'glucose'))
 $$;
@@ -667,6 +679,10 @@ begin
   perform core.declare_type('vitals', 1, 'base', format('{"type":"object","additionalProperties":false,"minProperties":1,
       "properties":{"bp":{"type":"object","additionalProperties":false,"required":["sys","dia"],"properties":{"sys":%1$s,"dia":%1$s}},
         "hr":%1$s,"rr":%1$s,"temp":%1$s,"spo2":%1$s,"weight":%1$s,"height":%1$s,"bmi":%1$s,"head":%1$s,"pain":%1$s,"glucose":%1$s,
+        "consciousness":{"enum":["a","c","v","p","u"]},
+        "oxygen":{"type":"object","additionalProperties":false,"required":["on"],"properties":{"on":{"enum":["air","oxygen"]},
+          "device":{"enum":["nasal_cannula","simple_mask","venturi_mask","reservoir_mask","humidified","high_flow_nasal","tracheostomy_mask","cpap","niv","other"]},
+          "flow":%1$s,"fio2":%1$s}},
         "method":{"type":"string"},"site":{"type":"string"},"note":{"type":"string"}}}', qty)::jsonb,
     'base.vitals_line(jsonb)', array['Observation'], checks => array['base.kind_check(jsonb,jsonb)']::regprocedure[],
     feeds => array['base.presence', 'base.values'], labels => '{"en":"Vitals","ar":"العلامات الحيوية"}');

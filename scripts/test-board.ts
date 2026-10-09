@@ -3,10 +3,10 @@
 // always in place; at most two pack buttons; a colour only for a state. Then pharmacy's mark. Pure: no browser, no database.
 // npm run test:board
 import assert from 'node:assert/strict'
-import { PACK_BUTTONS, noBedActions, registerTileButton, registerTileLine, tileActions, tileButtonDefs, tileLineDefs, tileLineOf, type TileCtx } from '../src/core/screens/ward/tiles'
+import { PACK_BUTTONS, noBedActions, registerTileButton, registerTileLine, registerTileLoad, staysKey, tileActions, tileButtonDefs, tileLineDefs, tileLineOf, tileLoadDefs, type TileCtx } from '../src/core/screens/ward/tiles'
 import { benchMarkRow, marksOf, registerRowMark, rowMarkDefs, stateTone, visitMarkRow, type MarkCtx, type MarkDef, type MarkRow } from '../src/core/screens/marks'
 import { collectMark } from '../src/packs/pharmacy/dispensed'
-import type { OrderRow, PresenceRow } from '../src/core/db/types'
+import type { OrderRow, Organization, PresenceRow } from '../src/core/db/types'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PackLine } from '../src/core/screens/ward/Tile'
@@ -264,5 +264,25 @@ test('a pack that charges (core change (d)): asked of the department without nam
 test('a list\'s pack data is read once for its patients and orders, whatever their order', () => {
   const a = [prow([order({ item: 'o1' })]), packRowOf('p2', { patient_id: 'p2', visit_id: null, orders: [order({ item: 'o9', patient_id: 'p2' })] })]
   assert.equal(rowsKey(a), rowsKey([...a].reverse())); assert.notEqual(rowsKey(a), rowsKey(a.slice(0, 1)))
+})
+test('a pack\'s data for the board (the owner\'s C1): one load a pack, handed to its line and its buttons; none yet is undefined', () => {
+  const load = async () => ({ n: 3 })
+  assert.equal(registerTileLoad('reader', load), true)
+  quiet(() => { assert.equal(registerTileLoad('base', load), false, 'the base\'s'); assert.equal(registerTileLoad('reader', load), false, 'one load a pack')
+    assert.equal(registerTileLoad('other', 'x' as never), false, 'a function') })
+  assert.deepEqual(tileLoadDefs().map((d) => d.pack), ['reader'])
+  const said = (d: unknown) => ({ words: d && typeof d === 'object' ? `read ${(d as { n: number }).n}` : 'none yet' })
+  const lines = [{ pack: 'reader', line: (_r: PresenceRow, _c: TileCtx, d?: unknown) => said(d) }]
+  assert.deepEqual(tileLineOf(lines, stay(), ctx(['reader']), { reader: { n: 3 } }), [{ pack: 'reader', words: [{ text: 'read 3' }] }])
+  assert.deepEqual(tileLineOf(lines, stay(), ctx(['reader'])), [{ pack: 'reader', words: [{ text: 'none yet' }] }], 'its load has not answered: the row alone')
+  assert.deepEqual(tileLineOf(lines, stay(), ctx(['reader']), { other: { n: 9 } }), [{ pack: 'reader', words: [{ text: 'none yet' }] }], 'never another pack\'s')
+  const seen: unknown[] = []
+  const bs = [{ pack: 'reader', key: 'reader:Look', label: 'Look', show: (_r: PresenceRow, _c: TileCtx, d?: unknown) => { seen.push(d); return !!d }, onClick: () => {} }]
+  assert.deepEqual(labels(tileActions(bs, free, taken(['reader']), true, { reader: 1 })), ['Move', 'Discharge', 'Look']); assert.deepEqual(seen, [1])
+  assert.deepEqual(labels(noBedActions(bs, taken(['reader']), true)), [], 'show gets undefined: hidden here')
+  const a = [stay({ item: 's2', version: 3 }), stay({ item: 's1', version: 1, has_vitals: true })]
+  assert.equal(staysKey(a), staysKey([...a].reverse())); assert.equal(staysKey(a), 's1@1:1,s2@3:0'); assert.notEqual(staysKey(a), staysKey(a.slice(0, 1)))
+  const org = { organization: { id: 'o1' } } as Organization
+  assert.deepEqual(tileLineOf([{ pack: 'reader', line: (_r, c) => ({ words: c.org?.organization.id ?? 'no org' }) }], stay(), ctx(['reader'], { org })), [{ pack: 'reader', words: [{ text: 'o1' }] }])
 })
 console.log(`board: ${n} groups passed`)

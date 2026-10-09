@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { Fragment, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { CornerDownLeft } from 'lucide-react'
 import { useDepartment, worksFor } from '../../hooks/organization'
 import { sendTarget } from './send'
@@ -7,11 +7,12 @@ import { useComposer, type Seed } from '../../hooks/composer'
 import type { Allergy, Medication, RecordView } from '../../db/types'
 import { Button, Callout, Card, Chip, Input, Kbd, cn, ymd } from '../../ui'
 import { ALLERGENS, DRUGS, PROBLEMS, allergyWarnings, doseWarnings, drugWarnings, duplicateMedication, duplicateProblem, type Warning } from './catalog'
-import { expand, suggest, type Expanded, type Suggestion } from './expand'
+import { expand, presetLine, suggest, type Expanded, type Suggestion } from './expand'
 import { SlashList } from './SlashList'
 import { CardItem, WarningItem } from './Card'
 import { lineOf, splitCommand, type Ctx, type Parsed } from './parse'
-import { commandNamed, commandsFor } from './commands'
+import { commandNamed, commandsFor, type Command } from './commands'
+import { parseVitals } from './vitals'
 import { factMissing, standingOf } from './facts'
 import { scoreMissing, tableOf, type ScoreParams } from './score'
 import { useFacts } from '../../hooks/chart'
@@ -19,6 +20,10 @@ import { replyFormFor } from '../../renderers'
 
 const FN_ACTION: Record<string, string> = { write_vitals: 'write:vitals', write_prescription: 'write:medication', write_request: 'write:order', write_problem: 'write:problem', write_allergy: 'write:allergy', write_note: 'write:note', write_list_review: 'write:list_review' }
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+/** the oxygen's flow and FiO₂ as the card holds them, by /v's own limits (0.5–60 L/min; FiO₂ a whole 21–100 %): what is wrong, or null */
+const o2Wrong = (q: Q): string | null => { for (const [k, w] of [['o2_flow', 'flow'], ['fio2', 'fio2']]) {
+  const r = q[k] != null ? parseVitals([w, String(q[k])]) : null; if (r && 'error' in r) return r.error }
+  return null }
 
 /** focus the line; flush adds what is in it before Done (false: it could not — the card says why) */
 export interface ComposerHandle { focus: () => void; flush: () => boolean; slash: () => void }
@@ -32,7 +37,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   const facts = useFacts(patientId)   // the standing pregnancy, breastfeeding and alerts: /preg, /bf and /alert change or end them
   const input = useRef<HTMLInputElement>(null); const card = useRef<HTMLDivElement>(null)
   const [text, setText] = useState(''); const [seed, setSeed] = useState<Seed | null>(null); const [seedN, setSeedN] = useState(0)
-  const [edited, setEdited] = useState<{ key: string; items: Parsed[] } | null>(null)
+  const [edited, setEdited] = useState<{ key: string; items: Parsed[]; dropped?: string[] } | null>(null)
   const [armed, setArmed] = useState<string | null>(null); const [pick, setPick] = useState(-1)
   const [history, setHistory] = useState<string[]>([]); const [hi, setHi] = useState(-1); const [help, setHelp] = useState(false)
   const openLongNote = useComposer((s) => s.openLongNote)
@@ -70,7 +75,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   const key = seed ? `seed:${seedN}` : text
   const base: Expanded | null = useMemo(() => seed ? { items: seed.items, errors: [], label: seed.label } : expand(text, ctx, presets), [seed, text, ctx, presets])
   const items = edited?.key === key ? edited.items : base?.items ?? []
-  const setItems = (next: Parsed[]) => { setEdited({ key, items: next }); setArmed(null) }
+  const setItems = (next: Parsed[], dropped?: string[]) => { setEdited({ key, items: next, dropped }); setArmed(null) }
   const sugg = seed ? null : suggest(text, ctx, presets, new Set(r.problems.map((p) => p.name.toLowerCase())))
   const warningsOf = (p: Parsed): Warning[] => {
     const q = p.params as Q
@@ -83,7 +88,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
   const missing = (p: Parsed): string | null => {
     const q = p.params as Q
     switch (p.function) {
-      case 'vitals': return (q.systolic != null) !== (q.diastolic != null) ? 'Type both sides of the blood pressure' : Object.values(q).some((v) => v != null) ? null : 'Type at least one vital'
+      case 'vitals': return (q.systolic != null) !== (q.diastolic != null) ? 'Type both sides of the blood pressure' : !Object.values(q).some((v) => v != null) ? 'Type at least one vital' : o2Wrong(q)
       case 'medication':
         if (q.action === 'stop') return null
         if (q.action === 'start' && !String(q.drug?.name ?? '').trim()) return 'Name the drug'
@@ -104,9 +109,25 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     return null
   }
   const warnings = items.flatMap(warningsOf)
-  // the command's own line under what the card holds (the lab's tubes and fasting)
-  const typedCmd = !seed && text.trimStart().startsWith('/') ? commandNamed(splitCommand(text)[0], ctx) : undefined
-  const note = typedCmd?.note && items.length ? typedCmd.note(items, ctx) : null
+  // the commands whose drafts the card holds: the one typed, or the lines of a preset that a pack adds to here (each once, with its words)
+  const inPlay = useMemo((): { c: Command; rest: string }[] => {
+    const t = text.trim(); if (seed) return []
+    if (t.startsWith('/')) { const c = commandNamed(splitCommand(t)[0], ctx); return c ? [{ c, rest: splitCommand(t)[1] }] : [] }
+    const tpl = t.startsWith('#') ? presets.find((x) => x.shortcut === t.slice(1).trim().split(/\s+/)[0].toLowerCase()) : undefined
+    const seen = new Set<string>()
+    return (tpl?.lines ?? []).map(presetLine).filter((l) => l.startsWith('/')).flatMap((l) => { const [w, rest] = splitCommand(l); const c = commandNamed(w, ctx)
+      if (!c?.again || seen.has(c.name)) return []; seen.add(c.name); return [{ c, rest }] })
+  }, [seed, text, ctx, presets])
+  // the command's own line under what the card holds (the lab's tubes and fasting), and the packs' added to it
+  const notes = items.length ? inPlay.flatMap(({ c }) => c.note ? [c.note(items, ctx)] : []).filter((n) => n != null && n !== false) : []
+  const note = notes.length ? <>{notes.map((n, i) => <Fragment key={i}>{n}</Fragment>)}</> : null
+  // a pack's drafts beside the command's own (§5.1 rule 1, the owner's C3): derived again whenever one of the command's own changes on
+  // the card, so they never go stale under the line; one the user left out stays out for this line
+  const dropped = edited?.key === key ? edited.dropped ?? [] : []
+  const derive = (next: Parsed[], gone: readonly string[] = dropped) => inPlay.reduce((acc, { c, rest }) => c.again ? c.again(acc, rest, ctx, gone) : acc, next)
+  const edit = (i: number, n: Parsed) => { const next = items.map((x, j) => j === i ? n : x); setItems(n.by ? next : derive(next), dropped) }
+  const drop = (i: number) => { const gone = items[i]; const next = items.filter((_, j) => j !== i); const d = gone.by ? [...dropped, gone.by] : dropped
+    setItems(gone.by ? next : derive(next, d), d) }
   // a word that fits more than one test (never guessed): its choices; one chosen puts its code in the line
   const asks = items.filter((p) => p.function === 'order' && !p.params.service_id && Array.isArray(p.params.choices))
   // the word still being typed is not asked about while its suggestions show: only a finished word is
@@ -229,7 +250,7 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
         {base?.hint && <Callout tone="info" className="mx-3 mt-2">{base.hint}</Callout>}
         {base?.label && !seed && <p className="px-3 pt-2 text-12 font-medium text-faint">{base.label}{base.drawer && ' — Enter opens it under the line'}</p>}
         {!sugg && <div className="divide-y divide-line">{items.map((p, i) => <CardItem key={`${key}:${i}`} item={p} ctx={ctx} warnings={warningsOf(p)}
-          onChange={(n) => setItems(items.map((x, j) => j === i ? n : x))} onRemove={items.length > 1 ? () => setItems(items.filter((_, j) => j !== i)) : undefined}
+          onChange={(n) => edit(i, n)} onRemove={items.length > 1 ? () => drop(i) : undefined}
           onLongNote={(kind, t) => { openLongNote({ kind, text: t, draftId: seed?.draftId }); clear() }}
           extra={i === 0 && (dup || dupProblem) ? <div className="mb-2 flex flex-wrap gap-1.5">
             {dup && <Button size="sm" variant="outline" onClick={() => repeatDup(dup)}>Repeat {dup.drug_name} as it is</Button>}

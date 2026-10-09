@@ -74,7 +74,9 @@ export const ROUTE: Record<string, string> = { oral: 'by mouth', sc: 'under the 
 export const VITALS: { key: string; code: string; short: string; name: string }[] = [
   { key: 'bp.sys', code: 'loinc:8480-6', short: 'BP', name: 'Blood pressure' }, { key: 'bp.dia', code: 'loinc:8462-4', short: 'BP', name: 'Diastolic BP' },
   { key: 'hr', code: 'loinc:8867-4', short: 'HR', name: 'Heart rate' }, { key: 'temp', code: 'loinc:8310-5', short: 'T', name: 'Temperature' },
-  { key: 'spo2', code: 'loinc:59408-5', short: 'SpO₂', name: 'SpO₂' }, { key: 'rr', code: 'loinc:9279-1', short: 'RR', name: 'Respiratory rate' },
+  { key: 'spo2', code: 'loinc:59408-5', short: 'SpO₂', name: 'SpO₂' },
+  { key: 'oxygen.flow', code: 'loinc:3151-8', short: 'O₂', name: 'Oxygen flow' }, { key: 'oxygen.fio2', code: 'loinc:3150-0', short: 'FiO₂', name: 'FiO₂' },
+  { key: 'rr', code: 'loinc:9279-1', short: 'RR', name: 'Respiratory rate' },
   { key: 'weight', code: 'loinc:29463-7', short: 'Wt', name: 'Weight' }, { key: 'height', code: 'loinc:8302-2', short: 'Ht', name: 'Height' },
   { key: 'bmi', code: 'loinc:39156-5', short: 'BMI', name: 'BMI' }, { key: 'pain', code: 'loinc:72514-3', short: 'Pain', name: 'Pain' },
   { key: 'glucose', code: 'loinc:41653-7', short: 'Glucose', name: 'Glucose (capillary)' }, { key: 'head', code: 'loinc:9843-4', short: 'Head', name: 'Head circumference' },

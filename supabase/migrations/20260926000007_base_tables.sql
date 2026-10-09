@@ -399,11 +399,12 @@ create table base.values (
 create index values_patient on base.values (organization_id, patient_id, code, at desc);
 create index values_item on base.values (organization_id, item);
 
--- the vitals keys and their LOINC codes (§4.1)
+-- the vitals keys and their LOINC codes (§4.1); oxygen's flow and FiO2 by their path (the owner's Q5, 2026-10-08)
 create function base.vital_keys() returns table (key text, path text[], code text, name text) language sql immutable as $$
   values ('bp.sys', array['bp','sys'], 'loinc:8480-6', 'Systolic BP'), ('bp.dia', array['bp','dia'], 'loinc:8462-4', 'Diastolic BP'),
          ('hr', array['hr'], 'loinc:8867-4', 'Heart rate'), ('rr', array['rr'], 'loinc:9279-1', 'Respiratory rate'), ('temp', array['temp'], 'loinc:8310-5', 'Temperature'),
-         ('spo2', array['spo2'], 'loinc:59408-5', 'SpO2'), ('weight', array['weight'], 'loinc:29463-7', 'Weight'), ('height', array['height'], 'loinc:8302-2', 'Height'),
+         ('spo2', array['spo2'], 'loinc:59408-5', 'SpO2'), ('oxygen.flow', array['oxygen','flow'], 'loinc:3151-8', 'Oxygen flow'),
+         ('oxygen.fio2', array['oxygen','fio2'], 'loinc:3150-0', 'FiO2'), ('weight', array['weight'], 'loinc:29463-7', 'Weight'), ('height', array['height'], 'loinc:8302-2', 'Height'),
          ('bmi', array['bmi'], 'loinc:39156-5', 'BMI'), ('head', array['head'], 'loinc:9843-4', 'Head circumference'), ('pain', array['pain'], 'loinc:72514-3', 'Pain'),
          ('glucose', array['glucose'], 'loinc:41653-7', 'Glucose (capillary)')
 $$;

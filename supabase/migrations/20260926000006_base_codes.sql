@@ -142,6 +142,19 @@ insert into core.codes (system, code, labels, props) select 'loinc', c, jsonb_bu
   ('5196-1', 'HBsAg', '{}'), ('16128-1', 'HCV antibody', '{}'), ('882-1', 'ABO and Rh group', '{}'), ('2756-5', 'Urine pH', '{}'), ('2965-2', 'Urine specific gravity', '{}')
 ) v(c, l, p) on conflict do nothing;
 insert into core.codes (system, code, labels) values ('ucum', 'mg/g', '{"en":"mg/g"}');
+-- the departments of beds (spec §4.1, §6.2; the owner's Q5 and B1, 2026-10-08): ACVPU and oxygen as vitals (67775-7 and its answers,
+-- 107117-4, 3151-8, 3150-0); fluid in and out, urine output, MAP, CVP and the baby's heart rate; the rates their charts write
+insert into core.codes (system, code, labels) select 'ucum', c, jsonb_build_object('en', l) from (values
+  ('L/min', 'L/min'), ('mL/h', 'mL/h'), ('mg/h', 'mg/h'), ('U/h', 'units/h'), ('ug/kg/min', 'µg/kg/min'), ('mL/kg/h', 'mL/kg/h'), ('cm[H2O]', 'cmH₂O')
+) v(c, l);
+insert into core.codes (system, code, labels, props) select 'loinc', c, jsonb_build_object('en', l), p::jsonb from (values
+  ('67775-7', 'Level of responsiveness', '{"key":"consciousness"}'), ('LA9340-6', 'Alert', '{}'), ('LA17108-4', 'Verbal', '{}'),
+  ('LA17107-6', 'Painful', '{}'), ('LA9343-0', 'Unresponsive', '{}'), ('107117-4', 'Method of oxygen delivery', '{"key":"oxygen"}'),
+  ('3151-8', 'Inhaled oxygen flow rate', '{"ucum":"L/min","key":"oxygen.flow"}'), ('3150-0', 'Inhaled oxygen concentration', '{"ucum":"%","key":"oxygen.fio2"}'),
+  ('9103-3', 'Fluid intake total Measured', '{"ucum":"mL"}'), ('9257-7', 'Fluid output total Measured', '{"ucum":"mL"}'), ('9187-6', 'Urine output', '{"ucum":"mL"}'),
+  ('9188-4', 'Urine output 1 hour', '{"ucum":"mL/h"}'), ('8478-0', 'Mean blood pressure', '{"ucum":"mm[Hg]"}'),
+  ('60985-9', 'Central venous pressure (CVP)', '{"ucum":"cm[H2O]","allowed":["cm[H2O]","mm[Hg]"]}'), ('55283-6', 'Fetal Heart rate', '{"ucum":"/min"}')
+) v(c, l, p);
 
 -- HL7 code sets used by the mapping (free)
 insert into core.codes (system, code, labels) select s, c, jsonb_build_object('en', l) from (values

@@ -164,6 +164,15 @@ select t.ok(array_agg((e.data ->> 'total')::int order by e.occurred_at) = array[
 select t.ok(not exists (select 1 from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'score' and e.data ->> 'score' like 'bedside.%'
   and not exists (select 1 from core.entries v where v.organization_id = e.organization_id and v.set_id = e.set_id and v.type = 'vitals')),
   'every NEWS2 is signed with the vitals in the same set');
+select t.ok(count(*) = 9 and bool_and(e.data -> 'inputs' ->> 'consciousness' = v.data ->> 'consciousness' and e.data -> 'inputs' ->> 'oxygen' = v.data -> 'oxygen' ->> 'on'),
+  'every NEWS2''s two answers are its vitals'' own: ' || count(*) || ' sets')
+  from core.entries e join core.entries v on v.organization_id = e.organization_id and v.set_id = e.set_id and v.type = 'vitals'
+ where e.organization_id = demo.base('clinic') and e.type = 'score' and e.data ->> 'score' like 'bedside.%';
+select t.ok(count(*) = 4 and bool_and(v.data -> 'oxygen' -> 'flow' ->> 'ucum' = 'L/min' and v.data -> 'oxygen' ->> 'on' = 'oxygen'),
+  'Abdelmoneim''s oxygen: its flow in L/min (UCUM) in every set: ' || count(*))
+  from core.entries v where v.organization_id = demo.base('clinic') and v.type = 'vitals' and v.patient_id = demo.id('bedside', 'patient:abdelmoneim');
+select t.ok(exists (select 1 from base.values x where x.organization_id = demo.base('clinic') and x.patient_id = demo.id('bedside', 'patient:abdelmoneim')
+  and x.key = 'oxygen.flow' and x.code = 'loinc:3151-8'), 'his flow is in the values, LOINC 3151-8');
 select t.ok(count(*) = 1 and bool_and(p.place_id is null and not p.has_vitals), 'Tahany is admitted with no bed yet and no obs') from base.presence p
  where p.organization_id = demo.base('clinic') and p.patient_id = demo.id('bedside', 'patient:tahany') and p.kind = 'stay' and p.state = 'admitted';
 

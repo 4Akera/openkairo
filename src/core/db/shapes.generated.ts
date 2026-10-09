@@ -405,12 +405,19 @@ export interface Vitals {
     dia: Quantity
     sys: Quantity
   }
+  consciousness?: 'a' | 'c' | 'v' | 'p' | 'u'
   glucose?: Quantity
   head?: Quantity
   height?: Quantity
   hr?: Quantity
   method?: string
   note?: string
+  oxygen?: {
+    device?: 'nasal_cannula' | 'simple_mask' | 'venturi_mask' | 'reservoir_mask' | 'humidified' | 'high_flow_nasal' | 'tracheostomy_mask' | 'cpap' | 'niv' | 'other'
+    fio2?: Quantity
+    flow?: Quantity
+    on: 'air' | 'oxygen'
+  }
   pain?: Quantity
   rr?: Quantity
   site?: string

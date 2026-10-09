@@ -1,12 +1,13 @@
 // NEWS2 as the ward reads it (spec/openCare.md §5.6, piece 1): each NEWS2 the patient has, the newest first, with its band in the
 // table's words and whether it is from the stay open now. From them: the banner's word ("NEWS2 6", amber at 5–6, red at 7 or more),
 // the section's chip and its Summary line (the stay's trend), and the tile's "no obs yet" for a stay with no vitals ("no obs for 2 h"
-// in amber from an hour after admission). NEWS2 is for adults (16 and over): a child's banner word has no colour. Pure: npm run test:bedside.
+// in amber from an hour after admission). On the board, each stay's latest NEWS2 from the pack's own read (bedside.board, the owner's
+// C1): "NEWS2 6" on its tile. NEWS2 is for adults (16 and over): a child's word has no colour. Pure: npm run test:bedside.
 import type { Organization, PresenceRow, ServerEntry } from '@core/db/types'
 import type { Rec } from '@core/screens/chart/model/record'
 import { fits, type ChipWord, type Fit, type Own, type SectionInput } from '@core/screens/chart/sections'
 import type { BannerWord, WordsInput } from '@core/screens/chart/words'
-import type { TileWords } from '@core/screens/ward/tiles'
+import type { TileCtx, TileWords } from '@core/screens/ward/tiles'
 import { tableOf } from '@core/screens/visit/score'
 import { hm, shortDate, ymd } from '@core/ui/time'
 import { NEWS2, NEWS2_S2 } from './line'
@@ -57,4 +58,19 @@ export function obsTileLine(row: PresenceRow, now: number): TileWords | null {
   if (row.kind !== 'stay' || row.state !== 'admitted' || row.has_vitals) return null
   const hours = Math.floor((now - new Date(row.checked_in_at).getTime()) / 3_600_000)
   return { words: hours >= 1 ? [{ text: `no obs for ${hours} h`, tone: 'warn' }] : ['no obs yet'] }
+}
+
+/** the board's read (bedside.board): the patients it names, and each stay's latest NEWS2 by the stay's item */
+export interface News2Board { patient_ids: string[]; news2: Record<string, { score: string; version: string; total: number; band: string; at: string }> }
+/** the tile's words: the open stay's latest NEWS2 from the board's read (amber at 5–6, red at 7 or more, in its band's tone, the colour
+ *  only for an adult); with none, a stay with no obs yet says so (obsTileLine) */
+export function tileWords(row: PresenceRow, ctx: Pick<TileCtx, 'org' | 'identity'>, data: unknown, now: number): TileWords | null {
+  const all = data && typeof data === 'object' ? (data as { news2?: unknown }).news2 : undefined
+  const n = all && typeof all === 'object' && Object.hasOwn(all, row.item) ? (all as News2Board['news2'])[row.item] : undefined
+  if (row.kind !== 'stay' || row.state !== 'admitted' || !n || typeof n !== 'object' || typeof n.total !== 'number') return obsTileLine(row, now)
+  const tone = tableOf(ctx.org?.scores, n.score, n.version)?.bands.find((b) => b.key === n.band)?.tone
+  // an age not known fits: the colour for anyone who may be an adult
+  const adult = !ctx.identity || fits(NEWS2_FIT, { sex: ctx.identity.gender, birth: ctx.identity.birth_date ?? null, today: ymd(new Date(now).toISOString()) })
+  const word = `NEWS2 ${n.total}`
+  return { words: [(tone === 'warn' || tone === 'danger') && adult ? { text: word, tone } : word] }
 }

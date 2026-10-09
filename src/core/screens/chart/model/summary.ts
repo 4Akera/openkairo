@@ -33,7 +33,7 @@ export function summaryOf(rec: Rec, ctx: ChartCtx, o: SummaryOpts = {}) {
     /** 3b · the latest current pregnancy and breastfeeding facts (yes or no); none: the item is left out */
     facts: { pregnancy: pregnancyOf(o.facts, ctx.org?.types, o.today ?? new Date().toISOString().slice(0, 10)), breastfeeding: breastfeedingOf(o.facts, ctx.org?.types) },
     /** 4 · one reading's worth of tiles, unflagged; empty: "No vitals recorded" */
-    vitals: vitalsNow(values),
+    vitals: vitalsNow(values, rec.tables['base.values']?.entries),
     /** 5 · show: any result value at all (else the item is left out); none: values, but no key test and nothing flagged */
     results: { rows: key.rows, show: key.any, none: key.any && !key.rows.length },
     /** 6 · the latest visits and stays other than this one */

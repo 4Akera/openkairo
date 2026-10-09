@@ -68,9 +68,11 @@ export const myUsers = () => call<{ id: string; organization_id: string; organiz
 export const chooseUser = (userId: string) => call<{ user_id: string; organization_id: string }>('choose_user', { p_user_id: userId })
 /** Retry (Settings → Packs): a pack's failed and parked work queued again in the background */
 export const retryPack = (pack: string) => call<{ pack: string; requeued: number }>('retry_pack', { p: { pack } as Json })
-/** a pack's own operation on a table of its own that holds no entries (spec §5.3: a stock kept by a pack): the door checks the action */
-export const packOp = <T = unknown>(op: string, departmentId: string, args: Record<string, unknown> = {}) =>
-  call<T>('pack_op', { p: { op, department_id: departmentId, args } as unknown as Json })
+/** a pack's own operation on a table of its own that holds no entries (spec §5.3: a stock kept by a pack): the door checks the action.
+ *  purpose: why the patients it names are read — the read log's default is PATADMIN, for a pack's own data; a pack reading the record
+ *  for care says TREAT (the owner's C1, 2026-10-08) */
+export const packOp = <T = unknown>(op: string, departmentId: string, args: Record<string, unknown> = {}, purpose?: string) =>
+  call<T>('pack_op', { p: { op, department_id: departmentId, args, ...(purpose ? { purpose } : {}) } as unknown as Json })
 export const erasePatient = (p: { patient_id: string; reason: string }) => call('erase_patient', { p: p as unknown as Json })
 /** a file of an entry: read() says where it is (the reader may see the entry; the read is logged), then a link that lasts two minutes */
 export async function fileLink(entryId: string, sha256: string, departmentId: string, purpose: { purpose: string; reason?: string } = { purpose: 'TREAT' }): Promise<string> {

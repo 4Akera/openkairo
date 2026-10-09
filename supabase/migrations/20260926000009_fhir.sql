@@ -160,12 +160,32 @@ begin
     members := members || jsonb_build_array(jsonb_build_object('reference', 'Observation/' || v_id));
   end if;
   for k in select * from base.vital_keys() v where v.key not like 'bp.%' loop
-    continue when not (o -> 'data' ? k.key);
+    continue when o -> 'data' #> k.path is null;
     v_id := (p -> 'entries' -> 0 ->> 'item') || '-' || k.key;
     out := out || jsonb_build_array(jsonb_build_object('resourceType', 'Observation', 'id', v_id, 'meta', core.fhir_meta(base.fhir_latest(p), false)) || base_obs ||
-      jsonb_build_object('code', core.fhir_code('loinc', split_part(k.code, ':', 2), null, v_org), 'valueQuantity', core.fhir_quantity(o -> 'data' -> k.key)));
+      jsonb_build_object('code', core.fhir_code('loinc', split_part(k.code, ':', 2), null, v_org), 'valueQuantity', core.fhir_quantity(o -> 'data' #> k.path)));
     members := members || jsonb_build_array(jsonb_build_object('reference', 'Observation/' || v_id));
   end loop;
+  -- consciousness (ACVPU) and air or oxygen, as words (the owner's Q5, 2026-10-08): ACVPU's C has no answer in LOINC's AVPU list, so it
+  -- goes as words; 107117-4 has no answer list, so air or the device goes as words too
+  if o -> 'data' ? 'consciousness' then
+    v_id := (p -> 'entries' -> 0 ->> 'item') || '-consciousness';
+    out := out || jsonb_build_array(jsonb_build_object('resourceType', 'Observation', 'id', v_id, 'meta', core.fhir_meta(base.fhir_latest(p), false)) || base_obs ||
+      jsonb_build_object('code', core.fhir_code('loinc', '67775-7', null, v_org), 'valueCodeableConcept', case o -> 'data' ->> 'consciousness'
+        when 'a' then core.fhir_code('loinc', 'LA9340-6', null, v_org) when 'v' then core.fhir_code('loinc', 'LA17108-4', null, v_org)
+        when 'p' then core.fhir_code('loinc', 'LA17107-6', null, v_org) when 'u' then core.fhir_code('loinc', 'LA9343-0', null, v_org)
+        else jsonb_build_object('text', 'New confusion') end));
+    members := members || jsonb_build_array(jsonb_build_object('reference', 'Observation/' || v_id));
+  end if;
+  if o -> 'data' ? 'oxygen' then
+    v_id := (p -> 'entries' -> 0 ->> 'item') || '-oxygen';
+    out := out || jsonb_build_array(jsonb_build_object('resourceType', 'Observation', 'id', v_id, 'meta', core.fhir_meta(base.fhir_latest(p), false)) || base_obs ||
+      jsonb_build_object('code', core.fhir_code('loinc', '107117-4', null, v_org), 'valueCodeableConcept', jsonb_build_object('text',
+        case when o -> 'data' -> 'oxygen' ->> 'on' = 'air' then 'Room air'
+             else coalesce(upper(left(base.o2_device(o -> 'data' -> 'oxygen' ->> 'device'), 1)) || substr(base.o2_device(o -> 'data' -> 'oxygen' ->> 'device'), 2),
+                           'Supplemental oxygen') end)));
+    members := members || jsonb_build_array(jsonb_build_object('reference', 'Observation/' || v_id));
+  end if;
   return jsonb_build_array(base.fhir_head(p, 'Observation') || base_obs || jsonb_build_object('code', core.fhir_code('loinc', '85353-1', null, v_org), 'hasMember', members)) || out;
 end $$;
 

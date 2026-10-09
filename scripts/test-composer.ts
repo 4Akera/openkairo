@@ -3,7 +3,9 @@
 import assert from 'node:assert/strict'
 import { lineOf, parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
 import { expand, suggest } from '../src/core/screens/visit/expand'
-import { registerCommand } from '../src/core/screens/visit/commands'
+import { addToCommand, commandNamed, registerCommand } from '../src/core/screens/visit/commands'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { drugWarnings, allergyWarnings, doseWarnings, duplicateProblem, findDrug } from '../src/core/screens/visit/catalog'
 import type { Allergy, Medication, Organization, Problem, Template } from '../src/core/db/types'
 import { draftEntries } from '../src/core/db/entries'
@@ -18,6 +20,7 @@ const ctx: Ctx = {
 }
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
+const quiet = <T,>(fn: () => T): T => { const e = console.error; console.error = () => {}; try { return fn() } finally { console.error = e } }
 const ok = (line: string): Parsed[] => { const r = parse(line, ctx); assert.ok(r && 'ok' in r, `${line} → ${JSON.stringify(r)}`); return r.ok }
 const err = (line: string): string => { const r = parse(line, ctx); assert.ok(r && 'error' in r, `${line} should be refused, got ${JSON.stringify(r)}`); return r.error }
 const p = (line: string) => ok(line)[0].params as Record<string, unknown>
@@ -28,6 +31,29 @@ test('vitals by name and by position', () => {
   assert.deepEqual(p('/v 140/90 p80'), { systolic: 140, diastolic: 90, pulse: 80 })
   assert.match(err('/v 148/92 84 45.5'), /not plausible/)
   assert.match(err('/v 148/92 84 37 86 97 12'), /Too many/)
+})
+test('vitals: air or oxygen and ACVPU, the base\'s own (the owner\'s Q5); what /v refuses in words', () => {
+  assert.deepEqual(p('/v 120/80 84 37 air a'), { systolic: 120, diastolic: 80, pulse: 84, temperature: 37, oxygen: 'air', consciousness: 'a' })
+  assert.deepEqual(p('/v 120/80 84 37 oxygen 2l nasal v'), { systolic: 120, diastolic: 80, pulse: 84, temperature: 37, oxygen: 'oxygen', o2_flow: 2, o2_device: 'nasal_cannula', consciousness: 'v' })
+  assert.deepEqual(p('/v 2l'), { oxygen: 'oxygen', o2_flow: 2 }, 'a flow is oxygen'); assert.deepEqual(p('/v venturi fio2 28'), { oxygen: 'oxygen', o2_device: 'venturi_mask', fio2: 28 })
+  assert.deepEqual(p('/v 1.5lpm venturi mask'), { oxygen: 'oxygen', o2_flow: 1.5, o2_device: 'venturi_mask' }, 'one device in two words'); assert.equal(p('/v flow 4').o2_flow, 4)
+  for (const [w, c] of [['alert', 'a'], ['confused', 'c'], ['voice', 'v'], ['pain', 'p'], ['unresponsive', 'u']]) assert.equal(p(`/v 120/80 ${w}`).consciousness, c, w)
+  assert.equal(p('/v 120/80 p 90').pulse, 90, 'a bare p is the pulse'); assert.deepEqual(p('/v a'), { consciousness: 'a' }); assert.deepEqual(p('/v air'), { oxygen: 'air' })
+  assert.match(err('/v 120/80 o2 94'), /spo2 .*oxygen/); assert.match(err('/v air 2l'), /Air and oxygen/); assert.equal(err('/v a v'), 'ACVPU said twice')
+  assert.equal(err('/v air oxygen'), 'Air or oxygen said twice'); assert.match(err('/v pain 8'), /^pain 8: ACVPU's P is pain on its own/)
+  assert.match(err('/v 120/80 84 37 c'), /confused/); assert.match(err('/v t 37 c'), /confused/); assert.match(err('/v fio2 0.4'), /percentage/)
+  assert.match(err('/v flow 80'), /not plausible/); assert.match(err('/v fio2 120'), /not plausible/); assert.equal(err('/v flow'), 'Oxygen flow needs a number')
+  for (const [l, d] of [['mask venturi', 'venturi_mask'], ['simple mask', 'simple_mask'], ['tracheostomy mask', 'tracheostomy_mask'], ['mask nrb', 'reservoir_mask'], ['high-flow nasal', 'high_flow_nasal'],
+    ['nasal cannula', 'nasal_cannula']]) assert.equal(p(`/v ${l}`).o2_device, d, `the line's words: ${l}`)
+  assert.equal(err('/v nasal mask'), 'Two oxygen devices: say one'); assert.equal(err('/v simple venturi'), 'Two oxygen devices: say one')
+  assert.equal(err('/v 2l 3l'), 'Oxygen flow said twice'); assert.equal(err('/v nasal cpap'), 'Two oxygen devices: say one'); assert.equal(err('/v fio2 x'), 'FiO₂ needs a number')
+  for (const w of ['constructor', '__proto__', 'tostring', '40%']) assert.match(err(`/v 120/80 ${w}`), /^Not a vital/, w)
+  assert.equal(lineOf(ok('/v 120/80 84 37 air a')[0]), 'BP 120/80 · P 84 · T 37 · Air · ACVPU A'); assert.equal(ok('/v 120/80 84 37 air a')[0].line, 'BP 120/80 · P 84 · T 37 · Air · ACVPU A')
+  assert.equal(ok('/v rr 22 oxygen 2l nasal spo2 93 u')[0].line, 'SpO₂ 93 · O₂ 2 L/min nasal cannula · RR 22 · ACVPU U'); assert.equal(ok('/v venturi fio2 28')[0].line, 'O₂ Venturi mask FiO₂ 28%')
+  const at = { patientId: 'pt', departmentId: 'im' }
+  const data = (line: string) => draftEntries({ id: 'e1', function: 'vitals', params: ok(line)[0].params }, at)[0].data as Record<string, unknown>
+  assert.deepEqual(data('/v oxygen 2l nasal v'), { consciousness: 'v', oxygen: { on: 'oxygen', device: 'nasal_cannula', flow: { value: '2', unit: 'L/min', ucum: 'L/min' } } })
+  assert.deepEqual(data('/v fio2 28'), { oxygen: { on: 'oxygen', fio2: { value: '28', unit: '%', ucum: '%' } } }); assert.deepEqual(data('/v 120/80 air').oxygen, { on: 'air' }, 'air alone')
 })
 test('prescription: catalog name, code, unit and route; PRN needs its reason', () => {
   const q = p('/rx glucophage 850 bd 30d for dm')
@@ -179,6 +205,41 @@ test('a pack\'s command only where the department uses its pack; elsewhere the c
   assert.deepEqual(pe.items.map((x) => x.function), ['medication']); assert.deepEqual(pe.skipped, ['“/tpk 3”: /tpk is used in: ObGyn clinic, Labour ward'])
   assert.equal(expand('#tp', here, [tp])!.items.length, 2, 'in a department that uses it, the preset writes both')
   assert.deepEqual(parse('/tpk 3', there), { error: '/tpk is used in: ObGyn clinic, Labour ward' }, 'parse checks the department before the role')
+})
+test('a pack adds drafts to a core command where the department uses it (the owner\'s C3): derived, again on an edit, left out when dropped', () => {
+  const add = (ds: Parsed[], _c: Ctx, more: { said: string[]; prev: Parsed[] }) => { const v = ds.find((d) => d.function === 'vitals'); if (!v?.params.pulse) return []
+    const was = more.prev[0]?.params; return [{ function: 'score', kind: 'score', action: 'write:score', params: { pulse: v.params.pulse, tp: more.said.includes('tp') || !!was?.tp }, line: `Test ${v.params.pulse}` }] }
+  assert.equal(addToCommand({ pack: 'testpack', name: 'v', writes: ['score'], words: ['TP'], add, note: () => 'test note' }), true)
+  quiet(() => { assert.equal(addToCommand({ pack: 'base', name: 'v', writes: ['score'], add }), false, 'the base adds nothing')
+    assert.equal(addToCommand({ pack: 'testpack', name: 'v', writes: ['score'], add }), false, 'one addition a pack to a command')
+    assert.equal(addToCommand({ pack: 'other', name: 'v', writes: [], add }), false); assert.equal(addToCommand({ pack: 'other', name: 'v', writes: ['score'], add: 1 as never }), false) })
+  const here: Ctx = { ...ctx, packs: ['testpack'] }
+  const two = (parse('/v 120/80 84', here) as { ok: Parsed[] }).ok
+  assert.deepEqual(two.map((d) => [d.function, d.by, d.action]), [['vitals', undefined, 'write:vitals'], ['score', 'testpack', 'write:score']])
+  assert.equal(parse('/v 120/80 84', { ...ctx, packs: [] }) && (parse('/v 120/80 84', { ...ctx, packs: [] }) as { ok: Parsed[] }).ok.length, 1); assert.equal(ok('/v 120/80 84').length, 1, 'packs unknown: none')
+  assert.equal(((parse('/v 120/80 84 tp', here) as { ok: Parsed[] }).ok[1].params.tp), true, 'its own word, taken out of the line')
+  assert.match(err('/v 120/80 84 tp'), /^Not a vital: “tp”/, 'elsewhere it is no word of /v')
+  const v = commandNamed('v', here)!; assert.deepEqual(v.writes, ['vitals', 'score']); assert.deepEqual(commandNamed('v', ctx)!.writes, ['vitals'])
+  const edited = v.again!([{ ...two[0], params: { ...two[0].params, pulse: 100 } }, two[1]], '120/80 84', here)
+  assert.deepEqual(edited.map((d) => d.line), ['BP 120/80 · P 84', 'Test 100'], 'derived again from the edited vitals')
+  assert.deepEqual(v.again!(two, '120/80 84', here, ['testpack']).map((d) => d.function), ['vitals'], 'left out: it stays out')
+  assert.equal(v.again!([two[0], { ...two[1], params: { ...two[1].params, tp: true } }], '120/80 84', here)[1].params.tp, true, 'prev: what its card chose')
+  assert.match(String(renderToStaticMarkup(createElement('div', null, v.note!(two, here)))), /test note/)
+  quiet(() => assert.equal(addToCommand({ pack: 'other2', name: 'tpk', writes: ['score'], add }), true))   // aimed at a pack's command: it never applies
+  const tpkHere: Ctx = { ...here, packs: ['testpack', 'other2'] }
+  assert.equal(commandNamed('tpk', tpkHere)!.again, undefined, 'a pack\'s command takes no addition'); assert.equal(commandNamed('tpk', tpkHere)!.writes, undefined)
+  assert.equal((parse('/tpk 3', tpkHere) as { ok: Parsed[] }).ok.length, 1)
+  assert.equal(expand('/v', here, [])!.items.length, 1, 'the empty card: nothing to derive from')
+  const tpl: Template = { ...preset, id: 't4', shortcut: 'obs', items: [], lines: ['/v 120/80 84'] }
+  const pre = expand('#obs', here, [tpl])!.items
+  assert.deepEqual(pre.map((d) => d.function), ['vitals', 'score'], 'a preset line derives too')
+  // …and again on a card edit, as the composer does for a preset's line (its command's again, with the line's own words)
+  assert.deepEqual(v.again!([{ ...pre[0], params: { ...pre[0].params, pulse: 90 } }, pre[1]], '120/80 84', here).map((d) => d.line), ['BP 120/80 · P 84', 'Test 90'])
+  const other = { function: 'note', kind: 'note', params: { text: 'x' }, line: 'x', by: 'elsewhere' }
+  assert.deepEqual(v.again!([two[0], other, two[1]], '120/80 84', here).map((d) => d.by), [undefined, 'elsewhere', 'testpack'], 'another command\'s additions stay as they are')
+  addToCommand({ pack: 'throws', name: 'v', writes: ['score'], add: () => { throw new Error('no') } })
+  addToCommand({ pack: 'wrong', name: 'v', writes: ['score'], add: () => [{ function: 'note', kind: 'note', params: {}, line: 'x' }] })
+  assert.deepEqual(quiet(() => (parse('/v 120/80 84', { ...ctx, packs: ['throws', 'wrong'] }) as { ok: Parsed[] }).ok.map((d) => d.function)), ['vitals'], 'a throwing add or a wrong function is left out')
 })
 test('the base facts: /preg with an LMP or weeks, /bf, /alert by kind; an end changes the standing fact; HIV is never written', () => {
   const was = { status: 'current', pregnant: true, weeks: 10 }

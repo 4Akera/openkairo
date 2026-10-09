@@ -1,11 +1,12 @@
-// Ward nursing's /obs (spec/openCare.md §5.6, piece 1): the vitals and NEWS2 in one line, offered where the department uses the pack.
-// Its drafts are the base's own types, as /lab's are: the core's vitals card and score card draw them, the score card asks the server
-// for the total as it fills and offers chips for what the line left out, Done waits until NEWS2 is complete, and Sign writes both in
-// one set. Under the cards, the line's notes (line.ts): words first, a glyph beside a caution, so colour is never alone.
+// Ward nursing on the base's /v (spec/openCare.md §5.6): where a department uses the pack, the ward's /v writes the base's vitals and
+// NEWS2 in one set (the owner's C3, 2026-10-08); /obs is gone. NEWS2 is the base's own score type: the core's vitals card and score card
+// draw the two drafts, the score card asks the server for the total as it fills and offers chips for what the vitals leave out, a change
+// on the vitals card derives NEWS2 again, Done waits until NEWS2 is complete, and Sign writes both. Under the cards, the notes (line.ts):
+// words first, a glyph beside a caution, so colour is never alone.
 import { CircleAlert, TriangleAlert } from 'lucide-react'
-import { registerCommand } from '@core/screens/visit/commands'
+import { addToCommand } from '@core/screens/visit/commands'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
-import { obsLine, obsNotes, type ObsNote } from './line'
+import { news2From, obsNotes, type ObsNote } from './line'
 
 /** the kit's glyphs for a caution and a danger, as its callouts draw them */
 const GLYPH = { warn: TriangleAlert, danger: CircleAlert }
@@ -19,7 +20,5 @@ export function ObsNotes({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
       {Glyph && <Glyph aria-hidden className="mt-px size-3.5 shrink-0" />}<span>{n.text}</span></li> })}</ul>
 }
 
-registerCommand({ name: 'obs', pack: 'bedside', groupTitle: 'Ward nursing', title: 'Obs', label: 'Obs with NEWS2 — the vitals and NEWS2 in one line, added up by the server',
-  example: '/obs 105/68 104 38.4 94 22 air a · /obs 132/80 96 37.1 91 20 oxygen a s2', action: 'write:vitals', writes: ['vitals', 'score'],
-  parse: (rest, ctx) => obsLine(rest, ctx),
+addToCommand({ pack: 'bedside', name: 'v', writes: ['score'], words: ['s2', 'scale2'], add: news2From,
   note: (items, ctx) => obsNotes(items, ctx).length ? <ObsNotes items={items} ctx={ctx} /> : null })

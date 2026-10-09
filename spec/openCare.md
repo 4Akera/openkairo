@@ -382,7 +382,7 @@ FHIR's own code wherever the meaning matches, so the mapping is identity and the
 | type | purpose · key fields | FHIR R4 | codes |
 |---|---|---|---|
 | `note` | text and/or files · kind (history, progress, plan, letter, scan, consult reply…), text, language, attachments | DocumentReference (docStatus amended on correction) | LOINC 11506-3, 34117-2, 11488-4, 34111-1, 28570-0, 18842-5, 18776-5 |
-| `vitals` | one set of measurements · a quantity per stable key: `bp`{sys,dia}, `hr`, `rr`, `temp`, `spo2`, `weight`, `height`, `bmi`, `head`, `pain`, `glucose`; method, site | Observation panel 85353-1 + one Observation per key, id `{item}-{key}` | LOINC 85354-9 (8480-6/8462-4), 8867-4, 9279-1, 8310-5, 2708-6 + 59408-5, 29463-7, 8302-2, 39156-5, 9843-4, 72514-3, 41653-7 (glucose 2339-0); UCUM |
+| `vitals` | one set of measurements · a quantity per stable key: `bp`{sys,dia}, `hr`, `rr`, `temp`, `spo2`, `weight`, `height`, `bmi`, `head`, `pain`, `glucose`, `consciousness` (ACVPU a · c · v · p · u), `oxygen` {on air · oxygen, device, flow, fio2} (owner, 2026-10-08, Q5); method, site | Observation panel 85353-1 + one Observation per key, id `{item}-{key}` (`{item}-consciousness`, `{item}-oxygen`, `{item}-oxygen.flow`, `{item}-oxygen.fio2`) | LOINC 85354-9 (8480-6/8462-4), 8867-4, 9279-1, 8310-5, 2708-6 + 59408-5, 29463-7, 8302-2, 39156-5, 9843-4, 72514-3, 41653-7 (glucose 2339-0), 67775-7 (LA9340-6 · LA17108-4 · LA17107-6 · LA9343-0; new confusion as words), 107117-4 (words), 3151-8, 3150-0; UCUM |
 | `observation` | one coded fact · code, value (quantity, concept, text or date) | Observation | LOINC (smoking 72166-2, pregnancy 82810-3, LMP 8665-2) |
 | `problem` | a problem or visit diagnosis · concept, category (problem-list-item · encounter-diagnosis), clinical status, verification (`/dx ?` = provisional), severity, body site, onset/abatement (partial date or words), note | Condition | WHO ICD-10; HL7 condition statuses |
 | `allergy` | allergy or intolerance · concept, type, category (food · medication · environment · biologic), criticality, statuses, reactions[{manifestation, severity}], note | AllergyIntolerance | ATC or EDA ingredient, ATC class; local allergens and reactions |
@@ -585,7 +585,9 @@ contrast (all pairs AA in both themes), every component and state, the record's 
 pack builds against.
 
 ### 4.7 The composer
-The composer turns typed lines into one set. `/v 120/80 88` becomes `vitals` with codings by stable key; `/dx` a `problem`; `/rx` a
+The composer turns typed lines into one set. `/v 120/80 88` becomes `vitals` with codings by stable key (and, owner 2026-10-08 Q5, air
+or oxygen — `air`, `oxygen`, `2l`, `fio2 40`, a device — and ACVPU — `a`, `confused`, `voice`, `pain`, `unresponsive`; `o2` is refused as
+ambiguous; the grammar lives in `visit/vitals.ts`); `/dx` a `problem`; `/rx` a
 `medication`; `/al` an `allergy`; `/nka` a `list_review`; `/order cbc, hba1c` two `order`s (a word fitting two services asked, never guessed; a pack
 that answers orders adds its own word, the laboratory's `/lab cbc, dm follow-up, troponin stat ? chest pain`, §5.1 rule 1); `/preg 12w` (or `lmp 2026-08-01`, `no`,
 `end delivered`) a `pregnancy`, `/bf` (`no`, `end`) a `breastfeeding` and `/alert dnr · hbv · hcv · fall · <words>` (`end dnr`) an
@@ -647,6 +649,10 @@ it works ("/x is used in: …").
   (`packs/lis/order.tsx`) says each test's tube and, under the card, the tubes and the fasting to tell the patient. It offers every
   service of the departments using the pack that serve this one, as those departments have them; one that takes no sample shows no
   tube. What a department offers is its own setting: an X-ray belongs to an imaging department, not the laboratory.
+  *Built 2026-10-09 (owner, 2026-10-08, C3):* a pack adds drafts to a core command where the department uses it (`addToCommand`;
+  the API's names are Claude's choice inside C3): it never replaces the command's grammar, its drafts are derived from the command's
+  own and derived again when one changes on the card, a draft left out stays out, and only a core command takes additions. Ward
+  nursing's `/v` writes NEWS2 beside the vitals where a department uses it; `/obs` is gone.
 - **Rule 2 · a pack's section in the chart.** It shows when this department uses the pack *and* the patient fits it, or when the
   patient already has that pack's data. Each pack declares its fit once, by age and sex (Pregnancy: women 10–55; Growth: under 19);
   a clinic cannot change it. Base sections always show. Every other section waits behind **More · n**, which opens in place as more
@@ -696,6 +702,10 @@ it works ("/x is used in: …").
   orders, while a prescription waits prepared at the pharmacy (open and started, whatever the service calls its steps, as its
   Dispensing screen's Prepared and its banner word); none on the desk, whose Reception reads no orders, nor on the bench, whose In
   progress says it.
+  *Built 2026-10-09 (owner, 2026-10-08, C1):* `registerTileLoad(pack, load)`: one load per pack per board (the department, the clinic,
+  the rights), read again on the clinic's hints and when the stays change, never on a timer; lines and buttons get its `data` (undefined
+  while it loads, so a pack says what the row alone knows); `TileCtx.org`. Ward nursing's "NEWS2 n" (amber medium, red high, adults)
+  comes through its op `bedside.board` (read:record, read-logged for treatment).
 - **Rule 5 · one frame for every screen.** The platform draws it for base and pack screens alike: the department's tab row, then one
   toolbar (the screen's views on the left; search, date and the main action on the right), then the content, at one width with one
   margin everywhere. No heading under the tabs: the selected tab is the title. The pack fills only the content; empty and "not for
@@ -1406,7 +1416,7 @@ their questions on 2026-10-08 ("1 two tabs, 2-6 ok, 7 yours"). What the owner de
   the chart already shows (latest values, current medicines, allergies); (c) an order finished with no answer to come (an X-ray not
   reported) puts a row on the requester's To review for their own reading.
 
-### 5.6 The departments of beds: ward, ER, ICU, CCU, labour ward, dialysis (pictures 2026-10-08; building from 2026-10-09)
+### 5.6 The departments of beds: ward, ER, ICU, CCU, labour ward, dialysis (pictures 2026-10-08; owner's answers 2026-10-08; building from 2026-10-09)
 The owner asked for these six together on 2026-10-08 ("they share common things"). The pictures `/pictures.html#stay-map` …
 `#hd-schedule` (`src/pictures/stays.tsx`, `ward.tsx`, `er.tsx`, `icu.tsx`, `labour.tsx`, `dialysis.tsx`; shots in
 `spec/shots/2026-10-08/stays/`) were drawn by Claude. *Everything below is proposed by Claude, awaiting the owner*; each question is
@@ -1482,6 +1492,17 @@ numbered as on its picture.
   the server keep each item's points with a score, so the banner can say "3 in one sign"; should the board refresh itself every
   minute (today an overdue tile turns amber at the next refresh); should the composer know the patient's age (for an "under 16"
   caution).
+- **Built, piece 2 (core for beds, the owner's C1, Q5, B1 and C3; 2026-10-09)**: consciousness (ACVPU) and oxygen are base vitals
+  (`vitals` stays at version 1: both keys optional; flow and FiO₂ reach `base.values`, ACVPU and air or oxygen are words); the codes and
+  units of §6.2; the vitals block, the Summary and FHIR show them. On a ward that uses Ward nursing, `/v` with all five of NEWS2's
+  measured signs (BP, pulse, RR, SpO₂, temperature) also drafts NEWS2, takes air or oxygen and ACVPU from the vitals (else its card
+  asks and Done waits), `s2` puts it on scale 2; a partial `/v` writes plain vitals with a quiet note. The board's tiles say "NEWS2 n".
+  *Chosen by Claude in the build, awaiting the owner*: the device list (nasal cannula, simple, Venturi, reservoir, humidified,
+  high-flow nasal, tracheostomy mask, CPAP, NIV, other; "venturi mask" and "nasal cannula" read as one device each); ACVPU's C exported
+  as the words "New confusion" (LOINC 67775-7 has no such answer); five signs before NEWS2 is drafted; NEWS2's tile colour by band only
+  (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
+  on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
+  approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
 
 ---
 
@@ -1507,6 +1528,9 @@ new type version. ICD-11 comes later through WHO maps applied when reading. Arab
 ### 6.2 Units
 Every value keeps the unit as written plus its UCUM code; the value is a decimal string. The codes row of each LOINC code holds the
 canonical UCUM unit and the allowed units. Trends and checks convert when reading (mg/dL ↔ mmol/L). Nothing is ever rewritten.
+For the departments of beds (owner, 2026-10-08, B1) the committed units gain L/min, mL/h, mg/h, U/h, ug/kg/min, mL/kg/h and cm[H2O],
+and LOINC gains fluid intake 9103-3, output 9257-7, urine output 9187-6 and 9188-4, MAP 8478-0, CVP 60985-9 and fetal heart rate
+55283-6.
 
 ### 6.3 Identifiers
 
@@ -2093,4 +2117,11 @@ types, parked pack calls with per-call Retry, Postgres enums.
   (Nour Adel; Samira, Abdelmoneim, Tahany). `bedside` 40 checks, `demo` 76; 32 suites, 1536 checks; `test:bedside` 11 groups and
   every node suite green; lint 0 errors. `typecheck` and `build` stop only on `src/pictures/bookings.tsx` (another session's commit
   2878882: Chips without onClick); `vite build` alone builds.
+- 2026-10-09: **core for beds, piece 2** (§5.6; the owner's C1, Q5, B1, C3 of 2026-10-08; lane `beds`): base migrations 06, 07, 08, 09
+  edited in place (codes and units, `base.vital_keys`, the vitals shape and line, `base.vitals_fhir`), `visit/vitals.ts`,
+  `addToCommand`, `registerTileLoad`, Ward nursing's `/v` NEWS2 and `bedside.board`. 33 suites (new `vitals` 27), 1581 checks
+  (`bedside` 55, `demo` 79); node: composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8,
+  setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
+  `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
+  `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

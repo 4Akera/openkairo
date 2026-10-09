@@ -157,6 +157,19 @@ test('vitals: no flag, only a trend; a tile older than the reading keeps its own
   assert.deepEqual(v.tiles.map((t) => `${t.label} ${t.value}${t.trend}${t.own ? '*' : ''}`), ['BP 150/95↗', 'HR 90*', 'Wt 86*'])
   assert.ok(v.tiles.every((t) => !('flag' in t) && !FLAG_GLYPHS.test(t.trend))); assert.equal(v.tiles[0].before, '140/90')
 })
+test('vitals: air or oxygen after SpO₂ and ACVPU after RR, from the reading\'s own entry (the owner\'s Q5); nine tiles at most', () => {
+  const vc = E('vitals', { data: { consciousness: 'v', oxygen: { on: 'oxygen', device: 'venturi_mask', flow: { value: '4', unit: 'L/min', ucum: 'L/min' } } } })
+  const vs = [val('bp.sys', 'loinc:8480-6', 110, T0, vc), val('bp.dia', 'loinc:8462-4', 70, T0, vc), val('hr', 'loinc:8867-4', 96, T0, vc), val('temp', 'loinc:8310-5', 37.4, T0, vc),
+    val('spo2', 'loinc:59408-5', 93, T0, vc), val('oxygen.flow', 'loinc:3151-8', 4, T0, vc), val('rr', 'loinc:9279-1', 22, T0, vc), val('weight', 'loinc:29463-7', 70, T0, vc),
+    val('height', 'loinc:8302-2', 170, T0, vc)]
+  const tiles = vitalsNow(vs, { [vc.id]: vc }).tiles
+  assert.deepEqual(tiles.map((t) => `${t.label} ${t.value}${t.unit ? ` ${t.unit}` : ''}`), ['BP 110/70 mmHg', 'HR 96', 'T 37.4', 'SpO₂ 93', 'O₂ 4 L/min', 'RR 22', 'ACVPU V', 'Wt 70', 'BMI 24.2 kg/m²'])
+  assert.deepEqual(tiles.filter((t) => t.key === 'acvpu').map((t) => [t.before, t.trend, t.own]), [[null, '', false]])
+  const air = E('vitals', { data: { oxygen: { on: 'air' } } })
+  assert.equal(vitalsNow([val('spo2', 'loinc:59408-5', 97, T0, air)], { [air.id]: air }).tiles.find((t) => t.key === 'oxygen')?.value, 'Air')
+  assert.deepEqual(vitalsNow(vs).tiles.map((t) => t.key), ['bp', 'hr', 'temp', 'spo2', 'rr', 'weight', 'bmi'], 'without the entries: as before')
+  assert.deepEqual(resultsByKind(record({ 'base.values': table(vs, [vc]) }), types).groups[0].tests.map((x) => x.name).slice(3, 5), ['SpO₂', 'Oxygen flow'], 'its flow trends after SpO₂')
+})
 test('key results: LL and HH keep their direction; trend glyphs are never flag glyphs', () => {
   const k6 = keyResults(values)
   assert.deepEqual(k6.rows.map((r) => r.name), ['HbA1c', 'Creatinine', 'Hb', 'Potassium'])

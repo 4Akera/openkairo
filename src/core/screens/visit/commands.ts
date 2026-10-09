@@ -6,8 +6,11 @@
 // A pack never takes a command over for the whole clinic: a name that is taken is refused. It may give its own
 // department type its own version of a core command (overrideCommand) and its own card (registerCard) — which still
 // write what the core command writes, so the record keeps one medication list, one problem list — and each
-// department may decline them (departments.pack_cards).
-import type { ComponentType, ReactNode } from 'react'
+// department may decline them (departments.pack_cards). Where a department uses a pack, the pack may also add drafts of its own to a
+// core command (addToCommand, the owner's C3, 2026-10-08): derived from the command's own and written in the same set, never in place
+// of its grammar.
+import { Fragment, createElement, type ComponentType, type ReactNode } from 'react'
+import { isPackKey } from '../marks'
 import type { Ctx, Parsed, Result } from './parse'
 
 export interface Command {
@@ -31,6 +34,9 @@ export interface Command {
   swatch?: (s: Ctx['services'][number]) => string | null
   /** a line under what the card holds (the tubes, fasting to tell the patient) */
   note?: (items: Parsed[], ctx: Ctx) => ReactNode
+  /** with a pack's additions here (C3): the drafts again after a card edit — the command's own as they stand, each addition derived anew;
+   *  dropped: the packs whose drafts the user left out on this line */
+  again?: (items: Parsed[], rest: string, ctx: Ctx, dropped?: readonly string[]) => Parsed[]
 }
 /** a pack's version of a command in its own department type: its label, parser and empty card */
 export interface CommandOverride { pack: string; departmentType: string; name: string; label?: string; example?: string; parse?: Command['parse']; empty?: Command['empty'] }
@@ -43,14 +49,66 @@ export function registerCommand(c: Command) {
   commands.set(c.name, c); for (const n of [c.name, ...(c.aliases ?? [])]) names.set(n.toLowerCase(), c.name)
 }
 export function overrideCommand(o: CommandOverride) { overrides.push(o) }
+
+/** a pack's addition to a core command where this department uses the pack (owner, 2026-10-08, C3): from the command's own drafts it
+ *  derives drafts of its own (a score beside the vitals), written in the same set. It never replaces the command's grammar; its own
+ *  words are taken out of the line before the command reads it; its drafts are derived again when the command's own change on the card */
+export interface CommandAddition {
+  pack: string                 // only where ctx.packs includes it (packs unknown, as in tests and previews: never)
+  name: string                 // the core command it adds to ('v')
+  writes: string[]             // the write functions its drafts call (['score'])
+  words?: string[]             // its own words on the line, whole words, any case (['s2', 'scale2'])
+  /** pure: the pack's drafts from the command's own; said: its words found on the line; prev: its drafts before this change (to keep what
+   *  was chosen on their cards); [] adds nothing */
+  add: (drafts: Parsed[], ctx: Ctx, more: { said: string[]; prev: Parsed[] }) => Parsed[]
+  note?: Command['note']       // a line under the cards, after the command's own
+}
+const additions: CommandAddition[] = []
+export function addToCommand(a: CommandAddition): boolean {
+  if (!isPackKey(a.pack)) { console.error(`openCare: an addition to /${a.name} belongs to a pack: ${a.pack}`); return false }
+  if (!a.writes?.length) { console.error(`openCare: ${a.pack}'s addition to /${a.name} names no write function`); return false }
+  if (typeof a.add !== 'function') { console.error(`openCare: ${a.pack}'s addition to /${a.name} needs its add`); return false }
+  if (additions.some((x) => x.pack === a.pack && x.name === a.name)) { console.error(`openCare: ${a.pack} adds to /${a.name} already`); return false }
+  additions.push({ ...a, words: (a.words ?? []).map((w) => w.toLowerCase()) }); return true
+}
+/** the additions to a core command here: none to a pack's command, and only from the packs this department uses */
+const additionsFor = (c: Command, w?: Where) => c.pack ? [] : additions.filter((a) => a.name === c.name && !!w?.packs?.includes(a.pack))
+/** the command with its additions here: its writes, its parse and empty card deriving the packs' drafts, their notes, and again */
+function withAdditions(c: Command, adds: CommandAddition[]): Command {
+  const split = (rest: string) => { const said: string[] = []; const kept: string[] = []
+    for (const w of rest.split(/\s+/).filter(Boolean)) { if (adds.some((a) => a.words?.includes(w.toLowerCase()))) said.push(w.toLowerCase()); else kept.push(w) }
+    return { said, kept: kept.join(' ') } }
+  const derive = (items: Parsed[], x: Ctx, said: string[], dropped: readonly string[] = []): Parsed[] => {
+    // the command's own drafts feed the additions; another command's additions (a preset's other line) stay as they are
+    const own = items.filter((p) => !p.by); const out = items.filter((p) => !adds.some((a) => a.pack === p.by))
+    for (const a of adds) {
+      if (dropped.includes(a.pack)) continue
+      let got: Parsed[] = []
+      try { got = a.add(own, x, { said: said.filter((w) => a.words?.includes(w)), prev: items.filter((p) => p.by === a.pack) }) } catch (e) { console.error(`openCare: ${a.pack}'s addition to /${c.name} failed`, e) }
+      for (const p of Array.isArray(got) ? got : []) {
+        if (!a.writes.includes(p.function)) { console.error(`openCare: ${a.pack}'s addition to /${c.name} wrote ${p.function}, not one of ${a.writes.join(', ')}`); continue }
+        out.push(p.by === a.pack ? p : { ...p, by: a.pack })   // one kept as it was stays the same draft (its server answer with it)
+      }
+    }
+    return out
+  }
+  const notes = [c.note, ...adds.map((a) => a.note)].filter((n): n is NonNullable<Command['note']> => !!n)
+  return { ...c, writes: [...(c.writes ?? []), ...adds.flatMap((a) => a.writes)],
+    parse: (rest, x) => { const s = split(rest); const r = c.parse(s.kept, x); return r && 'ok' in r ? { ok: derive(r.ok, x, s.said) } : r },
+    empty: c.empty ? (x) => { const e = c.empty!(x); return Array.isArray(e) ? derive(e, x, []) : e } : undefined,
+    note: notes.length ? (items, x) => createElement(Fragment, null, ...notes.map((n, i) => createElement(Fragment, { key: i }, n(items, x)))) : undefined,
+    again: (items, rest, x, dropped) => derive(items, x, split(rest).said, dropped) }
+}
 /** the pack's version, in a department of its type that uses pack cards, while the pack is on */
 const overrideFor = (name: string, w?: Where) => w?.departmentType && w.packCards !== false
   ? overrides.find((o) => o.name === name && o.departmentType === w.departmentType && (!w.packs || w.packs.includes(o.pack))) : undefined
 function resolve(c: Command, w?: Where): Command {
-  const o = overrideFor(c.name, w); if (!o) return c
+  const o = overrideFor(c.name, w)
   // it may look and ask differently; it writes what the core command writes
   const same = (r: Result): Result => !r || 'error' in r || !c.writes || r.ok.every((p) => c.writes!.includes(p.function)) ? r : { error: `This department's /${c.name} must write what /${c.name} writes` }
-  return { ...c, label: o.label ?? c.label, example: o.example ?? c.example, parse: o.parse ? (rest, x) => same(o.parse!(rest, x)) : c.parse, empty: o.empty ?? c.empty }
+  const base = o ? { ...c, label: o.label ?? c.label, example: o.example ?? c.example, parse: o.parse ? (rest: string, x: Ctx) => same(o.parse!(rest, x)) : c.parse, empty: o.empty ?? c.empty } : c
+  const adds = additionsFor(c, w)
+  return adds.length ? withAdditions(base, adds) : base
 }
 /** "rx", "RX", "plan:" → the command (this department's version), if one is registered under that name or alias */
 export const commandNamed = (word: string, w?: Where) => { const n = names.get(word.toLowerCase().replace(/:$/, '')); const c = n ? commands.get(n) : undefined; return c ? resolve(c, w) : undefined }

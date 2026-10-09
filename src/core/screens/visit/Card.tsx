@@ -9,6 +9,7 @@ import { lineOf, partialDate, type Ctx, type Parsed } from './parse'
 import { cardFor } from './commands'
 import { FactCard } from './FactCards'
 import { ScoreCard } from './ScoreCard'
+import { ACVPU, O2_DEVICES, type Acvpu } from './vitals'
 
 const FREQS = ['OD', 'BD', 'TDS', 'QDS', 'q6h', 'q8h', 'q12h', 'weekly', 'monthly', 'once', 'stat']
 const ROUTES = ['oral', 'sc', 'im', 'iv', 'sl', 'topical', 'inhaled', 'nasal', 'pr', 'pv']
@@ -130,9 +131,26 @@ function Al({ q, set }: { q: Q; set: (p: Q) => void }) {
   </div>
 }
 
+const NO_O2 = { o2_device: undefined, o2_flow: undefined, fio2: undefined }
 function Vitals({ q, set }: { q: Q; set: (p: Q) => void }) {
-  return <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">{VITALS.map(([k, l, u]) => <label key={k} className="text-11 text-muted">{l} <span className="text-faint">{u}</span>
-    <NumberInput label={l} value={q[k]} onValue={(n) => set({ [k]: n ?? undefined })} className={cn(small, 'mt-0.5')} /></label>)}</div>
+  // a device, a flow or FiO₂ is oxygen; air clears them (the base's air or oxygen and ACVPU, the owner's Q5)
+  const o2 = (patch: Q) => set({ ...patch, oxygen: 'oxygen' })
+  return <div className="grid gap-1.5">
+    <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">{VITALS.map(([k, l, u]) => <label key={k} className="text-11 text-muted">{l} <span className="text-faint">{u}</span>
+      <NumberInput label={l} value={q[k]} onValue={(n) => set({ [k]: n ?? undefined })} className={cn(small, 'mt-0.5')} /></label>)}</div>
+    <FormRow inline label="Air or oxygen">
+      <Chip data-chip on={q.oxygen === 'air'} onClick={() => set(q.oxygen === 'air' ? { oxygen: undefined } : { oxygen: 'air', ...NO_O2 })}>Air</Chip>
+      <Chip data-chip on={q.oxygen === 'oxygen'} onClick={() => set(q.oxygen === 'oxygen' ? { oxygen: undefined, ...NO_O2 } : { oxygen: 'oxygen' })}>Oxygen</Chip>
+      {q.oxygen === 'oxygen' && <>
+        <Select aria-label="Oxygen device" value={q.o2_device ?? ''} onChange={(e) => o2({ o2_device: e.target.value || undefined })} className={cn(small, 'w-40')}>
+          <option value="">—</option>{O2_DEVICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
+        <NumberInput label="Oxygen flow" value={q.o2_flow} onValue={(n) => o2({ o2_flow: n ?? undefined })} placeholder="flow" className={cn(small, 'w-16')} /><span className="text-11 text-faint">L/min</span>
+        <NumberInput label="FiO₂" integer value={q.fio2} onValue={(n) => o2({ fio2: n ?? undefined })} placeholder="FiO₂" className={cn(small, 'w-16')} /><span className="text-11 text-faint">%</span>
+      </>}
+    </FormRow>
+    <FormRow inline label="ACVPU">{(Object.entries(ACVPU) as [Acvpu, string][]).map(([k, l]) =>
+      <Chip data-chip key={k} on={q.consciousness === k} onClick={() => set({ consciousness: q.consciousness === k ? undefined : k })}>{l}</Chip>)}</FormRow>
+  </div>
 }
 
 function Req({ q, set, ctx }: { q: Q; set: (p: Q) => void; ctx: Ctx }) {

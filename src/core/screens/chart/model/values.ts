@@ -25,27 +25,33 @@ function series(values: ValueRow[]) {
 // ── Last vitals ──
 export interface VitalTile { key: string; label: string; value: string; unit: string | null; at: string; entry_id: string; before: string | null; trend: string; own: boolean }
 export interface VitalsNow { at: string | null; entry_id: string | null; tiles: VitalTile[] }
-/** one reading's worth: the latest value of each key (BP · HR · T · SpO₂ · RR · Wt, BMI when a height exists); a tile older than the
- *  latest reading carries its own date (own) */
-export function vitalsNow(values: ValueRow[]): VitalsNow {
+/** one reading's worth: the latest value of each key (BP · HR · T · SpO₂ · O₂ · RR · ACVPU · Wt, BMI when a height exists); a tile older
+ *  than the latest reading carries its own date (own). O₂ and ACVPU are words, never in base.values: they come from the latest reading's
+ *  own entry (entries), when it is at hand */
+export function vitalsNow(values: ValueRow[], entries?: Record<string, ServerEntry>): VitalsNow {
   const vs = values.filter(isVital).sort(newestFirst)
   if (!vs.length) return { at: null, entry_id: null, tiles: [] }
   const latest = vs[0]; const of = (key: string) => vs.filter((v) => v.key === key)
   const tile = (key: string, label: string, now: ValueRow, value: string, before: ValueRow | undefined, was: string | null, unit = unitOf(now)): VitalTile =>
     ({ key, label, value, unit, at: now.at, entry_id: now.entry_id, before: was, trend: trendMark(now.value, before?.value), own: now.entry_id !== latest.entry_id })
+  // a word tile of the latest reading: no value before, no trend
+  const words = (key: string, label: string, value: string, unit: string | null = null): VitalTile => ({ key, label, value, unit, at: latest.at, entry_id: latest.entry_id, before: null, trend: '', own: false })
+  const d = entries?.[latest.entry_id]?.data as { oxygen?: { on?: string; flow?: { value?: string } }; consciousness?: string } | undefined
   const tiles: VitalTile[] = []
   const [sys, prev] = [of('bp.sys')[0], of('bp.sys').find((v) => v.entry_id !== of('bp.sys')[0]?.entry_id)]
   const dia = (s: ValueRow | undefined) => s && of('bp.dia').find((d) => d.entry_id === s.entry_id)
   const bp = (s: ValueRow) => dia(s) ? `${s.value}/${dia(s)!.value}` : `${s.value}`
   if (sys) tiles.push(tile('bp', 'BP', sys, bp(sys), prev, prev ? bp(prev) : null, 'mmHg'))
-  for (const key of ['hr', 'temp', 'spo2', 'rr', 'weight']) {
+  for (const key of ['hr', 'temp', 'spo2', 'oxygen', 'rr', 'acvpu', 'weight']) {
+    if (key === 'oxygen') { const o = d?.oxygen; if (o?.on) tiles.push(o.on === 'air' ? words('oxygen', 'O₂', 'Air') : o.flow?.value ? words('oxygen', 'O₂', o.flow.value, 'L/min') : words('oxygen', 'O₂', 'Oxygen')); continue }
+    if (key === 'acvpu') { if (typeof d?.consciousness === 'string' && d.consciousness) tiles.push(words('acvpu', 'ACVPU', d.consciousness.toUpperCase())); continue }
     const [now, ...rest] = of(key); const before = rest.find((v) => v.entry_id !== now?.entry_id)
     if (now) tiles.push(tile(key, VITALS.find((v) => v.key === key)!.short, now, `${now.value}`, before, before ? `${before.value}` : null))
   }
   const bmi = of('bmi')[0]; const h = of('height')[0]; const w = of('weight')[0]
   if (bmi) tiles.push(tile('bmi', 'BMI', bmi, `${bmi.value}`, of('bmi')[1], of('bmi')[1] ? `${of('bmi')[1].value}` : null))
   else if (h && w && h.value > 0) tiles.push({ ...tile('bmi', 'BMI', w, (w.value / (h.value / 100) ** 2).toFixed(1), undefined, null, 'kg/m²'), key: 'bmi' })
-  return { at: latest.at, entry_id: latest.entry_id, tiles: tiles.slice(0, 7) }
+  return { at: latest.at, entry_id: latest.entry_id, tiles: tiles.slice(0, 9) }
 }
 
 // ── Key results ──

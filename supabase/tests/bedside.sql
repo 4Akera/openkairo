@@ -1,7 +1,8 @@
--- Ward nursing (spec §5.6), piece 1: NEWS2 (RCP 2017) as two of the server's score tables, SpO₂ scale 1 and scale 2, each item's
--- points at its edges, the totals and their bands; the pack's starter setup; on the ward the base's vitals and the base's score in one
--- set, the record's line, the values and the board's has_vitals; refused where the department or the clinic does not use the pack,
--- while plain vitals still land.
+-- Ward nursing (spec §5.6): NEWS2 (RCP 2017) as two of the server's score tables, SpO₂ scale 1 and scale 2, each item's points at
+-- its edges, the totals and their bands; the pack's starter setup; on the ward the base's vitals (ACVPU and air or oxygen among them)
+-- and the base's score in one set, as /v signs them, the record's lines, the values and the board's has_vitals; the board's read of each
+-- stay's latest NEWS2 through the pack's own op; refused where the department or the clinic does not use the pack, while plain vitals
+-- still land.
 \set org   '00000000-0000-0000-0000-0000000000a1'
 \set im    '00000000-0000-0000-0000-0000000000d1'
 \set ward  '00000000-0000-0000-0000-0000000000d6'
@@ -11,6 +12,10 @@
 \set s1    '00000000-0000-0000-0000-00000000e603'
 \set s2    '00000000-0000-0000-0000-00000000e604'
 \set new   '00000000-0000-0000-0000-0000000000e9'
+\set pt2   '00000000-0000-0000-0000-0000000000f2'
+\set stay2 '00000000-0000-0000-0000-00000000e605'
+\set stay3 '00000000-0000-0000-0000-00000000e606'
+\set rec   '11111111-0000-0000-0000-0000000000b4'
 \set ow    '11111111-0000-0000-0000-0000000000b9'
 \set dr    '11111111-0000-0000-0000-0000000000b1'
 \set nurse '11111111-0000-0000-0000-0000000000b3'
@@ -99,14 +104,16 @@ select t.as(:'dr');
 select t.landed(t.w(t.e('admitted', :'pt', :'ward', '{"admit_source":"emd","reason":"pneumonia"}', :'stay', :'stay')), 'admitted to the ward');
 select t.ok(count(*) = 1 and not bool_or((r ->> 'has_vitals')::boolean), 'just admitted: the board knows the stay has no obs yet') from t.rows('base.presence', :'ward', jsonb_build_object('item', :'stay')) r;
 
-\echo '── on the ward: the vitals and NEWS2 in one set, as /obs signs them'
+\echo '── on the ward: the vitals and NEWS2 in one set, as /v signs them'
 select t.as(:'nurse');
 select t.landed(t.w(jsonb_build_array(
-  t.e('vitals', :'pt', :'ward', '{"bp":{"sys":{"value":"105","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"68","unit":"mmHg","ucum":"mm[Hg]"}},"hr":{"value":"104","unit":"bpm","ucum":"/min"},"rr":{"value":"22","unit":"/min","ucum":"/min"},"temp":{"value":"38.4","unit":"°C","ucum":"Cel"},"spo2":{"value":"94","unit":"%","ucum":"%"}}',
+  t.e('vitals', :'pt', :'ward', '{"bp":{"sys":{"value":"105","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"68","unit":"mmHg","ucum":"mm[Hg]"}},"hr":{"value":"104","unit":"bpm","ucum":"/min"},"rr":{"value":"22","unit":"/min","ucum":"/min"},"temp":{"value":"38.4","unit":"°C","ucum":"Cel"},"spo2":{"value":"94","unit":"%","ucum":"%"},"consciousness":"a","oxygen":{"on":"air"}}',
     :'v1', :'stay'),
   t.e('score', :'pt', :'ward', '{"score":"bedside.news2","version":"2017","inputs":{"rr":"22","spo2":"94","oxygen":"air","sbp":"105","pulse":"104","consciousness":"a","temp":"38.4"},"total":6,"band":"medium"}',
     :'s1', :'stay'))), 'the vitals and NEWS2 6 land in one set');
 select t.ok(t.entry(t.record(:'pt', :'ward'), :'s1') ->> 'line' = 'NEWS2 6, 2017 · Medium', 'its line: NEWS2 6, 2017 · Medium');
+select t.ok(t.entry(t.record(:'pt', :'ward'), :'v1') ->> 'line' = 'BP 105/68 · HR 104 · RR 22 · T 38.4 · SpO2 94% · Air · ACVPU A',
+  'the vitals'' line: BP 105/68 · HR 104 · RR 22 · T 38.4 · SpO2 94% · Air · ACVPU A');
 select t.ok(count(*) = 1 and min((r ->> 'value')::numeric) = 22, 'the respiration rate is in the values: 22') from t.rows('base.values', :'ward', jsonb_build_object('patient_id', :'pt')) r
  where r ->> 'key' = 'rr';
 select t.ok(count(*) = 1 and bool_and((r ->> 'has_vitals')::boolean), 'the board knows the stay has obs') from t.rows('base.presence', :'ward', jsonb_build_object('item', :'stay')) r;
@@ -122,11 +129,57 @@ select t.landed(t.w(t.e('score', :'pt', :'ward', '{"score":"bedside.news2_s2","v
   :'s2', :'stay')), 'scale 2: NEWS2 3, low, lands in the stay');
 select t.ok(t.entry(t.record(:'pt', :'ward'), :'s2') ->> 'line' = 'NEWS2 3, 2017 · Low · scale 2', 'its line: NEWS2 3, 2017 · Low · scale 2');
 
+\echo '── the board reads each stay''s latest NEWS2 once, through the pack''s door'
+create function pg_temp.board(p_dept uuid) returns jsonb language sql as $$
+  select public.pack_op(jsonb_build_object('op', 'bedside.board', 'department_id', p_dept, 'args', '{}'::jsonb, 'purpose', 'TREAT'))
+$$;
+select t.ok(b -> 'news2' -> :'stay' ->> 'score' = 'bedside.news2_s2' and (b -> 'news2' -> :'stay' ->> 'total')::int = 3 and b -> 'news2' -> :'stay' ->> 'band' = 'low'
+  and b -> 'news2' -> :'stay' ->> 'version' = '2017' and b -> 'news2' -> :'stay' ? 'at' and b -> 'patient_ids' ? :'pt',
+  'the stay''s latest NEWS2 is scale 2''s 3, low; the patient is named for the read log') from (select pg_temp.board(:'ward') b) x;
+reset role;
+select t.ok(exists (select 1 from core.read_log l where l.patient_id = :'pt' and l.purpose = 'TREAT' and l.what -> 'ops' ? 'bedside.board'),
+  'the read is logged for the patient, for treatment, naming the op');
+set role authenticated;
+select t.landed(t.w(t.e('crossed_out', :'pt', :'ward', '{"reason":"wrong_value"}', null, :'stay', null, null, :'s2')), 'scale 2''s NEWS2 crossed out');
+select t.ok(b -> 'news2' -> :'stay' ->> 'score' = 'bedside.news2' and (b -> 'news2' -> :'stay' ->> 'total')::int = 6 and b -> 'news2' -> :'stay' ->> 'band' = 'medium',
+  'crossed out, it is passed over: the board answers the NEWS2 before it, 6, medium') from (select pg_temp.board(:'ward') b) x;
+select t.refuses(format($q$select public.pack_op(jsonb_build_object('op','bedside.board','department_id',%L))$q$, :'im'), 'not_used_here');
+select t.as(:'rec');
+select t.refuses(format($q$select public.pack_op(jsonb_build_object('op','bedside.board','department_id',%L))$q$, :'ward'), 'not_allowed');
+
+\echo '── the board names only this department''s admitted stays, each with a NEWS2 of its own stay'
+select t.as(:'ow');   -- Dr Ali and Nurse Sara work on the Surgical Ward too
+select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000b1', 'holdings', jsonb_build_array(
+  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c002', 'department_id', :'im'), jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c002', 'department_id', :'ward'),
+  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c002', 'department_id', :'new')))) is not null as dr;
+select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000b3', 'holdings', jsonb_build_array(
+  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c003', 'department_id', :'im'), jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c003', 'department_id', :'ward'),
+  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c003', 'department_id', :'new')))) is not null as nurse;
+select t.as(:'rec');
+select public.save_patient(jsonb_build_object('department_id', '00000000-0000-0000-0000-0000000000d4', 'patient', jsonb_build_object('id', :'pt2', 'given', jsonb_build_array('Mona'),
+  'family', 'Saleh', 'gender', 'female', 'birth_date', '1975-06-02'))) is not null as registered;
+select t.as(:'dr');
+select t.landed(t.w(t.e('admitted', :'pt2', :'new', '{"admit_source":"emd","reason":"cellulitis"}', :'stay2', :'stay2')), 'another patient admitted to the Surgical Ward');
+select t.as(:'nurse');
+select t.landed(t.w(t.e('score', :'pt2', :'new', '{"score":"bedside.news2","version":"2017","inputs":{"rr":"22","spo2":"94","oxygen":"air","sbp":"105","pulse":"104","consciousness":"a","temp":"38.4"},"total":6,"band":"medium"}',
+  null, :'stay2')), 'NEWS2 6 in that stay');
+select t.ok(not (b -> 'news2' ? :'stay2') and not (b -> 'patient_ids' ? :'pt2') and b -> 'news2' ? :'stay', 'the Ward''s board leaves out a stay of another department, and its patient')
+  from (select pg_temp.board(:'ward') b) x;
+select t.ok((b -> 'news2' -> :'stay2' ->> 'total')::int = 6 and b -> 'patient_ids' = jsonb_build_array(:'pt2') and not (b -> 'news2' ? :'stay'), 'the Surgical Ward''s board: its own stay only')
+  from (select pg_temp.board(:'new') b) x;
+select t.as(:'dr');
+select t.landed(t.w(t.move('discharged', :'stay', :'ward', '{"disposition":"home"}')), 'the ward''s stay discharged home');
+select t.ok(b -> 'news2' = '{}'::jsonb and b -> 'patient_ids' = '[]'::jsonb, 'a discharged stay is not on the board, nor its NEWS2, nor its patient') from (select pg_temp.board(:'ward') b) x;
+select t.landed(t.w(t.e('admitted', :'pt', :'ward', '{"admit_source":"emd","reason":"pneumonia again"}', :'stay3', :'stay3')), 'the same patient admitted again');
+select t.ok(b -> 'news2' = '{}'::jsonb and b -> 'patient_ids' = jsonb_build_array(:'pt'), 'the new stay is on the board with no NEWS2: the one of the stay before is not its own')
+  from (select pg_temp.board(:'ward') b) x;
+select t.as(:'nurse');
+
 \echo '── the clinic turns the pack off: NEWS2 is refused, plain vitals still land'
 select t.as(:'ow');
 select public.write_setting('{"key":"organization.packs_used","data":{"packs":["pharmacy"]}}') ->> 'key' as off;
 select t.as(:'nurse');
 select t.refused(t.w(t.e('score', :'pt', :'ward', '{"score":"bedside.news2","version":"2017","inputs":{"rr":"22","spo2":"94","oxygen":"air","sbp":"105","pulse":"104","consciousness":"a","temp":"38.4"},"total":6,"band":"medium"}',
-  null, :'stay')), 'pack_not_used', 'the clinic no longer uses Ward nursing');
-select t.landed(t.w(t.e('vitals', :'pt', :'ward', '{"hr":{"value":"90","unit":"bpm","ucum":"/min"}}', null, :'stay')), 'a plain vitals entry still lands');
+  null, :'stay3')), 'pack_not_used', 'the clinic no longer uses Ward nursing');
+select t.landed(t.w(t.e('vitals', :'pt', :'ward', '{"hr":{"value":"90","unit":"bpm","ucum":"/min"}}', null, :'stay3')), 'a plain vitals entry still lands');
 select t.as(null);
