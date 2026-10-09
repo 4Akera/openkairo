@@ -1,6 +1,7 @@
 // The clinics' core changes (spec/openCare.md §5.7, the owner 2026-10-08; spec/build-clinics.md C1–C5), proven with a test-only probe
 // pack: C1 a pack's line under the /rx and /v cards and after the draft; C2 /v reading length and head; C3 a pack command that is not an
-// order offered by works for; C4 a pack's step in New patient; C5 a pack's rows under the board. Pure: no browser, no database.
+// order offered by works for; C4 a pack's step in New patient; C5 a pack's rows under the board; and (the owner 2026-10-09) C6 a pack's
+// draft that refers to an item, C7 a tile line's own read. Pure: no browser, no database.
 // npm run test:clinics-core
 import assert from 'node:assert/strict'
 import { createElement } from 'react'
@@ -13,6 +14,8 @@ import { vitalsFields, monthsOld } from '../src/core/screens/visit/vitals'
 import { draftEntries } from '../src/core/db/entries'
 import { newPatientStepDefs, newPatientStepsFor, registerNewPatientStep } from '../src/core/shell/newPatientSteps'
 import { boardRowsDefs, boardRowsFor, minutesSince, registerBoardRows, rowButtons, rowsNotIn, type BoardRow } from '../src/core/screens/ward/rows'
+import { registerTileLine, tileLineDefs, tileLineOf, tileReadsFor, type TileCtx } from '../src/core/screens/ward/tiles'
+import type { PresenceRow } from '../src/core/db/types'
 import type { Organization } from '../src/core/db/types'
 
 let n = 0
@@ -153,6 +156,28 @@ test('C5: a patient already in a place here is not listed again; the minutes; a 
   assert.deepEqual(quiet(() => rowButtons(dial, row('a', 'p1'), c)), [])
   const [e] = probe.start!(row('a', 'p1'), { id: 'stay', place_id: 'chair2', department_id: 'du' })
   assert.equal((e as { visit_id: string }).visit_id, 'stay', 'the pack’s entries go in Start’s own set, in the stay just opened')
+})
+
+test('C6: a pack draft\'s `refers` becomes refers_to and relation, never its data; without it, as before', () => {
+  const where = { patientId: 'p', departmentId: 'd' }
+  const [changed] = draftEntries({ id: 'x', function: 'probe.thing', params: { a: 1, refers: { entry_id: 'e1', relation: 'changes' } } }, where)
+  assert.equal(changed.refers_to, 'e1'); assert.equal(changed.relation, 'changes'); assert.deepEqual(changed.data, { a: 1 })
+  const [about] = draftEntries({ id: 'y', function: 'probe.thing', params: { a: 2, refers: { entry_id: 'op', relation: 'about' } } }, where)
+  assert.equal(about.refers_to, 'op'); assert.equal(about.relation, 'about'); assert.deepEqual(about.data, { a: 2 })
+  const [plain] = draftEntries({ id: 'z', function: 'probe.thing', params: { a: 3 } }, where)
+  assert.equal(plain.refers_to, undefined); assert.equal(plain.relation, undefined); assert.deepEqual(plain.data, { a: 3 })
+})
+
+test('C7: a tile line\'s read reaches its own line only, where the department uses the pack; none yet, the line says what it can', () => {
+  const useRead = () => ['p1']
+  assert.equal(registerTileLine('reader', (r, c) => ({ words: (c.read as string[] | undefined)?.includes(r.patient_id) ? 'read' : 'not yet' }), useRead), true)
+  assert.equal(registerTileLine('other', (_r, c) => ({ words: c.read === undefined ? 'nothing' : 'leak' })), true)
+  assert.deepEqual(tileReadsFor(tileLineDefs(), { packs: ['reader', 'other'] }).map((d) => d.pack), ['reader'], 'only a line that reads')
+  assert.deepEqual(tileReadsFor(tileLineDefs(), { packs: ['other'] }), [], 'not where the pack is not used')
+  const ctx = { dept: { id: 'w', packs: ['reader', 'other'] }, place: null, identity: null, day: 1, can: () => true } as TileCtx
+  const row = { patient_id: 'p1' } as PresenceRow
+  assert.deepEqual(tileLineOf(tileLineDefs(), row, ctx, { reader: ['p1'], other: 'x' }).map((s) => s.words[0].text), ['read', 'nothing'], 'each pack sees only its own read (none was asked for other)')
+  assert.deepEqual(tileLineOf(tileLineDefs(), row, ctx).map((s) => s.words[0].text), ['not yet', 'nothing'], 'before the read lands')
 })
 
 console.log(`✓ clinics core: ${n} checks passed`)

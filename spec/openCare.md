@@ -1594,6 +1594,15 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   board (a patient with a stay here left out), counted as a view of the board's toolbar; Start is the base's admission into a free place
   chosen inline, with the pack's own entries in the same set; at most two buttons of the pack's own, never a base word. Tests:
   `npm run test:clinics-core`, `supabase/tests/clinics_core.sql`. The privileges migration is now `20260926000099_privileges.sql`.
+- *Core changes C6 and C7 (the owner's yes 2026-10-09; built in lane `clinics-theatre`)*: **C6** a pack's draft may refer to an item
+  (`db/entries.ts`, `PackRefers`): `refers` {entry_id, relation `changes` or `about`} among its params is kept out of its data and
+  written as the entry's `refers_to` and `relation`, which the writer already checks (a change continues the item, its own resource
+  only). Oncology's `/cancer` on a recorded cancer changes it (its stage, intent or side; the next version of the same item); the
+  pre-op's `/preop` is about the operation, so the operating list's Pre-op column reads it. **C7** a pack's tile line may register
+  its read (`registerTileLine(pack, line, useRead)`, `ward/tiles.ts`, `TileRead.tsx`): a React hook the board calls in a part of its
+  own on every render where the department uses the pack; what it returns reaches only that pack's line as `ctx.read`, and the board
+  draws again when it changes (so it keeps its identity while unchanged: a query's data, or memoised). Recovery's line and the day
+  unit's chairs read through it. Tests: `npm run test:clinics-core` (C6, C7), `test:oncology`, `test:anaesthesia`.
 - *Built 2026-10-08 (lane `clinics-theatre`), oncology* (`oncology`, migration 33, role block e8): the cancer `oncology.cancer` (the base's
   problem plus `oncology` {site, side, morphology (ICD-O-3, its own open system `oncology.icdo3`), grade, TNM with its edition, stage,
   markers, intent, plan (operation · chemotherapy · radiotherapy · endocrine · targeted · immunotherapy, each done · now · to come),
