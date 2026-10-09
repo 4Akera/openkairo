@@ -6,24 +6,30 @@ import type { Department, Identity, Place, PresenceRow } from '../../db/types'
 import { isPackKey, stateTone, type StateTone } from '../marks'
 
 /** what a pack's line and buttons read: the department, the bed, the patient, the stay's day (1 the admission's), the rights here */
-export interface TileCtx { dept: Pick<Department, 'id' | 'packs'>; place: Place | null; identity: Identity | null; day: number; can: (action: string) => boolean }
+export interface TileCtx { dept: Pick<Department, 'id' | 'packs'>; place: Place | null; identity: Identity | null; day: number; can: (action: string) => boolean
+  /** what the pack's own read returned (core change C7); undefined while it reads, or for a pack with none. A pack sees only its own */
+  read?: unknown }
 /** a pack's words on the tile: plain words, or its words one by one, each with a state colour of its own (only that word takes it) */
 export interface TileWord { text: string; tone?: StateTone }
 export interface TileWords { words: string | (string | TileWord)[] }
 export type TileLineFn = (row: PresenceRow, ctx: TileCtx) => TileWords | null | undefined
+/** a pack's read for its line (spec §5.7, core change C7, 2026-10-09): a React hook the board calls on every render where the department
+ *  uses the pack, in a part of its own; what it returns reaches the pack's line as ctx.read, and the board draws again when it changes —
+ *  so it returns a value that keeps its identity while unchanged (a query's data, or memoised), never a new object each render */
+export type TileReadHook = (dept: Pick<Department, 'id' | 'packs'>) => unknown
 /** a pack's button: its label, when it shows, and what it does (onClick, or a path to open) */
 export interface TileButtonIn { label: string; show?: (row: PresenceRow, ctx: TileCtx) => boolean; onClick?: (row: PresenceRow, ctx: TileCtx) => void; path?: (row: PresenceRow, ctx: TileCtx) => string }
-export interface LineDef { pack: string; line: TileLineFn }
+export interface LineDef { pack: string; line: TileLineFn; useRead?: TileReadHook }
 export interface ButtonDef extends TileButtonIn { pack: string; key: string }
 /** at most this many pack buttons: a pack's own, and on a tile */
 export const PACK_BUTTONS = 2
 
 const lines: LineDef[] = []; const buttons: ButtonDef[] = []
-/** a pack's words on each tile: one line per pack (a second is refused) */
-export function registerTileLine(pack: string, line: TileLineFn): boolean {
+/** a pack's words on each tile: one line per pack (a second is refused), with the read its words need (C7) */
+export function registerTileLine(pack: string, line: TileLineFn, useRead?: TileReadHook): boolean {
   if (!isPackKey(pack)) { console.error(`openCare: a tile line belongs to a pack: ${pack}`); return false }
   if (lines.some((d) => d.pack === pack)) { console.error(`openCare: ${pack} has its tile line already`); return false }
-  lines.push({ pack, line }); return true
+  lines.push({ pack, line, ...(useRead ? { useRead } : {}) }); return true
 }
 /** a pack's button on a taken bed: at most two per pack (a third is refused), each with onClick or a path */
 export function registerTileButton(pack: string, b: TileButtonIn): boolean {
@@ -36,6 +42,8 @@ export function registerTileButton(pack: string, b: TileButtonIn): boolean {
   buttons.push({ ...b, pack, key: `${pack}:${b.label}` }); return true
 }
 export const tileLineDefs = (): readonly LineDef[] => lines
+/** the lines whose pack this department uses that read (C7): the board calls each one's hook */
+export const tileReadsFor = (list: readonly LineDef[], dept: Pick<Department, 'packs'>) => list.filter((d) => d.useRead && dept.packs.includes(d.pack))
 export const tileButtonDefs = (): readonly ButtonDef[] => buttons
 
 export interface TileSegment { pack: string; words: TileWord[] }
@@ -45,13 +53,14 @@ function wordsOf(w: TileWords['words'] | undefined): TileWord[] {
   return list.flatMap((x) => { const text = (typeof x === 'string' ? x : x?.text)?.trim(); const tone = typeof x === 'string' ? undefined : stateTone(x?.tone)
     return text ? [tone ? { text, tone } : { text }] : [] })
 }
-/** the tile's one pack line: each pack this department uses, in its pack order, says its words; a pack whose words fail says nothing */
-export function tileLineOf(list: readonly LineDef[], row: PresenceRow, ctx: TileCtx): TileSegment[] {
+/** the tile's one pack line: each pack this department uses, in its pack order, says its words from its own read (C7); a pack whose words
+ *  fail says nothing */
+export function tileLineOf(list: readonly LineDef[], row: PresenceRow, ctx: TileCtx, reads: Readonly<Record<string, unknown>> = {}): TileSegment[] {
   const out: TileSegment[] = []
   for (const pack of ctx.dept.packs) {
     const d = list.find((x) => x.pack === pack); if (!d) continue
     let w: TileWords | null | undefined = null
-    try { w = d.line(row, ctx) } catch (e) { console.error(`openCare: the tile line of ${pack} failed`, e) }
+    try { w = d.line(row, { ...ctx, read: d.useRead ? reads[pack] : undefined }) } catch (e) { console.error(`openCare: the tile line of ${pack} failed`, e) }
     const words = wordsOf(w?.words)
     if (words.length) out.push({ pack, words })
   }

@@ -15,6 +15,9 @@ export interface Where { patientId: string; departmentId: string; visitId?: stri
 /** an order carrying a pack's own words (spec §5.5, core change (a)): the pack's type extending the base's order, and its words, kept
  *  under data.<pack> (an X-ray's side). Whoever may order writes it (write:order), from wherever they order */
 export interface PackOrder { type: string; words: Record<string, unknown> }
+/** a pack's draft that refers to an item (spec §5.7, core change C6, 2026-10-09): `refers` in its params, kept out of its data — the
+ *  entry it changes (its own item's latest entry: a cancer restaged) or is about (another item: a pre-op about an operation) */
+export interface PackRefers { entry_id: string; relation: 'changes' | 'about' }
 /** an order's type and data with a pack's words added, or the base's order as it is */
 export const asPackOrder = (data: EntryData['order'], as?: PackOrder | null): { type: string; data: EntryData['order'] } =>
   as ? { type: as.type, data: { ...data, [as.type.split('.')[0]]: as.words } as EntryData['order'] } : { type: 'order', data }
@@ -132,8 +135,10 @@ export function draftEntries(d: Draft, w: Where): EntryIn[] {
       return [{ ...base, id: d.id, type: d.function, data: factData(d.function, q), ...(q.entry_id ? { refers_to: String(q.entry_id), relation: 'changes' as const } : {}) } as EntryIn]
     // a score: the inputs and the server's total and band, with the version it used (§5.1 rule 8)
     case 'score': return [{ ...base, id: d.id, type: 'score', data: scoreData(q as ScoreParams) }]
-    // another type's draft (the composer makes none today): its params are that type's data, which the writer checks
-    default: return [{ ...base, id: d.id, type: d.function, data: q } as EntryIn]
+    // another type's draft (a pack's): its params are that type's data, which the writer checks; `refers` among them is not data but the
+    // entry it changes or is about (core change C6)
+    default: { const { refers, ...data } = q as Q & { refers?: PackRefers }
+      return [{ ...base, id: d.id, type: d.function, data, ...(refers?.entry_id ? { refers_to: refers.entry_id, relation: refers.relation } : {}) } as EntryIn] }
   }
 }
 

@@ -2050,6 +2050,106 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (thalassaemia programme), Ensaf Rizk (INR clinic), Dr. Ola Kandil (haematology@demo.com); the Blood bank's Nabila Farag and Soad Mahrous
   (two units on the ward, the second stopped for hives), Mahmoud Fekry (bloodbank@demo.com). Tests: `supabase/tests/haemato.sql`,
   `npm run test:haemato`, `npm run test:lis`.
+- *Core changes C6 and C7 (the owner's yes 2026-10-09; built in lane `clinics-theatre`)*: **C6** a pack's draft may refer to an item
+  (`db/entries.ts`, `PackRefers`): `refers` {entry_id, relation `changes` or `about`} among its params is kept out of its data and
+  written as the entry's `refers_to` and `relation`, which the writer already checks (a change continues the item, its own resource
+  only). Oncology's `/cancer` on a recorded cancer changes it (its stage, intent or side; the next version of the same item); the
+  pre-op's `/preop` is about the operation, so the operating list's Pre-op column reads it. **C7** a pack's tile line may register
+  its read (`registerTileLine(pack, line, useRead)`, `ward/tiles.ts`, `TileRead.tsx`): a React hook the board calls in a part of its
+  own on every render where the department uses the pack; what it returns reaches only that pack's line as `ctx.read`, and the board
+  draws again when it changes (so it keeps its identity while unchanged: a query's data, or memoised). Recovery's line and the day
+  unit's chairs read through it. Tests: `npm run test:clinics-core` (C6, C7), `test:oncology`, `test:anaesthesia`.
+- *Built 2026-10-08 (lane `clinics-theatre`), oncology* (`oncology`, migration 33, role block e8): the cancer `oncology.cancer` (the base's
+  problem plus `oncology` {site, side, morphology (ICD-O-3, its own open system `oncology.icdo3`), grade, TNM with its edition, stage,
+  markers, intent, plan (operation · chemotherapy · radiotherapy · endocrine · targeted · immunotherapy, each done · now · to come),
+  regimen}; FHIR adds the stage beside the base's Condition); ECOG the base's observation (LOINC 89247-1, added to the committed subset);
+  the cycle `oncology.cycle` (the base's order to the day unit plus {regimen, cycle of n, day, height, weight, BSA, percent, Give · Delay ·
+  Reduce, each dose with what it was worked from, the checks, the toxicity, the medicines before}; its table `oncology.cycles` for the
+  day unit, `read:queue`; FHIR adds its words as orderDetail); each toxicity the base's observation coded with CTCAE v5 (`oncology.ctcae`).
+  The regimens and plans are the clinic setting `oncology.regimens` (drugs mg/m², AUC by Calvert with Cockcroft–Gault, mg/kg or flat,
+  each with its rounding and a reaction watch; days between cycles; cycles; medicines before; checks with limits), written with
+  `edit:oncology.regimens`, held by every Oncologist (Q39 drawn; the history is the setting's). Roles: Oncologist (`oncology.oncologist`,
+  built on Doctor, `write:oncology.cancer`) and Chemotherapy nurse (`oncology.chemo_nurse`, built on Nurse, with the base's admit and
+  discharge). Setups `oncology.clinic` (the queue) and `oncology.day_unit` (eight chairs on the base's board; its one service, the cycle,
+  answered by the unit's note). Client: the Cancer section (diagnosis, stage, markers, ECOG, intent, the plan, the cycles with what came
+  after, the anthracycline so far, the heart), its chip and Summary line and banner words ("Breast · IIB", "AC 2 of 4"); `/chemo` (offered
+  where the day unit works for the department) works out BSA by Mosteller and every dose from today's height and weight, shows the
+  regimen's checks against the latest values (eGFR by CKD-EPI 2021 when only creatinine is there; shown, never a stop), grades the
+  toxicity, and writes the cycle, each drug as the base's medication sent where prescriptions go and each grade; its card's chips rewrite
+  the line, so the line and the drafts agree; `/cancer` fills a new cancer's card, and on one already recorded writes today's ECOG. The
+  day unit's tile line ("AC C3 D1", a dose reduced, "reaction watch" in the first 30 minutes of a drug the regimen marks) and, under the
+  board, today's cycles not in a chair yet (C5: each with the base's Admit here as its Start; one whose patient had a chair here today,
+  or delayed, is not listed; "Not today" is not built: it would change the oncologist's order from the day unit). Demo: the
+  Oncology clinic and the Chemotherapy day unit; Dr. Hesham Abdallah (oncology@demo.com) and Asmaa Farid (chemo@demo.com); Wafaa Shaker
+  (in consult for AC 3), Samir Tolba (FOLFOX 5, in Chair 2), Nesma Sabry (paclitaxel week 3 signed for today, not in a chair). Tests:
+  `supabase/tests/oncology.sql`, `npm run test:oncology`. Since C6 (2026-10-09) `/cancer` on a recorded cancer changes its stage,
+  intent or side ("IIIA (was IIB)", the next version of the same item); its site, plan and regimen are corrected on its entry. Since C7
+  the chairs' line reads today's cycles through its own read. *Not yet, and why:* the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
+  ward nursing's (`bedside`, beds lane), not in this base: the cycle is ended by the unit's note until then; the composer reads no
+  setting, so `/chemo` takes the regimens the chart last read (the Cancer section's).
+- *Built 2026-10-08 (lane `clinics-theatre`), theatre* (`theatre`, migration 35, role block ea): the operation `theatre.op` (the base's order
+  to the Theatre plus `theatre` {side left · right · both · none, the anaesthetic wanted (`technique`: general · spinal · local · the
+  anaesthetist decides), day case or admitted, surgeon, usual time, the risks told}; FHIR adds the side as bodySite and the rest as
+  orderDetail); the Theatre's step `theatre.step` (the base's step plus the operation, its room, start and place in the day; steps
+  scheduled · sent for · arrived · anaesthetic · operating · recovery · back, the last ending the order, so no "no report" row); a WHO
+  checklist part `theatre.check` (Sign in, Time out, Sign out: each item done or why not and who said it, signed by those who said it,
+  about the operation; Sign out's counts, implants with their lot, the specimen). Tables `theatre.cases`, `theatre.slots`,
+  `theatre.checks` (`read:bench`). Settings `theatre.operations` (by service code: usual time, a side asked, the risks to tell) and
+  `theatre.rooms` (rooms and the week's sessions). `write:theatre.step` and `write:theatre.check` are everyday where a department ticks
+  the pack; Theatre nurse (`theatre.nurse`, built on Nurse, with the bench, orders and steps). The setup `theatre.department` (13
+  operations by specialty, three rooms, their sessions; works for all). Client: `/op` (offered where the Theatre works for the
+  department; by code, the name's words or every word typed the start of one: "lap chole"; its card under the line: the side big,
+  chips for side, priority, surgeon, the anaesthetic wanted and the stay that rewrite the line, the record's blood thinners, SGLT2
+  inhibitors, metformin and BMI shown for the pre-op clinic, the risks told); the theatre list in place of the bench (rooms as chips,
+  the day with ← →, emergencies on top until put in a room now, each room's cases in order with the side, surgeon and anaesthetist, ASA,
+  where it stands, the parts signed and the next key; To schedule by priority then weeks waiting with Pre-op and Consent read from the
+  record, and the sessions with room for the usual time); the checklist on a case (Sign in → anaesthetic, Time out → operating; Sign out
+  sends the specimen as an order to the Laboratory's histopathology in the same set; a count that does not add up is a notice); in the
+  record a checklist part reads in words (each item said or not and who said it, the counts, implants, specimen), not the ids it is
+  about. What the
+  list shows of the pre-op, the anaesthetic record and the consent is read by shape from what refers to the operation, never by another
+  pack's name (rule: no pack names another). Demo: the Theatre, Iman Zidan (theatre@demo.com); Ghada Sharaf (operating, Sign out to say),
+  Amr Nassar (under a spinal), Aya Shehata (To schedule, urgent), Ziad Hafez (an emergency); the clinic's choices (`seeds/clinic_packs.sql`):
+  the Theatre ticks the surgical and anaesthesia packs, the Anaesthetic record on its line, the surgeon and anaesthetist hold their roles there, the
+  Laboratory offers histopathology. Tests: `supabase/tests/theatre.sql`, `npm run test:theatre`. *Differences:* printing the list and the
+  consent form waits for printing (not in core-v3); the pre-op clinic's booking is the bookings pack's; the operating list's Pre-op
+  column reads the pre-op about the operation (`/preop` is about it since C6, 2026-10-09), else the anaesthetic record's ASA; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
+  anaesthesia out of the theatre pack).
+- *Built 2026-10-08 (lane `clinics-theatre`), surgery* (`surgical`, migration 34, role block e9): the operation note `surgical.opnote`
+  (the base's note plus `surgical` {the operation, surgeon, assistant, anaesthetist and technique, the times, why, findings, steps, closure,
+  blood loss, drain, complications, specimen, implants}); the operation itself the base's procedure. The surgeons' templates are the
+  clinic setting `surgical.templates` (by surgeon and operation code; the post-op preset each offers); post-op orders are the base's
+  presets (`#postop`: the /rx lines and the plan, signed with the note, Q46 drawn). Surgeon (`surgical.surgeon`, built on Doctor,
+  `write:surgical.opnote`). The setup `surgical.clinic`. Client: the Surgery section (today's operation with its times, anaesthetic,
+  specimen and implants; planned operations and where each stands; earlier procedures), its banner word ("for op · inguinal hernia",
+  "op today · lap chole"), `/opnote` (the procedure and the note, from the surgeon's own template; the card fills the times, anaesthetist
+  and blood loss from the anaesthetic record and the specimen and implants from Sign out, read by shape). Operations are told from other
+  orders by their service's steps (it moves through "operating"). Demo: the Surgery clinic, Dr. Hesham Abdelaal (surgery@demo.com); Reda
+  Abdelhady in consult (the decision to operate typed live: `/op lichtenstein right`), Kamal Fouda (a haemorrhoidectomy on To schedule);
+  the templates and two post-op presets. Tests: `supabase/tests/surgical.sql`, `npm run test:surgical`. *Differences:* the consent form's
+  print waits for printing.
+- *Built 2026-10-08 (lane `clinics-theatre`), anaesthesia* (`anaesthesia`, migration 36, role block eb): the pre-op `anaesthesia.preop`
+  (history, airway, ASA I–VI and E, plan, Fit or Not yet, the medicines to stop, the risks told); RCRI (Lee 1999), STOP-BANG (Chung
+  2008) and Aldrete (1995) declared through `core.declare_score` (aliases `rcri`, `stopbang`, `aldrete`); the anaesthetic record as one
+  set signed at the end (Q45 drawn): each 5-minute column `anaesthesia.column` (the base's vitals plus EtCO₂, the agent and FiO₂), each
+  dose the base's given at its time, and `anaesthesia.record` about the operation (technique, ASA, the anaesthetist, the five times,
+  numbered events, airway, breathing, agent, warming, fluids, blood loss, weight), whose times the operating list and the operation note
+  read. Recovery's table `anaesthesia.recovery` (each Aldrete and pain, by a listener on the base's score and vitals). The clinic setting
+  `anaesthesia.stop_list` (matches by name or ATC; what to do; days before), shown never a stop. Anaesthetist (`anaesthesia.anaesthetist`,
+  built on Doctor) and Recovery nurse (`anaesthesia.recovery_nurse`, built on Nurse, with the base's admit and discharge). Setups
+  `anaesthesia.preop_clinic` and `anaesthesia.recovery` (five bays, cubicles on the base's board); the screen `anaesthesia.record` (the
+  Theatre's tab for whoever gives anaesthesia). Client: the Anaesthesia section; `/preop` and its card (the scores typed on the lines
+  before, read from the drafts; the patient's medicines against the list, each line editable; the Arabic sheet shown); the pre-op and
+  the anaesthetic record read in words in the record; the record's grid (a blank
+  keeps the last setting, a drug typed on a column takes its time, the dose per kg shown, drafts kept on this machine, Sign the record);
+  Recovery's tile line ("in 30 min · Aldrete 8 → 10 · pain 2 · ready for the ward") and its two buttons (Aldrete: the patient's chart with the
+  /score card; Record: the anaesthetic record). Demo: the Pre-op clinic and Recovery, Dr. Sherine Rashad (anaesthesia@demo.com) and Rehab Seif
+  (recovery@demo.com); Hamed Sakr (pre-op today, Hb 9.8), Marwa Shalaby (Bay 2, Aldrete 6), Yara Abdelsalam (7, Bay 3, Aldrete 7 → 9).
+  Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
+  ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet waits for printing;
+  recovery's ward nursing tick waits for the beds lane; Recovery's line reads through its own read (C7, 2026-10-09), so the bays'
+  words come as each Aldrete or pain lands; `/preop` is about the operation (C6); EtCO₂, the agent and FiO₂ stay the pack's own on each
+  column, as drawn: FiO₂ moves to the base's key at integration if the beds lane's FiO₂ and O₂ flow rows land.
 
 ---
 

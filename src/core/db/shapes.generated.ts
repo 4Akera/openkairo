@@ -107,6 +107,99 @@ export interface Allergy {
   type?: 'allergy' | 'intolerance'
   verification: 'unconfirmed' | 'confirmed' | 'refuted'
 }
+/** anaesthesia.column v1 (anaesthesia) */
+export interface AnaesthesiaColumn {
+  anaesthesia?: {
+    agent?: string
+    agent_pct?: number
+    etco2?: number
+    events?: number[]
+    fio2?: number
+  }
+  bmi?: Quantity
+  bp?: {
+    dia: Quantity
+    sys: Quantity
+  }
+  glucose?: Quantity
+  head?: Quantity
+  height?: Quantity
+  hr?: Quantity
+  method?: string
+  note?: string
+  pain?: Quantity
+  rr?: Quantity
+  site?: string
+  spo2?: Quantity
+  temp?: Quantity
+  weight?: Quantity
+}
+/** anaesthesia.preop v1 (anaesthesia) */
+export interface AnaesthesiaPreop {
+  airway?: {
+    mallampati?: 'I' | 'II' | 'III' | 'IV'
+    mouth_cm?: number
+    neck_cm?: number
+    neck_moves?: boolean
+    tm_cm?: number
+  }
+  asa: 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI'
+  consent?: string[]
+  emergency?: boolean
+  history?: {
+    before?: string
+    bleeding?: string
+    diabetes?: string
+    heart?: string
+    lungs?: string
+    sleep?: string
+    teeth?: string
+  }
+  note?: string
+  op?: string
+  operation?: string
+  plan?: 'general_lma' | 'general_tube' | 'spinal' | 'local_sedation'
+  plan_note?: string
+  stop?: {
+    days?: number
+    medicine: string
+    rule?: string
+    what: string
+  }[]
+  verdict: 'fit' | 'not_yet'
+  verdict_note?: string
+}
+/** anaesthesia.record v1 (anaesthesia) */
+export interface AnaesthesiaRecord {
+  agent?: string
+  airway?: string
+  anaesthetist?: string
+  asa?: string
+  blood_loss?: number
+  breathing?: string
+  events?: {
+    at: string
+    text: string
+  }[]
+  fluids?: {
+    ml: number
+    what: string
+  }[]
+  note?: string
+  op?: string
+  operation?: string
+  technique?: string
+  times: {
+    end?: string
+    in?: string
+    knife?: string
+    out?: string
+    start?: string
+  }
+  urine?: string
+  warming?: string
+  weight?: number
+}
 /** assigned v1 (base) */
 export interface Assigned {
   user_id?: string | null
@@ -172,43 +265,6 @@ export type Given = {
   site?: string
   status: 'completed' | 'not-done'
 } & ({ medication: string } | { drug: Concept })
-/** haemato.plan v1 (haemato) */
-export interface HaematoPlan {
-  medicine?: string
-  note?: string
-  reason: string
-  status?: 'active' | 'stopped'
-  tablet_mg?: number
-  target: {
-    high: number
-    low: number
-  }
-}
-/** haemato.programme v1 (haemato) */
-export interface HaematoProgramme {
-  condition?: string
-  every_weeks: number
-  hb: {
-    high: number
-    low: number
-  }
-  needs?: ('leucodepleted' | 'Rh and Kell matched' | 'irradiated' | 'washed')[]
-  note?: string
-  status?: 'active' | 'stopped'
-}
-/** haemato.week v1 (haemato) */
-export interface HaematoWeek {
-  bleeding?: 'none' | 'minor' | 'major'
-  days: number[]
-  food?: 'as usual' | 'more greens' | 'fewer greens'
-  inr?: number
-  missed?: 'none' | 'one' | 'two or more'
-  next_inr?: string
-  note?: string
-  suggested?: number
-  used_suggestion?: boolean
-  was?: number
-}
 /** here v1 (base) */
 export interface Here {
   note?: string
@@ -217,72 +273,6 @@ export interface Here {
 export interface Left {
   reason?: string
 }
-/** lis.blood v1 (lis) */
-export interface LisBlood {
-  answers?: Record<string, unknown>
-  asked_by?: string
-  department_id: string
-  details?: Record<string, unknown>
-  due?: Datetime
-  lis?: {
-    consent?: 'on file' | 'signed today' | 'emergency, no time'
-    needs?: ('leucodepleted' | 'Rh and Kell matched' | 'irradiated' | 'washed')[]
-    product?: 'rbc' | 'plt' | 'ffp' | 'cryo'
-    sample?: 'taken here' | 'the lab collects'
-    units?: number
-    why?: string
-  }
-  priority: 'routine' | 'urgent' | 'asap' | 'stat'
-  question?: string
-  reason?: string
-  reasons?: Reference[]
-  service: {
-    answer?: string
-    code?: string
-    coding?: Coding
-    id?: string
-    name: string
-  }
-  status: 'active' | 'on-hold' | 'revoked' | 'completed'
-}
-/** lis.transfusion v1 (lis) */
-export type LisTransfusion = {
-  dose?: Quantity
-  drug?: Concept
-  expiry?: string
-  lis?: {
-    checks?: string[]
-    ended?: string
-    group?: string
-    product?: 'rbc' | 'plt' | 'ffp' | 'cryo'
-    reaction?: {
-      doctor?: 'restart slowly when settled' | 'do not restart · return the unit'
-      severity?: 'mild' | 'moderate' | 'severe'
-      told?: string
-      what?: ('hives, itch' | 'fever, rigors' | 'breathless' | 'BP fell' | 'back pain, dark urine')[]
-    }
-    second: string
-    signs?: {
-      at?: string
-      dia?: number
-      pulse?: number
-      rr?: number
-      spo2?: number
-      sys?: number
-      temp?: number
-      when: 'before' | '15 min' | 'end' | 'reaction'
-    }[]
-    started?: string
-    unit: string
-  }
-  lot?: string
-  medication?: string
-  note?: string
-  reason?: string
-  route?: string
-  site?: string
-  status: 'completed' | 'not-done'
-} & ({ medication: string } | { drug: Concept })
 /** list_review v1 (base) */
 export interface ListReview {
   list: 'problems' | 'medications' | 'allergies'
@@ -348,6 +338,95 @@ export interface Observation {
     quantity?: Quantity
     text?: string
   }
+}
+/** oncology.cancer v1 (oncology) */
+export interface OncologyCancer {
+  abatement?: PartialDate
+  body_site?: Concept
+  category?: 'problem-list-item' | 'encounter-diagnosis'
+  clinical_status: 'active' | 'recurrence' | 'relapse' | 'inactive' | 'remission' | 'resolved'
+  concept: Concept
+  laterality?: 'left' | 'right' | 'both'
+  note?: string
+  oncology?: {
+    grade?: '1' | '2' | '3' | '4' | 'X'
+    intent?: 'curative' | 'palliative'
+    markers?: {
+      name: string
+      value: string
+    }[]
+    morphology?: Concept
+    plan?: {
+      status: 'done' | 'now' | 'todo'
+      step: 'operation' | 'chemotherapy' | 'radiotherapy' | 'endocrine' | 'targeted' | 'immunotherapy'
+      text?: string
+    }[]
+    regimen?: string
+    side?: 'left' | 'right' | 'both'
+    site?: string
+    stage?: string
+    tnm?: {
+      edition?: string
+      m?: string
+      n?: string
+      t?: string
+    }
+  }
+  onset?: PartialDate
+  severity?: 'mild' | 'moderate' | 'severe'
+  verification: 'unconfirmed' | 'provisional' | 'differential' | 'confirmed' | 'refuted'
+}
+/** oncology.cycle v1 (oncology) */
+export interface OncologyCycle {
+  answers?: Record<string, unknown>
+  asked_by?: string
+  department_id: string
+  details?: Record<string, unknown>
+  due?: Datetime
+  oncology?: {
+    added?: string[]
+    bsa?: number
+    checks?: {
+      ok?: boolean
+      text: string
+    }[]
+    cycle: number
+    day: number
+    decision: 'give' | 'delay' | 'reduce'
+    delay_days?: number
+    doses?: {
+      basis?: 'm2' | 'auc' | 'kg' | 'flat'
+      dose: number
+      drug: string
+      how?: string
+      per?: number
+      unit: string
+      worked?: number
+    }[]
+    height?: number
+    name?: string
+    of?: number
+    percent?: number
+    premeds?: string[]
+    regimen: string
+    toxicity?: {
+      grade: number
+      term: string
+    }[]
+    weight?: number
+  }
+  priority: 'routine' | 'urgent' | 'asap' | 'stat'
+  question?: string
+  reason?: string
+  reasons?: Reference[]
+  service: {
+    answer?: string
+    code?: string
+    coding?: Coding
+    id?: string
+    name: string
+  }
+  status: 'active' | 'on-hold' | 'revoked' | 'completed'
 }
 /** opened_anyway v1 (base) */
 export interface OpenedAnyway {
@@ -517,6 +596,104 @@ export interface Step {
   status: 'received' | 'accepted' | 'rejected' | 'in-progress' | 'on-hold' | 'completed' | 'cancelled' | 'failed'
   step?: string
 }
+/** surgical.opnote v1 (surgical) */
+export type SurgicalOpnote = {
+  attachments?: Attachment[]
+  heading?: string
+  kind?: string
+  language?: string
+  surgical?: {
+    anaesthetist?: string
+    assistant?: string
+    blood_loss?: number
+    closure?: string
+    complications?: string[]
+    drain?: string
+    findings?: string
+    implants?: string
+    op?: string
+    operation: string
+    specimen?: string
+    steps?: string
+    surgeon?: string
+    technique?: string
+    times?: {
+      from?: string
+      to?: string
+    }
+    why?: string
+  }
+  text?: string
+} & ({ text: string } | { attachments: Attachment[] })
+/** theatre.check v1 (theatre) */
+export interface TheatreCheck {
+  by?: string[]
+  counts?: {
+    added?: number
+    after?: number
+    before?: number
+    what: string
+  }[]
+  implants?: {
+    left_in?: number
+    lot?: string
+    used?: number
+    what: string
+  }[]
+  items: {
+    done: boolean
+    key: string
+    not?: string
+    text: string
+    who?: string
+  }[]
+  note?: string
+  op: string
+  part: 'sign_in' | 'time_out' | 'sign_out'
+  specimen?: string
+}
+/** theatre.op v1 (theatre) */
+export interface TheatreOp {
+  answers?: Record<string, unknown>
+  asked_by?: string
+  department_id: string
+  details?: Record<string, unknown>
+  due?: Datetime
+  priority: 'routine' | 'urgent' | 'asap' | 'stat'
+  question?: string
+  reason?: string
+  reasons?: Reference[]
+  service: {
+    answer?: string
+    code?: string
+    coding?: Coding
+    id?: string
+    name: string
+  }
+  status: 'active' | 'on-hold' | 'revoked' | 'completed'
+  theatre?: {
+    risks?: string[]
+    side?: 'left' | 'right' | 'both' | 'none'
+    stay?: 'day' | 'admitted'
+    surgeon?: string
+    technique?: 'general' | 'spinal' | 'local' | 'anaesthetist'
+    usual_min?: number
+  }
+}
+/** theatre.step v1 (theatre) */
+export interface TheatreStep {
+  note?: string
+  reason?: string
+  specimen?: string
+  status: 'received' | 'accepted' | 'rejected' | 'in-progress' | 'on-hold' | 'completed' | 'cancelled' | 'failed'
+  step?: string
+  theatre?: {
+    op: string
+    position?: number
+    room?: string
+    starts?: Datetime
+  }
+}
 /** transferred v1 (base) */
 export interface Transferred {
   reason?: string
@@ -548,6 +725,16 @@ export interface Vitals {
 }
 
 // ── settings (core.setting_keys) ──
+/** setting anaesthesia.stop_list (anaesthesia; owner organization) */
+export interface AnaesthesiaStopListSetting {
+  rules: {
+    days?: number
+    match: string
+    rule?: string
+    warn?: boolean
+    what: string
+  }[]
+}
 /** setting billing.desk (billing; owner department) */
 export interface BillingDeskSetting {
   float?: string
@@ -570,15 +757,6 @@ export interface BillingReasonsSetting {
 /** setting billing.visit_fee (billing; owner department, many) */
 export interface BillingVisitFeeSetting {
   amount: string
-}
-/** setting cardio.hf_targets (cardio; owner organization) */
-export interface CardioHfTargetsSetting {
-  targets: {
-    atc: string
-    group: 'ras' | 'bb' | 'mra' | 'sglt2'
-    mg_a_day: number
-    name: string
-  }[]
 }
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
@@ -619,21 +797,6 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
-/** setting haemato.inr (haemato; owner organization) */
-export interface HaematoInrSetting {
-  table: {
-    change: number
-    from: number
-    next_days: number
-    says: string
-    to: number
-  }[]
-  targets: {
-    high: number
-    low: number
-    reason: string
-  }[]
-}
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
   analysers: false
@@ -652,13 +815,34 @@ export interface LisLargeSetting {
   }
   turnaround: boolean
 }
-/** setting nephrology.renal_list (nephrology; owner organization) */
-export interface NephrologyRenalListSetting {
-  rules: {
-    atc?: string
-    medicine: string
-    says: string
-    under: number
+/** setting oncology.regimens (oncology; owner organization) */
+export interface OncologyRegimensSetting {
+  plans?: {
+    name: string
+    regimens: string[]
+    site?: string
+  }[]
+  regimens: {
+    checks?: {
+      max?: number
+      min?: number
+      test: 'anc' | 'plt' | 'hb' | 'creat' | 'egfr' | 'bili' | 'alt' | 'ef'
+    }[]
+    cycles?: number
+    drugs?: {
+      atc?: string
+      basis: 'm2' | 'auc' | 'kg' | 'flat'
+      drug: string
+      how?: string
+      per: number
+      round?: number
+      watch?: boolean
+    }[]
+    every_days?: number
+    key: string
+    name: string
+    premeds?: string[]
+    site?: string
   }[]
 }
 /** setting organization.packs_used (core; owner organization) */
@@ -775,12 +959,50 @@ export interface ServiceSetting {
   section?: string
   steps?: string[]
 }
+/** setting surgical.templates (surgical; owner organization) */
+export interface SurgicalTemplatesSetting {
+  templates: {
+    closure?: string
+    findings?: string
+    operation: string
+    postop?: string
+    steps?: string
+    surgeon?: string
+    why?: string
+  }[]
+}
+/** setting theatre.operations (theatre; owner department) */
+export interface TheatreOperationsSetting {
+  operations: {
+    code: string
+    risks?: string[]
+    side?: boolean
+    usual_min?: number
+  }[]
+}
+/** setting theatre.rooms (theatre; owner department) */
+export interface TheatreRoomsSetting {
+  rooms: {
+    name: string
+    specialty?: string
+  }[]
+  sessions?: {
+    from: string
+    room: string
+    surgeon?: string
+    to: string
+    weekday: 'sat' | 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri'
+  }[]
+}
 
 /** each entry type's data, by its key */
 export interface EntryData {
   'admitted': Admitted
   'alert': Alert
   'allergy': Allergy
+  'anaesthesia.column': AnaesthesiaColumn
+  'anaesthesia.preop': AnaesthesiaPreop
+  'anaesthesia.record': AnaesthesiaRecord
   'assigned': Assigned
   'away': Away
   'back_to_waiting': BackToWaiting
@@ -792,13 +1014,8 @@ export interface EntryData {
   'discharged': Discharged
   'done': Done
   'given': Given
-  'haemato.plan': HaematoPlan
-  'haemato.programme': HaematoProgramme
-  'haemato.week': HaematoWeek
   'here': Here
   'left': Left
-  'lis.blood': LisBlood
-  'lis.transfusion': LisTransfusion
   'list_review': ListReview
   'medication': Medication
   'moved': Moved
@@ -806,6 +1023,8 @@ export interface EntryData {
   'not_private': NotPrivate
   'note': Note
   'observation': Observation
+  'oncology.cancer': OncologyCancer
+  'oncology.cycle': OncologyCycle
   'opened_anyway': OpenedAnyway
   'order': Order
   'pharmacy.dispense': PharmacyDispense
@@ -820,18 +1039,22 @@ export interface EntryData {
   'score': Score
   'seen': Seen
   'step': Step
+  'surgical.opnote': SurgicalOpnote
+  'theatre.check': TheatreCheck
+  'theatre.op': TheatreOp
+  'theatre.step': TheatreStep
   'transferred': Transferred
   'urgent': Urgent
   'vitals': Vitals
 }
 /** each setting's data, by its key */
 export interface SettingData {
+  'anaesthesia.stop_list': AnaesthesiaStopListSetting
   'billing.desk': BillingDeskSetting
   'billing.pay_first': BillingPayFirstSetting
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
-  'cardio.hf_targets': CardioHfTargetsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
@@ -841,9 +1064,8 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
-  'haemato.inr': HaematoInrSetting
   'lis.large': LisLargeSetting
-  'nephrology.renal_list': NephrologyRenalListSetting
+  'oncology.regimens': OncologyRegimensSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
@@ -859,4 +1081,7 @@ export interface SettingData {
   'radiology.options': RadiologyOptionsSetting
   'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
+  'surgical.templates': SurgicalTemplatesSetting
+  'theatre.operations': TheatreOperationsSetting
+  'theatre.rooms': TheatreRoomsSetting
 }

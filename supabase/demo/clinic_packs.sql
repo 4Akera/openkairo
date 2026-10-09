@@ -32,4 +32,19 @@ begin
         'route', x ->> 'route', 'vaccines', jsonb_build_object('vaccine', x ->> 'vaccine', 'dose', (x ->> 'dose')::int, 'source', 'card', 'given_on', (b + (x ->> 'earliest_days')::int + 7)::text)))))
       from jsonb_array_elements(core.setting_at(c, 'vaccines.national', c) -> 'rows') x where (x ->> 'earliest_days')::int <= (e ->> 'to')::int));
   end loop;
+-- The operations asked of the Theatre for two packs' patients (spec §5.7): Kamal Fouda's haemorrhoidectomy, decided in the Surgery clinic 14
+-- weeks ago (on To schedule), and Hamed Sakr's left inguinal hernia repair, asked 11 weeks ago (his pre-op today in the Pre-op clinic).
+-- Skipped while a pack is off.
+do $$
+declare c uuid := demo.base('clinic'); th uuid := demo.id('theatre', 'department'); day int := 60 * 24;
+begin
+  if not (core.packs_used(c) @> array['theatre', 'surgical', 'anaesthesia']) then return; end if;
+  perform demo.use(demo.id('surgical', 'patient:kamal'));
+  perform demo.w(demo.id('surgical', 'surgeon'), jsonb_build_array(demo.e('theatre.op', demo.id('surgical', 'clinic'), null, demo.ago(98 * day), jsonb_build_object('service', jsonb_build_object(
+    'id', core.setup_id(th, 'service', 'haemorrhoid'), 'code', 'haemorrhoid', 'name', 'Haemorrhoidectomy'), 'department_id', th, 'priority', 'routine', 'status', 'active',
+    'theatre', '{"side":"none","technique":"spinal","stay":"day","surgeon":"Dr. Mona Tawfik","usual_min":40}'::jsonb))));
+  perform demo.use(demo.id('anaesthesia', 'patient:hamed'));
+  perform demo.w(demo.id('surgical', 'surgeon'), jsonb_build_array(demo.e('theatre.op', demo.id('surgical', 'clinic'), null, demo.ago(77 * day), jsonb_build_object('service', jsonb_build_object(
+    'id', core.setup_id(th, 'service', 'ihr_mesh'), 'code', 'ihr_mesh', 'name', 'Inguinal hernia repair, open mesh (Lichtenstein)'), 'department_id', th, 'priority', 'routine', 'status', 'active',
+    'theatre', '{"side":"left","technique":"anaesthetist","stay":"admitted","surgeon":"Dr. Hesham Abdelaal","usual_min":60}'::jsonb))));
 end $$;
