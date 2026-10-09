@@ -15,9 +15,9 @@ import type { ScreenProps } from '@core/screens/registry'
 import { useDepartment } from '@core/hooks/organization'
 import { useStays } from '@core/hooks/reads'
 import { refresh } from '@core/hooks/writes'
-import { staysKey } from '@core/screens/ward/tiles'
 import { Button, Card, Empty, Kbd, ListRow, ScreenFrame, Spinner, Tag, errorText, type RowMark, type ScreenView } from '@core/ui'
-import { boardOf, dur, order, rowWords, toLeave, views as countViews, type Board } from './board'
+import { boardOf, dur, order, rowWords, staysKey, toLeave, views as countViews, type Board } from './board'
+import { boardKey } from './boardRead'
 import { levelWord, toneOf } from './scale'
 import type { Arrival } from './triage'
 import { Arrived } from './Arrived'
@@ -35,7 +35,7 @@ export function Patients({ dept }: ScreenProps) {
   const stays = useStays(dept.id)
   const rows = useMemo(() => stays.data?.rows ?? [], [stays.data])
   const read = can('read:record')
-  const boardQ = useQuery({ queryKey: ['casualty-board', dept.id, staysKey(rows)], queryFn: () => packOp<Board>('casualty.board', dept.id, {}, 'TREAT'),
+  const boardQ = useQuery({ queryKey: boardKey(dept.id, staysKey(rows)), queryFn: () => packOp<Board>('casualty.board', dept.id, {}, 'TREAT'),
     enabled: rows.length > 0 && read, placeholderData: keepPreviousData, retry: false, refetchInterval: 30_000 })
   const board = boardQ.isError ? null : boardOf(boardQ.data)
   // a card waits for the board's first read (its presets come from it), then never mounts again: a later read, or a failed one, keeps
@@ -84,7 +84,7 @@ export function Patients({ dept }: ScreenProps) {
     setTaking(r.item); setErr(null)
     try {
       await write(oneSet([move('assigned', { id: r.item, patient_id: r.patient_id, latest_entry: r.latest_entry }, dept.id, { user_id: org!.me.id })]))
-      refresh(qc); void qc.invalidateQueries({ queryKey: ['casualty-board'] }); void qc.invalidateQueries({ queryKey: ['pack-tiles'] })
+      refresh(qc); void qc.invalidateQueries({ queryKey: ['casualty-board'] })
     } catch (e) { setErr(errorText(e)) } finally { setTaking(null) }
   }
 

@@ -5,8 +5,10 @@ import { useDepartment } from '../../hooks/organization'
 import { usePatientSearch } from '../../hooks/reads'
 import { nameOf, userName } from '../../db/views'
 import { Badge, Button, Empty, PageHead, SearchInput, Section, Spinner, dateTime } from '../../ui'
+import { printedOf } from '../../print/log'
 
-// a row of the read log (spec/openCare.md §3.10): one per reader, patient and purpose, coalesced over ten minutes
+// a row of the read log (spec/openCare.md §3.10): one per reader, patient and purpose, coalesced over ten minutes; a print is one of its
+// reads (§3.13)
 type LogRow = { id: string; user_id: string; department_id: string | null; patient_id: string | null; purpose: string; reason: string | null; what: Record<string, unknown>; withheld: number; reads: number; at: string; last_at: string }
 const PURPOSE: Record<string, string> = { TREAT: 'care', BTG: 'opened anyway', PATADMIN: 'finding or registering', HOPERAT: 'running the clinic', HPAYMT: 'payment', PATRQT: 'the patient asked', PUBHLTH: 'public health', HRESCH: 'research', LEGAL: 'the law' }
 
@@ -39,7 +41,8 @@ export function ReadsPage({ orgId }: { orgId: string }) {
             <Button size="sm" variant="outline" className="ms-auto print:hidden" onClick={() => window.print()}>Print</Button><Button size="sm" variant="ghost" className="print:hidden" onClick={() => { setPid(null); setQ('') }}>Another patient</Button></div>
           {reads.isLoading ? <Spinner /> : <div className="overflow-x-auto rounded-lg ring-1 ring-line"><table className="w-full text-14"><thead><tr className="border-b border-line text-start text-11 text-faint"><th className="px-3 py-1.5 font-medium">When</th><th className="font-medium">Who</th><th className="font-medium">From</th><th className="font-medium">Why</th></tr></thead>
             <tbody>{(reads.data ?? []).map((r) => <tr key={r.id} className="border-b border-line last:border-0"><td className="px-3 py-1.5 text-12 tnum">{dateTime(r.at)}{r.reads > 1 ? ` · ${r.reads}×` : ''}</td><td>{userName(org, r.user_id)}</td><td className="text-12 text-faint">{nameOf(org, r.department_id)}</td>
-              <td className="text-12">{PURPOSE[r.purpose] ?? r.purpose}{r.reason ? ` · ${r.reason}` : ''}{r.withheld ? ` · ${r.withheld} private withheld` : ''}</td></tr>)}</tbody></table>
+              <td className="text-12">{PURPOSE[r.purpose] ?? r.purpose}{r.reason ? ` · ${r.reason}` : ''}{r.withheld ? ` · ${r.withheld} private withheld` : ''}
+                {printedOf(r.what) && ` · printed ${printedOf(r.what)}`}</td></tr>)}</tbody></table>
             {reads.data?.length === 0 && <Empty>No one has read this record.</Empty>}</div>}</>}
       </div>
     </Section>

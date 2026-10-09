@@ -16,6 +16,12 @@ import { ErBoard, ErTriage, ErWhereTo } from './er'
 import { CcuChart, IcuBoard, IcuChart, IcuGoals } from './icu'
 import { LabourBirth, LabourBoard, LabourPartograph } from './labour'
 import { HdSchedule, HdSession, HdUnit } from './dialysis'
+import { FAMILY } from './family'
+import { OBGYN } from './obgyn'
+import { PAEDS } from './paeds'
+import { MEDICINE } from './medicine'
+import { HAEMONC } from './haemonc'
+import { SURGERY } from './surgery'
 
 const LIST: { id: string; title: string; note: string; Page: ComponentType }[] = [
   { id: 'bench-walkin', title: 'Any bench · a walk-in', note: 'Two steps: first who (search, or New patient), then what for (this room\'s services); who asked folded.', Page: BenchWalkIn },
@@ -84,6 +90,8 @@ const LIST: { id: string; title: string; note: string; Page: ComponentType }[] =
   { id: 'hd-unit', title: 'Dialysis · the unit today', note: 'Shift 2 at 14:10, chairs on the base\'s board: time left, fluid off against the target, last BP. Who is due is the pack\'s own rows from the schedule; Start = Admit here, End = Discharge (Q2).', Page: HdUnit },
   { id: 'hd-session', title: 'Dialysis · the session', note: 'Before (weights, access, the fluid to take off), the standing prescription with the dry weight, readings every 30 min (arterial, venous, TMP), events, the unit\'s drugs.', Page: HdSession },
   { id: 'hd-schedule', title: 'Dialysis · the schedule and monthly bloods', note: 'Each chair\'s two patients by day (Sat/Mon/Wed, Sun/Tue/Thu); a one-off move keeps the pattern; HBV and HCV chairs apart; Kt/V, URR, Hb, virology due. Q13.', Page: HdSchedule },
+  // the last group (2026-10-08): the clinics, paediatrics, internal medicine and its branches, surgery with theatre and anaesthesia, family medicine
+  ...FAMILY.slice(0, 1), ...OBGYN, ...PAEDS, ...MEDICINE, ...HAEMONC, ...SURGERY, ...FAMILY.slice(1),
 ]
 
 export function Pictures() {
@@ -91,7 +99,7 @@ export function Pictures() {
   useEffect(() => { const f = () => setId(location.hash.slice(1)); addEventListener('hashchange', f); return () => removeEventListener('hashchange', f) }, [])
   const i = LIST.findIndex((p) => p.id === id)
   if (i < 0) return <div className="mx-auto grid max-w-2xl gap-3 p-6 text-14">
-    <p className="text-18 font-semibold text-fg">Pictures · pharmacy, laboratory, radiology, bookings and the departments of beds</p>
+    <p className="text-18 font-semibold text-fg">Pictures · pharmacy, laboratory, radiology, bookings, the departments of beds and the clinics</p>
     <p className="text-muted">Made-up patients, the real kit. Nothing here is built yet.</p>
     <ol className="grid gap-1.5">{LIST.map((p, n) => <li key={p.id}><a className="text-accent hover:underline" href={`#${p.id}`}>{n + 1}. {p.title}</a> <span className="text-muted">— {p.note}</span></li>)}</ol>
   </div>

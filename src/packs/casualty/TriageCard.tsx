@@ -66,7 +66,7 @@ export function TriageCard({ dept, row, identity, opening, facts, arrival: carri
     setBusy(true); setErr(null); setWarn(null)
     try {
       await write(oneSet(es, confirmed.length ? { confirmed } : {}))
-      refresh(qc); void qc.invalidateQueries({ queryKey: ['casualty-board'] }); void qc.invalidateQueries({ queryKey: ['pack-tiles'] })
+      refresh(qc); void qc.invalidateQueries({ queryKey: ['casualty-board'] })
       onDone()
     } catch (e) {
       if (e instanceof WriteWarned) setWarn({ findings: e.outcome.findings, retry: (c) => void send(es, [...confirmed, ...c]) }); else setErr(errorText(e))

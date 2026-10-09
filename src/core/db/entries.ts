@@ -12,6 +12,15 @@ export const newId = () => uuid()
 type Q = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 export interface Draft { id: string; function: string; params: Record<string, unknown>; line?: string; kind?: string; tag?: string }
 export interface Where { patientId: string; departmentId: string; visitId?: string | null; record?: RecordView | null; org?: Organization | null }
+/** an order carrying a pack's own words (spec §5.5, core change (a)): the pack's type extending the base's order, and its words, kept
+ *  under data.<pack> (an X-ray's side). Whoever may order writes it (write:order), from wherever they order */
+export interface PackOrder { type: string; words: Record<string, unknown> }
+/** a pack's draft that refers to an item (spec §5.8, core change C6, 2026-10-09): `refers` in its params, kept out of its data — the
+ *  entry it changes (its own item's latest entry: a cancer restaged) or is about (another item: a pre-op about an operation) */
+export interface PackRefers { entry_id: string; relation: 'changes' | 'about' }
+/** an order's type and data with a pack's words added, or the base's order as it is */
+export const asPackOrder = (data: EntryData['order'], as?: PackOrder | null): { type: string; data: EntryData['order'] } =>
+  as ? { type: as.type, data: { ...data, [as.type.split('.')[0]]: as.words } as EntryData['order'] } : { type: 'order', data }
 
 // ── units ──
 const UNIT_UCUM: Record<string, string> = { mg: 'mg', g: 'g', mcg: 'ug', ug: 'ug', µg: 'ug', ml: 'mL', l: 'L', units: '[iU]', unit: '[iU]', u: '[iU]', iu: '[iU]', tab: '{tbl}', tabs: '{tbl}', tablet: '{tbl}',
@@ -39,7 +48,9 @@ function vitals(q: Q): EntryData['vitals'] {
   const sys = qty(q.systolic, 'mmHg', 'mm[Hg]'); const dia = qty(q.diastolic, 'mmHg', 'mm[Hg]')   // a pressure is both or neither
   return clean<EntryData['vitals']>({ bp: sys && dia ? { sys, dia } : undefined,
     hr: qty(q.pulse, 'bpm', '/min'), rr: qty(q.respiratory_rate, '/min', '/min'), temp: qty(q.temperature, '°C', 'Cel'), spo2: qty(q.spo2, '%', '%'),
-    weight: qty(q.weight, 'kg', 'kg'), height: qty(q.height, 'cm', 'cm'), glucose: qty(q.glucose, 'mg/dL', 'mg/dL'), pain: qty(q.pain, '/10', '{score}'),
+    weight: qty(q.weight, 'kg', 'kg'), height: qty(q.height ?? q.length, 'cm', 'cm'), head: qty(q.head, 'cm', 'cm'), glucose: qty(q.glucose, 'mg/dL', 'mg/dL'), pain: qty(q.pain, '/10', '{score}'),
+    // a child's length is the base's height measured lying (core change C2, §5.8 Q22)
+    method: q.length != null && q.height == null ? 'lying' : undefined,
     // ACVPU and air or oxygen (the owner's Q5): air alone, or oxygen with its device, its flow and FiO₂ as a percentage
     consciousness: q.consciousness || undefined,
     oxygen: q.oxygen === 'air' ? { on: 'air' } : q.oxygen === 'oxygen' ? clean<NonNullable<EntryData['vitals']['oxygen']>>({ on: 'oxygen', device: q.o2_device || undefined,
@@ -118,7 +129,7 @@ export function draftEntries(d: Draft, w: Where): EntryIn[] {
     }
     case 'order': {
       const svc = q.service_id ? w.org?.services.find((s) => s.id === q.service_id) : undefined
-      if (svc?.department_id) return [{ ...base, id: d.id, type: 'order', data: clean<EntryData['order']>({ service: clean({ id: svc.id, code: svc.code, name: svc.name, coding: svc.coding ?? undefined }), department_id: svc.department_id, priority: q.priority ?? 'routine', status: 'active', question: q.question_text || undefined }) }]
+      if (svc?.department_id) return [{ ...base, id: d.id, ...asPackOrder(clean<EntryData['order']>({ service: clean({ id: svc.id, code: svc.code, name: svc.name, coding: svc.coding ?? undefined }), department_id: svc.department_id, priority: q.priority ?? 'routine', status: 'active', question: q.question_text || undefined }), q.as as PackOrder | undefined) } as EntryIn]
       // a consult: the department's own consult service if it has one (a note answers it), else a named consult
       const consult = w.org?.services.find((s) => s.department_id === q.to_department_id && s.reply_type === 'note')
       return [{ ...base, id: d.id, type: 'order', data: clean<EntryData['order']>({ service: consult ? { id: consult.id, code: consult.code, name: consult.name } : { name: 'Consult', answer: 'note' },
@@ -128,8 +139,10 @@ export function draftEntries(d: Draft, w: Where): EntryIn[] {
       return [{ ...base, id: d.id, type: d.function, data: factData(d.function, q), ...(q.entry_id ? { refers_to: String(q.entry_id), relation: 'changes' as const } : {}) } as EntryIn]
     // a score: the inputs and the server's total and band, with the version it used (§5.1 rule 8)
     case 'score': return [{ ...base, id: d.id, type: 'score', data: scoreData(q as ScoreParams) }]
-    // another type's draft (the composer makes none today): its params are that type's data, which the writer checks
-    default: return [{ ...base, id: d.id, type: d.function, data: q } as EntryIn]
+    // another type's draft (a pack's): its params are that type's data, which the writer checks; `refers` among them is not data but the
+    // entry it changes or is about (core change C6)
+    default: { const { refers, ...data } = q as Q & { refers?: PackRefers }
+      return [{ ...base, id: d.id, type: d.function, data, ...(refers?.entry_id ? { refers_to: refers.entry_id, relation: refers.relation } : {}) } as EntryIn] }
   }
 }
 

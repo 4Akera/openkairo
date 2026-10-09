@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useDepartment } from '../../hooks/organization'
 import { useRequestQueue, useToReview, useVisitQueue } from '../../hooks/reads'
 import { useWrite } from '../../hooks/writes'
-import { oneSet, reviewed } from '../../db/entries'
+import { newId, oneSet, reviewed } from '../../db/entries'
 import type { Card as EntryCard, Department, Flag } from '../../db/types'
 import type { ScreenProps } from '../registry'
-import { Button, Card, Empty, ListSection, ScreenFrame, Tag, cn, flagClass, flagMark, shortDate, type ScreenView, type Tone } from '../../ui'
+import { Button, Card, Empty, Input, Kbd, ListSection, ScreenFrame, Tag, cn, flagClass, flagMark, shortDate, type ScreenView, type Tone } from '../../ui'
 import { QueueList, RequestList } from '../Queue'
 
 type View = 'queue' | 'requests' | 'review'
@@ -31,21 +31,33 @@ export function ClinicHome({ dept }: ScreenProps) {
     : toReview.length ? <ToReview cards={toReview} rule={dept.review_results} departmentId={dept.id} /> : <Card><Empty>Nothing to review.</Empty></Card>)
 }
 
-const REASON: Record<string, [Tone, string]> = { critical: ['danger', 'critical'], abnormal: ['warn', 'abnormal'], not_seen: ['info', 'patient not seen'], corrected: ['warn', 'corrected'], result: ['neutral', 'result'], rejected: ['warn', 'not done'], flag: ['warn', 'flagged'], question: ['warn', 'asks'] }
+const REASON: Record<string, [Tone, string]> = { critical: ['danger', 'critical'], abnormal: ['warn', 'abnormal'], not_seen: ['info', 'patient not seen'], corrected: ['warn', 'corrected'], result: ['neutral', 'result'], rejected: ['warn', 'not done'], no_answer: ['neutral', 'no report'], flag: ['warn', 'flagged'], question: ['warn', 'asks'] }
 /** My results to review: the line opens the patient's chart with that result in the center (?at=entry:); Reviewed writes a reviewed
- *  entry about the result and the row closes */
+ *  entry about the result and the row closes. An order done with no report (an X-ray nobody reports, spec §5.5 (c)) asks for the
+ *  doctor's own reading instead: a line folds out under the row and is kept as the reviewed entry's note */
 function ToReview({ cards, rule, departmentId }: { cards: EntryCard[]; rule: Department['review_results']; departmentId: string }) {
   const navigate = useNavigate(); const w = useWrite()
+  const [reading, setReading] = useState<string | null>(null); const [text, setText] = useState('')
+  // the reading is the doctor's: a note in the record (the chart shows it), and the reviewed entry that closes the row keeps it too
+  const keep = (c: EntryCard) => w.mutate(oneSet([{ id: newId(), type: 'note', patient_id: c.patient_id!, department_id: departmentId, visit_id: null,
+      data: { kind: 'progress', text: `Reading of ${c.display_line.replace(/ · done, no report asked$/, '')} (no report asked): ${text.trim()}` } },
+    reviewed(c.id, c.patient_id!, departmentId, text.trim())]), { onSuccess: () => { setReading(null); setText('') } })
   const why = `Critical results, corrected results and results for patients who left before being seen come here${rule === 'abnormal' ? ', and abnormal ones' : rule === 'all' ? ', and every final result' : ''}.`
   return <Card className="overflow-hidden ring-1 ring-danger-line"><ul>
     <ListSection title="My results to review" count={cards.length} />
-    {cards.map((c) => { const p = (c as unknown as { patient?: { given_name: string; family_name: string } }).patient; const reason = c.request?.review_reason; return <li key={c.id} className="flex items-center border-t border-line pe-3">
+    {cards.map((c) => { const p = (c as unknown as { patient?: { given_name: string; family_name: string } }).patient; const reason = c.request?.review_reason; return <li key={c.id} className="border-t border-line">
+      <div className="flex items-center pe-3">
       <button type="button" title={why} onClick={() => navigate(`/patient/${c.patient_id}?at=entry:${c.id}`)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2 text-start text-13 hover:bg-hover focus-ring">
         <span className="w-48 shrink-0 truncate font-medium">{p?.given_name} {p?.family_name}</span>
         {reason && <Tag tone={REASON[reason]?.[0] ?? 'neutral'}>{reason === 'question' ? `${c.department_name ?? ''} asks`.trim() : REASON[reason]?.[1] ?? reason}</Tag>}
         <span className={cn('min-w-0 flex-1 truncate', c.flag && c.flag !== 'normal' && flagClass(c.flag))}>{c.display_line}</span><Compared c={c} /></button>
       {reason === 'question' ? <Button size="sm" variant="outline" onClick={() => navigate(`/patient/${c.patient_id}`)}>Answer</Button>
-        : <Button size="sm" variant="ghost" disabled={w.isPending} onClick={() => w.mutate(oneSet([reviewed(c.id, c.patient_id!, departmentId)]))}>Reviewed</Button>}</li> })}
+        : reason === 'no_answer' ? <Button size="sm" variant="outline" aria-expanded={reading === c.id} onClick={() => { setReading(reading === c.id ? null : c.id); setText('') }}>Your reading</Button>
+        : <Button size="sm" variant="ghost" disabled={w.isPending} onClick={() => w.mutate(oneSet([reviewed(c.id, c.patient_id!, departmentId)]))}>Reviewed</Button>}</div>
+      {reading === c.id && <form className="flex flex-wrap items-center gap-2 bg-sunken px-4 py-2" onSubmit={(e) => { e.preventDefault(); if (text.trim()) keep(c) }}>
+        <Input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="What you see on the films" aria-label="Your reading" className="min-w-0 flex-1" />
+        <Button size="sm" type="submit" disabled={!text.trim()} loading={w.isPending}>Keep<Kbd className="ms-1">↵</Kbd></Button>
+        <span className="text-12 text-faint">No report was asked: your reading goes into the record as a note.</span></form>}</li> })}
   </ul></Card>
 }
 

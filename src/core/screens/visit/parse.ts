@@ -24,12 +24,15 @@ export interface Ctx {
   send?: SendWords | null                             // where a prescription goes from here, in its pack's words (visit/send.ts): /rx … send
   facts?: StandingFacts                               // the pregnancy, breastfeeding and alerts standing now: /preg, /bf, /alert change or end them
   scores?: ScoreTable[]                               // the score tables (read 'me'): /score and each score's alias (/gcs)
+  record?: Pick<RecordView, 'patient' | 'values' | 'medications' | 'allergies' | 'allergy_review'>   // what the chart shows, read-only: a pack's order card may show it (spec §5.5, (b))
+  org?: Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'>   // the clinic's settings, for a pack's line under a base card (lines.ts, §5.8 C1)
+  servedBy?: string[]                                 // the departments that work for this one (not itself): a pack's command offered by works for (§5.8 C3)
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
 import { allowed, commandNamed, notHere, registerCommand } from './commands'
 import { alert, breastfeeding, emptyAlert, emptyBreastfeeding, emptyPregnancy, factLine, pregnancy, type StandingFacts } from './facts'
 import { aliasLine, emptyScore, parseScore, scoreLine, type ScoreParams } from './score'
-import type { ScoreTable } from '../../db/types'
+import type { Organization, RecordView, ScoreTable } from '../../db/types'
 import { PLAIN_SEND, type SendWords } from './send'
 import { parseVitals, vitalsWords } from './vitals'
 
@@ -248,7 +251,7 @@ export function lineOf(p: Parsed, ctx?: Pick<Ctx, 'services' | 'departments'> & 
 }
 
 // ── core's six commands, one per building block; a pack registers its own the same way ──
-registerCommand({ name: 'v', group: 'record', title: 'Vitals', aliases: ['vitals', 'bp'], label: 'Vitals', example: '/v 148/92 84 37 86', action: 'write:vitals', writes: ['vitals'],
+registerCommand({ name: 'v', group: 'record', title: 'Vitals', aliases: ['vitals', 'bp'], label: 'Vitals — a child’s length and head too (len, hc)', example: '/v 148/92 84 37 86 · /v wt 7.5 len 72.4 hc 45.4', action: 'write:vitals', writes: ['vitals'],
   parse: (rest) => rest ? parseVitals(rest.split(/\s+/)) : null, empty: () => [{ function: 'vitals', kind: 'vitals', params: {}, line: '' }] })
 registerCommand({ name: 'rx', group: 'orders', title: 'Prescription', aliases: ['med'], label: 'Prescription', example: '/rx metformin 500 bd 30d for dm', action: 'write:medication', writes: ['medication'],
   parse: (rest, ctx) => prescription(rest, ctx),

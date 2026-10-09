@@ -170,7 +170,7 @@ select t.ok(exists (select 1 from long_res d, long_res o where d.r ->> 'resource
 
 \echo '── every demo patient exports as valid R4 (a mapping that fails stops this suite); the journey''s dispense beside its Task'
 -- include: supabase/demo/load.sql
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 create temp table demo_res as
   select x.id patient, e -> 'resource' r from core.patients x, lateral jsonb_array_elements(core.read_fhir(
     (select u from core.users u where u.organization_id = demo.base('clinic') and exists (select 1 from core.holdings h where h.organization_id = u.organization_id and h.user_id = u.id

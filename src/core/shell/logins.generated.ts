@@ -11,7 +11,7 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'admin@demo.com', name: 'Amira Lotfy', role: 'Owner' },
   ] },
   { department: 'Front desk', departmentId: '00000000-0000-0000-0000-00000000d001', people: [
-    { email: 'reception@demo.com', name: 'Mai Samir', role: 'Reception' },
+    { email: 'reception@demo.com', name: 'Mai Samir', role: 'Booking desk · Reception' },
   ] },
   { department: 'General Practice', departmentId: '00000000-0000-0000-0000-00000000d002', people: [
     { email: 'dr.ali@demo.com', name: 'Dr. Ali Hassan', role: 'Doctor' },
@@ -34,14 +34,83 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'pharm@demo.com', name: 'Dr. Reem Hamdy', role: 'Cashier · Pharmacist' },
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
   ] },
+  { department: 'ECG room', departmentId: '8a750cf3-d235-53b6-87b4-c93cb73cfa3c', people: [
+    { email: 'ecg@demo.com', name: 'Tamer Wahba', role: 'Books its rooms' },
+  ] },
   { department: 'Main store', departmentId: '1d64cf4d-60f9-5945-a245-e9764b6c294f', people: [
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
   ] },
   { department: 'Cashier', departmentId: '1d5d62c1-1b7d-5d6a-8375-6f9cd8f0fc9a', people: [
     { email: 'cashier@demo.com', name: 'Mona Saad', role: 'Cashier' },
   ] },
+  { department: 'Radiology', departmentId: '3de074c1-edbb-5d08-8ae6-d2a8bb6356a9', people: [
+    { email: 'xray@demo.com', name: 'Ahmed Saber', role: 'Radiographer' },
+    { email: 'radiology@demo.com', name: 'Dr. Mai Farouk', role: 'Radiologist' },
+  ] },
   { department: 'Emergency', departmentId: '9a5e6292-bfe8-554b-853f-a5006ad1b4d6', people: [
     { email: 'er@demo.com', name: 'Dr. Tamer Ezz', role: 'Doctor' },
     { email: 'triage@demo.com', name: 'Heba Nabil', role: 'Triage nurse' },
+  ] },
+  { department: 'Paediatrics clinic', departmentId: 'eea2eb4f-e68c-504c-9cad-75e256702c06', people: [
+    { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
+  ] },
+  { department: 'Vaccination room', departmentId: 'f98715c0-781c-57a9-90a2-fd7c7fb129eb', people: [
+    { email: 'vaccines@demo.com', name: 'Rokaya Ghoneim', role: 'Vaccinator' },
+  ] },
+  { department: 'Children\'s ward', departmentId: '46cacda0-b807-52f8-be95-0b98ece5e191', people: [
+    { email: 'children.nurse@demo.com', name: 'Doha Wagdy', role: 'Nurse' },
+    { email: 'kandil@demo.com', name: 'Dr. Hassan Kandil', role: 'Paediatrician' },
+    { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
+  ] },
+  { department: 'Diabetes clinic', departmentId: '043f9d6c-1d02-59f7-9e62-46aa91a5c248', people: [
+    { email: 'diabetes@demo.com', name: 'Dr. Iman Sherif', role: 'Doctor' },
+  ] },
+  { department: 'Family medicine', departmentId: '15566c3b-bdc9-520b-a8ca-62a8ae46dcbc', people: [
+    { email: 'family@demo.com', name: 'Dr. Hazem Ouda', role: 'Doctor' },
+  ] },
+  { department: 'ObGyn clinic', departmentId: '16f24bcc-90d4-50fa-8afb-eafa79bca011', people: [
+    { email: 'midwife@demo.com', name: 'Samah Lotfy', role: 'Midwife' },
+    { email: 'zaki@demo.com', name: 'Dr. Ahmed Zaki', role: 'Obstetrician' },
+    { email: 'obgyn@demo.com', name: 'Dr. Nermeen Fathy', role: 'Obstetrician' },
+  ] },
+  { department: 'Cardiology clinic', departmentId: 'ed61e81d-35ff-5ebd-aab9-65bc3fe69f83', people: [
+    { email: 'cardio@demo.com', name: 'Dr. Wael Ghoneim', role: 'Cardiologist' },
+  ] },
+  { department: 'Echo room', departmentId: 'b524ff70-a7b0-5080-b2f4-8915a319c743', people: [
+    { email: 'echo@demo.com', name: 'Dr. Rasha Nabil', role: 'Echo doctor' },
+  ] },
+  { department: 'Nephrology clinic', departmentId: '9412aa38-749f-5311-8ad0-558233c3b577', people: [
+    { email: 'nephrology@demo.com', name: 'Dr. Medhat Sorour', role: 'Nephrologist' },
+  ] },
+  { department: 'Chest clinic', departmentId: '5eff2909-14f0-5be8-981e-a1b908dca0bd', people: [
+    { email: 'chest@demo.com', name: 'Dr. Dalia Mostafa', role: 'Chest physician' },
+  ] },
+  { department: 'Haematology clinic', departmentId: '2d09bc93-774e-5a31-b19a-daf3c47fd223', people: [
+    { email: 'haemato@demo.com', name: 'Dr. Ola Kandil', role: 'Haematologist' },
+  ] },
+  { department: 'Blood bank', departmentId: 'a6a74dcb-0181-5115-be6a-f37885eb78b3', people: [
+    { email: 'bloodbank@demo.com', name: 'Mahmoud Fekry', role: 'Lab technician' },
+  ] },
+  { department: 'Oncology clinic', departmentId: '75f640e8-9291-5ed1-b1dc-97ba43f5db0b', people: [
+    { email: 'oncology@demo.com', name: 'Dr. Hesham Abdallah', role: 'Oncologist' },
+  ] },
+  { department: 'Chemotherapy day unit', departmentId: 'e074f43d-dfc7-5d23-9274-d3f0c01e921d', people: [
+    { email: 'chemo@demo.com', name: 'Asmaa Farid', role: 'Chemotherapy nurse' },
+    { email: 'oncology@demo.com', name: 'Dr. Hesham Abdallah', role: 'Oncologist' },
+  ] },
+  { department: 'Surgery clinic', departmentId: '50a62a80-0700-5d15-8184-b6712bca74e5', people: [
+    { email: 'surgery@demo.com', name: 'Dr. Hesham Abdelaal', role: 'Surgeon' },
+  ] },
+  { department: 'Pre-op clinic', departmentId: 'ef2aaf18-1883-50cc-8a26-684dd69969ac', people: [
+    { email: 'anaesthesia@demo.com', name: 'Dr. Sherine Rashad', role: 'Anaesthetist' },
+  ] },
+  { department: 'Theatre', departmentId: '2b82ecb9-80cb-514e-bea5-cf0eff126483', people: [
+    { email: 'anaesthesia@demo.com', name: 'Dr. Sherine Rashad', role: 'Anaesthetist' },
+    { email: 'surgery@demo.com', name: 'Dr. Hesham Abdelaal', role: 'Surgeon' },
+    { email: 'theatre@demo.com', name: 'Iman Zidan', role: 'Theatre nurse' },
+  ] },
+  { department: 'Recovery', departmentId: '4ea48f66-4a43-586d-961e-283f43f47824', people: [
+    { email: 'anaesthesia@demo.com', name: 'Dr. Sherine Rashad', role: 'Anaesthetist' },
+    { email: 'recovery@demo.com', name: 'Rehab Seif', role: 'Recovery nurse' },
   ] },
 ]

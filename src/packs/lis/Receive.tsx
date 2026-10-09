@@ -1,10 +1,10 @@
 // Receive (lis.receive, spec/openCare.md §5.3; the picture "Lab · receiving"): a tab only where the laboratory scans to receive (the
-// large lab's switch). Each scan of a sample number (S-MMDD-NNNN, written on the tubes until labels print) marks its tests received
-// — a received step on each order — and says where each tube goes; Results types only what was received. An unknown number, or one
-// already in, says so. A tube that cannot be used (haemolysed, clotted, too little) is rejected: its tests go back to Collect for a new
-// sample, held with the reason. Views: Not arrived (collected, not scanned; Receive by hand there for a tube with no number or one that
-// will not scan), Received (waiting for results), Sent back. A number that
-// finds nothing says why: never given, given but not marked Collected yet, or its tubes saved under another number.
+// large lab's switch). Each scan of a sample number (S-MMDD-NNNN, written on the tubes or printed on their labels, whose barcode a
+// scanner types in) marks its tests received — a received step on each order — and says where each tube goes; Results types only
+// what was received. An unknown number, or one already in, says so. A tube that cannot be used (haemolysed, clotted, too little) is
+// rejected: its tests go back to Collect for a new sample, held with the reason. Views: Not arrived (collected, not scanned; Receive by
+// hand there for a tube with no number or one that will not scan), Received (waiting for results), Sent back. A number that finds
+// nothing says why: never given, given but not marked Collected yet, or its tubes saved under another number.
 // A pack the laboratory uses may put its button on a row (Pay) with its card under it, and may hold single tests waiting (a soft check,
 // spec §5.4), as on Collect: a waiting test shows its word on the row, a scan or Receive takes only the free tests (saying how many wait),
 // and Receive anyway… asks why; Reject a tube (a stop) is never greyed.
@@ -95,9 +95,9 @@ export function Receive({ dept }: ScreenProps) {
             <span className="truncate">{[...new Set(g.rows.map((r) => r.section_name ?? 'Other'))].join(', ')}</span></>}</>}
       minutes={g.rows[0]?.order.last_at ? minutesSince(g.rows[0].order.last_at) : null}
       actions={view === 'in' && may ? <Button size="sm" variant="ghost" aria-expanded={isOpen} onClick={() => setRejecting(isOpen ? null : g.patient.id)}>Reject a tube</Button>
-        : view === 'wait' && may ? <span className="flex gap-1.5"><Button size="sm" variant="ghost" disabled={busy || !ok.length} title={ok.length ? 'For a tube with no number, or one that will not scan' : waitWord(hold)}
-          aria-label={`Receive ${g.patient.given_name} ${g.patient.family_name}'s tubes by hand`} onClick={() => void take(ok, n || 'No number')}>Receive</Button>
-          {hold.length > 0 && packs.anyway(pr, hold.map((r) => r.order.item), 'Receive')}</span> : undefined} />,
+        : view === 'wait' && (may || can('read:bench')) ? <span className="flex gap-1.5">{may && <Button size="sm" variant="ghost" disabled={busy || !ok.length} title={ok.length ? 'For a tube with no number, or one that will not scan' : waitWord(hold)}
+          aria-label={`Receive ${g.patient.given_name} ${g.patient.family_name}'s tubes by hand`} onClick={() => void take(ok, n || 'No number')}>Receive</Button>}
+          {hold.length > 0 && can('read:bench') && packs.anyway(pr, hold.map((r) => r.order.item), 'Receive')}</span> : undefined} />,
       isOpen && <li key={`${g.patient.id} reject`} className="grid gap-2 border-t border-line bg-sunken p-4">
         {tubes.map(({ tube, tests }) => <div key={tube.cap} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
           <Cap cap={tube.cap} big /><span className="w-36 text-13 font-medium text-fg">{tube.word}</span><span className="text-13 text-muted">{tests.map((t) => t.name).join(' · ')}</span>

@@ -15,6 +15,8 @@ import { dur, isAdmit, isTo, type Decided } from './where'
 export { dur }
 export interface StayFacts { triage?: { level: Level; scale: Scale; at: string }; seen_at?: string; decided?: Decided; police?: boolean }
 export interface Board { patient_ids: string[]; stays: Record<string, StayFacts> }
+/** the stays as they are, for the board's query key: it reads again when one changes */
+export const staysKey = (rows: readonly PresenceRow[]) => rows.map((r) => `${r.item}@${r.version}`).sort().join(',')
 /** minutes before an untriaged wait turns red */
 export const UNTRIAGED_LIMIT = 15
 

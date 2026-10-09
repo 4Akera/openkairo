@@ -70,7 +70,7 @@ export function WhereTo({ dept, row, identity, facts, onDone, onCancel }: WhereT
     setBusy(true); setErr(null); setWarn(null)
     try {
       await write(oneSet(es, confirmed.length ? { confirmed } : {}))
-      refresh(qc); for (const k of ['casualty-board', 'casualty-beds', 'pack-tiles']) void qc.invalidateQueries({ queryKey: [k] })
+      refresh(qc); for (const k of ['casualty-board', 'casualty-beds']) void qc.invalidateQueries({ queryKey: [k] })
       onDone()
     } catch (e) {
       if (e instanceof WriteWarned) setWarn({ findings: e.outcome.findings, retry: (c) => void send(es, [...confirmed, ...c]) })

@@ -1,7 +1,10 @@
 // /v's words (spec 05, §4.7): the vitals typed on one line, moved here out of parse.ts. A BP first, then pulse, temperature, weight and
 // SpO₂ by position, or any of them by name (p 84 t 37.2 w 86 h 170 spo2 98 rr 16). Since the owner's Q5 (2026-10-08) the base's vitals
 // also hold air or oxygen (air · oxygen 2l nasal · venturi fio2 28) and the patient's ACVPU (alert, confused, voice, pain, unresponsive).
-// The draft's params stay flat; its line follows them in one fixed order. Pure: npm run test:composer.
+// A child's length (lying; the base's height, method lying) and head (core change C2, §5.8 Q22): len 72.4 hc 45.4. The draft's params
+// stay flat; its line follows them in one fixed order. And the vitals card's fields: a child under two is weighed, measured lying and has
+// the head measured, with no blood pressure; anyone else the adult card, with length or head when the line said them. Pure: npm run
+// test:composer and test:clinics-core.
 import type { Vitals } from '../../db/shapes.generated'
 import type { Result } from './parse'
 
@@ -22,6 +25,8 @@ const NAMED: Record<string, [string, string]> = {
   p: ['pulse', 'P'], hr: ['pulse', 'P'], pulse: ['pulse', 'P'], t: ['temperature', 'T'], temp: ['temperature', 'T'],
   w: ['weight', 'Wt'], wt: ['weight', 'Wt'], weight: ['weight', 'Wt'], h: ['height', 'Ht'], ht: ['height', 'Ht'], height: ['height', 'Ht'],
   spo2: ['spo2', 'SpO₂'], sat: ['spo2', 'SpO₂'], sats: ['spo2', 'SpO₂'], rr: ['respiratory_rate', 'RR'],
+  // a child's length (lying; the base's height, method lying) and head (the base's head): core change C2 (§5.8, Q22)
+  len: ['length', 'Length'], length: ['length', 'Length'], hc: ['head', 'Head'], head: ['head', 'Head'], ofc: ['head', 'Head'],
 }
 const WORDS: Record<string, Acvpu> = { a: 'a', alert: 'a', c: 'c', confused: 'c', confusion: 'c', v: 'v', voice: 'v', pain: 'p', u: 'u', unresponsive: 'u' }
 const AIR: Record<string, 'air' | 'oxygen'> = { air: 'air', oxygen: 'oxygen', ox: 'oxygen' }
@@ -33,7 +38,7 @@ const PART: Record<string, (d: O2Device) => boolean> = { mask: (d) => d.endsWith
 const POSITIONAL: [string, string, number, number][] = [['pulse', 'P', 20, 250], ['temperature', 'T', 30, 45], ['weight', 'Wt', 1, 400], ['spo2', 'SpO₂', 50, 100]]
 const NUMBER = /^\d+(\.\d+)?$/
 const FLOW = /^(\d+(?:\.\d+)?)(l|lpm|l\/min)$/
-const EXAMPLE = 'Try bp 140/90 p 80 t 37 w 70 h 170 spo2 98 rr 16 · air, or oxygen 2l nasal · alert'
+const EXAMPLE = 'Try bp 140/90 p 80 t 37 w 70 h 170 spo2 98 rr 16 · air, or oxygen 2l nasal · alert · a child: wt 7.5 len 72.4 hc 45.4'
 
 /** the words after /v → the vitals draft (null: nothing typed) */
 export function parseVitals(words: string[]): Result {
@@ -103,6 +108,7 @@ export function parseVitals(words: string[]): Result {
   if (flow !== undefined) params.o2_flow = flow
   if (fio2 !== undefined) params.fio2 = fio2
   if (!Object.keys(params).length) return null
+  if (params.height !== undefined && params.length !== undefined) return { error: 'Length (lying) or height (standing), not both' }
   return { ok: [{ function: 'vitals', params, line: vitalsWords(params), kind: 'vitals' }] }
 }
 
@@ -112,10 +118,24 @@ function oxygenWords(q: Record<string, unknown>): string | null {
   if (q.oxygen !== 'oxygen') return null
   return ['O₂', q.o2_flow != null ? `${q.o2_flow} L/min` : null, deviceWords(q.o2_device), q.fio2 != null ? `FiO₂ ${q.fio2}%` : null].filter(Boolean).join(' ')
 }
-/** the vitals draft's one line, from its fields: BP · P · T · Wt · Ht · SpO₂ · air or oxygen · RR · ACVPU */
+/** the vitals draft's one line, from its fields: BP · P · T · Wt · Ht · Length (lying) · Head · SpO₂ · air or oxygen · RR · ACVPU */
 export function vitalsWords(q: Record<string, unknown>): string {
   const num = (k: string, l: string) => q[k] != null ? `${l} ${q[k]}` : null
   return [q.systolic != null ? `BP ${q.systolic}/${q.diastolic ?? '?'}` : null, num('pulse', 'P'), num('temperature', 'T'), num('weight', 'Wt'), num('height', 'Ht'),
-    num('spo2', 'SpO₂'), oxygenWords(q), num('respiratory_rate', 'RR'), typeof q.consciousness === 'string' && q.consciousness ? `ACVPU ${q.consciousness.toUpperCase()}` : null]
+    q.length != null ? `Length ${q.length} (lying)` : null, num('head', 'Head'), num('spo2', 'SpO₂'), oxygenWords(q), num('respiratory_rate', 'RR'), typeof q.consciousness === 'string' && q.consciousness ? `ACVPU ${q.consciousness.toUpperCase()}` : null]
     .filter(Boolean).join(' · ')
+}
+
+type Q = Record<string, unknown>
+/** the vitals card's number fields (the adult's): key, label, unit; air or oxygen and ACVPU are its chips */
+export const VITALS: [string, string, string][] = [['systolic', 'Sys', 'mmHg'], ['diastolic', 'Dia', 'mmHg'], ['pulse', 'Pulse', 'bpm'], ['temperature', 'Temp', '°C'], ['weight', 'Wt', 'kg'], ['spo2', 'SpO₂', '%'], ['respiratory_rate', 'RR', '/min'], ['height', 'Ht', 'cm']]
+const CHILD: [string, string, string][] = [['weight', 'Wt', 'kg'], ['length', 'Length', 'cm'], ['head', 'Head', 'cm'], ['temperature', 'Temp', '°C'], ['pulse', 'Pulse', 'bpm'], ['respiratory_rate', 'RR', '/min'], ['spo2', 'SpO₂', '%']]
+/** completed months from a birth date to now (null when not known) */
+export const monthsOld = (born: string | null | undefined, now = new Date()) => { if (!born) return null
+  const [y, m, d] = born.slice(0, 10).split('-').map(Number); return (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m) - (now.getDate() < d ? 1 : 0) }
+/** the vitals card's fields for this patient: a child under two the child's, else the adult's plus length and head when given */
+export function vitalsFields(q: Q, born: string | null | undefined, now = new Date()): [string, string, string][] {
+  const months = monthsOld(born, now)
+  if (months !== null && months < 24) return CHILD
+  return [...VITALS.filter(([k]) => k !== 'height' || q.length == null), ...CHILD.filter(([k]) => (k === 'length' || k === 'head') && q[k] != null)]
 }

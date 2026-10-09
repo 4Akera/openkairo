@@ -140,7 +140,7 @@ test('tileWords: in the ER, not triaged, the level and its wait, seen', () => {
   for (const junk of [null, 'x', 7, { stays: null }, { stays: [] }]) assert.deepEqual(tileWords(row('a', 42), {}, junk, NOW), { words: ['in the ER 42 min'] }, JSON.stringify(junk))
   assert.deepEqual(boardOf({ stays: { a: { triage: { level: 9, scale: 'ats', at: ago(1) } }, b: { triage: { level: 2, scale: 'esi', at: ago(1) } } } })?.stays, { a: {}, b: {} }, 'a triage without a real level or scale is dropped')
   const tile: TileCtx = { dept: { id: 'er', packs: ['casualty'] }, place: null, identity: null, day: 1, can: () => true }
-  const lines = [{ pack: 'casualty', line: (r: PresenceRow, c: TileCtx, d?: unknown) => tileWords(r, c, d, NOW) }]
+  const lines = [{ pack: 'casualty', line: (r: PresenceRow, c: TileCtx) => tileWords(r, c, c.read, NOW), useRead: () => undefined }]
   assert.deepEqual(tileLineOf(lines, row('a', 80), tile, { casualty: B({ a: tri(4, 72) }) }), [{ pack: 'casualty', words: [{ text: '4 · Standard' }, { text: 'waiting 72 min', tone: 'danger' }] }])
   assert.deepEqual(tileLineOf(lines, row('a', 6), tile), [{ pack: 'casualty', words: [{ text: 'in the ER 6 min' }] }], 'before the board answers')
 })

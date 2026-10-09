@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { setClinicTimeZone, hm, shortDate } from '../src/core/ui/time'
 import '../src/packs/bedside/obs'
 import { NEWS2, NEWS2_S2, news2From, obsNotes, scale2Choice } from '../src/packs/bedside/line'
-import { news2Chip, news2Summary, news2Words, obsTileLine, tileWords, type News2Board } from '../src/packs/bedside/news2'
+import { news2Chip, news2Summary, news2Words, obsTileLine, staysKey, tileWords, type News2Board } from '../src/packs/bedside/news2'
 import { parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
 import { commandNamed, commandsFor } from '../src/core/screens/visit/commands'
 import { keyOf, type ScoreParams, type ScoreResult } from '../src/core/screens/visit/score'
@@ -219,9 +219,12 @@ test('the tile: the stay\'s latest NEWS2 from the board\'s read, in its band\'s 
   assert.equal(tileWords(seen, tc, undefined, NOW), null, 'obs taken, the board not read yet: nothing')
   assert.deepEqual(tileWords(row(90, { state: 'discharged' }), tc, board(6, 'medium'), NOW), null, 'only an admitted stay')
   const tile = (packs: string[]): TileCtx => ({ dept: { id: 'ward', packs }, place: null, identity, day: 1, can: () => true, org: scoresOrg })
-  const lines = [{ pack: 'bedside', line: (r: PresenceRow, c: TileCtx, d?: unknown) => tileWords(r, c, d, NOW) }]
+  const lines = [{ pack: 'bedside', line: (r: PresenceRow, c: TileCtx) => tileWords(r, c, c.read, NOW), useRead: () => undefined }]
   assert.deepEqual(tileLineOf(lines, seen, tile(['bedside']), { bedside: board(6, 'medium') }), [{ pack: 'bedside', words: [{ text: 'NEWS2 6', tone: 'warn' }] }])
   assert.deepEqual(tileLineOf(lines, row(90), tile(['bedside'])), [{ pack: 'bedside', words: [{ text: 'no obs for 1 h', tone: 'warn' }] }], 'before the board answers: the row alone')
   assert.deepEqual(tileLineOf(lines, row(90), tile([])), [], 'only where the ward uses the pack')
+  assert.deepEqual(tileLineOf(lines, seen, tile(['bedside']), { other: board(6, 'medium') }), [], 'never another pack\'s read')
+  const a = [presence('s2', { version: 3 }), presence('s1', { version: 1, has_vitals: true })]
+  assert.equal(staysKey(a), staysKey([...a].reverse())); assert.equal(staysKey(a), 's1@1:1,s2@3:0', 'the board\'s read again when a stay changes'); assert.notEqual(staysKey(a), staysKey(a.slice(0, 1)))
 })
 console.log(`bedside: ${n} groups passed`)
