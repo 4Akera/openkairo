@@ -7,6 +7,9 @@ import { changeOf, columnsOf, workedOut } from '../src/packs/lis/grid'
 import { byArrival, lateBy, nextUp, notFound, nowAt, sampleKey, scanned, sectionKey, targetOf, ticketOf, type Large, type Ticket } from '../src/packs/lis/large'
 import type { RequestQueueRow } from '../src/core/db/types'
 import '../src/packs/lis/order'
+import { bedsideMissing, bedsideOf, parseBlood, parseTransfuse, transfusionData, CHECKS } from '../src/packs/lis/blood'
+import { registerBloodWords } from '../src/packs/lis/bloodWords'
+registerBloodWords()
 import { lineOf, parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
 import { suggest } from '../src/core/screens/visit/expand'
 import { commandsFor } from '../src/core/screens/visit/commands'
@@ -231,5 +234,32 @@ test('the Sample labels switch: written (a number on each tube) unless the labor
   assert.match(src, /const printing = large\.labels === 'printed'/); assert.match(src, /labels ready/); assert.match(src, /<PrintButton label=\{printWords\(ready\.labels\)\} keyed/, 'Print 3 labels (P)')
   assert.match(src, /key: 'lis\.labels', data: labels, thing: samplesOf\(labels\), things: sampleNumbers\(labels\), patientId/, 'the print names the patient: logged like a read; each sample its own thing')
   assert.match(src, /<PrintButton label=\{printWords\(again\(g\)\)\} print=/, 'the row\'s button says Print until it has printed (never "Print again" for labels never printed)')
+// ── the Blood bank (spec §5.7, Q35, Q36) ──
+const BB = [{ id: 'rbc1', code: 'rbc', name: 'Red cells', department_id: 'bb', section_name: 'Blood bank' }, { id: 'plt1', code: 'plt', name: 'Platelets', department_id: 'bb', section_name: 'Blood bank' },
+  { id: 'cbc1', code: 'cbc', name: 'Complete blood count', department_id: 'lab', section_name: 'Haematology' }]
+const bctx: Pick<Ctx, 'services' | 'departments' | 'departmentId'> = { services: BB, departments: [{ id: 'bb', name: 'Blood bank', packs: ['lis'] }, { id: 'lab', name: 'Laboratory', packs: ['lis'] }, { id: 'hc', name: 'Clinic', packs: [] }], departmentId: 'hc' }
+test('/blood: the product, the units, what the red cells need, why; the Blood bank\'s service, its words on the order (its own type)', () => {
+  const r = parseBlood('rbc 2 leuco kell ? thalassaemia programme', bctx); assert.ok(r && 'ok' in r)
+  assert.deepEqual(r.ok[0].params, { service_id: 'rbc1', priority: 'routine', question_text: 'thalassaemia programme', as: { type: 'lis.blood', words: { product: 'rbc', needs: ['leucodepleted', 'Rh and Kell matched'], units: 2,
+    why: 'thalassaemia programme', consent: 'on file', sample: 'taken here' } } })
+  const e = parseBlood('plt 1 emergency', bctx); assert.ok(e && 'ok' in e); assert.equal(e.ok[0].params.priority, 'stat'); assert.equal((e.ok[0].params.as as { words: { consent: string } }).words.consent, 'emergency, no time')
+  assert.ok('error' in (parseBlood('2 units', bctx) as object), 'a product is said'); assert.ok('error' in (parseBlood('rbc 2 wobble', bctx) as object))
+  assert.ok('error' in (parseBlood('rbc 2', { ...bctx, departments: bctx.departments.map((d) => ({ ...d, packs: [] })) }) as object), 'no Blood bank serving here')
+})
+test('/transfuse: one unit at the bedside, the base\'s given (the unit its lot, the volume its dose); two who check and every check before it is added', () => {
+  const r = parseTransfuse('26-118452', new Date('2026-10-08T11:32:00')); assert.ok(r && 'ok' in r)
+  const d = r.ok[0]; assert.equal(d.function, 'lis.transfusion'); assert.equal(d.params.lot, '26-118452'); assert.deepEqual(d.params.dose, { value: '290', unit: 'mL', ucum: 'mL' })
+  const { b } = bedsideOf(d.params); assert.match(bedsideMissing(b) ?? '', /name the second/)
+  assert.match(bedsideMissing({ ...b, second: 'Marwa Gaber' }) ?? '', /Tick every check/)
+  assert.equal(bedsideMissing({ ...b, second: 'Marwa Gaber', checks: [...CHECKS] }), null)
+  const w = parseTransfuse('26-118452 with Marwa Gaber checked'); assert.ok(w && 'ok' in w)
+  assert.equal(bedsideMissing(bedsideOf(w.ok[0].params).b), null, 'on the line: the second by name, the six checks said aloud')
+  const stopped = transfusionData({ ...b, ended: '11:51', reaction: { what: ['hives, itch'], severity: 'mild', doctor: 'do not restart · return the unit' } }, 60)
+  assert.equal(stopped.note, '11:32 to 11:51 · about 60 mL · stopped: hives, itch, mild · do not restart · return the unit', 'the reaction said in the given\'s note, read on every chart')
+  assert.ok('error' in (parseTransfuse('x') as object))
+  const ward = (servedBy: string[]): Ctx => ({ services: BB, departments: [{ id: 'bb', name: 'Blood bank', packs: ['lis'] }, { id: 'ward', name: 'Medical Ward', packs: [] }], problems: [],
+    departmentId: 'ward', packs: [], templates: [], servedBy, usedIn: () => ['Blood bank'] })
+  assert.ok((parse('/transfuse 26-118452 with Marwa Gaber checked', ward(['bb'])) as { ok?: unknown[] }).ok, 'offered where the Blood bank works for the ward (C3)')
+  assert.ok('error' in (parse('/transfuse 26-118452', ward([])) as object), 'not where it does not')
 })
 console.log(`lis: ${n} groups passed`)

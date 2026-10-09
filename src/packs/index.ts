@@ -9,4 +9,8 @@ import * as chroniccare from './chroniccare'
 import * as familycare from './familycare'
 import * as paeds from './paeds'
 import * as obgyn from './obgyn'
-export const packs = { pharmacy, lis, billing, radiology, bookings, vaccines, chroniccare, familycare, paeds, obgyn }
+import * as cardio from './cardio'
+import * as nephrology from './nephrology'
+import * as lungs from './lungs'
+import * as haemato from './haemato'
+export const packs = { pharmacy, lis, billing, radiology, bookings, vaccines, chroniccare, familycare, paeds, obgyn, cardio, nephrology, lungs, haemato }

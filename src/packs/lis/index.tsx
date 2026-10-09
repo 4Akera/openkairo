@@ -16,6 +16,10 @@ import { largeOf } from './large'
 import { LabelSheet } from './LabelSheet'
 import type { Label } from './labels'
 import './order'
+import { registerCard } from '@core/screens/visit/commands'
+import { transfusionLine, bedsideOf } from './blood'
+import { registerBloodWords } from './bloodWords'
+import { BedsideCard, BloodNote } from './BloodCards'
 
 registerScreen('lis.collect', Collect)
 registerScreen('lis.receive', Receive, (dept, org) => largeOf(org, dept.id).scan_receive)
@@ -24,4 +28,6 @@ registerWalkInStep('lis', OrderStep)
 registerPrintout<Label[]>('lis.labels', { paper: 'label', Component: LabelSheet })
 registerWords({ no_such_chair: 'This laboratory has no such chair: pick yours again', unknown_ticket: 'That ticket is not today\'s',
   called_elsewhere: 'Another chair called this patient a moment ago' })
+registerBloodWords((items, ctx) => <BloodNote items={items} ctx={ctx} />)
+registerCard({ function: 'lis.transfusion', pack: 'lis', Editor: BedsideCard, line: (q) => { const { b, ml } = bedsideOf(q); return transfusionLine(b, ml) } })
 export const key = 'lis'

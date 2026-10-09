@@ -24,3 +24,9 @@ begin
   perform public.write_setting(jsonb_build_object('key', 'lis.large', 'owner_id', demo.base('lab'), 'data', '{"turnaround":false,"targets":{"haematology":60,"coagulation":60,
     "chemistry":120,"hormones":240,"serology":240,"urine_stool":60},"second_check":false,"scan_receive":false,"chairs":0,"labels":"printed","analysers":false,"auto_release":false}'::jsonb));
 end $$;
+-- the Blood bank (spec §5.7, Q35): a department using the pack, from its starter setup lis.blood_bank (its four products answered on the base's
+-- bench after their steps; it works for every department); its technician, Mahmoud Fekry
+select demo.setup(demo.id('lis', 'blood_bank'), 'lis.blood_bank', 'Blood bank', 25);
+
+select demo.person(demo.id('lis', 'blood_tech'), 'bloodbank@demo.com', 'Mahmoud Fekry');
+select demo.grant(demo.id('lis', 'blood_tech'), '00000000-0000-0000-0000-00000000cf01', demo.id('lis', 'blood_bank'));

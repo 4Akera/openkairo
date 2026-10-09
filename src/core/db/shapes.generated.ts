@@ -140,16 +140,6 @@ export interface CheckedIn {
   priority?: 'routine' | 'urgent' | 'asap' | 'stat'
   reason?: string
 }
-/** chroniccare.target v1 (chroniccare) */
-export interface ChroniccareTarget {
-  condition: string
-  measure: string
-  op: '<' | '<=' | '>' | '>='
-  reason?: string
-  status?: 'active' | 'ended'
-  value: number
-  value2?: number
-}
 /** crossed_out v1 (base) */
 export interface CrossedOut {
   reason: 'typo' | 'wrong_value' | 'wrong_patient' | 'late_information' | 'other'
@@ -182,6 +172,43 @@ export type Given = {
   site?: string
   status: 'completed' | 'not-done'
 } & ({ medication: string } | { drug: Concept })
+/** haemato.plan v1 (haemato) */
+export interface HaematoPlan {
+  medicine?: string
+  note?: string
+  reason: string
+  status?: 'active' | 'stopped'
+  tablet_mg?: number
+  target: {
+    high: number
+    low: number
+  }
+}
+/** haemato.programme v1 (haemato) */
+export interface HaematoProgramme {
+  condition?: string
+  every_weeks: number
+  hb: {
+    high: number
+    low: number
+  }
+  needs?: ('leucodepleted' | 'Rh and Kell matched' | 'irradiated' | 'washed')[]
+  note?: string
+  status?: 'active' | 'stopped'
+}
+/** haemato.week v1 (haemato) */
+export interface HaematoWeek {
+  bleeding?: 'none' | 'minor' | 'major'
+  days: number[]
+  food?: 'as usual' | 'more greens' | 'fewer greens'
+  inr?: number
+  missed?: 'none' | 'one' | 'two or more'
+  next_inr?: string
+  note?: string
+  suggested?: number
+  used_suggestion?: boolean
+  was?: number
+}
 /** here v1 (base) */
 export interface Here {
   note?: string
@@ -190,6 +217,72 @@ export interface Here {
 export interface Left {
   reason?: string
 }
+/** lis.blood v1 (lis) */
+export interface LisBlood {
+  answers?: Record<string, unknown>
+  asked_by?: string
+  department_id: string
+  details?: Record<string, unknown>
+  due?: Datetime
+  lis?: {
+    consent?: 'on file' | 'signed today' | 'emergency, no time'
+    needs?: ('leucodepleted' | 'Rh and Kell matched' | 'irradiated' | 'washed')[]
+    product?: 'rbc' | 'plt' | 'ffp' | 'cryo'
+    sample?: 'taken here' | 'the lab collects'
+    units?: number
+    why?: string
+  }
+  priority: 'routine' | 'urgent' | 'asap' | 'stat'
+  question?: string
+  reason?: string
+  reasons?: Reference[]
+  service: {
+    answer?: string
+    code?: string
+    coding?: Coding
+    id?: string
+    name: string
+  }
+  status: 'active' | 'on-hold' | 'revoked' | 'completed'
+}
+/** lis.transfusion v1 (lis) */
+export type LisTransfusion = {
+  dose?: Quantity
+  drug?: Concept
+  expiry?: string
+  lis?: {
+    checks?: string[]
+    ended?: string
+    group?: string
+    product?: 'rbc' | 'plt' | 'ffp' | 'cryo'
+    reaction?: {
+      doctor?: 'restart slowly when settled' | 'do not restart · return the unit'
+      severity?: 'mild' | 'moderate' | 'severe'
+      told?: string
+      what?: ('hives, itch' | 'fever, rigors' | 'breathless' | 'BP fell' | 'back pain, dark urine')[]
+    }
+    second: string
+    signs?: {
+      at?: string
+      dia?: number
+      pulse?: number
+      rr?: number
+      spo2?: number
+      sys?: number
+      temp?: number
+      when: 'before' | '15 min' | 'end' | 'reaction'
+    }[]
+    started?: string
+    unit: string
+  }
+  lot?: string
+  medication?: string
+  note?: string
+  reason?: string
+  route?: string
+  site?: string
+  status: 'completed' | 'not-done'
+} & ({ medication: string } | { drug: Concept })
 /** list_review v1 (base) */
 export interface ListReview {
   list: 'problems' | 'medications' | 'allergies'
@@ -242,100 +335,6 @@ export type Note = {
   language?: string
   text?: string
 } & ({ text: string } | { attachments: Attachment[] })
-/** obgyn.anc v1 (obgyn) */
-export interface ObgynAnc {
-  code: Concept
-  interpretation?: string
-  method?: string
-  note?: string
-  obgyn?: {
-    booking?: {
-      antibodies?: string
-      before?: string
-      blood_group?: 'A' | 'B' | 'AB' | 'O'
-      gravida?: number
-      miscarriages?: number
-      para?: number
-      rh?: 'positive' | 'negative'
-      risk_note?: string
-      risks?: ('previous_caesarean' | 'preeclampsia_risk' | 'diabetes')[]
-    }
-    days?: number
-    fhr?: number
-    lie?: 'cephalic' | 'breech' | 'transverse' | 'not sure'
-    moves?: 'felt' | 'less'
-    next_weeks?: number
-    oedema?: 'none' | 'feet' | 'face, hands'
-    protein?: 'nil' | 'trace' | '+' | '++' | '+++'
-    sfh?: number
-    taken?: string[]
-    weeks?: number
-  }
-  value: {
-    boolean?: boolean
-    concept?: Concept
-    date?: PartialDate
-    quantity?: Quantity
-    text?: string
-  }
-}
-/** obgyn.periods v1 (obgyn) */
-export interface ObgynPeriods {
-  code: Concept
-  interpretation?: string
-  method?: string
-  note?: string
-  obgyn?: {
-    clots?: boolean
-    cycle_from?: number
-    cycle_to?: number
-    days_from?: number
-    days_to?: number
-    flow?: 'light' | 'normal' | 'heavy'
-    lmp?: string
-    note?: string
-    pads?: number
-    pain?: 'none' | 'mild' | 'moderate' | 'severe'
-  }
-  value: {
-    boolean?: boolean
-    concept?: Concept
-    date?: PartialDate
-    quantity?: Quantity
-    text?: string
-  }
-}
-/** obgyn.postnatal v1 (obgyn) */
-export interface ObgynPostnatal {
-  code: Concept
-  interpretation?: string
-  method?: string
-  note?: string
-  obgyn?: {
-    birth?: {
-      baby?: 'boy' | 'girl'
-      baby_id?: string
-      days?: number
-      grams?: number
-      how: 'normal' | 'vacuum' | 'forceps' | 'caesarean'
-      on: string
-      place?: string
-      weeks?: number
-      where: 'here' | 'elsewhere'
-      why?: string
-    }
-    bleeding?: 'none' | 'light' | 'heavy'
-    days?: number
-    wound?: 'healed' | 'red' | 'oozing' | 'opened'
-  }
-  value: {
-    boolean?: boolean
-    concept?: Concept
-    date?: PartialDate
-    quantity?: Quantity
-    text?: string
-  }
-}
 /** observation v1 (base) */
 export interface Observation {
   code: Concept
@@ -375,33 +374,6 @@ export interface Order {
     name: string
   }
   status: 'active' | 'on-hold' | 'revoked' | 'completed'
-}
-/** paeds.development v1 (paeds) */
-export interface PaedsDevelopment {
-  code: Concept
-  interpretation?: string
-  method?: string
-  note?: string
-  paeds?: {
-    age_months?: number
-    items: {
-      area: 'movement' | 'hands' | 'talking' | 'social'
-      short?: string
-      text: string
-      yes: boolean
-    }[]
-    list: string
-    months?: number
-    plan?: string[]
-    version?: string
-  }
-  value: {
-    boolean?: boolean
-    concept?: Concept
-    date?: PartialDate
-    quantity?: Quantity
-    text?: string
-  }
 }
 /** pharmacy.dispense v1 (pharmacy) */
 export interface PharmacyDispense {
@@ -554,26 +526,6 @@ export interface Transferred {
 export interface Urgent {
   urgent: boolean
 }
-/** vaccines.dose v1 (vaccines) */
-export type VaccinesDose = {
-  dose?: Quantity
-  drug?: Concept
-  expiry?: string
-  lot?: string
-  medication?: string
-  note?: string
-  reason?: string
-  route?: string
-  site?: string
-  status: 'completed' | 'not-done'
-  vaccines?: {
-    dose?: number
-    given_by?: string
-    given_on?: string
-    source?: 'here' | 'card'
-    vaccine: string
-  }
-} & ({ medication: string } | { drug: Concept })
 /** vitals v1 (base) */
 export interface Vitals {
   bmi?: Quantity
@@ -619,27 +571,14 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
-/** setting chroniccare.conditions (chroniccare; owner organization) */
-export interface ChroniccareConditionsSetting {
-  conditions: {
-    checks?: {
-      codes: string[]
-      every_months: number
-      key?: string
-      name: string
-      off_target_months?: number
-    }[]
-    codes: string[]
-    key: string
+/** setting cardio.hf_targets (cardio; owner organization) */
+export interface CardioHfTargetsSetting {
+  targets: {
+    atc: string
+    group: 'ras' | 'bb' | 'mra' | 'sglt2'
+    mg_a_day: number
     name: string
-    targets?: {
-      measure: string
-      op: '<' | '<=' | '>' | '>='
-      value: number
-      value2?: number
-    }[]
   }[]
-  window_months?: number
 }
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
@@ -680,26 +619,20 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
-/** setting familycare.checks (familycare; owner organization) */
-export interface FamilycareChecksSetting {
-  checks: {
-    bmi_age_from?: number
-    bmi_from?: number
-    codes: string[]
-    every_years?: number
-    from?: number
-    met_by?: string
-    name: string
-    once?: boolean
-    order?: string
-    sex?: 'any' | 'female' | 'male'
-    to?: number
-    who?: string
+/** setting haemato.inr (haemato; owner organization) */
+export interface HaematoInrSetting {
+  table: {
+    change: number
+    from: number
+    next_days: number
+    says: string
+    to: number
   }[]
-}
-/** setting familycare.files (familycare; owner organization) */
-export interface FamilycareFilesSetting {
-  ask_at_new_patient?: boolean
+  targets: {
+    high: number
+    low: number
+    reason: string
+  }[]
 }
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
@@ -719,43 +652,14 @@ export interface LisLargeSetting {
   }
   turnaround: boolean
 }
-/** setting obgyn.gynaecology (obgyn; owner organization) */
-export interface ObgynGynaecologySetting {
-  methods: {
-    every: number
-    method: string
-    unit: 'weeks' | 'months' | 'years'
+/** setting nephrology.renal_list (nephrology; owner organization) */
+export interface NephrologyRenalListSetting {
+  rules: {
+    atc?: string
+    medicine: string
+    says: string
+    under: number
   }[]
-  screening: 'pap3' | 'hpv5' | 'both5'
-}
-/** setting obgyn.notices (obgyn; owner organization) */
-export interface ObgynNoticesSetting {
-  bp_dia: number
-  bp_sys: number
-  dvp_high: number
-  dvp_low: number
-  efw_high: number
-  efw_low: number
-  protein: '+' | '++' | '+++'
-}
-/** setting obgyn.schedule (obgyn; owner organization) */
-export interface ObgynScheduleSetting {
-  rows: {
-    from: number
-    to: number
-    what: string
-    whom: 'everyone' | 'rh_negative' | 'previous_caesarean' | 'age_35' | 'preeclampsia_risk' | 'diabetes'
-    word?: string
-  }[]
-}
-/** setting obgyn.visits (obgyn; owner organization) */
-export interface ObgynVisitsSetting {
-  every: {
-    until: number
-    weeks: number
-  }[]
-  fundus_band: number
-  fundus_from: number
 }
 /** setting organization.packs_used (core; owner organization) */
 export interface OrganizationPacksUsedSetting {
@@ -768,29 +672,6 @@ export interface OrganizationRecordViewSetting {
 /** setting organization.time_zone (core; owner organization) */
 export interface OrganizationTimeZoneSetting {
   zone: string
-}
-/** setting paeds.doses (paeds; owner organization) */
-export interface PaedsDosesSetting {
-  doses: {
-    drug: string
-    from: number
-    most?: number
-    per: 'day' | 'dose'
-    route?: 'oral' | 'iv' | 'im' | 'pr' | 'inhaled'
-    times_from?: number
-    times_to?: number
-    to: number
-  }[]
-}
-/** setting paeds.milestones (paeds; owner organization) */
-export interface PaedsMilestonesSetting {
-  milestones: {
-    area: 'movement' | 'hands' | 'talking' | 'social'
-    months: number
-    short?: string
-    text: string
-  }[]
-  source: string
 }
 /** setting pharmacy.counselling (pharmacy; owner organization) */
 export interface PharmacyCounsellingSetting {
@@ -894,43 +775,6 @@ export interface ServiceSetting {
   section?: string
   steps?: string[]
 }
-/** setting vaccines.national (vaccines; owner organization) */
-export interface VaccinesNationalSetting {
-  rows: {
-    age: string
-    cvx?: string
-    dose: number
-    earliest_days: number
-    how?: string
-    interval_days?: number
-    key: string
-    latest_days?: number
-    name: string
-    route?: string
-    site?: string
-    vaccine: string
-  }[]
-  sample?: boolean
-  source?: string
-  version?: string
-}
-/** setting vaccines.optional (vaccines; owner organization) */
-export interface VaccinesOptionalSetting {
-  rows: {
-    age?: string
-    cvx?: string
-    dose: number
-    earliest_days?: number
-    how?: string
-    interval_days?: number
-    latest_days?: number
-    name: string
-    pregnancy?: boolean
-    route?: string
-    site?: string
-    vaccine: string
-  }[]
-}
 
 /** each entry type's data, by its key */
 export interface EntryData {
@@ -943,27 +787,27 @@ export interface EntryData {
   'breastfeeding': Breastfeeding
   'called': Called
   'checked_in': CheckedIn
-  'chroniccare.target': ChroniccareTarget
   'crossed_out': CrossedOut
   'died': Died
   'discharged': Discharged
   'done': Done
   'given': Given
+  'haemato.plan': HaematoPlan
+  'haemato.programme': HaematoProgramme
+  'haemato.week': HaematoWeek
   'here': Here
   'left': Left
+  'lis.blood': LisBlood
+  'lis.transfusion': LisTransfusion
   'list_review': ListReview
   'medication': Medication
   'moved': Moved
   'not_here': NotHere
   'not_private': NotPrivate
   'note': Note
-  'obgyn.anc': ObgynAnc
-  'obgyn.periods': ObgynPeriods
-  'obgyn.postnatal': ObgynPostnatal
   'observation': Observation
   'opened_anyway': OpenedAnyway
   'order': Order
-  'paeds.development': PaedsDevelopment
   'pharmacy.dispense': PharmacyDispense
   'pregnancy': Pregnancy
   'private': Private
@@ -978,7 +822,6 @@ export interface EntryData {
   'step': Step
   'transferred': Transferred
   'urgent': Urgent
-  'vaccines.dose': VaccinesDose
   'vitals': Vitals
 }
 /** each setting's data, by its key */
@@ -988,7 +831,7 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
-  'chroniccare.conditions': ChroniccareConditionsSetting
+  'cardio.hf_targets': CardioHfTargetsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
@@ -998,18 +841,12 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
-  'familycare.checks': FamilycareChecksSetting
-  'familycare.files': FamilycareFilesSetting
+  'haemato.inr': HaematoInrSetting
   'lis.large': LisLargeSetting
-  'obgyn.gynaecology': ObgynGynaecologySetting
-  'obgyn.notices': ObgynNoticesSetting
-  'obgyn.schedule': ObgynScheduleSetting
-  'obgyn.visits': ObgynVisitsSetting
+  'nephrology.renal_list': NephrologyRenalListSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
-  'paeds.doses': PaedsDosesSetting
-  'paeds.milestones': PaedsMilestonesSetting
   'pharmacy.counselling': PharmacyCounsellingSetting
   'pharmacy.keep_stock': PharmacyKeepStockSetting
   'pharmacy.late_after': PharmacyLateAfterSetting
@@ -1022,6 +859,4 @@ export interface SettingData {
   'radiology.options': RadiologyOptionsSetting
   'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
-  'vaccines.national': VaccinesNationalSetting
-  'vaccines.optional': VaccinesOptionalSetting
 }

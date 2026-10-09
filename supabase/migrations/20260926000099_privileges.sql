@@ -15,6 +15,10 @@ revoke all on all routines in schema chroniccare from public, anon, authenticate
 revoke all on all routines in schema familycare from public, anon, authenticated;
 revoke all on all routines in schema paeds from public, anon, authenticated;
 revoke all on all routines in schema obgyn from public, anon, authenticated;
+revoke all on all routines in schema cardio from public, anon, authenticated;
+revoke all on all routines in schema nephrology from public, anon, authenticated;
+revoke all on all routines in schema lungs from public, anon, authenticated;
+revoke all on all routines in schema haemato from public, anon, authenticated;
 revoke all on all routines in schema public from public, anon, authenticated;
 alter default privileges for role base_role revoke execute on functions from public;
 alter default privileges for role pack_pharmacy revoke execute on functions from public;
@@ -26,6 +30,10 @@ alter default privileges for role pack_chroniccare revoke execute on functions f
 alter default privileges for role pack_familycare revoke execute on functions from public;
 alter default privileges for role pack_paeds revoke execute on functions from public;
 alter default privileges for role pack_obgyn revoke execute on functions from public;
+alter default privileges for role pack_cardio revoke execute on functions from public;
+alter default privileges for role pack_nephrology revoke execute on functions from public;
+alter default privileges for role pack_lungs revoke execute on functions from public;
+alter default privileges for role pack_haemato revoke execute on functions from public;
 
 grant execute on function public.write(jsonb), public.read(jsonb), public.choose_user(uuid), public.create_organization(uuid, text, uuid, text),
   public.save(text, jsonb), public.remove(text, uuid), public.save_patient(jsonb), public.merge_patients(jsonb), public.write_setting(jsonb),

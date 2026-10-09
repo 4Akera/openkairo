@@ -27,6 +27,14 @@
 -- include: supabase/demo/paeds.sql
 -- include: supabase/seeds/obgyn.sql
 -- include: supabase/demo/obgyn.sql
+-- include: supabase/seeds/cardio.sql
+-- include: supabase/demo/cardio.sql
+-- include: supabase/seeds/nephrology.sql
+-- include: supabase/demo/nephrology.sql
+-- include: supabase/seeds/lungs.sql
+-- include: supabase/demo/lungs.sql
+-- include: supabase/seeds/haemato.sql
+-- include: supabase/demo/haemato.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql

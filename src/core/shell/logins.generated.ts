@@ -43,17 +43,22 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'xray@demo.com', name: 'Ahmed Saber', role: 'Radiographer' },
     { email: 'radiology@demo.com', name: 'Dr. Mai Farouk', role: 'Radiologist' },
   ] },
-  { department: 'Paediatrics clinic', departmentId: 'eea2eb4f-e68c-504c-9cad-75e256702c06', people: [
-    { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
+  { department: 'Cardiology clinic', departmentId: 'ed61e81d-35ff-5ebd-aab9-65bc3fe69f83', people: [
+    { email: 'cardio@demo.com', name: 'Dr. Wael Ghoneim', role: 'Cardiologist' },
   ] },
-  { department: 'Children\'s ward', departmentId: '46cacda0-b807-52f8-be95-0b98ece5e191', people: [
-    { email: 'children.nurse@demo.com', name: 'Doha Wagdy', role: 'Nurse' },
-    { email: 'kandil@demo.com', name: 'Dr. Hassan Kandil', role: 'Paediatrician' },
-    { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
+  { department: 'Echo room', departmentId: 'b524ff70-a7b0-5080-b2f4-8915a319c743', people: [
+    { email: 'echo@demo.com', name: 'Dr. Rasha Nabil', role: 'Echo doctor' },
   ] },
-  { department: 'ObGyn clinic', departmentId: '16f24bcc-90d4-50fa-8afb-eafa79bca011', people: [
-    { email: 'midwife@demo.com', name: 'Samah Lotfy', role: 'Midwife' },
-    { email: 'zaki@demo.com', name: 'Dr. Ahmed Zaki', role: 'Obstetrician' },
-    { email: 'obgyn@demo.com', name: 'Dr. Nermeen Fathy', role: 'Obstetrician' },
+  { department: 'Nephrology clinic', departmentId: '9412aa38-749f-5311-8ad0-558233c3b577', people: [
+    { email: 'nephrology@demo.com', name: 'Dr. Medhat Sorour', role: 'Nephrologist' },
+  ] },
+  { department: 'Chest clinic', departmentId: '5eff2909-14f0-5be8-981e-a1b908dca0bd', people: [
+    { email: 'chest@demo.com', name: 'Dr. Dalia Mostafa', role: 'Chest physician' },
+  ] },
+  { department: 'Haematology clinic', departmentId: '2d09bc93-774e-5a31-b19a-daf3c47fd223', people: [
+    { email: 'haemato@demo.com', name: 'Dr. Ola Kandil', role: 'Haematologist' },
+  ] },
+  { department: 'Blood bank', departmentId: 'a6a74dcb-0181-5115-be6a-f37885eb78b3', people: [
+    { email: 'bloodbank@demo.com', name: 'Mahmoud Fekry', role: 'Lab technician' },
   ] },
 ]
