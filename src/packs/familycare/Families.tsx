@@ -1,4 +1,4 @@
-// Families (spec/openCare.md §5.7, Q49; picture #family-day): the family pack's own screen — find a file by its number, a phone, an
+// Families (spec/openCare.md §5.8, Q49; picture #family-day): the family pack's own screen — find a file by its number, a phone, an
 // address or a member's name; open it: its members and what each is due (a name opens the chart); add a member, or start a new file.
 import { useEffect, useState } from 'react'
 import { usePatientSearch } from '@core/hooks/reads'

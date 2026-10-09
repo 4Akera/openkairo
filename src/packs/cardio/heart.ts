@@ -1,4 +1,4 @@
-// What the Heart and Heart failure sections read (spec/openCare.md §5.7; the pictures #cardio-ecg, #cardio-hf), all from the base's record:
+// What the Heart and Heart failure sections read (spec/openCare.md §5.8; the pictures #cardio-ecg, #cardio-hf), all from the base's record:
 // the ECGs (results with the ECG study's code), the last echo (its EF, LOINC 10230-1, and its conclusion), NYHA and the dry weight (the
 // base's observations in this pack's terms), the weights (vitals), K, creatinine and eGFR (results), and the four medicine groups read from
 // the medication list by ATC class against the clinic's target doses (cardio.hf_targets). Pure (npm run test:cardio).

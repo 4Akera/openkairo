@@ -1,4 +1,4 @@
--- The obgyn pack's day, its clinic part (spec/openCare.md §5.1 rule 9, §5.7, the pictures #anc-visit … #ob-queue): its own patients
+-- The obgyn pack's day, its clinic part (spec/openCare.md §5.1 rule 9, §5.8, the pictures #anc-visit … #ob-queue): its own patients
 -- in the ObGyn clinic. Rania Saad (28+3 weeks, in consult with Dr. Nermeen Fathy: G3 P1+1, a caesarean before, O Rh negative — anti-D
 -- and the OGTT due at 28 weeks, Hb 10.4), Nahla Gaber (32+0 weeks, in consult with Dr. Ahmed Zaki: her first pregnancy, her clinic scan
 -- at 28 weeks), Eman Abdelaal (42, waiting: heavy periods, a fibroid, her copper IUD ten years and seven months in, a smear due next

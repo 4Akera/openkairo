@@ -1,4 +1,4 @@
-// Under /op's card (spec/openCare.md §5.7, Q41; the picture #surg-clinic): the operation with its usual time, the side big, the chips
+// Under /op's card (spec/openCare.md §5.8, Q41; the picture #surg-clinic): the operation with its usual time, the side big, the chips
 // that rewrite the line (side, priority, surgeon, the anaesthetic wanted, day case or admitted), what the record says before an
 // operation (blood thinners, SGLT2 inhibitors, metformin, BMI: shown for the pre-op clinic to weigh, never a stop) and the risks to tell
 // (the Theatre's list for this operation). The signed consent form is a scan in the patient's Documents; printing the form waits for printing.

@@ -1,4 +1,4 @@
-// Haematology's cards under the line (spec/openCare.md §5.7; the picture #haem-inr): today's INR against her target; the week — missed
+// Haematology's cards under the line (spec/openCare.md §5.8; the picture #haem-inr): today's INR against her target; the week — missed
 // doses, food, bleeding, the clinic's table and its suggestion (Use takes it; nothing is applied by itself), the new week day by day, the
 // next INR, her table in Arabic (it prints when printing comes); the plan's and the programme's fields.
 import { useEffect, type ReactNode } from 'react'

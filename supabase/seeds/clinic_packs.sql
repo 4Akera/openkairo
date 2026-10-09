@@ -22,8 +22,8 @@ begin
   perform demo.screen(ph, 'billing.today');
 end $$;
 
--- Family medicine uses chronic care and the immunisation pack too (§5.7 Q16), after its own and in that order, with the immunisation
--- list a tab of its line; the desk asks for a family file at New patient (§5.7 C4), so it ticks the family medicine pack, whose door it writes
+-- Family medicine uses chronic care and the immunisation pack too (§5.8 Q16), after its own and in that order, with the immunisation
+-- list a tab of its line; the desk asks for a family file at New patient (§5.8 C4), so it ticks the family medicine pack, whose door it writes
 -- the file through. Skipped while the family medicine pack is off; each other pack only while it is on.
 do $$
 declare c uuid := demo.base('clinic'); fm uuid := demo.id('familycare', 'department');
@@ -36,7 +36,7 @@ begin
     perform demo.tick(fm, 'vaccines');
     perform demo.screen(fm, 'vaccines.room');
   end if;
--- The Theatre (spec §5.7, Q47 drawn: who ticks what): the surgeon's operation note and the anaesthetist's record are written there, so
+-- The Theatre (spec §5.8, Q47 drawn: who ticks what): the surgeon's operation note and the anaesthetist's record are written there, so
 -- the Theatre ticks surgical and anaesthesia too, its line has the Anaesthetic record beside the theatre list, the surgeon and the
 -- anaesthetist hold their roles there; the Laboratory offers histopathology for the specimens sent at Sign out. Skipped while a pack is off.
 do $$

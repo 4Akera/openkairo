@@ -1,4 +1,4 @@
--- The theatre pack's day (spec/openCare.md §5.1 rule 9, §5.7; the pictures #theatre-list, #theatre-checklist). Its own patients, each
+-- The theatre pack's day (spec/openCare.md §5.1 rule 9, §5.8; the pictures #theatre-list, #theatre-checklist). Its own patients, each
 -- operation asked by Dr. Ali Hassan from General Practice (the surgeon named on it): Ghada Sharaf (45, gallstones; Theatre 1's first
 -- case, a laparoscopic cholecystectomy: sent for, arrived, Sign in and Time out signed, operating; Sign out to say), Amr Nassar (36, a
 -- right inguinal hernia; Theatre 1's second case: arrived, Sign in signed, under a spinal), Aya Shehata (29, gallstones, urgent: To

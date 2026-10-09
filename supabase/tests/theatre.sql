@@ -1,4 +1,4 @@
--- the theatre pack (spec §5.7): the operation, its own type on the base's order to the Theatre (written with write:order wherever the
+-- the theatre pack (spec §5.8): the operation, its own type on the base's order to the Theatre (written with write:order wherever the
 -- surgeon orders from), its words kept for the list; the Theatre's steps on it (the pack's step: scheduled with its room and time, sent
 -- for, the anaesthetic, operating, recovery, back, which ends it), a step the service does not have refused; the WHO checklist's parts
 -- about the operation, kept for the list; its FHIR beside the base's; the theatre nurse; off, no new operation

@@ -1,4 +1,4 @@
-// The Cancer section of the chart's record panel (spec/openCare.md §5.7; the picture #onc-plan): the diagnosis (where, ICD-10, the
+// The Cancer section of the chart's record panel (spec/openCare.md §5.8; the picture #onc-plan): the diagnosis (where, ICD-10, the
 // morphology and grade), the stage with the TNM and its edition, the markers, ECOG (the base's observation), the intent, the plan (done,
 // now, to come), the cycles from the clinic's list (date, dose, what came after), the anthracycline so far and the heart. Read-only: a
 // line opens its entry in the center.

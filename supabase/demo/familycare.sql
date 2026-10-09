@@ -1,4 +1,4 @@
--- The family pack's day (spec/openCare.md §5.1 rule 9, §5.7; pictures #family-folder, #family-day): one household, file 1182 at
+-- The family pack's day (spec/openCare.md §5.1 rule 9, §5.8; pictures #family-folder, #family-day): one household, file 1182 at
 -- Al-Gomhoria St, Mit Ghamr — Ayman Abdelrahman (39, the head), his wife Basma Hegazy (34, in consult now with Dr. Hazem Ouda: BMI 31,
 -- her fasting sugar four years ago and never screened for cervical cancer, so two checks due), his mother Zeinab Hamouda (68, diabetes: her
 -- HbA1c five months old and high; waiting with knee pain), their son Yassin (6, waiting with ear pain) and daughter Malak (14 months).

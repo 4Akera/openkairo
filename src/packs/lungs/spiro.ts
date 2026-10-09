@@ -1,4 +1,4 @@
-// Spirometry (spec/openCare.md §5.7; the picture #chest-spiro): /spiro fev1 1.62 fvc 2.86 post 1.72 2.98 writes the base's result with no
+// Spirometry (spec/openCare.md §5.8; the picture #chest-spiro): /spiro fev1 1.62 fvc 2.86 post 1.72 2.98 writes the base's result with no
 // order: FEV1, FVC and FEV1/FVC before and after the bronchodilator, each an analyte (before with its LOINC code), the LLN as each one's
 // range, the % predicted and z after, the quality, and the reading as the conclusion. The predicted values come from the server (the
 // GLI-2012 list loaded, its LMS for this age, height and sex); worked out here: LLN = M·(1 − 1.645·L·S)^(1/L), z = ((x/M)^L − 1)/(L·S).

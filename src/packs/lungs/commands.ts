@@ -1,4 +1,4 @@
-// Respiratory's words on the line (spec/openCare.md §5.7), where the department ticks the pack: /spiro (the base's result), /technique,
+// Respiratory's words on the line (spec/openCare.md §5.8), where the department ticks the pack: /spiro (the base's result), /technique,
 // /flare and /plan (the base's observations in the pack's terms). CAT, mMRC, ACT and the GOLD group are its declared scores, offered by
 // their aliases (/cat /mmrc /act /gold). Pure.
 import { registerCommand } from '@core/screens/visit/commands'

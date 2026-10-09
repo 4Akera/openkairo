@@ -1,4 +1,4 @@
--- The cardio pack's day (spec/openCare.md §5.1 rule 9, §5.7): its own patients. Kamal Abdelrahman (64, hypertension on amlodipine,
+-- The cardio pack's day (spec/openCare.md §5.1 rule 9, §5.8): its own patients. Kamal Abdelrahman (64, hypertension on amlodipine,
 -- palpitations for three weeks) is in consult at the Cardiology clinic; his ECG seven months ago was sinus 78; his echo was ordered from
 -- the clinic 25 minutes ago and the Echo room has started it. Zeinab Abou Zeid (72, heart failure with EF 30 % at the Echo room three
 -- months ago, AF on apixaban, diabetes) waits in consult: NYHA III five weeks ago, her dry weight set then at 70 kg, 71.4 kg today; on

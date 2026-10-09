@@ -1,4 +1,4 @@
-// What the Chest section reads (spec/openCare.md §5.7; the picture #chest-spiro), all the base's: the smoking (LOINC 72166-2), the scores
+// What the Chest section reads (spec/openCare.md §5.8; the picture #chest-spiro), all the base's: the smoking (LOINC 72166-2), the scores
 // (GOLD group, CAT, mMRC, ACT), the flares, the inhaler technique and the action plan (observations in this pack's terms), the last
 // spirometry, the inhalers (R03), the eosinophils, the flu and pneumococcal vaccines (the base's given). Pure (npm run test:lungs).
 import type { Medication, ServerEntry, ValueRow } from '@core/db/types'

@@ -1,4 +1,4 @@
-// /checks (spec/openCare.md §5.7, Q49; picture #family-folder): what is due for this patient by age and sex — the due ones a service
+// /checks (spec/openCare.md §5.8, Q49; picture #family-folder): what is due for this patient by age and sex — the due ones a service
 // here does drafted as orders, each left out with × — and under the card the clinic's list for them, due or met, and what the others in
 // the family are due. Worked out from age, sex, the latest values and the coded observations; never ticked by hand.
 import { useFacts } from '@core/hooks/chart'

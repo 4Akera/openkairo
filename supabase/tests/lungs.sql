@@ -1,4 +1,4 @@
--- the lungs pack (spec §5.7): its starter setup (the Chest clinic); the predicted values worked out by the server from the GLI-2012
+-- the lungs pack (spec §5.8): its starter setup (the Chest clinic); the predicted values worked out by the server from the GLI-2012
 -- list loaded (a demo sample, marked so; a cell not loaded said, never guessed), through its operation where the pack is ticked; CAT,
 -- mMRC, ACT and the GOLD group added up by the server; spirometry as the base's result with no order, its codes and units known
 \set cc   '00000000-0000-0000-0000-0000000000e6'

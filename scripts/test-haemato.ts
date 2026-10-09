@@ -1,4 +1,4 @@
-// Haematology (spec/openCare.md §5.7), as pure decisions: the INR clinic — time in range by Rosendaal, the clinic's table's row and its
+// Haematology (spec/openCare.md §5.8), as pure decisions: the INR clinic — time in range by Rosendaal, the clinic's table's row and its
 // suggested week in half tablets (shown, never applied), the week spread over its days, the medicines that change the INR, her table in
 // Arabic; /inr, /inrplan, /programme; the Transfusions section's reads (the units given, the Hb before, mL/kg, the chelation at mg/kg).
 //   npm run test:haemato

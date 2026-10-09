@@ -8,7 +8,7 @@ import { newPatientStepDefs, newPatientStepsFor } from './newPatientSteps'
 
 /** New patient: four fields and a phone (spec 03), with a live duplicate warning. Used by reception and ⌘K.
  *  `onRegisterOnly` adds a second button that registers without the submit label's next step (reception's send).
- *  A pack on for the clinic may add its step after the phone (§5.7 C4: the family file); once registered, the pack does its own with
+ *  A pack on for the clinic may add its step after the phone (§5.8 C4: the family file); once registered, the pack does its own with
  *  the new patient before the desk goes on, and a step that fails says so with Continue, never silently. */
 export function NewPatient({ seed, orgId, onDone, onCancel, submitLabel = 'Register', onRegisterOnly }: { seed: string; orgId: string; onDone: (p: PatientHit) => void; onCancel: () => void; submitLabel?: string; onRegisterOnly?: (p: PatientHit) => void }) {
   const parts = /\d/.test(seed) ? [] : seed.trim().split(/\s+/); const [given, setGiven] = useState(parts[0] ?? ''); const [family, setFamily] = useState(parts.slice(1).join(' '))

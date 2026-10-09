@@ -1,4 +1,4 @@
-// The chronic care pack's client (spec/openCare.md §5.7, Q28–Q30; pictures #chronic-visit, #chronic-list): a shared pack. Registers come
+// The chronic care pack's client (spec/openCare.md §5.8, Q28–Q30; pictures #chronic-visit, #chronic-list): a shared pack. Registers come
 // from the problem list's codes; each condition's targets and checks are the clinic's (a patient's own target, the pack's one type, wins);
 // the Chronic care section shows each condition's measures and checks, the banner what is off target and how many checks are due. /review
 // dm drafts the yearly review (the feet and the eyes as the base's observations, the due tests as orders); /target sets an own target. The

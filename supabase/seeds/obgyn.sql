@@ -1,4 +1,4 @@
--- The obgyn pack's seed, its clinic part (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on, the ObGyn clinic is made from
+-- The obgyn pack's seed, its clinic part (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on, the ObGyn clinic is made from
 -- the pack's starter setup (it ticks obgyn, opens on the base's queue; the antenatal schedule, visits, notices and gynaecology's
 -- intervals are the clinic's settings with their starter rows), and a demo person for each role the pack declares: the obstetricians
 -- Dr. Nermeen Fathy and Dr. Ahmed Zaki, and the midwife Samah Lotfy. Ids in the pack's own namespace; written through the doors by the

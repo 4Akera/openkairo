@@ -1,4 +1,4 @@
-// The vaccines pack's pure half (spec/openCare.md §5.7, Q25, Q26; pictures #vax-chart, #vax-room): /vax read into doses, the dose's
+// The vaccines pack's pure half (spec/openCare.md §5.8, Q25, Q26; pictures #vax-chart, #vax-room): /vax read into doses, the dose's
 // line, the schedule from the national and optional settings, due and overdue worked out (a later dose from the last one given, four
 // weeks' grace, too late past its latest age), the chip, Summary, banner and row words, and the walk-in's chips. No browser, no database.
 // npm run test:vaccines

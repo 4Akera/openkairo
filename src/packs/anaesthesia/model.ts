@@ -1,4 +1,4 @@
-// The anaesthesia pack's words and arithmetic (spec/openCare.md §5.7; the pictures #anaes-preop, #anaes-record, and Recovery's): the
+// The anaesthesia pack's words and arithmetic (spec/openCare.md §5.8; the pictures #anaes-preop, #anaes-record, and Recovery's): the
 // clinic's list of medicines to stop matched against a patient's current ones (shown, never a stop), the anaesthetic's risks to tell
 // by plan, the record's 5-minute columns, and recovery's line (minutes in, Aldrete first → last, pain, ready for the ward at 9 or
 // more). Pure: a node test imports it.

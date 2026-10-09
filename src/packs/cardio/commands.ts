@@ -1,4 +1,4 @@
-// Cardiology's words on the line (spec/openCare.md §5.7): /ecg and /hf where the department ticks the pack; /echo, its order word, wherever
+// Cardiology's words on the line (spec/openCare.md §5.8): /ecg and /hf where the department ticks the pack; /echo, its order word, wherever
 // the Echo room (a department using the pack) works for this one. Pure: the /hf note under the card is handed in by the client.
 import type { ReactNode } from 'react'
 import { ordersFrom, registerCommand } from '@core/screens/visit/commands'

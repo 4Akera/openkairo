@@ -1,4 +1,4 @@
-// The theatre pack's words and arithmetic (spec/openCare.md §5.7; the pictures #surg-clinic, #theatre-list, #theatre-checklist): the
+// The theatre pack's words and arithmetic (spec/openCare.md §5.8; the pictures #surg-clinic, #theatre-list, #theatre-checklist): the
 // Theatre's operations (usual time, a side asked, the risks to tell) and its rooms and sessions as its settings hold them; where a case
 // stands from the Theatre's steps on it; the order a room's cases go in; the sessions with room enough for a case's usual time; the
 // WHO checklist's items (2009). Pure: a node test imports it.

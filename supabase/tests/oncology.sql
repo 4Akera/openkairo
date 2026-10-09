@@ -1,4 +1,4 @@
--- the oncology pack (spec §5.7): the cancer, the base's problem extended (the oncologist's write), its shape; the cycle, its own type on
+-- the oncology pack (spec §5.8): the cancer, the base's problem extended (the oncologist's write), its shape; the cycle, its own type on
 -- the base's order to the day unit (the base's write:order, core change (a)), kept in its table for the day unit's rows and tiles,
 -- answered by the unit's note; its FHIR beside the base's; the regimens changed by any oncologist (Q39), not by the day unit's nurse; the
 -- nurse starts the day in a chair and ends it (the base's admit and discharge); off, no new cycle

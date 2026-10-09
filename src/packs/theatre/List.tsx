@@ -1,4 +1,4 @@
-// The theatre list (theatre.list, spec/openCare.md §5.7, Q42; the picture #theatre-list): the theatre pack's own screen and the
+// The theatre list (theatre.list, spec/openCare.md §5.8, Q42; the picture #theatre-list): the theatre pack's own screen and the
 // Theatre's only one for this work (rule 4). Rooms as chips, the day with ← →; emergencies on top until a room takes them; each room's
 // cases in the order put (time, patient, the operation and its side, surgeon and anaesthetist, ASA, where it stands, the checklist's
 // parts, the next key: Send for, Arrived, Sign in, Time out, Sign out, Out, Back); then To schedule by priority and weeks waiting, with

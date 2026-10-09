@@ -1,4 +1,4 @@
-// Oncology (spec/openCare.md §5.7), as pure decisions: BSA by Mosteller, each dose worked out and rounded as the regimen says (mg/m²,
+// Oncology (spec/openCare.md §5.8), as pure decisions: BSA by Mosteller, each dose worked out and rounded as the regimen says (mg/m²,
 // AUC by Calvert with Cockcroft–Gault, mg/kg, flat; a reduction), the regimen's checks against the latest values (shown, never a
 // stop), /chemo's line (the regimen, the cycle, Give · Delay · Reduce, the toxicity graded) and the drafts it writes (the cycle to the
 // day unit, each drug sent on, each toxicity), /cancer (a new cancer; on one recorded, today's ECOG), the banner and chip words, and the

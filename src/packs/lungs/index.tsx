@@ -1,4 +1,4 @@
-// The lungs pack's client (spec/openCare.md §5.7; the picture #chest-spiro). In a department that ticks it: /spiro (the base's
+// The lungs pack's client (spec/openCare.md §5.8; the picture #chest-spiro). In a department that ticks it: /spiro (the base's
 // result, worked out against GLI-2012 by the server), /technique, /flare and /plan (the base's observations in its terms), CAT, mMRC, ACT
 // and the GOLD group as declared scores, the Chest section and its banner words.
 import { registerCard } from '@core/screens/visit/commands'

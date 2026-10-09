@@ -1,4 +1,4 @@
--- The haemato pack's seed (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on; the Haematology clinic is made from the
+-- The haemato pack's seed (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on; the Haematology clinic is made from the
 -- pack's starter setup; its haematologist, Dr. Ola Kandil. The INR targets and the dosing table are the pack's clinic-wide setting, its
 -- starter rows as declared. Ids in the pack's own namespace; run again, it adds only what is missing. Its day is supabase/demo/haemato.sql.
 

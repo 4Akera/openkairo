@@ -1,4 +1,4 @@
-// Paediatrics' words on the children's ward board (spec/openCare.md §5.7, the picture #paeds-ward): each tile's one pack line says the
+// Paediatrics' words on the children's ward board (spec/openCare.md §5.8, the picture #paeds-ward): each tile's one pack line says the
 // child's latest weight and how old it is (older than 3 days in amber: doses by weight hang on it) and the day's maintenance fluid by
 // Holliday–Segar from that weight ("12.4 kg (1 d) · maint. 47 mL/h"). Shown, never an order. Paediatrics brings no tile button.
 // The board hands a tile line only the row (core-v3); the weights are read once per board from the pack's own table, kept here, and

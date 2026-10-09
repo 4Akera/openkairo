@@ -1,4 +1,4 @@
-// The haemato pack's client (spec/openCare.md §5.7; the pictures #haem-blood, #haem-bedside, #haem-inr). In a department that ticks
+// The haemato pack's client (spec/openCare.md §5.8; the pictures #haem-blood, #haem-bedside, #haem-inr). In a department that ticks
 // it: /inr (today's INR, the base's result with no order, and the INR clinic's week, the clinic's table suggesting the week, never
 // applying it), /inrplan, /programme; the Transfusions section (the group and screen from the Blood bank, each unit given, the programme,
 // iron and chelation) and the Anticoagulation section; its banner words. Blood is ordered and given through the Blood bank's words.

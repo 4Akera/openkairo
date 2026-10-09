@@ -1,4 +1,4 @@
-// The kidney's stage and its panel (spec/openCare.md §5.7; the picture #renal-ckd), all worked out from the base's record, never typed:
+// The kidney's stage and its panel (spec/openCare.md §5.8; the picture #renal-ckd), all worked out from the base's record, never typed:
 // the KDIGO 2012 square from the latest eGFR and urine ACR (and the square a year before), eGFR over time (the laboratory's, else worked
 // out from creatinine by CKD-EPI 2021), and the CKD panel with what stands beside each test on the medication list. Pure
 // (npm run test:nephrology).

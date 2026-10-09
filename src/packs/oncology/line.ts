@@ -1,4 +1,4 @@
-// Oncology's two words on the composer's line (spec/openCare.md §5.7; the pictures #onc-plan, #onc-cycle). Pure.
+// Oncology's two words on the composer's line (spec/openCare.md §5.8; the pictures #onc-plan, #onc-cycle). Pure.
 //   /cancer ecog 1                     the cancer's card: a new cancer when none is on record; on one, ECOG (the base's observation)
 //   /chemo ac 3 · /chemo pac 4 reduce 20 · /chemo folfox delay 7 · /chemo ac 3 fn3 nausea2 muc1 neu0 peg
 // /chemo is the pack's order to the day unit (it extends the base's order): the regimen from the clinic's list, the cycle (the next one

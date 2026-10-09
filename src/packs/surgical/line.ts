@@ -1,4 +1,4 @@
-// /opnote on the composer's line (spec/openCare.md §5.7, Q46; the picture #surg-opnote): in the operating room, after the operation. Two drafts:
+// /opnote on the composer's line (spec/openCare.md §5.8, Q46; the picture #surg-opnote): in the operating room, after the operation. Two drafts:
 // the base's procedure (what, done, today) and the pack's operation note (extending the base's note), started from the surgeon's
 // template for this operation; the card fills the times, the anaesthetic and blood loss from the anaesthetic record and the specimen
 // and implants from Sign out. "#postop …" on the next line brings the surgeon's post-op preset (the base's), each line removable. Pure.

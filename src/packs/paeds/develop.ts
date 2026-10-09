@@ -1,4 +1,4 @@
-// Development and the newborn checks as paediatrics reads them (spec/openCare.md §5.7, the picture #paeds-develop). A check is one entry
+// Development and the newborn checks as paediatrics reads them (spec/openCare.md §5.8, the picture #paeds-develop). A check is one entry
 // of the pack's own type, paeds.development (the base's observation: the list, the age, its version, each milestone yes or not
 // yet, what was chosen next); the milestones are the clinic's list (the setting paeds.milestones), the list for an age the latest
 // one at or before it. "Not yet" past the list's age is a notice, never a stop. The newborn checks are base entries by the pack's own

@@ -1,4 +1,4 @@
--- The anaesthesia pack's day (spec/openCare.md §5.1 rule 9, §5.7; the pictures #anaes-preop, #theatre-recovery). Its own patients: Hamed
+-- The anaesthesia pack's day (spec/openCare.md §5.1 rule 9, §5.8; the pictures #anaes-preop, #theatre-recovery). Its own patients: Hamed
 -- Sakr (70; a left inguinal hernia, its operation asked 11 weeks ago in the clinic's day; Hb 9.8 last week; in consult in the Pre-op clinic with Dr. Sherine now, the
 -- assessment typed live), and in Recovery Marwa Shalaby (33; a laparoscopic ovarian cystectomy; in Bay 2 for 5 minutes, Aldrete 6,
 -- oxygen on) and Yara Abdelsalam (7, 23 kg; K-wires to the left elbow; in Bay 3 for 45 minutes, Aldrete 7 → 9, pain 4). Times relative

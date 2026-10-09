@@ -1,4 +1,4 @@
-// ObGyn's composer lines (spec/openCare.md §5.7, the pictures #anc-visit, #ob-scan, #ob-gyn, #ob-postnatal), each turned into drafts of
+// ObGyn's composer lines (spec/openCare.md §5.8, the pictures #anc-visit, #ob-scan, #ob-gyn, #ob-postnatal), each turned into drafts of
 // base entries where the base has the idea and the pack's own types where it has not:
 //   /anc bp 118/74 wt 71 sfh 29 fhr 144 ceph nil      the base's vitals (BP, weight) and the pack's antenatal check (the rest)
 //   /obus bpd 78 hc 288 ac 245 fl 57 dvp 1.8 post ceph fhr 146   the clinic's scan: the base's result with no order, the fetal weight worked out

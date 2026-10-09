@@ -1,4 +1,4 @@
-// The INR clinic (spec/openCare.md §5.7, Q37, Q38; the picture #haem-inr), worked out, never typed: time in range (Rosendaal, over the
+// The INR clinic (spec/openCare.md §5.8, Q37, Q38; the picture #haem-inr), worked out, never typed: time in range (Rosendaal, over the
 // last six months of INRs), the clinic's dosing table's suggestion for the new week (shown, never applied), the week spread over its days in
 // half tablets (Saturday first, as the week runs in Egypt), the medicines on the list that change the INR, and her table in Arabic. Pure
 // (npm run test:haemato).

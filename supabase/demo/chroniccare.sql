@@ -1,4 +1,4 @@
--- The chronic care pack's day (spec/openCare.md §5.1 rule 9, §5.7; pictures #chronic-visit, #chronic-list): its own patients in the
+-- The chronic care pack's day (spec/openCare.md §5.1 rule 9, §5.8; pictures #chronic-visit, #chronic-list): its own patients in the
 -- Diabetes clinic with Dr. Iman Sherif. Ashraf Mokhtar, in consult now: type 2 diabetes for twelve years, hypertension for ten, CKD 3a for
 -- two on his problem list; HbA1c 8.2 (and rising), LDL 112, BP 146/90 today; eyes and feet last reviewed 14 months ago, his urine ACR 15
 -- months ago: three checks due. Fawzia Darwish, 81: her own target BP < 150/90 (falls), still above it. Wafaa Abdelmoneim: diabetes and

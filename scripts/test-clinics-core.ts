@@ -1,4 +1,4 @@
-// The clinics' core changes (spec/openCare.md §5.7, the owner 2026-10-08; spec/build-clinics.md C1–C5), proven with a test-only probe
+// The clinics' core changes (spec/openCare.md §5.8, the owner 2026-10-08; spec/build-clinics.md C1–C5), proven with a test-only probe
 // pack: C1 a pack's line under the /rx and /v cards and after the draft; C2 /v reading length and head; C3 a pack command that is not an
 // order offered by works for; C4 a pack's step in New patient; C5 a pack's rows under the board; and (the owner 2026-10-09) C6 a pack's
 // draft that refers to an item, C7 a tile line's own read. Pure: no browser, no database.

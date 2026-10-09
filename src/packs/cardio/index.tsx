@@ -1,4 +1,4 @@
-// The cardio pack's client (spec/openCare.md §5.7; the pictures #cardio-ecg, #cardio-echo, #cardio-hf). In a department that ticks it:
+// The cardio pack's client (spec/openCare.md §5.8; the pictures #cardio-ecg, #cardio-echo, #cardio-hf). In a department that ticks it:
 // /ecg (the ECG read here, the base's result with no order), /hf (the heart failure visit: NYHA, the weight, the dry weight), its Heart and
 // Heart failure sections, its banner words; /chadsvasc is its declared score. /echo is its order word, offered wherever the Echo room
 // (a department using the pack, from its starter setup) works for this one; the Echo room answers on the base's bench with the base's

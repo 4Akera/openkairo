@@ -1,4 +1,4 @@
--- The oncology pack's seed (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on; the Oncology clinic and the Chemotherapy
+-- The oncology pack's seed (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on; the Oncology clinic and the Chemotherapy
 -- day unit are made from the pack's starter setups (the clinic's queue; eight chairs on the base's board, the cycle its one service);
 -- the clinic's regimens (a demo sample, not the full list); a demo person for each role the pack declares: the oncologist, Dr. Hesham
 -- Abdallah, and the day unit's nurse, Asmaa Farid. Ids in the pack's own namespace; written through the doors by the kit; run again, it

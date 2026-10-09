@@ -1,4 +1,4 @@
-// The surgical pack's client (spec/openCare.md §5.7; the pictures #surg-clinic, #surg-opnote): the Surgery section and its banner words
+// The surgical pack's client (spec/openCare.md §5.8; the pictures #surg-clinic, #surg-opnote): the Surgery section and its banner words
 // ("for op · …" while an operation waits, "op today · …"), and /opnote with its card — the base's procedure and the pack's operation
 // note, from the surgeon's template, the times and the specimen read from the record.
 import { ANYONE, registerSection } from '@core/screens/chart/sections'

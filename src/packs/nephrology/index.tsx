@@ -1,4 +1,4 @@
-// The nephrology pack's client (spec/openCare.md §5.7; the picture #renal-ckd). It adds no record type: in a department that ticks it, the
+// The nephrology pack's client (spec/openCare.md §5.8; the picture #renal-ckd). It adds no record type: in a department that ticks it, the
 // Kidneys section (the KDIGO square from the latest eGFR and ACR, eGFR over time, the CKD panel), its banner words, and the clinic's renal
 // list (its setting) speaking on one line under the base's /rx card as the medicine is typed, a notice, never a stop.
 import { registerSection, ANYONE, type SectionInput } from '@core/screens/chart/sections'

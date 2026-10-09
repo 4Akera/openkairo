@@ -1,4 +1,4 @@
-// Nephrology (spec/openCare.md §5.7), as pure decisions: the KDIGO 2012 square from the latest eGFR and urine ACR and the one a year
+// Nephrology (spec/openCare.md §5.8), as pure decisions: the KDIGO 2012 square from the latest eGFR and urine ACR and the one a year
 // before; eGFR worked out from creatinine by CKD-EPI 2021 where the laboratory gave none; the fall a year; the CKD panel with what stands
 // beside each test; the renal list's line under /rx (the lowest threshold the eGFR is under speaks).   npm run test:nephrology
 import assert from 'node:assert/strict'

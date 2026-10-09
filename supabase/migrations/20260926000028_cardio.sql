@@ -1,4 +1,4 @@
--- 28 · the cardio pack (spec/openCare.md §5.7; the pictures /pictures.html#cardio-ecg, #cardio-echo, #cardio-hf). It adds no record type:
+-- 28 · the cardio pack (spec/openCare.md §5.8; the pictures /pictures.html#cardio-ecg, #cardio-echo, #cardio-hf). It adds no record type:
 -- the ECG read in the clinic is the base's result with no order (LOINC 11524-6, each measure an analyte), the echo is the base's result
 -- answering /echo at the Echo room (a bench department from this pack's starter setup, each measure with its range), NYHA and the dry
 -- weight are the base's observations, the weight its vitals, CHA₂DS₂-VASc a declared score. Its own: the four heart failure medicine

@@ -1,4 +1,4 @@
--- The WHO growth tables' demo sample for the paediatrics pack (spec/openCare.md §5.1 rule 7, §5.7): birth to 2 years — weight, length
+-- The WHO growth tables' demo sample for the paediatrics pack (spec/openCare.md §5.1 rule 7, §5.8): birth to 2 years — weight, length
 -- and head for age, weight for length — L, M and S as the WHO publishes them (WHO Child Growth Standards 2006; here as the CDC hosts the
 -- WHO's tables), loaded as the reference list paeds.who_growth and recorded as a demo sample, not the full list. An installation
 -- loads the full tables with scripts/import-codes.sh. Loaded at a reset with the other code lists (supabase/config.toml sql_paths).

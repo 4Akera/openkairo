@@ -1,4 +1,4 @@
-// Haematology's sections (spec/openCare.md §5.1 rule 2, §5.7; the pictures #haem-blood, #haem-bedside, #haem-inr): Transfusions (the group
+// Haematology's sections (spec/openCare.md §5.1 rule 2, §5.8; the pictures #haem-blood, #haem-bedside, #haem-inr): Transfusions (the group
 // and screen, reactions, the programme, the last transfusions with the Hb before and mL/kg, the units at the bedside, iron and chelation)
 // and Anticoagulation (the reason and target, the medicine, time in range, the INRs in their band, the week now, the last change).
 import { useState, type ReactNode } from 'react'

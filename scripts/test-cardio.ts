@@ -1,4 +1,4 @@
-// Cardiology (spec/openCare.md §5.7), as pure decisions: the /ecg line and the result it writes (no order, each measure with its LOINC
+// Cardiology (spec/openCare.md §5.8), as pure decisions: the /ecg line and the result it writes (no order, each measure with its LOINC
 // code and range, the conclusion), read back for the card and the Heart section; /hf (NYHA, oedema, lying flat, the weight, the dry
 // weight); the four medicine groups against the clinic's target doses; /echo ordering from the Echo room only where it works for this one.
 //   npm run test:cardio

@@ -1,4 +1,4 @@
-// The Blood bank's words (spec/openCare.md §5.7, Q35, Q36; the pictures #haem-blood, #haem-bedside), the laboratory pack's: /blood orders a
+// The Blood bank's words (spec/openCare.md §5.8, Q35, Q36; the pictures #haem-blood, #haem-bedside), the laboratory pack's: /blood orders a
 // product from the Blood bank, offered wherever a department using the pack works for this one, carrying the pack's words on the order
 // (its own order type: the product, what the red cells need, the units, why, the consent, the sample); /transfuse is the bedside record of
 // one unit (the pack's type extending the base's given: the unit number its lot, the volume its dose, the two who checked, the signs, a

@@ -1,4 +1,4 @@
-// The WHO safety checklist for surgery on a case (spec/openCare.md §5.7, Q44; the picture #theatre-checklist): Sign in, Time out and Sign
+// The WHO safety checklist for surgery on a case (spec/openCare.md §5.8, Q44; the picture #theatre-checklist): Sign in, Time out and Sign
 // out, each the theatre pack's own entry signed by who said it when it is said (a part signed moves the case on: Sign in → the anaesthetic,
 // Time out → operating). An item not done says why; nothing waits for it. Sign out counts swabs, needles and instruments (a count that
 // does not add up is a notice for the surgeon, never a stop), keeps the implants with their lot, and sends the specimen as a /lab order

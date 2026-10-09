@@ -1,4 +1,4 @@
-// The dose per kg (spec/openCare.md §5.7, the picture #paeds-dose): what a prescription comes to in mg/kg, worked out from the child's
+// The dose per kg (spec/openCare.md §5.8, the picture #paeds-dose): what a prescription comes to in mg/kg, worked out from the child's
 // latest weight and the clinic's own dose list (the setting paeds.doses), and whether it sits in the clinic's range. Shown,
 // never a stop; nothing is stored. With no weight in the last 30 days it says the last one and its date and asks for a weight; it never
 // guesses a weight from the age. Pure.

@@ -1,4 +1,4 @@
-// Haematology's words on the line (spec/openCare.md §5.7), where the department ticks the pack: /inr (today's INR, the base's result with no
+// Haematology's words on the line (spec/openCare.md §5.8), where the department ticks the pack: /inr (today's INR, the base's result with no
 // order, and the INR clinic's week), /inrplan (the reason and the target), /programme (a transfusion programme). Pure.
 import { registerCommand } from '@core/screens/visit/commands'
 import type { ReactNode } from 'react'

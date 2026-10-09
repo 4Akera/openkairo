@@ -1,4 +1,4 @@
-// The day unit's rows under the board (spec/openCare.md §5.7, the picture #onc-unit; core change C5): today's cycles not in a chair yet
+// The day unit's rows under the board (spec/openCare.md §5.8, the picture #onc-unit; core change C5): today's cycles not in a chair yet
 // — the regimen and cycle, a dose reduced, here since — each with the base's Admit here as its Start (into a free chair). A cycle
 // whose patient already had a chair here today (in one now, or gone home) is not listed again; a delayed cycle waits for its day. The
 // cycles read here are kept for the chairs' tile line too.

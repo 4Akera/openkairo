@@ -1,4 +1,4 @@
--- The vaccines pack's seed (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on, the Vaccination room is made from the
+-- The vaccines pack's seed (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on, the Vaccination room is made from the
 -- pack's starter setup (it ticks vaccines, opens on its own list in place of the queue; the optional rows a clinic usually offers), the
 -- national schedule is loaded as an import would load it — the MOHP's rows, birth to 18 months, a demo sample said to be one — and a
 -- demo person for the role the pack declares: the vaccinator, Rokaya Ghoneim. Ids in the pack's own namespace; written through the

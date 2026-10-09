@@ -1,4 +1,4 @@
-// The family file at the desk's New patient (spec/openCare.md §5.7, Q49; core change C4; picture #family-checks): join a family file —
+// The family file at the desk's New patient (spec/openCare.md §5.8, Q49; core change C4; picture #family-checks): join a family file —
 // found by its number, the phone or the address, the family's phone typed above tried first — as a wife, a son…; or start a new file at
 // this address; or not now. Registered, the pack joins or starts the file through its door, from the desk (which ticks the pack).
 import { useEffect, useState } from 'react'

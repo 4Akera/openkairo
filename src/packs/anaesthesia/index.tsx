@@ -1,4 +1,4 @@
-// The anaesthesia pack's client (spec/openCare.md §5.7; the pictures #anaes-preop, #anaes-record, and Recovery's): the Anaesthesia
+// The anaesthesia pack's client (spec/openCare.md §5.8; the pictures #anaes-preop, #anaes-record, and Recovery's): the Anaesthesia
 // section; /preop and its card (the airway, ASA, the scores typed before it, the medicines to stop, the plan, Fit or Not yet); the
 // anaesthetic record, a tab of the operating department's; Recovery's line on each bay and its two buttons (Aldrete: the /score card in the patient's chart;
 // Record: the patient's anaesthetic record). RCRI, STOP-BANG and Aldrete are the base's /score with the pack's declared tables.

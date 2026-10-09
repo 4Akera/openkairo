@@ -15,7 +15,7 @@ export interface Where { patientId: string; departmentId: string; visitId?: stri
 /** an order carrying a pack's own words (spec §5.5, core change (a)): the pack's type extending the base's order, and its words, kept
  *  under data.<pack> (an X-ray's side). Whoever may order writes it (write:order), from wherever they order */
 export interface PackOrder { type: string; words: Record<string, unknown> }
-/** a pack's draft that refers to an item (spec §5.7, core change C6, 2026-10-09): `refers` in its params, kept out of its data — the
+/** a pack's draft that refers to an item (spec §5.8, core change C6, 2026-10-09): `refers` in its params, kept out of its data — the
  *  entry it changes (its own item's latest entry: a cancer restaged) or is about (another item: a pre-op about an operation) */
 export interface PackRefers { entry_id: string; relation: 'changes' | 'about' }
 /** an order's type and data with a pack's words added, or the base's order as it is */
@@ -49,7 +49,7 @@ function vitals(q: Q): EntryData['vitals'] {
   return clean<EntryData['vitals']>({ bp: sys && dia ? { sys, dia } : undefined,
     hr: qty(q.pulse, 'bpm', '/min'), rr: qty(q.respiratory_rate, '/min', '/min'), temp: qty(q.temperature, '°C', 'Cel'), spo2: qty(q.spo2, '%', '%'),
     weight: qty(q.weight, 'kg', 'kg'), height: qty(q.height ?? q.length, 'cm', 'cm'), head: qty(q.head, 'cm', 'cm'), glucose: qty(q.glucose, 'mg/dL', 'mg/dL'), pain: qty(q.pain, '/10', '{score}'),
-    // a child's length is the base's height measured lying (core change C2, §5.7 Q22)
+    // a child's length is the base's height measured lying (core change C2, §5.8 Q22)
     method: q.length != null && q.height == null ? 'lying' : undefined })
 }
 function problemData(q: Q, was?: EntryData['problem']): EntryData['problem'] {

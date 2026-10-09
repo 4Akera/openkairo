@@ -1,4 +1,4 @@
-// The vaccination room's own list (spec/openCare.md §5.7, Q26; picture #vax-room), in place of the queue there and a tab beside it in a
+// The vaccination room's own list (spec/openCare.md §5.8, Q26; picture #vax-room), in place of the queue there and a tab beside it in a
 // clinic using the pack (rule 4: a list of work that is not places, calling and finishing itself). Due today: who is here (the room's
 // visits), then the children due by the schedule not here yet; This week; Overdue · to call, with the phone number (a call is a note on
 // the child's record); Given today. Every child the room knows has a dose recorded; due and overdue are worked out, never typed.

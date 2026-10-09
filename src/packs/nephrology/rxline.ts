@@ -1,4 +1,4 @@
-// The renal list's line under the base's /rx card (spec/openCare.md §5.7, Q33; core change C1): as the medicine is typed, the clinic's
+// The renal list's line under the base's /rx card (spec/openCare.md §5.8, Q33; core change C1): as the medicine is typed, the clinic's
 // renal list says what it says at the latest eGFR — "eGFR 28 (3 Oct): metformin — the clinic's renal list says stop under 30" — a notice in
 // warn, never a stop; nothing waits for it and nothing is stored. Pure: handed the card's fields, what the chart shows and the settings.
 import type { Organization, ValueRow } from '@core/db/types'

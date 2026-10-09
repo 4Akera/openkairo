@@ -1,4 +1,4 @@
-// The WHO tables for the /v line, read once from the reference list the server reads too (spec/openCare.md §5.7): a small store the
+// The WHO tables for the /v line, read once from the reference list the server reads too (spec/openCare.md §5.8): a small store the
 // line asks; until they are read the line says nothing, and the next keystroke draws it.
 import { read } from '@core/db/rpc'
 import type { Lms } from './lms'

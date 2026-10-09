@@ -1,4 +1,4 @@
-// /vax in the composer (spec/openCare.md §5.7; picture #vax-chart): the dose's card — site, lot and expiry, who gave it, given here or
+// /vax in the composer (spec/openCare.md §5.8; picture #vax-chart): the dose's card — site, lot and expiry, who gave it, given here or
 // copied from the card with its date, or not given and why — and under the card, the child's schedule worked out: what is due and
 // overdue, the facts to ask (temperature, allergies, a live vaccine in the last four weeks), the optional ones not chosen, the next.
 import { usePackEntries } from '@core/hooks/chart'

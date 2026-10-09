@@ -1,4 +1,4 @@
--- The theatre pack's seed (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on; the Theatre is made from the pack's starter
+-- The theatre pack's seed (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on; the Theatre is made from the pack's starter
 -- setup (its list in place of the bench; its operations by specialty, each with its usual time, a side asked and the risks to tell;
 -- three rooms with their week of sessions); a demo person for the role the pack declares: the theatre nurse, Iman Zidan. Ids in the
 -- pack's own namespace; written through the doors by the kit; run again, it adds only what is missing. Its day is

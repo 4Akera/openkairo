@@ -1,4 +1,4 @@
-// /vax (spec/openCare.md §5.7, picture #vax-chart): "/vax mmr 1, opv 5" — each dose its series and number; after it, as needed, "lot
+// /vax (spec/openCare.md §5.8, picture #vax-chart): "/vax mmr 1, opv 5" — each dose its series and number; after it, as needed, "lot
 // 4K21M07", "exp 03/2027", a site (r arm, l thigh…), "card 2025-11-09" (copied from the mother's card, with its date) or "not fever
 // 39 °C" (not given, and why). Each dose is a draft of the pack's type, whose data is the base's given plus the pack's words. Pure.
 import type { Parsed, Result } from '@core/screens/visit/parse'

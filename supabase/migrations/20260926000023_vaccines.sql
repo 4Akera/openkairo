@@ -1,4 +1,4 @@
--- 23 · the vaccines pack (spec/openCare.md §5.7; the owner 2026-10-08, Q25, Q26: drawn; the pictures /pictures.html#vax-chart, #vax-room).
+-- 23 · the vaccines pack (spec/openCare.md §5.8; the owner 2026-10-08, Q25, Q26: drawn; the pictures /pictures.html#vax-chart, #vax-room).
 -- A shared pack, ticked by paediatrics, family medicine, the vaccination room and ObGyn (tetanus in pregnancy). Each dose is the base's
 -- given, extended by the pack's dose (the vaccine and which dose of its series, given here or copied from the card, or not given with its
 -- reason): FHIR Immunization beside the base's MedicationAdministration. Due and overdue are worked out from the birth date, the doses and

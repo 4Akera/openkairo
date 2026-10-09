@@ -1,4 +1,4 @@
-// ObGyn's settings as its cards, sections and mark read them (spec/openCare.md §5.1 rule 7, §5.7, the picture #ob-settings): the
+// ObGyn's settings as its cards, sections and mark read them (spec/openCare.md §5.1 rule 7, §5.8, the picture #ob-settings): the
 // antenatal schedule, the visits and the fundus band, the notices, gynaecology's intervals — clinic-wide, on the pack's page, each with
 // the drawn starter rows as its shape's defaults. Pure.
 import type { Organization } from '@core/db/types'

@@ -1,4 +1,4 @@
-// /review's card and the words under it (spec/openCare.md §5.7; picture #chronic-visit). The feet: the monofilament, the pulses, the skin
+// /review's card and the words under it (spec/openCare.md §5.8; picture #chronic-visit). The feet: the monofilament, the pulses, the skin
 // and the foot risk as chips, each taken or left (nothing waits for it); the eyes: seen here, referred, or an outside report. Under the
 // card: the condition's review, when it was last done, and the tests by the clinic's checks — due ones drafted as orders, the rest not due
 // with their next date; for a foot at risk, what to tell the patient. A check is done when an entry with one of its codes is written.

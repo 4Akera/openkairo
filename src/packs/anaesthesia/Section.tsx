@@ -1,4 +1,4 @@
-// The Anaesthesia section of the chart (spec/openCare.md §5.7; the picture #anaes-preop): the operation planned (from the patient's
+// The Anaesthesia section of the chart (spec/openCare.md §5.8; the picture #anaes-preop): the operation planned (from the patient's
 // orders, by their shape), what is known of anaesthetics before, the pre-op assessments and the anaesthetic records. Read-only: a line
 // opens its entry in the center.
 import type { SectionBody } from '@core/screens/chart/sections'

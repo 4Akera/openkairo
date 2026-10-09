@@ -1,4 +1,4 @@
-// The day unit's read of today's cycles (spec/openCare.md §5.7): the pack's table, oncology.cycles, through the read door, for the
+// The day unit's read of today's cycles (spec/openCare.md §5.8): the pack's table, oncology.cycles, through the read door, for the
 // rows under the board and the tiles' line (its read, core change C7).
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'

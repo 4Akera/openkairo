@@ -1,4 +1,4 @@
--- The anaesthesia pack's seed (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on; the Pre-op clinic and Recovery are
+-- The anaesthesia pack's seed (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on; the Pre-op clinic and Recovery are
 -- made from the pack's starter setups (the queue; five bays on the base's board); the clinic's list of medicines to stop before an
 -- operation; a demo person for each role the pack declares: the anaesthetist, Dr. Sherine Rashad, and recovery's nurse, Rehab Seif. Ids
 -- in the pack's own namespace; written through the doors by the kit; run again, it adds only what is missing. Its day is

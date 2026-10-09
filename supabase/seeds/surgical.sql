@@ -1,4 +1,4 @@
--- The surgical pack's seed (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on; the Surgery clinic is made from the pack's
+-- The surgical pack's seed (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on; the Surgery clinic is made from the pack's
 -- starter setup; the surgeons' templates for their operations and their post-op presets (the base's presets: each /rx line and the
 -- plan the surgeon signs with the note); a demo person for the role the pack declares: the surgeon, Dr. Hesham Abdelaal. Ids in the
 -- pack's own namespace; written through the doors by the kit; run again, it adds only what is missing. Its day is supabase/demo/surgical.sql.

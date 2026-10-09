@@ -1,4 +1,4 @@
--- The lungs pack's day (spec/openCare.md §5.1 rule 9, §5.7): its own patients at the Chest clinic. Abdelhamid Mansy (61, 170 cm,
+-- The lungs pack's day (spec/openCare.md §5.1 rule 9, §5.8): its own patients at the Chest clinic. Abdelhamid Mansy (61, 170 cm,
 -- COPD, an ex-smoker of 40 pack-years) is in consult: GOLD E five weeks ago (CAT 18, mMRC 2; two flares this year, one admitted four
 -- days), his spirometry a year ago (FEV1 1.78 L after salbutamol, 58 %), Ultibro and Farcolin, his Breezhaler technique wrong last time,
 -- eosinophils 180, flu vaccine this season, pneumococcal never; his action plan in Arabic. Nermeen Saleh (34, 160 cm, asthma, ACT 17

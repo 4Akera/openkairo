@@ -1,4 +1,4 @@
-// The anaesthetic record (anaesthesia.record, spec/openCare.md §5.7, Q45; the picture #anaes-record): a tab of the operating department's for
+// The anaesthetic record (anaesthesia.record, spec/openCare.md §5.8, Q45; the picture #anaes-record): a tab of the operating department's for
 // whoever gives anaesthesia there. Today's cases, then one case's record: the times (in the room, anaesthesia start, knife to skin, end of
 // the operation, anaesthesia end), a 5-minute grid (heart rate, BP, SpO₂, EtCO₂, temperature, the agent and FiO₂ — a blank keeps the last
 // setting —, each drug at its column with its dose per kg, Ringer's so far, blood loss), the numbered events, the airway, breathing,

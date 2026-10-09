@@ -1,4 +1,4 @@
-// The Chronic care list (spec/openCare.md §5.7, Q29; picture #chronic-list): a tab in each department that ticks the pack. Who is off
+// The Chronic care list (spec/openCare.md §5.8, Q29; picture #chronic-list): a tab in each department that ticks the pack. Who is off
 // target or overdue, a chip per condition: the patients seen here within the clinic's window whose problem list has a condition of the
 // clinic's list. Each row: the conditions, what is off target, the checks due, when last here; a row opens the chart. Read from the base's
 // tables (the problem list, the values, the visits here) and the pack's own (coded observations, own targets).

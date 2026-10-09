@@ -1,4 +1,4 @@
--- 22 · the clinics' core change that needs SQL (spec/openCare.md §5.7, the owner 2026-10-08, Q36; core change C3): a pack's command that
+-- 22 · the clinics' core change that needs SQL (spec/openCare.md §5.8, the owner 2026-10-08, Q36; core change C3): a pack's command that
 -- is not an order (/transfuse) is offered where a department using the pack works for this one, as an order word is. What it writes is a
 -- pack type extending a base type (the transfusion record extends given); declared *served*, it is written with the base type's own
 -- action (write:given), as a pack's order type is written with write:order (§5.5 a), so a ward that does not tick the pack can write it

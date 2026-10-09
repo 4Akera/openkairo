@@ -1,4 +1,4 @@
--- The paediatrics pack's seed (spec/openCare.md §5.1 rule 9, §5.7; its WHO tables' demo sample is supabase/codes/who_growth_sample.sql,
+-- The paediatrics pack's seed (spec/openCare.md §5.1 rule 9, §5.8; its WHO tables' demo sample is supabase/codes/who_growth_sample.sql,
 -- a reference list loaded with the codes): the clinic turns the pack on; the Paediatrics clinic and the Children's ward are made
 -- from the pack's starter setups; the clinic's dose list and milestones (its settings, on the pack's page); a demo person for each role
 -- it uses: the paediatricians Dr. Rehab Shaker and Dr. Hassan Kandil, and Doha Wagdy, a nurse on the children's ward (the base's Nurse).

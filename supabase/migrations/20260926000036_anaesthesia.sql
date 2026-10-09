@@ -1,4 +1,4 @@
--- 36 · the anaesthesia pack (spec/openCare.md §5.7; the pictures /pictures.html#anaes-preop, #anaes-record, #theatre-recovery). The
+-- 36 · the anaesthesia pack (spec/openCare.md §5.8; the pictures /pictures.html#anaes-preop, #anaes-record, #theatre-recovery). The
 -- pre-op is the pack's own entry (what matters from the history, the airway, ASA — a class the anaesthetist chooses, not a score — the
 -- plan, fit or not yet, the medicines to stop from the clinic's list: shown, never a stop, Q43 drawn); RCRI, STOP-BANG and Aldrete are
 -- declared scores the server adds up (rule 8). The anaesthetic record is one set signed by the anaesthetist at the end (Q45, drawn): each

@@ -1,4 +1,4 @@
--- 32 · the Blood bank on the laboratory pack (spec/openCare.md §5.7, Q35, Q36; the pictures /pictures.html#haem-blood, #haem-bedside). It
+-- 32 · the Blood bank on the laboratory pack (spec/openCare.md §5.8, Q35, Q36; the pictures /pictures.html#haem-blood, #haem-bedside). It
 -- extends the pack lis (declared in 12) inside its own prefix: the Blood bank is a department using the pack, from its starter setup
 -- lis.blood_bank (its products answered on the base's bench: the sample received, grouped and screened, crossmatched, then the units issued
 -- as the base's result: the group, the antibody screen, the crossmatch and each unit's number); /blood is the pack's order word, its own

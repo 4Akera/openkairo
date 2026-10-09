@@ -1,4 +1,4 @@
--- 26 · the paediatrics pack, key paeds (spec/openCare.md §5.7; the pictures /pictures.html#paeds-growth, #paeds-dose, #paeds-develop, #paeds-ward).
+-- 26 · the paediatrics pack, key paeds (spec/openCare.md §5.8; the pictures /pictures.html#paeds-growth, #paeds-dose, #paeds-develop, #paeds-ward).
 -- Growth on the WHO charts from the base's own vitals (weight, length, head: the base's keys), worked out here and nowhere else: each
 -- measurement of a child gets its z-scores and centiles for the age on the day and the sex, from the loaded WHO tables (a reference
 -- list, `paeds.who_growth`, L, M and S by age or by length; the demo loads birth to 2 years, marked a demo sample), kept with the

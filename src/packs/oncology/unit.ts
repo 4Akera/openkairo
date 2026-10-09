@@ -1,4 +1,4 @@
-// The Chemotherapy day unit (spec/openCare.md §5.7, the picture #onc-unit): chairs on the base's board. Oncology's line on each tile
+// The Chemotherapy day unit (spec/openCare.md §5.8, the picture #onc-unit): chairs on the base's board. Oncology's line on each tile
 // says the regimen and cycle ("AC C3 D1"), a dose reduced, and a reaction watch for the first 30 minutes of a drug the regimen marks;
 // under the board, today's cycles not in a chair yet (the pack's rows, core change C5), each with the base's Admit here as its Start.
 // The cycles are the pack's table, oncology.cycles, read for the day unit and today (unitRead.ts); the tile line is pure and reads them

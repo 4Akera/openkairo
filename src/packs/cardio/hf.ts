@@ -1,4 +1,4 @@
-// The heart failure visit as typed (spec/openCare.md §5.7; the picture #cardio-hf): /hf nyha 2 wt 71.4 oedema ankles flat. No type of its
+// The heart failure visit as typed (spec/openCare.md §5.8; the picture #cardio-hf): /hf nyha 2 wt 71.4 oedema ankles flat. No type of its
 // own: NYHA is the base's observation (this pack's term, the note saying the oedema and lying flat), the weight the base's vitals, and
 // "dry 70" the dry weight the doctor sets, an observation that stands until the next. Pure (npm run test:cardio).
 import type { Parsed, Result } from '@core/screens/visit/parse'

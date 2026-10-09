@@ -1,4 +1,4 @@
--- 34 · the surgical pack (spec/openCare.md §5.7; the pictures /pictures.html#surg-clinic, #surg-opnote). Ticked where a surgeon's work
+-- 34 · the surgical pack (spec/openCare.md §5.8; the pictures /pictures.html#surg-clinic, #surg-opnote). Ticked where a surgeon's work
 -- is done — the Surgery clinic, the Theatre, the surgical ward (Q47, drawn): the chart's Surgery section and its banner words ("for op",
 -- "op today"), and the operation note. The operation is the base's procedure (what, when, why, done); the note is the pack's operation
 -- note extending the base's note (surgeon, assistant, anaesthetist, the times, why, findings, steps, closure, blood loss, drain,

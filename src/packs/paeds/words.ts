@@ -1,4 +1,4 @@
-// Paediatrics' words: the Growth chip and Summary line, and its banner words (spec/openCare.md §5.1 rules 2 and 3, §5.7): the age and
+// Paediatrics' words: the Growth chip and Summary line, and its banner words (spec/openCare.md §5.1 rules 2 and 3, §5.8): the age and
 // the latest weight ("11 mo · 7.5 kg"), then a z-score beyond ±2 ("weight z −2.1", amber) and a newborn hearing screen that said refer
 // and was not repeated. Pure.
 import type { Identity } from '@core/db/types'

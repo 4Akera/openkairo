@@ -1,4 +1,4 @@
--- 30 · the lungs pack (spec/openCare.md §5.7; the picture /pictures.html#chest-spiro). It adds no record type: spirometry is the
+-- 30 · the lungs pack (spec/openCare.md §5.8; the picture /pictures.html#chest-spiro). It adds no record type: spirometry is the
 -- base's result (FEV1, FVC and FEV1/FVC before and after the bronchodilator, each an analyte; the predicted, LLN and z worked out by the
 -- server from GLI-2012), CAT, mMRC, ACT and the GOLD group are declared scores, the inhaler technique, the smoking, a flare and the action
 -- plan are the base's observations in the pack's terms. Its own: its terms, the GLI-2012 reference list (here a demo sample, marked so:

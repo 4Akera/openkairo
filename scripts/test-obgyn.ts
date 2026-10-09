@@ -1,4 +1,4 @@
-// ObGyn's clinic part (spec/openCare.md §5.7), as pure decisions: the weeks and days from the LMP and the EDD, the fundus against the
+// ObGyn's clinic part (spec/openCare.md §5.8), as pure decisions: the weeks and days from the LMP and the EDD, the fundus against the
 // weeks, what the clinic's schedule says is due and for whom (worked out from the booking, never ticked), the next visit, G and P,
 // the queue's one word (a warning first, then what is due, then the weeks; the birth not written past 42 weeks; an IUD's change for a
 // woman not pregnant), Hadlock's fetal weight and its centile, the lines /anc /obus /fp /periods /pn and the drafts they make.

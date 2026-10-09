@@ -1,4 +1,4 @@
-# Building the clinics group (spec §5.7) — four lanes at once
+# Building the clinics group (spec §5.8) — four lanes at once
 
 The owner, 2026-10-08: "drawn choice for all, start building in parallel make it fast like 8 hrs all". Every answer is the drawn
 choice on its picture; the 36 pictures (`/pictures.html#clinics-map` … `#family-checks`, `src/pictures/{clinics,obgyn,paeds,medicine,
@@ -54,13 +54,13 @@ report, and builds the rest.
    registered in `src/packs/index.ts`, a starter setup per department kind, its own demo (rule 9: 2–3 patients each, unique names,
    believable values, the people who use it as demo logins), its suites.
 3. Build each pack as its pictures draw it: the same words, the same places, the same keys. Base entries wherever the base has the
-   idea; a pack type only where the pictures say so (§5.7's list). Scores as declared tables through `core.declare_score` (EPDS, ACT,
+   idea; a pack type only where the pictures say so (§5.8's list). Scores as declared tables through `core.declare_score` (EPDS, ACT,
    CAT, mMRC, GOLD group, CHA₂DS₂-VASc, RCRI, STOP-BANG, Aldrete, Brighton PEWS). Reference lists (WHO growth, GLI-2012, Hadlock,
    the MOHP schedule) as demo samples marked "demo sample, not the full list" (rule 7), never the licensed full list.
 4. Done for a pack = `npm run typecheck`, `npm run lint`, the node suites (`test:*`, add `test:<key>`), `npm run db:test` all green;
    `npm run db:demo` loads; one browser check per main screen as its demo user (a dev server on the lane's ports, screenshots
-   compared with the picture). Commit on the lane branch after each pack (`<Pack>: … (spec §5.7)`), with the attribution line.
-5. Spec: add a short "*Built 2026-10-08*" paragraph per pack under §5.7 (what was built, its keys, migration, role block, any
+   compared with the picture). Commit on the lane branch after each pack (`<Pack>: … (spec §5.8)`), with the attribution line.
+5. Spec: add a short "*Built 2026-10-08*" paragraph per pack under §5.8 (what was built, its keys, migration, role block, any
    difference from the picture and why). Never write "owner" for Claude's own choices.
 6. Merge order at the end (the lead does it): L1 → L2 → L3 → L4 into `clinics`, then `clinics` into `core-v3` after the beds lane.
    Lanes never merge into `core-v3` or touch `/Users/yusif/openCare`.

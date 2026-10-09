@@ -1,4 +1,4 @@
--- 27 · the obgyn pack, its clinic part (spec/openCare.md §5.7; the pictures /pictures.html#anc-visit … #ob-settings). The labour ward's
+-- 27 · the obgyn pack, its clinic part (spec/openCare.md §5.8; the pictures /pictures.html#anc-visit … #ob-settings). The labour ward's
 -- part (the labour examination, the birth, MEOWS, Apgar, the labour ward's setup) is the beds lane's, added later to this same pack
 -- (agreed 2026-10-08: no second declare_pack; role ids d310–d31f kept for it). The clinic part: the antenatal check (its own type on
 -- the base's observation: the weeks worked out from the EDD, the fundus, the baby's heart, the lie, moves, urine and oedema, and at

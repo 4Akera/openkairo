@@ -1,4 +1,4 @@
-// The oncology pack's client (spec/openCare.md §5.7; the pictures #onc-plan, #onc-cycle, #onc-unit). The Cancer section and its banner
+// The oncology pack's client (spec/openCare.md §5.8; the pictures #onc-plan, #onc-cycle, #onc-unit). The Cancer section and its banner
 // words; /cancer (a new cancer's card; on one already recorded, today's ECOG) and /chemo (the cycle to the day unit, each dose worked
 // out, the checks shown, the toxicity graded, each drug sent where prescriptions go), offered wherever the day unit works for the department;
 // the day unit's tile line (the regimen and cycle, a dose reduced, a reaction watch) and its rows of today's cycles not in a chair yet.

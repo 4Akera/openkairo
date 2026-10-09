@@ -1,4 +1,4 @@
--- The nephrology pack's seed (spec/openCare.md §5.1 rule 9, §5.7): the clinic turns the pack on; the Nephrology clinic is made from the
+-- The nephrology pack's seed (spec/openCare.md §5.1 rule 9, §5.8): the clinic turns the pack on; the Nephrology clinic is made from the
 -- pack's starter setup; its nephrologist, Dr. Medhat Sorour. The renal list is the pack's clinic-wide setting, its starter rows as declared.
 -- Ids in the pack's own namespace; run again, it adds only what is missing. Its day is supabase/demo/nephrology.sql.
 

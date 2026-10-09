@@ -1,4 +1,4 @@
-// A pack's line under a base card (spec/openCare.md §5.7, core change C1; the owner, 2026-10-08, Q23, Q33, Q22): a pack the department
+// A pack's line under a base card (spec/openCare.md §5.8, core change C1; the owner, 2026-10-08, Q23, Q33, Q22): a pack the department
 // uses may add one line, in its own words with a state tone, under the base's /rx card and its draft, and under /v's card — a
 // children's pack's dose per kg and z-scores, a renal list. A notice, never a stop: nothing waits for it and nothing is
 // stored. One registry, like registerTileLine and registerRowMark: one line per pack and card, only the packs this department uses

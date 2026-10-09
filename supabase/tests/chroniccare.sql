@@ -1,4 +1,4 @@
--- the chronic care pack (spec §5.7, Q28–Q30): the Diabetes clinic from its setup (its queue and the Chronic care list; the clinic's
+-- the chronic care pack (spec §5.8, Q28–Q30): the Diabetes clinic from its setup (its queue and the Chronic care list; the clinic's
 -- conditions); a patient's own target — the pack's one type, written by a doctor where the department ticks the pack (everyday), kept in
 -- its table, its line; the yearly review's coded observations kept from the base's (a listener) for the list, a check done by its code;
 -- its tables read only where the list is; off, no new target

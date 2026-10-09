@@ -1,4 +1,4 @@
--- The vaccines pack's day (spec/openCare.md §5.1 rule 9, §5.7; pictures #vax-chart, #vax-room): its own children, given their doses in
+-- The vaccines pack's day (spec/openCare.md §5.1 rule 9, §5.8; pictures #vax-chart, #vax-room): its own children, given their doses in
 -- the Vaccination room by Rokaya Ghoneim or copied from the mother's card. Here today: Farida Bassem (13 months: her 12-month OPV 5 and
 -- MMR 1 not given four weeks ago for a fever, so overdue; the pneumococcal booster due) and Talia Nassef (2 months: her birth doses from
 -- the card, the 2-month ones due). Overdue · to call: Layan Hegab (18 months and five weeks: the 18-month row). A walk-in to find:

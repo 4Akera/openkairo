@@ -1,4 +1,4 @@
-// The Chest section (spec/openCare.md §5.1 rule 2, §5.7; the picture #chest-spiro): the smoking, the GOLD group with CAT, mMRC and the
+// The Chest section (spec/openCare.md §5.1 rule 2, §5.8; the picture #chest-spiro): the smoking, the GOLD group with CAT, mMRC and the
 // flares (for asthma, ACT and the reversibility instead), the flares of the last year, the last spirometry, the inhalers and the technique,
 // the eosinophils, the vaccines, the action plan in Arabic. Read-only; a row opens its entry. The plan prints later (printing is not in
 // openCare yet).

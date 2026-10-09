@@ -1,4 +1,4 @@
-// Development and the newborn checks in the chart, and /dev's card under the line (spec/openCare.md §5.7, the picture #paeds-develop).
+// Development and the newborn checks in the chart, and /dev's card under the line (spec/openCare.md §5.8, the picture #paeds-develop).
 // The Development section lists each check by its list's age (each area all yes, or not yet); the Newborn checks section the birth,
 // the heel prick, hearing, hips, eyes and jaundice from base entries. /dev opens the clinic's list for the child's age: each milestone
 // yes or not yet (←→ on a row), and, not yet past the list's age, a notice with what to do next as chips taken into the check's plan.

@@ -1,4 +1,4 @@
-// ObGyn's clinic sums and words (spec/openCare.md §5.7, the pictures #anc-visit … #ob-queue): the weeks and days from the LMP (the
+// ObGyn's clinic sums and words (spec/openCare.md §5.8, the pictures #anc-visit … #ob-queue): the weeks and days from the LMP (the
 // EDD 280 days on), the fundus against the weeks, what the clinic's schedule says is due at these weeks and for whom, the next visit,
 // G and P from the booking, the queue's one word, Hadlock's fetal weight and its centile, the liquor, what gynaecology says is due.
 // Worked out, never typed; each a notice, never a stop. Pure.

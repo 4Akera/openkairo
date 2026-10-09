@@ -1,4 +1,4 @@
-// Theatre (spec/openCare.md §5.7), as pure decisions: /op's words (the operation by its words or code, the side, elective · urgent ·
+// Theatre (spec/openCare.md §5.8), as pure decisions: /op's words (the operation by its words or code, the side, elective · urgent ·
 // emergency, day case or admitted, the anaesthetic wanted, the surgeon, ? the question) and the order it writes (the pack's type on the
 // base's order, its words beside); where a case stands and the list's next key; the order of a room's day and To schedule; the
 // sessions with room for a case's usual time; the WHO checklist's counts.   npm run test:theatre

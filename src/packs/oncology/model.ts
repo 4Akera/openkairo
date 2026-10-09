@@ -1,4 +1,4 @@
-// The oncology pack's arithmetic and words (spec/openCare.md §5.7; the pictures #onc-plan, #onc-cycle, #onc-unit): the clinic's
+// The oncology pack's arithmetic and words (spec/openCare.md §5.8; the pictures #onc-plan, #onc-cycle, #onc-unit): the clinic's
 // regimens as its setting holds them, BSA by Mosteller, each dose worked out and rounded as the regimen says (mg/m², AUC by Calvert
 // with Cockcroft–Gault, mg/kg, flat), the regimen's checks against the latest values (shown, never a stop), the cancer and its
 // cycles from the patient's entries. Worked out, never typed. Pure: a node test imports it.

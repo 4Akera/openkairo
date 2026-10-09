@@ -1,4 +1,4 @@
-// The pre-op assessment under the line (spec/openCare.md §5.7, Q43; the picture #anaes-preop): /preop in the Pre-op clinic (or on a
+// The pre-op assessment under the line (spec/openCare.md §5.8, Q43; the picture #anaes-preop): /preop in the Pre-op clinic (or on a
 // ward, the evening before). What matters from the history, the airway (Mallampati, mouth opening, thyromental, neck), ASA (a class the
 // anaesthetist chooses, not a score), RCRI and STOP-BANG as typed on the lines before (/score rcri, /score stopbang: the base's scores,
 // the server adds them up), the patient's medicines against the clinic's list of what to stop (shown, never a stop; the anaesthetist

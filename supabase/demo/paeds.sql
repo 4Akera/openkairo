@@ -1,4 +1,4 @@
--- The paediatrics pack's day (spec/openCare.md §5.1 rule 9, §5.7, the pictures #paeds-*): its own patients. In the Paediatrics clinic,
+-- The paediatrics pack's day (spec/openCare.md §5.1 rule 9, §5.8, the pictures #paeds-*): its own patients. In the Paediatrics clinic,
 -- with Dr. Rehab Shaker: Malek Shoukry (11 months, in consult: his weight has fallen from the 24th centile at 4 months to the 2nd today,
 -- weight-for-length below −2), Jana Moataz (3 years 2 months, waiting: fever and a red left ear; her amoxicillin in July) and Kenzy Hafez
 -- (10 months, waiting: her checks at 2, 4 and 6 months all yes; her newborn hearing screen said refer in both ears and was never

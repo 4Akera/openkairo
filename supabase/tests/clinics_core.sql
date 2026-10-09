@@ -1,4 +1,4 @@
--- the clinics' core change that needs SQL (spec/openCare.md §5.7, the owner 2026-10-08, Q36; core change C3): a pack's type extending a
+-- the clinics' core change that needs SQL (spec/openCare.md §5.8, the owner 2026-10-08, Q36; core change C3): a pack's type extending a
 -- base type, declared served, is written with the base type's action (write:given) where its pack serves the department — it uses the
 -- pack, or a department using it works for this one (a nurse in a ward that does not tick the pack, the Blood bank working for it) — and
 -- its pack's check refuses it `not_served` elsewhere. Proven with a probe pack: Lab (d2) uses it and works for Internal Medicine only.

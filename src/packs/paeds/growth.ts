@@ -1,4 +1,4 @@
-// Paediatrics' growth as its section, banner and lines read it (spec/openCare.md §5.7, the picture #paeds-growth): the rows of its own
+// Paediatrics' growth as its section, banner and lines read it (spec/openCare.md §5.8, the picture #paeds-growth): the rows of its own
 // table, paeds.growth, which the server fills from the base's vitals with each value's z-score and centile on the WHO tables (the
 // age on the day, the sex, the tables' version). Nothing here works out a z-score; it only says what the server worked out. Also the
 // words a child's age and weight are said in, centile lines crossed, and Holliday–Segar's maintenance from a weight. Pure.

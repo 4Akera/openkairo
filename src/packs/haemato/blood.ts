@@ -1,4 +1,4 @@
-// What the Transfusions section reads (spec/openCare.md §5.7; the pictures #haem-blood, #haem-bedside), all the base's but the programme:
+// What the Transfusions section reads (spec/openCare.md §5.8; the pictures #haem-blood, #haem-bedside), all the base's but the programme:
 // the blood group and antibody screen (the Blood bank's results, LOINC 882-1 and 890-4), each unit given (the base's given: the unit
 // number its lot, the volume its dose, what happened in its note), the Hb before each, the ferritin, the chelation (V03AC) at mg/kg,
 // its checks; the programme is this pack's own. Pure (npm run test:haemato).

@@ -3,7 +3,7 @@
 // writes the pack's own type through its own write function. The "/" menu lists the commands the reader's role
 // may write in this department, and a pack's only where this department uses the pack (§5.1 rule 1; elsewhere typing it says where);
 // a pack's order command (/lab) where a department using the pack works for this one (rule 1, added 2026-10-07); a pack's command
-// that is not an order, declared worksFor (/transfuse), there too, as well as where the pack is ticked (§5.7 C3, 2026-10-08).
+// that is not an order, declared worksFor (/transfuse), there too, as well as where the pack is ticked (§5.8 C3, 2026-10-08).
 // A pack never takes a command over for the whole clinic: a name that is taken is refused. It may give its own
 // department type its own version of a core command (overrideCommand) and its own card (registerCard) — which still
 // write what the core command writes, so the record keeps one medication list, one problem list — and each
@@ -20,7 +20,7 @@ export interface Command {
   pack?: string                     // a pack's command shows only in a department that uses the pack
   orders?: boolean                  // …or, a pack's order command: where a department using the pack works for this one, searching its services only
   section?: string                  // …and only this section of them (an imaging pack's /ct: CT; spec §5.1 rule 1, "each its section")
-  worksFor?: boolean                // …or, a pack's command that is not an order: where this department uses the pack, or a department using it works for this one (§5.7 C3, /transfuse)
+  worksFor?: boolean                // …or, a pack's command that is not an order: where this department uses the pack, or a department using it works for this one (§5.8 C3, /transfuse)
   group?: 'record' | 'orders' | 'safety'   // where the / list shows it (a pack's commands sit under the pack's own name)
   groupTitle?: string               // a pack's group in the / list, in its words ("Laboratory")
   title?: string                    // its name in the / list, in a word or two ("Vitals", "Diagnosis"); else its label

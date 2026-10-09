@@ -1,4 +1,4 @@
--- 33 · the oncology pack (spec/openCare.md §5.7; the pictures /pictures.html#onc-plan, #onc-cycle, #onc-unit). The cancer is the base's
+-- 33 · the oncology pack (spec/openCare.md §5.8; the pictures /pictures.html#onc-plan, #onc-cycle, #onc-unit). The cancer is the base's
 -- problem extended by the pack (where, the morphology, grade, side, the TNM with its edition, the stage group, the markers, the intent,
 -- the plan and the regimen chosen); ECOG is the base's observation (LOINC 89247-1); the tumour board's decision the base's note. Each
 -- cycle is the pack's order to the Chemotherapy day unit (it extends the base's order, core change (a) of §5.5): the regimen and cycle,

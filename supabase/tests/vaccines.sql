@@ -1,4 +1,4 @@
--- the vaccines pack (spec §5.7, Q25, Q26): a dose is the base's given extended by the pack's words, written by whoever works where the
+-- the vaccines pack (spec §5.8, Q25, Q26): a dose is the base's given extended by the pack's words, written by whoever works where the
 -- department ticks the pack (everyday: the base's Nurse), kept in its table (a card's copy at the card's date; not given with why); its
 -- line; FHIR an Immunization beside the base's MedicationAdministration; the Vaccination room from its setup (its own list in place of
 -- the queue); the vaccinator built on Nurse, who checks a walk-in in; the national rows written only by the import's action; off, it

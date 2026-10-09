@@ -1,4 +1,4 @@
--- The oncology pack's day (spec/openCare.md §5.1 rule 9, §5.7; the pictures #onc-plan, #onc-cycle, #onc-unit). Its own patients:
+-- The oncology pack's day (spec/openCare.md §5.1 rule 9, §5.8; the pictures #onc-plan, #onc-cycle, #onc-unit). Its own patients:
 -- Wafaa Shaker (47, left breast cancer IIB after a mastectomy; AC 1 and AC 2 given, febrile neutropenia after AC 2; in consult with Dr.
 -- Hesham now for AC 3, today's height, weight and blood counts in), Samir Tolba (61, sigmoid colon cancer; FOLFOX cycle 5 signed for
 -- today, in Chair 2 for 40 minutes) and Nesma Sabry (39, breast cancer; weekly paclitaxel 3 signed for today, here and weighed, not in a

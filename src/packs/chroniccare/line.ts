@@ -1,4 +1,4 @@
-// Chronic care's words in the composer (spec/openCare.md §5.7; picture #chronic-visit): /review dm — the yearly review of a condition:
+// Chronic care's words in the composer (spec/openCare.md §5.8; picture #chronic-visit): /review dm — the yearly review of a condition:
 // the feet and the eyes as the base's observations (coded chroniccare.check:feet, :eyes; their card chooses what was found), and the tests
 // its checks say are due drafted as the base's orders, each one left out with ×; /target htn bp < 150/90 ; 81, falls — a patient's own
 // target with its reason (the pack's one type). Pure.

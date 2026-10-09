@@ -1,4 +1,4 @@
-// Paediatrics' lines under the base's cards (spec/openCare.md §5.7, the pictures #paeds-growth and #paeds-dose; the core's C1): under
+// Paediatrics' lines under the base's cards (spec/openCare.md §5.8, the pictures #paeds-growth and #paeds-dose; the core's C1): under
 // /rx the dose per kg — the latest weight, the mg/kg a prescription comes to and the clinic's range (dose.ts) — and under /v the
 // z-scores and centiles of the values being typed, for the age today and the sex, from the loaded WHO tables (the same tables and
 // sums the server keeps with the record: lms.ts here, paeds.measure there; who.ts reads the tables once). Shown, never a stop;

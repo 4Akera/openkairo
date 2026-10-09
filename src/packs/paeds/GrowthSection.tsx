@@ -1,4 +1,4 @@
-// The Growth section (spec/openCare.md §5.7, the picture #paeds-growth): each latest value with its z-score and centile, the WHO curve
+// The Growth section (spec/openCare.md §5.8, the picture #paeds-growth): each latest value with its z-score and centile, the WHO curve
 // for weight, length, head or weight-for-length with the child's own points, a word when the weight has crossed two centile lines, and
 // every measurement. The z-scores and centiles are the server's (paeds.growth); the curves are drawn from the loaded WHO tables
 // (the demo's: birth to 2 years, a demo sample). Read-only: a measurement opens its entry.

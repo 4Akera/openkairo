@@ -1,4 +1,4 @@
-// Cardiology's cards under the line (spec/openCare.md §5.7; the pictures #cardio-ecg, #cardio-hf): the ECG's (rhythm, the measures,
+// Cardiology's cards under the line (spec/openCare.md §5.8; the pictures #cardio-ecg, #cardio-hf): the ECG's (rhythm, the measures,
 // ST and T, the conclusion; the last ECG beside it) and the heart failure visit's (NYHA, oedema, lying flat). Under the /hf card: the
 // weight against the dry weight and, beside the four medicine groups, BP, pulse, K, creatinine and eGFR — shown, never a stop.
 import type { ReactNode } from 'react'

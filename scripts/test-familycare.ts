@@ -1,4 +1,4 @@
-// The family pack's pure half (spec/openCare.md §5.7, Q49; pictures #family-folder, #family-checks): the checks due by age and sex (and a
+// The family pack's pure half (spec/openCare.md §5.8, Q49; pictures #family-folder, #family-checks): the checks due by age and sex (and a
 // BMI from an age), each met by an entry with one of its codes within its interval (or once); the member's relation as the viewer reads
 // it; the desk's step asked only while the setting says so, and what it still needs. No browser, no database. npm run test:familycare
 import assert from 'node:assert/strict'

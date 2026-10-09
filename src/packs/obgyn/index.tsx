@@ -1,4 +1,4 @@
-// The obgyn pack's client, its clinic part (spec/openCare.md §5.7, the pictures #anc-visit … #ob-settings; the labour ward's part comes
+// The obgyn pack's client, its clinic part (spec/openCare.md §5.8, the pictures #anc-visit … #ob-settings; the labour ward's part comes
 // with the beds lane). Where a department uses it: the Pregnancy and Gynaecology sections, /anc (the base's vitals and the antenatal
 // check), /obus (the clinic's scan, a base result with no order), /fp (the method; a device put in, the base's procedure), /periods,
 // /pn (the visit after the birth; a birth elsewhere ends the pregnancy once), EPDS through the base's score card (/epds), its banner

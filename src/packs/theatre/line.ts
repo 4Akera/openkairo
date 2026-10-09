@@ -1,4 +1,4 @@
-// /op on the composer's line (spec/openCare.md §5.7, Q41; the picture #surg-clinic): the operation from the Theatre's operations, the
+// /op on the composer's line (spec/openCare.md §5.8, Q41; the picture #surg-clinic): the operation from the Theatre's operations, the
 // side (asked big; with none typed for an operation that has one, the card asks it first), elective · urgent · emergency, day case or
 // admitted, the anaesthetic wanted, the surgeon ("by …"), "? the question". The order carries theatre's words (its own order type,
 // the order door of §5.5 a): the side, the anaesthetic wanted, the stay, the surgeon, the usual time and the risks told (the Theatre's

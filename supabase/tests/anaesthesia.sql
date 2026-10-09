@@ -1,4 +1,4 @@
--- the anaesthesia pack (spec §5.7): the pre-op (the anaesthetist's; ASA a class, not a score); RCRI, STOP-BANG and Aldrete as declared
+-- the anaesthesia pack (spec §5.8): the pre-op (the anaesthetist's; ASA a class, not a score); RCRI, STOP-BANG and Aldrete as declared
 -- tables the server adds up (rule 8); the record's column (the base's vitals extended), each dose the base's given, the record about the
 -- operation; recovery's bays (the nurse admits and discharges) and its table of Aldrete and pain from the base's score and vitals (a
 -- listener); off, no new pre-op

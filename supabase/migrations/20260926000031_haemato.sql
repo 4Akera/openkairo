@@ -1,4 +1,4 @@
--- 31 · the haemato pack (spec/openCare.md §5.7; the pictures /pictures.html#haem-blood, #haem-inr). The INR is the base's result,
+-- 31 · the haemato pack (spec/openCare.md §5.8; the pictures /pictures.html#haem-blood, #haem-inr). The INR is the base's result,
 -- warfarin the base's medication, each unit of blood the base's given (written at the bedside through the Blood bank's /transfuse, on the
 -- laboratory pack); the ferritin a result, the chelation a medication. Its own types, for what the base lacks: the INR clinic's plan (the
 -- reason, the target, the medicine), the INR clinic's week (each day's dose, what changed, the next INR) and the transfusion programme

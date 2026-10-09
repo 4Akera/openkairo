@@ -1,4 +1,4 @@
-// Paediatrics' settings as its cards read them (spec/openCare.md §5.1 rule 7, §5.7): the clinic's dose list (paeds.doses) and its
+// Paediatrics' settings as its cards read them (spec/openCare.md §5.1 rule 7, §5.8): the clinic's dose list (paeds.doses) and its
 // milestones (paeds.milestones), both clinic-wide, on the pack's page. Pure.
 import type { Organization } from '@core/db/types'
 import { settingIn } from '@core/screens/settings/form/model'

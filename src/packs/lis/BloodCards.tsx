@@ -1,4 +1,4 @@
-// The Blood bank's cards (spec/openCare.md §5.7; the pictures #haem-blood, #haem-bedside): under /blood, what the chart already shows
+// The Blood bank's cards (spec/openCare.md §5.8; the pictures #haem-blood, #haem-bedside): under /blood, what the chart already shows
 // (Hb and platelets, the weight for mL/kg, allergies; core change (b)) and the sample to take — shown, never a stop; the bedside card of one
 // unit: the two who checked and the six checks, the signs before, at 15 minutes and at the end, and Stop with the reaction.
 import type { ReactNode } from 'react'

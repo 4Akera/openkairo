@@ -1,4 +1,4 @@
-// The pre-op on a list's row (spec/openCare.md §5.7; the pictures: the operating list's Pre-op column, and #anaes-preop's "Fit fills
+// The pre-op on a list's row (spec/openCare.md §5.8; the pictures: the operating list's Pre-op column, and #anaes-preop's "Fit fills
 // the list"): where a department uses anaesthesia, a row whose patient has a pre-op shows its ASA and verdict as the pack's row button
 // which folds out the assessment under the row (the airway, the plan, the medicines to stop). Read from the pack's table, by patient;
 // the one about the row's operation first.

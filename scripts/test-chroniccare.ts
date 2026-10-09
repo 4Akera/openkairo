@@ -1,4 +1,4 @@
-// Chronic care's pure half (spec/openCare.md §5.7, Q28–Q30; pictures #chronic-visit, #chronic-list): registers from the problem list's
+// Chronic care's pure half (spec/openCare.md §5.8, Q28–Q30; pictures #chronic-visit, #chronic-list): registers from the problem list's
 // codes (resolved takes a patient off), measures against the clinic's target or the patient's own, checks done by any entry with one of
 // their codes and due by their interval (sooner while off target), a shared check counted once; /review and /target read. No browser,
 // no database. npm run test:chroniccare

@@ -1,4 +1,4 @@
--- the haemato pack (spec §5.7) and the Blood bank on the laboratory pack: the INR clinic's own types (the plan, the week) beside the
+-- the haemato pack (spec §5.8) and the Blood bank on the laboratory pack: the INR clinic's own types (the plan, the week) beside the
 -- base's INR result with no order; the transfusion programme; its actions everyday where the pack is ticked, refused elsewhere; the clinic's
 -- dosing table as a setting; the Blood bank from its setup (the products, their steps, the result that issues the units), /blood's order
 -- carrying the Blood bank's words (written with write:order from any department), refused when its words are not the Blood bank's

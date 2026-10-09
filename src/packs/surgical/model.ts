@@ -1,4 +1,4 @@
-// The surgical pack's words (spec/openCare.md §5.7; the pictures #surg-clinic, #surg-opnote): which of a patient's orders are
+// The surgical pack's words (spec/openCare.md §5.8; the pictures #surg-clinic, #surg-opnote): which of a patient's orders are
 // operations (a service the department answering it moves through operating), the banner's "for op" and "op today", the surgeon's
 // template for an operation, the operation note's line. Pure: a node test imports it.
 

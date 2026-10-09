@@ -1,4 +1,4 @@
-// Anaesthesia (spec/openCare.md §5.7), as pure decisions: a patient's medicines against the clinic's list of what to stop (shown, never
+// Anaesthesia (spec/openCare.md §5.8), as pure decisions: a patient's medicines against the clinic's list of what to stop (shown, never
 // a stop), the Arabic sheet, the record's 5-minute columns and a setting carried on, the dose per kg, recovery's line (minutes in,
 // Aldrete first → last, pain, ready for the ward at 9 or more), /preop's draft about the operation.   npm run test:anaesthesia
 import assert from 'node:assert/strict'

@@ -1,4 +1,4 @@
-// ObGyn's one word a row on the clinic's queue (spec/openCare.md §5.1 rule 4, §5.7, the picture #ob-queue): read from the pack's own
+// ObGyn's one word a row on the clinic's queue (spec/openCare.md §5.1 rule 4, §5.8, the picture #ob-queue): read from the pack's own
 // table (obgyn.marks: the pregnancy, today's BP, the antenatal check's protein and blood group, the method) for the patients on the
 // list, with the clinic's schedule, notices and intervals; the word itself is pregnancy.ts's markWord. A row mark is handed only the row
 // (core-v3), so the list's rows are read once from the table, kept here, and drawn from the list's next redraw.

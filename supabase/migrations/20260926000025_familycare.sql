@@ -1,4 +1,4 @@
--- 25 · the family pack (spec/openCare.md §5.7; the owner 2026-10-08, Q16, Q49, Q50: drawn; the pictures /pictures.html#family-folder,
+-- 25 · the family pack (spec/openCare.md §5.8; the owner 2026-10-08, Q16, Q49, Q50: drawn; the pictures /pictures.html#family-folder,
 -- #family-day, #family-checks). Family medicine ticks five packs (its own, chronic care, vaccines, paediatrics and ObGyn), never copies of
 -- them. Its own: the household as the pack's own table (Q49: each member still their own patient; the file, its number by the unit, its
 -- address and phone, who belongs to it), not record entries; the checks due by age and sex as a clinic setting, each met by a base entry

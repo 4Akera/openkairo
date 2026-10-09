@@ -1,4 +1,4 @@
-// Chronic care, worked out (spec/openCare.md §5.7, Q28–Q30; pictures #chronic-visit, #chronic-list): a patient's registers from the
+// Chronic care, worked out (spec/openCare.md §5.8, Q28–Q30; pictures #chronic-visit, #chronic-list): a patient's registers from the
 // problem list's codes (resolved takes them off), each condition's measures against its targets (the patient's own target wins), and
 // its checks — done when an entry with one of the check's codes was written, due when the last is older than its interval (shorter while
 // a target is off). Never typed; a notice, never a stop. Pure: a node test imports it.

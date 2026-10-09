@@ -1,4 +1,4 @@
-// The Kidneys section (spec/openCare.md §5.1 rule 2, §5.7; the picture #renal-ckd): the KDIGO grid with the patient's square now and a year
+// The Kidneys section (spec/openCare.md §5.1 rule 2, §5.8; the picture #renal-ckd): the KDIGO grid with the patient's square now and a year
 // before, eGFR over time, ACR, BP against its target, the CKD panel with what stands beside each test, and where dialysis stands. Read-only.
 import { Fragment, type ReactNode } from 'react'
 import type { SectionBody } from '@core/screens/chart/sections'

@@ -1,4 +1,4 @@
-// The theatre list's reads (spec/openCare.md §5.7): the operations sent to the Theatre (the base's orders), theatre's words on them,
+// The theatre list's reads (spec/openCare.md §5.8): the operations sent to the Theatre (the base's orders), theatre's words on them,
 // where each stands with its room and time, the checklist's parts, and what refers to each operation (the pre-op's ASA and verdict, the
 // anaesthetic record's times, the consent scanned): read by shape from the record, never by another pack's name.
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'

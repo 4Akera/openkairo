@@ -1,4 +1,4 @@
--- The surgical pack's day (spec/openCare.md §5.1 rule 9, §5.7; the pictures #surg-clinic, #surg-opnote). Its own patients: Reda
+-- The surgical pack's day (spec/openCare.md §5.1 rule 9, §5.8; the pictures #surg-clinic, #surg-opnote). Its own patients: Reda
 -- Abdelhady (58; a right inguinal hernia for eight months, a stent in 2022, diabetes; in consult with Dr. Hesham now, his history and
 -- examination signed: the decision to operate is typed live, /op lichtenstein right) and Kamal Fouda (47; haemorrhoids; an operation
 -- decided 14 weeks ago: the clinic's day puts it on the Theatre's To schedule). Times relative to the load; ids in the pack's namespace;

@@ -1,4 +1,4 @@
--- The nephrology pack's day (spec/openCare.md §5.1 rule 9, §5.7): its own patients at the Nephrology clinic. Saeed El-Gammal (67, diabetic
+-- The nephrology pack's day (spec/openCare.md §5.1 rule 9, §5.8): its own patients at the Nephrology clinic. Saeed El-Gammal (67, diabetic
 -- kidney disease) is in consult: his eGFR has fallen from 48 two years ago to 28 five days ago, his urine ACR from 260 a year ago to 420
 -- (G4 A3, very high; G3b A2 a year before); the CKD panel five days ago (Hb 9.6 with ferritin 85 and TSAT 16, phosphate 5.1, PTH 188,
 -- bicarbonate 19, potassium 5.3 on losartan); he still takes metformin. Hoda Fathy (54, hypertension and CKD G3a A2) waits. Times

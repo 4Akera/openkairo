@@ -1,4 +1,4 @@
--- 29 · the nephrology pack (spec/openCare.md §5.7; the picture /pictures.html#renal-ckd). It adds no record type: the kidney's stage is
+-- 29 · the nephrology pack (spec/openCare.md §5.8; the picture /pictures.html#renal-ckd). It adds no record type: the kidney's stage is
 -- worked out from the base's latest eGFR and urine ACR (KDIGO 2012), the panel read from the base's results, the BP from its vitals. Its
 -- own: the clinic's renal list (a medicine by ingredient or ATC class, the eGFR under which it speaks, what it says), which speaks on one
 -- line under the base's /rx card (core change C1, a notice, never a stop), its starter setup and its role.

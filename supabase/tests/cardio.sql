@@ -1,4 +1,4 @@
--- the cardio pack (spec §5.7): its starter setups (the Cardiology clinic; the Echo room, a bench answering /echo with the base's
+-- the cardio pack (spec §5.8): its starter setups (the Cardiology clinic; the Echo room, a bench answering /echo with the base's
 -- result, each measure with its range); the ECG read in the clinic as the base's result with no order, its measures in base.values; NYHA
 -- and the dry weight as the base's observations in the pack's terms; CHA₂DS₂-VASc added up by the server; the target doses a setting
 \set im   '00000000-0000-0000-0000-0000000000d1'

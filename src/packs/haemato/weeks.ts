@@ -1,4 +1,4 @@
-// The INR clinic's own entries as the sections and the card read them (spec/openCare.md §5.7): the plan (the reason, the target, the
+// The INR clinic's own entries as the sections and the card read them (spec/openCare.md §5.8): the plan (the reason, the target, the
 // medicine, the tablet) and each week (the seven days' doses, the INR it was set at, the next INR). Pure.
 import type { ServerEntry } from '@core/db/types'
 import type { Target } from './inr'

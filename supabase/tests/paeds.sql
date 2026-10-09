@@ -1,4 +1,4 @@
--- the paediatrics pack (spec §5.7): growth worked out by the server from the base's vitals on the loaded WHO tables (each child's
+-- the paediatrics pack (spec §5.8): growth worked out by the server from the base's vitals on the loaded WHO tables (each child's
 -- measurement its z-scores and centiles, kept with the tables' version; beyond the loaded table it says so; an adult has no row; the
 -- live op the same sums), a development check on the base's observation (written where the department uses the pack, by its
 -- paediatrician and, everyday, by the base's Doctor there; never elsewhere; its shape), the Brighton PEWS added up by the server, the

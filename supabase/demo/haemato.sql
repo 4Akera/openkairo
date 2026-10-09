@@ -1,4 +1,4 @@
--- The haemato pack's day (spec/openCare.md §5.1 rule 9, §5.7): its own patients at the Haematology clinic. Mariam Tawfik (19, 48 kg,
+-- The haemato pack's day (spec/openCare.md §5.1 rule 9, §5.8): its own patients at the Haematology clinic. Mariam Tawfik (19, 48 kg,
 -- β-thalassaemia major) is in consult at day care: her programme every 3 weeks with the Hb before 9.5–10.5 and red cells leucodepleted,
 -- Rh and Kell matched; two units each 9, 6 and 3 weeks ago; her Hb 8.9 this morning, under her 9.5; ferritin falling from 3 850 to 2 610 on
 -- deferasirox 1 260 mg (26 mg/kg); grouped O Rh positive, antibody screen negative 3 weeks ago (from her Blood bank card). Ensaf Rizk

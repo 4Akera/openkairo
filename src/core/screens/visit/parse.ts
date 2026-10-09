@@ -25,8 +25,8 @@ export interface Ctx {
   facts?: StandingFacts                               // the pregnancy, breastfeeding and alerts standing now: /preg, /bf, /alert change or end them
   scores?: ScoreTable[]                               // the score tables (read 'me'): /score and each score's alias (/gcs)
   record?: Pick<RecordView, 'patient' | 'values' | 'medications' | 'allergies' | 'allergy_review'>   // what the chart shows, read-only: a pack's order card may show it (spec §5.5, (b))
-  org?: Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'>   // the clinic's settings, for a pack's line under a base card (lines.ts, §5.7 C1)
-  servedBy?: string[]                                 // the departments that work for this one (not itself): a pack's command offered by works for (§5.7 C3)
+  org?: Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'>   // the clinic's settings, for a pack's line under a base card (lines.ts, §5.8 C1)
+  servedBy?: string[]                                 // the departments that work for this one (not itself): a pack's command offered by works for (§5.8 C3)
 }
 import { findAllergen, findDrug, findProblem } from './catalog'
 import { allowed, commandNamed, notHere, registerCommand } from './commands'
@@ -43,7 +43,7 @@ const VITALS: Record<string, [string, string]> = {
   p: ['pulse', 'P'], hr: ['pulse', 'P'], pulse: ['pulse', 'P'], t: ['temperature', 'T'], temp: ['temperature', 'T'],
   w: ['weight', 'Wt'], wt: ['weight', 'Wt'], weight: ['weight', 'Wt'], h: ['height', 'Ht'], ht: ['height', 'Ht'], height: ['height', 'Ht'],
   spo2: ['spo2', 'SpO₂'], sat: ['spo2', 'SpO₂'], sats: ['spo2', 'SpO₂'], o2: ['spo2', 'SpO₂'], rr: ['respiratory_rate', 'RR'],
-  // a child's length (lying; the base's height, method lying) and head (the base's head): core change C2 (§5.7, Q22)
+  // a child's length (lying; the base's height, method lying) and head (the base's head): core change C2 (§5.8, Q22)
   len: ['length', 'Length'], length: ['length', 'Length'], hc: ['head', 'Head'], head: ['head', 'Head'], ofc: ['head', 'Head'],
 }
 const FREQ: Record<string, string> = {

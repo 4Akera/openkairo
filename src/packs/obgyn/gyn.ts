@@ -1,4 +1,4 @@
-// Gynaecology's facts as the section and the words read them (spec/openCare.md §5.7, the picture #ob-gyn): the method standing now (the
+// Gynaecology's facts as the section and the words read them (spec/openCare.md §5.8, the picture #ob-gyn): the method standing now (the
 // latest base observation by the pack's contraception code) and the last cervical screening (by its code). Pure.
 import type { ServerEntry } from '@core/db/types'
 

@@ -1,4 +1,4 @@
-// The paediatrics pack's client (spec/openCare.md §5.7, the pictures #paeds-growth … #paeds-ward). In a department that uses it: the
+// The paediatrics pack's client (spec/openCare.md §5.8, the pictures #paeds-growth … #paeds-ward). In a department that uses it: the
 // Growth section (the WHO z-scores and centiles the server worked out from the base's vitals, the curve), Development (/dev, the
 // clinic's milestones for the age) and the Newborn checks (base entries by its codes); its banner words (the age and the weight, a
 // z-score beyond ±2, a hearing screen to repeat); its line on the children's ward board (the weight and its age, Holliday–Segar's

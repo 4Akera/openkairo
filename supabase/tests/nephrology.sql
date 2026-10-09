@@ -1,4 +1,4 @@
--- the nephrology pack (spec §5.7): no record type of its own; its starter setup (the Nephrology clinic); the renal list, the clinic's
+-- the nephrology pack (spec §5.8): no record type of its own; its starter setup (the Nephrology clinic); the renal list, the clinic's
 -- setting (starter rows; an ATC class or an ingredient, an eGFR, its words); the CKD panel's codes known, so its results land clean
 \set nc   '00000000-0000-0000-0000-0000000000e5'
 \set pt   '00000000-0000-0000-0000-0000000000f1'

@@ -1,4 +1,4 @@
-// Surgery's parts of the chart (spec/openCare.md §5.7; the pictures #surg-clinic, #surg-opnote): the operation note's card under the
+// Surgery's parts of the chart (spec/openCare.md §5.8; the pictures #surg-clinic, #surg-opnote): the operation note's card under the
 // line (the surgeon's template, every line editable; the times, the anaesthetic and blood loss from the anaesthetic record and the
 // specimen and implants from Sign out, read by their shape from what refers to the operation) and the Surgery section (today, planned,
 // before; what was sent and left in).

@@ -234,7 +234,7 @@ test('the Sample labels switch: written (a number on each tube) unless the labor
   assert.match(src, /const printing = large\.labels === 'printed'/); assert.match(src, /labels ready/); assert.match(src, /<PrintButton label=\{printWords\(ready\.labels\)\} keyed/, 'Print 3 labels (P)')
   assert.match(src, /key: 'lis\.labels', data: labels, thing: samplesOf\(labels\), things: sampleNumbers\(labels\), patientId/, 'the print names the patient: logged like a read; each sample its own thing')
   assert.match(src, /<PrintButton label=\{printWords\(again\(g\)\)\} print=/, 'the row\'s button says Print until it has printed (never "Print again" for labels never printed)')
-// ── the Blood bank (spec §5.7, Q35, Q36) ──
+// ── the Blood bank (spec §5.8, Q35, Q36) ──
 const BB = [{ id: 'rbc1', code: 'rbc', name: 'Red cells', department_id: 'bb', section_name: 'Blood bank' }, { id: 'plt1', code: 'plt', name: 'Platelets', department_id: 'bb', section_name: 'Blood bank' },
   { id: 'cbc1', code: 'cbc', name: 'Complete blood count', department_id: 'lab', section_name: 'Haematology' }]
 const bctx: Pick<Ctx, 'services' | 'departments' | 'departmentId'> = { services: BB, departments: [{ id: 'bb', name: 'Blood bank', packs: ['lis'] }, { id: 'lab', name: 'Laboratory', packs: ['lis'] }, { id: 'hc', name: 'Clinic', packs: [] }], departmentId: 'hc' }

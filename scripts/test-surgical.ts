@@ -1,4 +1,4 @@
-// Surgery (spec/openCare.md §5.7), as pure decisions: which orders are operations (by their service's steps, never a pack's name), the
+// Surgery (spec/openCare.md §5.8), as pure decisions: which orders are operations (by their service's steps, never a pack's name), the
 // banner's words ("for op · …", "op today · …"), the surgeon's template for an operation, /opnote's two drafts (the base's procedure
 // and the pack's operation note extending the base's note), the note's text and line.   npm run test:surgical
 import assert from 'node:assert/strict'

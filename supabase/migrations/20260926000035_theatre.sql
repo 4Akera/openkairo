@@ -1,4 +1,4 @@
--- 35 · the theatre pack (spec/openCare.md §5.7; the pictures /pictures.html#surg-clinic, #theatre-list, #theatre-checklist). The
+-- 35 · the theatre pack (spec/openCare.md §5.8; the pictures /pictures.html#surg-clinic, #theatre-list, #theatre-checklist). The
 -- operation is the base's order to the Theatre, extended by the pack (Q41, drawn): the side (asked big), the anaesthesia wanted, a day
 -- case or admitted, the surgeon, the usual time and the risks told, through the order door of §5.5 (a); /op is offered wherever the
 -- Theatre works for the department and searches only its operations (each with its usual time, whether it has a side, the risks to

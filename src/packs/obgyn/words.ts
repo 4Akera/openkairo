@@ -1,4 +1,4 @@
-// ObGyn's chip words and banner words (spec/openCare.md §5.1 rules 2 and 3, §5.7): Pregnancy's chip the weeks (or "not ended" in amber
+// ObGyn's chip words and banner words (spec/openCare.md §5.1 rules 2 and 3, §5.8): Pregnancy's chip the weeks (or "not ended" in amber
 // past 44 weeks, or P from the booking when she is not pregnant), Gynaecology's a method past its change; the banner G and P, Rh
 // negative while pregnant, a method's change due. Pure.
 import type { ServerEntry } from '@core/db/types'

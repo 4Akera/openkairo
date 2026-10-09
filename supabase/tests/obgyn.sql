@@ -1,4 +1,4 @@
--- the obgyn pack, its clinic part (spec §5.7): the antenatal check on the base's observation (its words, the booking; everyday where the
+-- the obgyn pack, its clinic part (spec §5.8): the antenatal check on the base's observation (its words, the booking; everyday where the
 -- department uses the pack, never elsewhere), the periods and the visit after the birth, a birth elsewhere ending the base's pregnancy,
 -- the method as a base observation by the pack's own code, the clinic's scan as a base result with no order; the queue's table fed after
 -- commit from the base's pregnancy, vitals and observations and from its own checks; EPDS added up by the server; its settings with

@@ -1,4 +1,4 @@
-// Respiratory (spec/openCare.md §5.7), as pure decisions: /spiro before and after, worked out against the server's GLI-2012 LMS (LLN,
+// Respiratory (spec/openCare.md §5.8), as pure decisions: /spiro before and after, worked out against the server's GLI-2012 LMS (LLN,
 // % predicted, z), what the numbers say (obstruction under the LLN, reversible at 200 mL and 12 %, the GOLD grade); the result it writes
 // (no order, LOINC on the before values, the LLN as each range); /technique, /flare, /plan; the Chest section's reads.   npm run test:lungs
 import assert from 'node:assert/strict'

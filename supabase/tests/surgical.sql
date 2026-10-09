@@ -1,4 +1,4 @@
--- the surgical pack (spec §5.7): the operation note, its own type extending the base's note (the surgeon's write; the base's note's text
+-- the surgical pack (spec §5.8): the operation note, its own type extending the base's note (the surgeon's write; the base's note's text
 -- required), the base's procedure beside it; the surgeons' templates as a clinic setting; the surgeon is built on Doctor; a plain doctor
 -- writes no operation note; off, no new note
 \set sc   '00000000-0000-0000-0000-0000000000e4'

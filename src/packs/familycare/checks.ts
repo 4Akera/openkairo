@@ -1,4 +1,4 @@
-// The family pack's checks (spec/openCare.md §5.7, Q49; pictures #family-folder, #family-checks): due by age and sex (and a BMI from an
+// The family pack's checks (spec/openCare.md §5.8, Q49; pictures #family-folder, #family-checks): due by age and sex (and a BMI from an
 // age), each met by a base entry with one of its codes — a BP in the vitals, an HbA1c result, a smear — never ticked by hand; due when
 // never met or its interval has passed. Pure: a node test imports it.
 import type { Organization } from '@core/db/types'

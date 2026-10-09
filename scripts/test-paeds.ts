@@ -1,4 +1,4 @@
-// Paediatrics (spec/openCare.md §5.7), as pure decisions: the growth table's rows as the section reads them (latest values, the words
+// Paediatrics (spec/openCare.md §5.8), as pure decisions: the growth table's rows as the section reads them (latest values, the words
 // of a z-score and a centile, the chip and the Summary line, centile lines crossed), the banner words (the age and weight, a z-score
 // beyond ±2, the hearing to repeat; none for an adult), Holliday–Segar and the board's line (a weight older than 3 days in amber), the
 // dose per kg against the clinic's list (a syrup by its strength, a day's or a dose's range, no weight in 30 days), the milestones list

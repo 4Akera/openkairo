@@ -1,4 +1,4 @@
-// Oncology's cards under the line (spec/openCare.md §5.7; the pictures #onc-plan, #onc-cycle). The cycle's card says what /chemo worked
+// Oncology's cards under the line (spec/openCare.md §5.8; the pictures #onc-plan, #onc-cycle). The cycle's card says what /chemo worked
 // out — BSA, each dose and its rounding, the regimen's checks (shown, never a stop), the toxicity since the last cycle, Give · Delay ·
 // Reduce, what is given before, where it goes — and each chip rewrites the line, so the line and the drafts always agree. The cancer's
 // card fills a new cancer field by field; on a cancer already on record the line adds today's ECOG (the note under the card).

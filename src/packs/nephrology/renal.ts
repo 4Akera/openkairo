@@ -1,4 +1,4 @@
-// The clinic's renal list (spec/openCare.md §5.7, Q33; the setting nephrology.renal_list): a medicine by its ingredient or ATC class, the
+// The clinic's renal list (spec/openCare.md §5.8, Q33; the setting nephrology.renal_list): a medicine by its ingredient or ATC class, the
 // eGFR under which it speaks, and what it says ("metformin: halve under 45, stop under 30"). It speaks on one line under the base's /rx
 // card (core change C1, a notice, never a stop) and nowhere else decides anything. Pure (npm run test:nephrology).
 import type { Organization, ValueRow } from '@core/db/types'

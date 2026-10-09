@@ -13,7 +13,7 @@ export interface TileCtx { dept: Pick<Department, 'id' | 'packs'>; place: Place 
 export interface TileWord { text: string; tone?: StateTone }
 export interface TileWords { words: string | (string | TileWord)[] }
 export type TileLineFn = (row: PresenceRow, ctx: TileCtx) => TileWords | null | undefined
-/** a pack's read for its line (spec §5.7, core change C7, 2026-10-09): a React hook the board calls on every render where the department
+/** a pack's read for its line (spec §5.8, core change C7, 2026-10-09): a React hook the board calls on every render where the department
  *  uses the pack, in a part of its own; what it returns reaches the pack's line as ctx.read, and the board draws again when it changes —
  *  so it returns a value that keeps its identity while unchanged (a query's data, or memoised), never a new object each render */
 export type TileReadHook = (dept: Pick<Department, 'id' | 'packs'>) => unknown

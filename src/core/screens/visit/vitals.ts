@@ -1,4 +1,4 @@
-// The vitals card's fields (spec 05; core change C2, §5.7 Q22): a child under two is weighed, measured lying (the base's height,
+// The vitals card's fields (spec 05; core change C2, §5.8 Q22): a child under two is weighed, measured lying (the base's height,
 // method lying) and has the head measured, with no blood pressure; anyone else the adult card, with length or head when the line said
 // them. Pure: a node test imports it.
 type Q = Record<string, unknown>

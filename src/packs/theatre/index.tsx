@@ -1,4 +1,4 @@
-// The theatre pack's client (spec/openCare.md §5.7; the pictures #surg-clinic, #theatre-list, #theatre-checklist): /op, the operation
+// The theatre pack's client (spec/openCare.md §5.8; the pictures #surg-clinic, #theatre-list, #theatre-checklist): /op, the operation
 // as an order to the Theatre (its card under the line: the side big, the chips, the record's facts, the risks told), offered wherever
 // the Theatre works for the department; the theatre list in place of the bench, with the WHO checklist on each case.
 import { registerRenderer } from '@core/renderers'

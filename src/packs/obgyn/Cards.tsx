@@ -1,4 +1,4 @@
-// ObGyn's cards under the line (spec/openCare.md §5.7, the pictures #anc-visit, #ob-scan, #ob-gyn, #ob-postnatal). Each edits the
+// ObGyn's cards under the line (spec/openCare.md §5.8, the pictures #anc-visit, #ob-scan, #ob-gyn, #ob-postnatal). Each edits the
 // draft the line made: the antenatal check (the weeks from the EDD, the fundus against them, the lie, moves, urine and oedema; at
 // booking G and P, the blood group and the risks; what the clinic's schedule says is due, as chips taken into the check), the clinic's
 // scan (the fetal weight worked out and its centile, the liquor, placenta and presentation; a small baby a notice), the method (and an

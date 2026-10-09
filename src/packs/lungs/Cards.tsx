@@ -1,4 +1,4 @@
-// Respiratory's cards under the line (spec/openCare.md §5.7; the picture #chest-spiro): spirometry's table — before, after, the change,
+// Respiratory's cards under the line (spec/openCare.md §5.8; the picture #chest-spiro): spirometry's table — before, after, the change,
 // predicted, LLN, % predicted and z, the predicted values from the server as the card fills (GLI-2012 for this age, height and sex) — and
 // what the numbers say; the action plan's three zones in Arabic; the technique and a flare as their words.
 import { useEffect, type ReactNode } from 'react'

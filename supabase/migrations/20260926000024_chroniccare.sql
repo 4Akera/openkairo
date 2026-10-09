@@ -1,4 +1,4 @@
--- 24 · the chronic care pack (spec/openCare.md §5.7; the owner 2026-10-08, Q28, Q29, Q30: drawn; the pictures /pictures.html#chronic-visit,
+-- 24 · the chronic care pack (spec/openCare.md §5.8; the owner 2026-10-08, Q28, Q29, Q30: drawn; the pictures /pictures.html#chronic-visit,
 -- #chronic-list). A shared pack: registers worked out from the problem list's codes (a problem with one of a condition's codes puts the
 -- patient on it, resolved takes them off; nobody enrols by hand), each condition's targets and checks set once for the clinic, a patient's
 -- own target beside them (the pack's one type: a target with its reason, written in the chart by the doctor, which wins over the

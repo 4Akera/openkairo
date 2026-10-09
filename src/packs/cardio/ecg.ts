@@ -1,4 +1,4 @@
-// The ECG read in the clinic (spec/openCare.md §5.7; the picture "Cardiology · the ECG in the clinic"): /ecg writes the base's result with
+// The ECG read in the clinic (spec/openCare.md §5.8; the picture "Cardiology · the ECG in the clinic"): /ecg writes the base's result with
 // no order (LOINC 11524-6), each measure an analyte with its LOINC code and range, the rhythm, ST and T and the conclusion as text. The
 // typed line: the rhythm (sinus, af, flutter, paced, other), the rate (a bare number, or rate/hr), pr, qrs, qtc, axis, the ST-T words
 // (nad, ste, std, twi, lvh, bbb) and "; the conclusion". Pure (npm run test:cardio).

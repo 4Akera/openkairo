@@ -1,4 +1,4 @@
-// A pack's own rows under the board (spec/openCare.md §5.6 Q2 and §5.7, the owner 2026-10-08; core change C5): today's work not yet in a
+// A pack's own rows under the board (spec/openCare.md §5.6 Q2 and §5.8, the owner 2026-10-08; core change C5): today's work not yet in a
 // place — the chemotherapy day unit's cycles signed for today, dialysis's patients due this shift — listed under the base's board, each
 // with the base's Admit here as its Start (into a free place, chosen inline) and at most two buttons of the pack's own ("Not today").
 // The rows are the pack's (it reads them its own way, a hook); the board draws them the same everywhere, counts them as a view of its

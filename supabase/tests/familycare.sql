@@ -1,4 +1,4 @@
--- the family medicine pack (spec §5.7, Q49): Family medicine from its setup (its queue and Families; the checks by age and sex; New
+-- the family medicine pack (spec §5.8, Q49): Family medicine from its setup (its queue and Families; the checks by age and sex; New
 -- patient asks for a file); the household as the pack's own table, written through its door — started with the next number by the unit,
 -- joined (one file a patient), read by whoever finds patients, changed only by whoever registers them (manage:patients), and only where
 -- the department ticks the pack; Erase reaches a member's row

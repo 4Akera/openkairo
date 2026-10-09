@@ -63,7 +63,7 @@ begin
   perform demo.w(tech, pg_temp.walk(kft, 7, 'Dr. Ashraf Kamel · outside', null, 'stat') || pg_temp.walk(lytes, 7, 'Dr. Ashraf Kamel · outside', null, 'stat'));
 end $$;
 
--- The Blood bank's day (spec/openCare.md §5.1 rule 9, §5.7, Q35, Q36), the laboratory pack's: Nabila Farag (44, iron deficiency, Hb 6.9 at
+-- The Blood bank's day (spec/openCare.md §5.1 rule 9, §5.8, Q35, Q36), the laboratory pack's: Nabila Farag (44, iron deficiency, Hb 6.9 at
 -- General Practice) has one unit of red cells asked this morning, its sample received; Soad Mahrous (66, melaena, Hb 6.8 this morning) on the
 -- Medical Ward: two units asked urgently, grouped A Rh positive and crossmatched, issued as 26-118437 and 26-118452; the first given with no
 -- reaction; the second started and stopped for hives, mild, not restarted (each unit the bedside record, /transfuse's type extending the base's given: the unit its lot). Times relative to

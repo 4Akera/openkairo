@@ -1,4 +1,4 @@
-// ObGyn's sections in the chart (spec/openCare.md §5.7, the pictures #anc-visit … #ob-postnatal). Pregnancy (women 10–55): the dates
+// ObGyn's sections in the chart (spec/openCare.md §5.8, the pictures #anc-visit … #ob-postnatal). Pregnancy (women 10–55): the dates
 // (the LMP, the EDD), what came before, the blood group and risks from the booking, every antenatal visit as a row (BP and weight
 // from the base's vitals of the same visit), the tests (Hb), the scans (the clinic's results), the birth or "not written". Gynaecology
 // (women 10 and over): the periods, the method and when it is due again by the clinic's intervals, cervical screening. Read-only: a

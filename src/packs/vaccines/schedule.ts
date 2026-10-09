@@ -1,4 +1,4 @@
-// The vaccines pack's schedule and what is due (spec/openCare.md §5.7, Q25, Q26; the pictures #vax-chart, #vax-room). The schedule is the
+// The vaccines pack's schedule and what is due (spec/openCare.md §5.8, Q25, Q26; the pictures #vax-chart, #vax-room). The schedule is the
 // national rows (the MOHP's, loaded read-only: vaccines.national) and the clinic's optional rows (vaccines.optional); a dose is due from
 // the later of its earliest age and the interval after the last dose of its series, overdue four weeks after, and too late past its
 // latest age (rotavirus). Worked out from the birth date, the doses and the schedule, never typed; a dose too early is a notice, never

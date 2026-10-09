@@ -1,4 +1,4 @@
-// /preop on the composer's line (spec/openCare.md §5.7, Q43): one draft, the pack's pre-op assessment, about the patient's operation
+// /preop on the composer's line (spec/openCare.md §5.8, Q43): one draft, the pack's pre-op assessment, about the patient's operation
 // as the chart last read it (its card, Preop.tsx, fills it). Pure.
 import type { Ctx, Result } from '@core/screens/visit/parse'
 import { PLANS } from './model'

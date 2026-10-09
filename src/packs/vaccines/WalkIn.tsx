@@ -1,4 +1,4 @@
-// The vaccination room's walk-in (spec/openCare.md §5.7, Q26; picture #vax-room): the bench's two steps side by side. First who — one
+// The vaccination room's walk-in (spec/openCare.md §5.8, Q26; picture #vax-room): the bench's two steps side by side. First who — one
 // search by name, phone or record number, or New patient (the desk's card, here). Then what for — what is due today by the schedule as
 // chips (national, then the parents' choice), and the earlier doses on the mother's MOHP card, ticked with the card's dates to copy them
 // first; Start checks the child in here and opens the visit with each dose drafted, to be given with its lot and site, and Done.

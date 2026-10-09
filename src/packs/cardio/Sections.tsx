@@ -1,4 +1,4 @@
-// Cardiology's sections in the chart (spec/openCare.md §5.1 rule 2, §5.7): Heart (the ECGs as a table, the last echo, Holter) and Heart
+// Cardiology's sections in the chart (spec/openCare.md §5.1 rule 2, §5.8): Heart (the ECGs as a table, the last echo, Holter) and Heart
 // failure (EF from the last echo, NYHA, the weight against the dry weight, the four medicine groups against their targets, K, creatinine
 // and eGFR beside them, the diuretic, CHA₂DS₂-VASc). Read-only; a row opens its entry in the center.
 import type { ReactNode } from 'react'
