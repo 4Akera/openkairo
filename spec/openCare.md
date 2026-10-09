@@ -1575,6 +1575,21 @@ numbered as on its picture.
   "SOFA 11" and "goals not done" (never an infusion: the banner's types are read on every chart in one page, so a pressor word there is
   noted for the owner). Demo: Nabil's three lines, his SOFAs 13 → 12 → 11 and this morning's bloods (platelets 96, creatinine 1.6),
   today's round with its goals; Samy's SOFA 4 on admission, his goals not done.
+- *Built 2026-10-09 (Critical care, piece I3; chosen by Claude in the build, awaiting the owner; Q14 as drawn):* the pack's second
+  starter setup, the CCU (`intensive.ccu`: four beds CCU 1–4, inpatient stays, the same board, ICU chart and Round, review level
+  critical, its own infusions: heparin, GTN, amiodarone, noradrenaline, dobutamine, insulin), and a department setting, "Cardiac rows"
+  (`intensive.cardiac`: on, first ECG within 10 min, door to needle within 30, door to balloon within 90), on in the CCU and off in the
+  ICU's setup, so a mixed unit switches them on in its own ICU. With them on, the hourly chart's first group is Heart: the rhythm ("SR",
+  "SR · VEs", "AF · new"), the heart rate and BP (moved out of Vitals), chest pain 0–10 and ST ("resolving", "↓ 60 %"); and Bloods
+  (aPTT, troponin I, potassium, magnesium from `base.values`, flagged by their interpretation) comes before in and out. The hour card
+  gains the rhythm chips (Other with its words), ectopics (VEs, AEs), chest pain and the ST chips with its fall in %. Rhythm, ectopics,
+  ST and the ST elevation's fall are the base's observations coded in the pack's own open code system `intensive.cardiac` (the base's
+  LOINC subset has no rhythm or ST rows: LOINC 8884-9 there would be a base change); chest pain is the vitals' `pain`. The board's op
+  returns the stay's latest rhythm, and the tile says it first, in amber, when it is not sinus ("AF", "CHB"). Demo: the CCU, Dr. Tarek
+  Nour its doctor and Mariam Saad nursing there too, Ward nursing ticked after Critical care; Maher Shokry Qandil, 58, anterior STEMI
+  after tenecteplase, admitted today to CCU 2 (the picture's Adel Shawky, renamed: radiology's demo has an Adel Shawky), on heparin
+  and GTN, his hours sinus with the ST resolving, then AF with chest pain (the amiodarone bolus as the base's `given`, its
+  infusion an hour later), the GTN stopped; his troponin, potassium, magnesium and an aPTT of 44 s the heparin has not been changed for.
 
 ---
 
@@ -2221,4 +2236,11 @@ types, parked pack calls with per-call Retry, Postgres enums.
   billing 19, bedside 12, `test:intensive` 7 and `test-intensive-round` 8 groups (coag, liver, renal, cardio, cns, resp and the
   history, goals and lines, words and tile); lint 0 errors; typecheck and `vite build` clean but for `src/pictures/bookings.tsx`
   (another session's).
+- 2026-10-09: **Critical care, piece I3a: the CCU and its cardiac rows** (§5.6; lane `beds-icu`; no core or base change): migration 19
+  (`intensive.instant`, the code system `intensive.cardiac`, the setting `intensive.cardiac`, the setup `intensive.ccu`, the board's
+  rhythm), the seeds (the CCU, Dr. Tarek Nour, Mariam Saad there too, Ward nursing ticked), the demo (Maher), `src/packs/intensive`
+  (cardiac, HourCardiac; hour, chart, unit, useIcu, board, HourCard, IcuChart). As run: `db:test` 36 suites, 1 719 ok
+  (`intensive_ccu` 13 new, `demo` 101), the gen:shapes and gen:logins checks clean; `db:demo` twice (38 patients, 18 open visits and
+  stays, 441 entries); `test:intensive` 7, 8 and 3 groups and the other node tests green; lint 0 errors; typecheck and build clean but
+  for `src/pictures/bookings.tsx` (another session's), `vite build` ok.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

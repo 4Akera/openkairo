@@ -13,7 +13,7 @@ import { computedMap } from './chart'
 export type Say = Record<string, { problem?: string; notice?: string }>
 export interface PartProps { d: HourDraft; set: (f: (d: HourDraft) => HourDraft) => void; now: HourNow; unit: UnitSetting; say: Say }
 
-const Under = ({ s }: { s?: { problem?: string; notice?: string } }) => <>
+export const Under = ({ s }: { s?: { problem?: string; notice?: string } }) => <>
   {s?.problem && <span role="alert" className="text-12 text-danger">{s.problem}</span>}{s?.notice && <span className="text-12 text-warn">{s.notice}</span>}</>
 /** a number field: its label over it, what is in force as the placeholder, its problem or notice under it */
 function Num({ label, unit, value, onChange, placeholder, s, w = 'w-16' }: { label: string; unit?: string; value?: string; onChange: (v: string) => void; placeholder?: string
@@ -25,7 +25,7 @@ function Num({ label, unit, value, onChange, placeholder, s, w = 'w-16' }: { lab
     <Under s={s} />
   </label>
 }
-const Part = ({ title, children }: { title: string; children: ReactNode }) =>
+export const Part = ({ title, children }: { title: string; children: ReactNode }) =>
   <section aria-label={title} className="grid gap-1.5"><h3 className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">{title}</h3>
     <div className="flex flex-wrap items-start gap-x-3 gap-y-2">{children}</div></section>
 

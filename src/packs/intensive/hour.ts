@@ -2,11 +2,13 @@
 // settings, each running infusion's dose) shows faint and a blank keeps it: only what changed is written, as a version that changes
 // its item. A dose typed gives the pump's rate from the bag and the weight, and the dose written is the one that rate gives. Only what
 // cannot be written stops the sign (a problem); a value outside its usual range is a notice and "Sign anyway", since an ICU nurse must
-// be able to chart a real value in an arrest. A start is linked to the patient's prescription only when it is the same drug. Pure.
+// be able to chart a real value in an arrest. A start is linked to the patient's prescription only when it is the same drug. Where the
+// department's cardiac rows are on (piece I3), the hour also holds the rhythm, ectopics, chest pain (on the vitals) and ST. Pure.
 import type { EntryIn } from '@core/db/rpc'
 import type { Concept, EntryData, Quantity } from '@core/db/shapes.generated'
 import type { ListRowData, ServerEntry, TableRead } from '@core/db/types'
 import type { Acvpu } from '@core/screens/visit/vitals'
+import { cardiacEntries, cardiacPain, cardiacProblems, cardiacTouched, type CardiacDraft } from './cardiac'
 import { AIRWAY, OBS, airwayOf, concept, type AirwayKind, type Mode, type ObsKey } from './codes'
 import { hourLabel, plusHours } from './hours'
 import { inForce, itemsOf, latestOf, type Item } from './items'
@@ -51,7 +53,7 @@ type Num = 'hr' | 'sys' | 'dia' | 'map' | 'spo2' | 'rr' | 'temp' | 'glucose' | '
 export type VentField = 'fio2' | 'peep' | 'vt' | 'rate' | 'ps' | 'pinsp'
 export interface Start { key: string; dose?: string; rate?: string; amount?: string; volume?: string; kg?: string; medication?: string }
 export type HourDraft = { hour: string; acvpu?: Acvpu; o2?: 'air' | 'oxygen'; vent?: { mode?: Mode; mode_text?: string } & Partial<Record<VentField, string>>
-  ventOn?: AirwayKind; ventOff?: boolean; doses: Record<string, { dose?: string; rate?: string; stop?: boolean }>; starts: Start[] } & Partial<Record<Num, string>>
+  ventOn?: AirwayKind; ventOff?: boolean; doses: Record<string, { dose?: string; rate?: string; stop?: boolean }>; starts: Start[]; cardiac?: CardiacDraft } & Partial<Record<Num, string>>
 export const emptyDraft = (hour: string): HourDraft => ({ hour, doses: {}, starts: [] })
 
 export const LABEL: Record<Num | VentField, string> = { hr: 'HR', sys: 'Systolic', dia: 'Diastolic', map: 'MAP', spo2: 'SpO₂', rr: 'RR', temp: 'T', glucose: 'Glucose',
@@ -132,6 +134,7 @@ export function problemsOf(d: HourDraft, now: HourNow, unit: UnitSetting): { fie
     else if (DOSE_UNITS[row.dose_unit].perKg && !kg) bad(f, 'A dose per kg needs the weight: type it')
     else { const p = fitProblem(bag, row.dose_unit, kg); if (p) bad(f, p); else zero(f, s, bag, row.dose_unit, kg, 'Above 0') }
   })
+  if (unit.cardiac) out.push(...cardiacProblems(d.cardiac))
   return out
 }
 /** a value outside its usual range: shown under its field, never a stop */
@@ -189,10 +192,12 @@ export function entriesOf(d: HourDraft, now: HourNow, unit: UnitSetting, where: 
   const sys = n('sys'); const dia = n('dia')
   const vit = clean<EntryData['vitals']>({ hr: q(n('hr'), 'bpm', '/min'), bp: sys !== undefined && dia !== undefined ? { sys: q(sys, 'mmHg', 'mm[Hg]')!, dia: q(dia, 'mmHg', 'mm[Hg]')! } : undefined,
     rr: q(n('rr'), '/min', '/min'), temp: q(n('temp'), '°C', 'Cel'), spo2: q(n('spo2'), '%', '%'), glucose: q(n('glucose'), 'mg/dL', 'mg/dL'), consciousness: d.acvpu,
-    oxygen: d.o2 === 'air' ? { on: 'air' } : d.o2 === 'oxygen' ? clean({ on: 'oxygen' as const, flow: q(n('flow'), 'L/min', 'L/min') }) : undefined })
+    oxygen: d.o2 === 'air' ? { on: 'air' } : d.o2 === 'oxygen' ? clean({ on: 'oxygen' as const, flow: q(n('flow'), 'L/min', 'L/min') }) : undefined,
+    pain: unit.cardiac ? cardiacPain(d.cardiac) : undefined })
   if (Object.keys(vit).length) entries.push({ id: id(), ...at, type: 'vitals', data: vit })
   for (const k of ['map', 'cvp', 'intake', 'urine'] as ObsKey[]) { const v = n(k); if (v === undefined) continue
     entries.push({ id: id(), ...at, type: 'observation', data: { code: concept('loinc', OBS[k].code, OBS[k].label), value: { quantity: q(v, OBS[k].unit, OBS[k].ucum)! } } }) }
+  if (unit.cardiac) entries.push(...cardiacEntries(d.cardiac, where, id, d.hour))
   const ventTyped = clean<Partial<Vent>>({ mode: d.vent?.mode, mode_text: modeOf(d, now) === 'other' ? d.vent?.mode_text?.trim() || undefined : undefined,
     fio2: q(num(d.vent?.fio2), '%', '%'), peep: q(num(d.vent?.peep), 'cmH₂O', 'cm[H2O]'), vt: q(num(d.vent?.vt), 'mL', 'mL'), rate: q(num(d.vent?.rate), '/min', '/min'),
     ps: q(num(d.vent?.ps), 'cmH₂O', 'cm[H2O]'), pinsp: q(num(d.vent?.pinsp), 'cmH₂O', 'cm[H2O]') })
@@ -230,4 +235,5 @@ export function entriesOf(d: HourDraft, now: HourNow, unit: UnitSetting, where: 
 }
 /** nothing typed or chosen */
 export const isEmpty = (d: HourDraft) => typed(d).length === 0 && !d.acvpu && !d.o2 && !d.vent?.mode && !d.vent?.mode_text?.trim() && !d.ventOn && !d.ventOff && d.starts.length === 0
+  && !cardiacTouched(d.cardiac)
   && !Object.values(d.doses).some((x) => x.stop || num(x.dose) !== undefined || num(x.rate) !== undefined)

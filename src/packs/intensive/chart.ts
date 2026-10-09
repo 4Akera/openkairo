@@ -2,9 +2,12 @@
 // out, and who signed. A cell is what was written in that hour; a setting carried on from the hour before (the ventilator's, an
 // infusion's dose) is drawn faint and never written again; a MAP nobody typed is worked out from that hour's BP, faint, with a title
 // that says so. A low MAP and a low hourly urine carry ↓. The balance is in − urine over the ICU day's hours (other losses are not
-// charted yet); the day-start column holds the hour before it, so it closes the day before. The hour now with nothing signed is due. Pure.
-import type { ServerEntry } from '@core/db/types'
+// charted yet); the day-start column holds the hour before it, so it closes the day before. The hour now with nothing signed is due.
+// Where the cardiac rows are on (piece I3, cardiac.ts), the Heart group comes first (the heart rate and BP move into it) and the Bloods
+// come before in and out. Pure.
+import type { ServerEntry, ValueRow } from '@core/db/types'
 import { initials } from '@core/ui/tone'
+import { cardiacGroups, type CardiacInput } from './cardiac'
 import { airwayOf, modeWords, obsKeyOf } from './codes'
 import { dayStart, hourOf, hoursFrom, plusHours } from './hours'
 import { inForce, inHour, itemsOf, latestOf, type Item } from './items'
@@ -14,7 +17,9 @@ export interface Cell { text: string; carried?: boolean; flag?: 'low' | 'high'; 
 export interface Row { key: string; label: string; unit?: string; title?: string; cells: (Cell | null)[] }
 export interface Group { key: string; title: string; rows: Row[] }
 export interface ChartModel { hours: string[]; now: string; due: boolean; groups: Group[] }
-export interface ChartInput { entries: ServerEntry[]; from: string; now: string; dayStarts: number; kg: number | null; users: { id: string; name: string }[] }
+export interface ChartInput { entries: ServerEntry[]; from: string; now: string; dayStarts: number; kg: number | null; users: { id: string; name: string }[]
+  /** the department's cardiac rows, when on: the base's values for the bloods, the needle's time, the unit's heparin target */
+  cardiac?: { values: readonly ValueRow[]; needleAt: string | null; heparin?: CardiacInput['heparin'] } }
 
 type Data = Record<string, unknown>
 const obj = (x: unknown): Data => x && typeof x === 'object' && !Array.isArray(x) ? x as Data : {}
@@ -157,7 +162,12 @@ export function chartOf(x: ChartInput): ChartModel {
   }
   const signedRow: Row = { key: 'by', label: 'By', cells: by.map((s) => s.size ? cell([...s].join(', ')) : null) }
   const nowAt = index.get(now)
-  const groups = [vitalsGroup(items, hours, col), ventGroup(items, hours), infusionGroup(items, hours), fluidGroup(items, hours, x.dayStarts, x.kg),
+  // the cardiac rows: the heart rate and BP move out of the vitals into the Heart group
+  const vitals = vitalsGroup(items, hours, col); const take = (key: string) => vitals.rows.find((r) => r.key === key) ?? null
+  const cardiac = x.cardiac ? cardiacGroups({ entries: x.entries, values: x.cardiac.values, hours, needleAt: x.cardiac.needleAt, heparin: x.cardiac.heparin, hr: take('hr'), bp: take('bp') }) : []
+  if (x.cardiac) vitals.rows = vitals.rows.filter((r) => r.key !== 'hr' && r.key !== 'bp')
+  const heart = cardiac.find((g) => g.key === 'heart') ?? null; const bloods = cardiac.find((g) => g.key === 'bloods') ?? null
+  const groups = [heart, vitals, ventGroup(items, hours), infusionGroup(items, hours), bloods, fluidGroup(items, hours, x.dayStarts, x.kg),
     { key: 'signed', title: 'Signed', rows: [signedRow] }].filter((g): g is Group => g !== null)
   return { hours, now, due: nowAt !== undefined && signedRow.cells[nowAt] === null, groups }
 }

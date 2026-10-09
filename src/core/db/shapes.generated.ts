@@ -537,6 +537,13 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
+/** setting intensive.cardiac (intensive; owner department) */
+export interface IntensiveCardiacSetting {
+  balloon_minutes?: number
+  ecg_minutes?: number
+  needle_minutes?: number
+  on: boolean
+}
 /** setting intensive.unit (intensive; owner department) */
 export interface IntensiveUnitSetting {
   day_starts: number
@@ -732,6 +739,7 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
+  'intensive.cardiac': IntensiveCardiacSetting
   'intensive.unit': IntensiveUnitSetting
   'lis.large': LisLargeSetting
   'organization.packs_used': OrganizationPacksUsedSetting

@@ -2,11 +2,13 @@
 // intensive.board), in this order, at most one of each: the airway (on a ventilator or NIV and since which day of the stay, off it in
 // the last day, else air or oxygen); one infusion (the first vasopressor or inotrope in amber, else the first running); the MAP while a
 // pressor runs or when it is under 65; the urine when under 0.5 mL/kg/h over the last hours; the stay's latest SOFA and, in amber,
-// "goals not done" until the round is signed after the ICU day began (piece I2). Pure.
+// "goals not done" until the round is signed after the ICU day began (piece I2). Before them all, in amber, the stay's latest heart
+// rhythm when it is not sinus (piece I3: the cardiac rows). Pure.
 import type { PresenceRow } from '@core/db/types'
 import type { TileCtx, TileWord, TileWords } from '@core/screens/ward/tiles'
 import { stayDay } from '@core/screens/chart/model/encounter'
 import { hm } from '@core/ui/time'
+import { RHYTHMS, SINUS } from './cardiac'
 import { AIRWAY, airwayKind } from './codes'
 import { dayStart } from './hours'
 import { DOSE_WORDS, infusionOf, isPressor, shortOf, unitOf, type DoseUnit } from './unit'
@@ -20,6 +22,7 @@ export interface StayWords {
   urine?: { ml: number; hours: number; kg: number | null }
   sofa?: { total: number; at: string }
   goals_at?: string | null
+  rhythm?: { code: string; at: string }
 }
 type Running = NonNullable<StayWords['infusions']>[number]
 export interface IcuBoard { patient_ids: string[]; stays: Record<string, StayWords> }
@@ -49,6 +52,9 @@ export function tileWords(row: PresenceRow, ctx: Pick<TileCtx, 'org' | 'dept'>, 
   if (!isObj(data) || !isObj(data.stays) || row.kind !== 'stay' || !Object.hasOwn(data.stays, row.item)) return null
   const w = data.stays[row.item]; if (!isObj(w)) return null
   const stay = w as StayWords; const words: (string | TileWord)[] = []
+  // the latest rhythm, when it is not sinus
+  const rhythm = isObj(stay.rhythm) && typeof stay.rhythm.code === 'string' && !SINUS.has(stay.rhythm.code) ? RHYTHMS.find(([c]) => c === stay.rhythm!.code) : undefined
+  if (rhythm) words.push({ text: rhythm[2], tone: 'warn' })
   const air = airwayWord(stay, now); if (air) words.push(air)
   // one infusion: the first pressor by drug name, else the first running
   const unit = unitOf(ctx.org, ctx.dept.id)

@@ -8,6 +8,9 @@
 -- Piece I2: SOFA (1996) as a declared score table; the morning round's daily goals as the pack's own type (intensive.goals, a CarePlan),
 -- signed with the SOFA in one set; the lines (central, arterial, urinary) as the base's procedures, in progress until removed; and the
 -- board's latest SOFA and "goals not done" through intensive.board.
+-- Piece I3: the CCU, the pack's second starter setup, and the cardiac rows a department switches on (intensive.cardiac): rhythm, ectopics
+-- and ST as the base's observations coded in the pack's own open code system (the base's LOINC subset has no rows for them), chest
+-- pain as the vitals' pain, aPTT, troponin, potassium and magnesium from the base's values; the board's latest rhythm.
 
 set client_min_messages = warning;
 
@@ -46,6 +49,14 @@ $$;
 create function intensive.dose_ucum(p_unit text) returns text language sql immutable as $$
   select case when p_unit in ('ug/kg/min', 'mg/h') then p_unit end
 $$;
+
+-- a text that should be an instant, or null: a check and a line never raise
+create function intensive.instant(t text) returns timestamptz language plpgsql stable as $$
+begin
+  return t::timestamptz;
+exception when others then
+  return null;
+end $$;
 
 -- ── checks: a change continues its own kind; the vent's FiO2 a percentage; the infusion's rate in mL/h and its dose the rate's ──
 -- the item a correction or a change continues (the writer has put it on the entry) began as this type
@@ -331,6 +342,11 @@ begin
     if found then v := v || jsonb_build_object('sofa', jsonb_build_object('total', n.total, 'at', n.at)); end if;
     v := v || jsonb_build_object('goals_at', (select max(x.occurred_at) from core.pack_kind(p_org, v_pt, 'intensive.goals',
       jsonb_build_object('current', true, 'limit', 50)) x where x.visit_id = v_stay));
+    -- the stay's latest heart rhythm (piece I3: the cardiac rows)
+    select x.data -> 'value' -> 'concept' -> 'codings' -> 0 ->> 'code' as code, x.occurred_at as at into n from core.pack_kind(p_org, v_pt, 'observation',
+        jsonb_build_object('current', true, 'codes', jsonb_build_array('intensive.cardiac:rhythm'), 'limit', 20)) x
+     where x.visit_id = v_stay order by x.occurred_at desc limit 1;
+    if found then v := v || jsonb_build_object('rhythm', jsonb_build_object('code', n.code, 'at', n.at)); end if;
     v_out := v_out || jsonb_build_object(v_stay::text, v);
   end loop;
   return jsonb_build_object('patient_ids', to_jsonb(v_ids), 'stays', v_out);
@@ -443,5 +459,33 @@ select core.declare_setup('intensive.icu', 'intensive', 'stays', '{"en":"ICU","a
     {"key":"magnesium","name":"Magnesium sulfate","short":"MgSO₄","kind":"electrolyte","dose_unit":"g/h","amount":10,"amount_unit":"g","volume":100}]}}$j$::jsonb,
   places => (select jsonb_agg(jsonb_build_object('key', 'icu_' || n, 'name', 'ICU ' || n, 'label', 'bed') order by n) from generate_series(1, 6) n),
   help => '{"en":"Six ICU beds on the board, inpatient stays, and Critical care''s ICU chart: vitals, the ventilator, infusions, in and out, signed once an hour; the morning round: SOFA and the daily goals, signed once."}');
+
+-- ── piece I3: the CCU and its cardiac rows ──
+-- rhythm, ectopics, ST and the ST elevation's fall: the base's observations, coded in the pack's own open code system
+select core.declare_system('intensive.cardiac', 'intensive', 'code', '{canon}/CodeSystem/intensive-cardiac', null, false, null, 'openCare',
+  '{"en":"Critical care: heart rhythm and ST"}');
+select core.declare_setting('intensive.cardiac', 'intensive', 'department', $j${"type":"object","additionalProperties":false,"required":["on"],
+  "properties":{"on":{"type":"boolean","default":false},"ecg_minutes":{"type":"integer","minimum":1,"maximum":120,"default":10},
+    "needle_minutes":{"type":"integer","minimum":1,"maximum":240,"default":30},"balloon_minutes":{"type":"integer","minimum":1,"maximum":360,"default":90}}}$j$::jsonb,
+  labels => '{"en":"Cardiac rows","ar":"صفوف القلب"}', form => 'department',
+  fields => $j$[{"key":"on","labels":{"en":"Cardiac rows"},"help":{"en":"Rhythm, chest pain and ST on the hourly chart; the reperfusion times; aPTT, troponin, potassium and magnesium."}},
+    {"key":"ecg_minutes","labels":{"en":"First ECG within"},"unit":"min","help":{"en":"Of arriving at the door."}},
+    {"key":"needle_minutes","labels":{"en":"Door to needle within"},"unit":"min","help":{"en":"Lysis."}},
+    {"key":"balloon_minutes","labels":{"en":"Door to balloon within"},"unit":"min","help":{"en":"Primary PCI."}}]$j$::jsonb);
+
+-- the CCU's starter setup (Q14, as drawn): four CCU beds, the same chart and Round, the cardiac rows on, the CCU's infusions
+select core.declare_setup('intensive.ccu', 'intensive', 'stays', '{"en":"CCU","ar":"العناية المركزة للقلب"}', packs => array['intensive'],
+  screens => '{"screens":["base.beds","intensive.chart","intensive.round"],"opens":"base.beds"}',
+  settings => $j${"department.encounter_class":{"class":"IMP"},"department.review_results":{"level":"critical"},
+    "intensive.unit":{"day_starts":8,"infusions":[
+      {"key":"heparin","name":"Heparin","short":"heparin","kind":"anticoagulant","dose_unit":"units/h","amount":25000,"amount_unit":"units","volume":50},
+      {"key":"gtn","name":"Glyceryl trinitrate (GTN)","short":"GTN","kind":"vasodilator","dose_unit":"ug/min","amount":50,"amount_unit":"mg","volume":50},
+      {"key":"amiodarone","name":"Amiodarone","short":"amiodarone","kind":"antiarrhythmic","dose_unit":"mg/h","amount":900,"amount_unit":"mg","volume":500},
+      {"key":"noradrenaline","name":"Noradrenaline","short":"noradrenaline","kind":"vasopressor","sofa":"noradrenaline","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50},
+      {"key":"dobutamine","name":"Dobutamine","short":"dobutamine","kind":"inotrope","sofa":"dobutamine","dose_unit":"ug/kg/min","amount":250,"amount_unit":"mg","volume":50},
+      {"key":"insulin","name":"Soluble insulin","short":"insulin","kind":"insulin","dose_unit":"units/h","amount":50,"amount_unit":"units","volume":50}]},
+    "intensive.cardiac":{"on":true,"ecg_minutes":10,"needle_minutes":30,"balloon_minutes":90}}$j$::jsonb,
+  places => (select jsonb_agg(jsonb_build_object('key', 'ccu_' || n, 'name', 'CCU ' || n, 'label', 'bed') order by n) from generate_series(1, 4) n),
+  help => '{"en":"Four CCU beds on the board, and Critical care with its cardiac rows: rhythm, chest pain and ST each hour, the reperfusion times, heparin by aPTT."}');
 
 select core.lock_pack('intensive');

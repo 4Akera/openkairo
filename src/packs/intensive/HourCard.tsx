@@ -1,7 +1,7 @@
 // The hour card (spec/openCare.md §5.6): under the grid, the nurse types one column (the hour now, or one of the two before) and signs
 // it once (⌘/Ctrl+↵): one set through the writer, each change a version of its item with the version it was typed against. A problem
 // greys the sign; a value outside its usual range turns it into "Sign anyway" (one click, never a stop). A refusal shows above the
-// button and the draft stays.
+// button and the draft stays. Where the department's cardiac rows are on (piece I3), the card holds them after the vitals.
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
@@ -11,6 +11,7 @@ import { refresh } from '@core/hooks/writes'
 import { Button, Callout, Card, Chip, Kbd, errorText } from '@core/ui'
 import { hourLabel, plusHours } from './hours'
 import { emptyDraft, entriesOf, isEmpty, noticesOf, problemsOf, rangeNotices, type HourDraft, type HourNow } from './hour'
+import { HourCardiac } from './HourCardiac'
 import { AirwayRow, FluidRow, InfusionRows, VitalsRow, type Say } from './HourParts'
 import type { UnitSetting } from './unit'
 
@@ -45,7 +46,7 @@ export function HourCard({ hour, stateAt, unit, where, signedBy }: HourCardProps
     <div className="flex flex-wrap items-center gap-2"><span className="text-13 font-medium text-fg">The hour</span>
       {[0, -1, -2].map((n) => { const h = plusHours(hour, n)
         return <Chip key={h} shape="pill" on={d.hour === h} onClick={() => set((x) => ({ ...x, hour: h }))}>{hourLabel(h)}:00{n === 0 ? ' · now' : ''}</Chip> })}</div>
-    <VitalsRow {...p} /><AirwayRow {...p} /><InfusionRows {...p} /><FluidRow {...p} />
+    <VitalsRow {...p} />{unit.cardiac && <HourCardiac {...p} />}<AirwayRow {...p} /><InfusionRows {...p} /><FluidRow {...p} />
     {notices.length > 0 && <ul aria-label="Notes" className="grid gap-0.5">{notices.map((n) =>
       <li key={n.text} className={`flex items-start gap-1 text-12 ${n.tone === 'warn' ? 'text-warn' : 'text-muted'}`}>
         {n.tone === 'warn' && <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />}<span>{n.text}</span></li>)}</ul>}

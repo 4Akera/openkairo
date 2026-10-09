@@ -7,13 +7,14 @@ import type { Bag } from './rates'
 
 /** one of the unit's infusions, as its setting holds it */
 export type UnitInfusion = IntensiveUnitSetting['infusions'][number]
-export interface UnitSetting { dayStarts: number; infusions: UnitInfusion[] }
+export interface UnitSetting { dayStarts: number; infusions: UnitInfusion[]; cardiac?: boolean }
 export type DoseUnit = UnitInfusion['dose_unit']
 
-/** the department's setting, with the shape's defaults: the day from 08:00, no infusions */
+/** the department's setting, with the shape's defaults: the day from 08:00, no infusions; the cardiac rows off */
 export function unitOf(org: Organization | undefined, deptId: string): UnitSetting {
   const s = settingIn(org, 'intensive.unit', deptId)
-  return { dayStarts: typeof s.day_starts === 'number' ? s.day_starts : 8, infusions: Array.isArray(s.infusions) ? s.infusions : [] }
+  return { dayStarts: typeof s.day_starts === 'number' ? s.day_starts : 8, infusions: Array.isArray(s.infusions) ? s.infusions : [],
+    cardiac: settingIn(org, 'intensive.cardiac', deptId).on === true }
 }
 export const infusionOf = (unit: UnitSetting, key: string | undefined): UnitInfusion | null => unit.infusions.find((r) => r.key === key) ?? null
 /** a drug that holds the blood pressure up: the board says its dose in amber, and the MAP beside it */

@@ -5,6 +5,9 @@
 -- six whole hours are charted; the one now is left to type. Times relative to the load; ids in the pack's namespace; a reload erases these
 -- patients first. Piece I2: Nabil's three lines, his SOFAs (13 on admission, 12 at the round the ICU day before, 11 at today's round, signed
 -- with the daily goals in one set) and this morning's bloods by the Laboratory; Samy's SOFA 4 on admission and no round yet this ICU day.
+-- Piece I3: the CCU's Maher (anterior STEMI after tenecteplase, admitted today in CCU 2), on heparin and GTN, his hours charted with the
+-- cardiac rows: sinus rhythm and the ST resolving, then AF with chest pain, the amiodarone bolus, its infusion an hour later, the GTN stopped; his
+-- troponin, potassium, magnesium and an aPTT the heparin has not been changed for yet.
 select demo.layer('intensive');
 
 -- a set whose first entry takes an ICU bed: the bed named, else the next free by position (a patient admitted in the app since keeps
@@ -68,6 +71,15 @@ create or replace function pg_temp.icu_hour_set(p_stay uuid, p_at timestamptz, p
   select demo.w(demo.id('intensive', 'nurse'), jsonb_build_array(demo.e('vitals', demo.id('intensive', 'icu'), p_stay, p_at, p_vit))
     || coalesce((select jsonb_agg(demo.e('observation', demo.id('intensive', 'icu'), p_stay, p_at, o) order by n) from jsonb_array_elements(p_obs) with ordinality x(o, n)), '[]')
     || p_more);
+$$;
+-- a cardiac row (piece I3): the base's observation, coded in the pack's own system, its value a concept of the same system
+create or replace function pg_temp.ccu_obs(p_code text, p_words text, p_value text, p_value_words text) returns jsonb language sql immutable as $$
+  select jsonb_build_object('code', demo.concept('intensive.cardiac', p_code, p_words),
+    'value', jsonb_build_object('concept', demo.concept('intensive.cardiac', p_value, p_value_words)))
+$$;
+-- an outside result (no order), one analyte with its LOINC code
+create or replace function pg_temp.ccu_result(p_name text, p_analyte jsonb) returns jsonb language sql immutable as $$
+  select jsonb_build_object('status', 'final', 'code', demo.concept('loinc', p_analyte -> 'code' ->> 'code', p_name), 'analytes', jsonb_build_array(p_analyte))
 $$;
 -- the ICU day the load falls in: from the setup's 08:00
 create or replace function pg_temp.icu_day() returns timestamptz language sql stable as $$
@@ -197,4 +209,88 @@ begin
   perform pg_temp.icu_hour_set(s, pg_temp.icu_hour(3), pg_temp.icu_vit(94, 120, 70, 98, 20) || air, pg_temp.icu_fluids(null, null, 150, 30));
   perform pg_temp.icu_hour_set(s, pg_temp.icu_hour(2), pg_temp.icu_vit(92, 118, 70, 98, 20, 37.0, 196) || air, pg_temp.icu_fluids(null, null, 150, 28));
   perform pg_temp.icu_hour_set(s, pg_temp.icu_hour(1), pg_temp.icu_vit(92, 120, 72, 99, 20) || air, pg_temp.icu_fluids(null, null, 150, 26));
+end $$;
+
+-- Maher, 58: anterior STEMI after tenecteplase in the ER, admitted to CCU 2 today (within the five hours the kit squeezes before 05:00,
+-- so his stay is today's at any load). Each charted hour is a whole hour after his admission and before the load; an hour before it
+-- is skipped, with everything that belongs to it
+do $$
+declare ccu uuid := demo.id('intensive', 'ccu'); tn uuid := demo.id('intensive', 'ccu doctor'); rn uuid := demo.id('intensive', 'nurse');
+  v_admit timestamptz := demo.ago(280); s uuid := gen_random_uuid(); at timestamptz; k int;
+  hep_rx uuid := gen_random_uuid(); gtn_rx uuid := gen_random_uuid(); amio_rx uuid := gen_random_uuid();
+  hep uuid := gen_random_uuid(); gtn uuid := gen_random_uuid(); g2 uuid;
+  hep_d jsonb := demo.concept('atc', 'B01AB01', 'Heparin'); gtn_d jsonb := demo.concept('atc', 'C01DA02', 'Glyceryl trinitrate');
+  amio_d jsonb := demo.concept('atc', 'C01BD01', 'Amiodarone');
+  vit jsonb; more jsonb; amio boolean := false;
+begin
+  perform demo.patient(demo.id('intensive', 'patient:maher'), array['Maher', 'Shokry'], 'Qandil', 'male', demo.born(58, 120), '+201015546620');
+  perform pg_temp.icu_admit(tn, jsonb_build_array(demo.e('admitted', ccu, s, v_admit, jsonb_build_object('department_id', ccu,
+    'admit_source', 'emd', 'reason', 'anterior STEMI, after tenecteplase'), s)), 'ccu_2');
+  -- on arrival, one set: his vitals, the history, the ER's troponin, the two infusions prescribed
+  at := demo.after(v_admit, 5);
+  perform demo.w(tn, jsonb_build_array(
+    demo.e('vitals', ccu, s, at, pg_temp.icu_vit(78, 128, 74, 97, 16, 36.8, null, 84)
+      || jsonb_build_object('pain', demo.q(2, '/10', '{score}'), 'consciousness', 'a', 'oxygen', jsonb_build_object('on', 'air'))),
+    demo.e('note', ccu, s, at, demo.note('history_physical',
+      E'hx: central chest pain from early morning, anterior STEMI on the first ECG; tenecteplase in the ER\nex: pain 2/10, no crackles, Killip I\nplan: heparin by aPTT, GTN for pain, angiography within 24 h of lysis')),
+    demo.e('result', ccu, s, at, pg_temp.ccu_result('Troponin I', demo.analyte('trop', 'Troponin I', '10839-9', 1.84, 'ng/mL', 'ng/mL', null, 0.04))),
+    demo.e('medication', ccu, s, at, pg_temp.icu_rx(hep_d, 'infusion by aPTT, the unit''s table'), hep_rx),
+    demo.e('medication', ccu, s, at, pg_temp.icu_rx(gtn_d, 'infusion for chest pain; keep the systolic above 100'), gtn_rx)));
+  -- the two infusions started by the nurse, linked to their prescriptions: heparin 1 000 units/h, GTN 20 µg/min
+  at := demo.after(v_admit, 10);
+  perform demo.w(rn, jsonb_build_array(
+    demo.e('intensive.infusion', ccu, s, at, pg_temp.icu_drip(hep_d, hep_rx, 'heparin', 2.0, 1000, 'units/h', 'units/h', null, 25000, 'units', '[iU]', 50), hep),
+    demo.e('intensive.infusion', ccu, s, at, pg_temp.icu_drip(gtn_d, gtn_rx, 'gtn', 1.2, 20, 'ug/min', 'µg/min', null, 50, 'mg', 'mg', 50), gtn)));
+
+  -- his hours, one set each by the nurse: the vitals with the chest pain, the cardiac rows, then what changed
+  for k in reverse 4 .. 1 loop
+    at := pg_temp.icu_hour(k);
+    continue when at <= demo.after(v_admit, 10);
+    more := '[]';
+    if k = 4 then
+      vit := pg_temp.icu_vit(82, 122, 70, 97) || jsonb_build_object('pain', demo.q(0, '/10', '{score}'));
+      more := jsonb_build_array(demo.e('observation', ccu, s, at, pg_temp.ccu_obs('rhythm', 'Heart rhythm', 'sr', 'Sinus rhythm')),
+        demo.e('observation', ccu, s, at, pg_temp.ccu_obs('st', 'ST segment', 'resolving', 'Resolving')),
+        demo.e('observation', ccu, s, at, jsonb_build_object('code', demo.concept('intensive.cardiac', 'st_fall', 'ST elevation fall'),
+          'value', jsonb_build_object('quantity', demo.q(60, '%', '%')))));
+    elsif k = 3 then
+      vit := pg_temp.icu_vit(84, 118, 72, 97) || jsonb_build_object('pain', demo.q(0, '/10', '{score}'));
+      more := jsonb_build_array(demo.e('observation', ccu, s, at, pg_temp.ccu_obs('rhythm', 'Heart rhythm', 'sr', 'Sinus rhythm')),
+        demo.e('observation', ccu, s, at, pg_temp.ccu_obs('ectopics', 'Ectopic beats', 'ves', 'Ventricular ectopics')));
+    elsif k = 2 then
+      -- AF with chest pain: amiodarone prescribed and its bolus given over this hour; the GTN down to 10 µg/min
+      perform demo.w(tn, jsonb_build_array(demo.e('medication', ccu, s, at - interval '5 minutes',
+        pg_temp.icu_rx(amio_d, 'AF: 300 mg IV over 1 hour, then 900 mg over 24 hours by pump'), amio_rx)));
+      vit := pg_temp.icu_vit(128, 98, 60, 96) || jsonb_build_object('pain', demo.q(3, '/10', '{score}'));
+      g2 := gen_random_uuid();
+      more := jsonb_build_array(demo.e('observation', ccu, s, at, pg_temp.ccu_obs('rhythm', 'Heart rhythm', 'af', 'Atrial fibrillation')),
+        demo.e('given', ccu, s, at, jsonb_build_object('drug', amio_d, 'dose', demo.q(300, 'mg', 'mg'), 'route', 'iv', 'status', 'completed', 'note', 'over 1 hour')),
+        demo.e('intensive.infusion', ccu, s, at, pg_temp.icu_drip(gtn_d, gtn_rx, 'gtn', 0.6, 10, 'ug/min', 'µg/min', null, 50, 'mg', 'mg', 50), g2, gtn, 'changes'));
+      gtn := g2; amio := true;
+    else
+      vit := pg_temp.icu_vit(104, 110, 66, 97) || jsonb_build_object('pain', demo.q(0, '/10', '{score}'));
+      more := jsonb_build_array(demo.e('observation', ccu, s, at, pg_temp.ccu_obs('rhythm', 'Heart rhythm', 'af', 'Atrial fibrillation')),
+        demo.e('observation', ccu, s, at, pg_temp.ccu_obs('st', 'ST segment', 'no_new_change', 'No new change')),
+        demo.e('intensive.infusion', ccu, s, at, (pg_temp.icu_drip(gtn_d, gtn_rx, 'gtn', 0.6, 10, 'ug/min', 'µg/min', null, 50, 'mg', 'mg', 50) - 'rate' - 'dose')
+          || '{"status":"stopped"}'::jsonb, null, gtn, 'changes'));
+      -- the bolus over, its 24-hour infusion starts (as prescribed: 300 mg over 1 hour, then 900 mg over 24 hours)
+      if amio then
+        more := more || jsonb_build_array(demo.e('intensive.infusion', ccu, s, at,
+          pg_temp.icu_drip(amio_d, amio_rx, 'amiodarone', 20.8, 37.4, 'mg/h', 'mg/h', 'mg/h', 900, 'mg', 'mg', 500)));
+      end if;
+    end if;
+    perform demo.w(rn, jsonb_build_array(demo.e('vitals', ccu, s, at, vit)) || more);
+  end loop;
+
+  -- his bloods, each its own set by the doctor, only once he is here: potassium and magnesium after the AF; an aPTT on the heparin,
+  -- whose rate is not changed after it (the chart then suggests the unit's next rate)
+  at := pg_temp.icu_hour(2) + interval '15 minutes';
+  if at > v_admit then
+    perform demo.w(tn, jsonb_build_array(demo.e('result', ccu, s, at, pg_temp.ccu_result('Potassium', demo.analyte('k', 'Potassium', '2823-3', 3.6, 'mmol/L', 'mmol/L', 3.5, 5.1)))));
+    perform demo.w(tn, jsonb_build_array(demo.e('result', ccu, s, at, pg_temp.ccu_result('Magnesium', demo.analyte('mg', 'Magnesium', '19123-9', 0.8, 'mmol/L', 'mmol/L', 0.7, 1.0)))));
+  end if;
+  at := pg_temp.icu_hour(1) - interval '20 minutes';
+  if at > demo.after(v_admit, 10) then
+    perform demo.w(tn, jsonb_build_array(demo.e('result', ccu, s, at, pg_temp.ccu_result('APTT', demo.analyte('aptt', 'APTT', '3173-2', 44, 's', 's', 25, 35)))));
+  end if;
 end $$;
