@@ -32,6 +32,8 @@ begin
         'route', x ->> 'route', 'vaccines', jsonb_build_object('vaccine', x ->> 'vaccine', 'dose', (x ->> 'dose')::int, 'source', 'card', 'given_on', (b + (x ->> 'earliest_days')::int + 7)::text)))))
       from jsonb_array_elements(core.setting_at(c, 'vaccines.national', c) -> 'rows') x where (x ->> 'earliest_days')::int <= (e ->> 'to')::int));
   end loop;
+end $$;
+
 -- The operations asked of the Theatre for two packs' patients (spec §5.8): Kamal Fouda's haemorrhoidectomy, decided in the Surgery clinic 14
 -- weeks ago (on To schedule), and Hamed Sakr's left inguinal hernia repair, asked 11 weeks ago (his pre-op today in the Pre-op clinic).
 -- Skipped while a pack is off.

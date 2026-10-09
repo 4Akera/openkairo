@@ -36,6 +36,8 @@ begin
     perform demo.tick(fm, 'vaccines');
     perform demo.screen(fm, 'vaccines.room');
   end if;
+end $$;
+
 -- The Theatre (spec §5.8, Q47 drawn: who ticks what): the surgeon's operation note and the anaesthetist's record are written there, so
 -- the Theatre ticks surgical and anaesthesia too, its line has the Anaesthetic record beside the theatre list, the surgeon and the
 -- anaesthetist hold their roles there; the Laboratory offers histopathology for the specimens sent at Sign out. Skipped while a pack is off.
