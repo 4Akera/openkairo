@@ -1736,6 +1736,21 @@ numbered as on its picture.
   Demo: six of the pack's own patients: Said, Nadia and Mohamed (HCV, in the HCV chair) on dialysis, Hassan (who missed a session a
   week ago, on one of his days: on a Friday the Saturday six days back) and Shaimaa due, Magdy (HBV) in the HBV chair on the
   other days; each of the five had a session on their last pattern day; on a Friday the five come a day early by one-off moves.
+- **Built 2026-10-09, D1c: Dialysis on the board (chosen by Claude at the owner's request, awaiting the owner)**: under the chairs,
+  "Due now · from the schedule" (the clinics' C5 rows, the toolbar's view "Due, not started"), read from `haemodialysis.due` each
+  minute and on the clinic's hints, by shift then the chair's place. Each row says the scheduled chair, "due 11:30" (amber from 30
+  minutes past the shift's start, its minutes counted from there), HBV or HCV, a chair that does not fit the patient's isolation
+  ("HCV: Chair 3 is not kept for HCV", in amber; shown, never a stop), "moved here for today", "last session Wed" (within six days),
+  "last session 9 days ago" or "first session here", and "in Medical Ward" in amber for a stay elsewhere. Start is C5's: the base's
+  admission into a free chair chosen inline ("Into"), with the session begun in the same Done (in progress, now, the clinic's day,
+  the shift, the scheduled chair and slot, the hours). Missed, for whoever may write the session, once the row's shift has begun (the
+  next shift is listed up to an hour early, and nobody misses a session not yet due): the session not done, in no stay, "Did not
+  come" (one click; its reason can be changed later). Each chair's tile reads the board once (C7's read, `haemodialysis.board` for
+  treatment, again when the stays change and on the clinic's hints, never on a timer; the tile's clock moves each minute, so the time
+  left moves without a new read): "on · 1:30 left" ("over by 0:10" in amber past the hours; "on · 2:30" with none), "ended · not
+  discharged" or "no session" in amber, "BP 146/84" (amber under 100 systolic, red under 90), and the chair's mismatch in amber;
+  nothing while it reads, or for a visit. A patient with both HBV and HCV fits the HBV chair (HBV is the one that needs its own
+  chair): no warning there. The refusals have the pack's words. No tile button yet (D2 adds Readings and End).
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2934,4 +2949,7 @@ types, parked pack calls with per-call Retry, Postgres enums.
   base's procedure, its line and check, `write:haemodialysis.session`), `haemodialysis.due` and `haemodialysis.board`; the demo's six
   patients (`supabase/demo/haemodialysis.sql`); suite `haemodialysis` 108 checks, `demo` 95 (`registry` 16, `boundary` 10); shapes
   regenerated (HaemodialysisSession).
+- 2026-10-09: **Dialysis, piece D1c** (§5.6; lane `beds-dialysis`): the pack's client, part 1 (`src/packs/haemodialysis`: days, unit,
+  due, board, words, hooks, index): who is due under the board with Start and Missed (the clinics' C5) and the tile's words (C7's
+  read); `test:haemodialysis` 7 groups; `test:board`, `test:clinics-core`, `test:bedside` and `test:oncology` unchanged; no core file.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
