@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { parse, type Ctx } from '../src/core/screens/visit/parse'
-import { notHere, registerCommand, commandsFor, type Command } from '../src/core/screens/visit/commands'
+import { cardFor, notHere, registerCard, registerCommand, commandsFor, type Command } from '../src/core/screens/visit/commands'
 import { cardLineDefs, cardLinesOf, registerCardLine, type CardLineCtx } from '../src/core/screens/visit/lines'
 import { CardLines, DraftLine } from '../src/core/screens/visit/CardLines'
 import { vitalsFields, monthsOld } from '../src/core/screens/visit/vitals'
@@ -103,6 +103,16 @@ test('C3: offered where a department using the pack works for this one, or where
   assert.ok(commandsFor({ ...ctx, departmentId: 'bb', packs: ['probe'], servedBy: [] }).some((c) => c.name === 'probefuse'), 'ticked here: offered')
   const none = { ...ctx, departments: ctx.departments.map((d) => ({ ...d, packs: [] })), packs: [], servedBy: ['bb'] }
   assert.match(notHere(transfuse, none) ?? '', /not used in any department/)
+})
+test('C3: the pack’s card for what that command writes draws wherever the command is offered by works for', () => {
+  const Editor = () => null
+  registerCard({ function: 'probe.given', Editor, pack: 'probe' })
+  assert.equal(cardFor('probe.given', { ...ctx, packs: [], servedBy: ['bb'] })?.Editor, Editor, 'the ward the Blood bank works for')
+  assert.equal(cardFor('probe.given', { ...ctx, departmentId: 'bb', packs: ['probe'], servedBy: [] })?.Editor, Editor, 'the Blood bank itself')
+  assert.equal(cardFor('probe.given', { ...ctx, packs: [], servedBy: ['ward'] }), undefined, 'not where the pack neither is used nor serves')
+  registerCard({ function: 'other.thing', Editor, pack: 'other' })
+  assert.equal(cardFor('other.thing', { ...ctx, departments: [...ctx.departments, { id: 'o', name: 'Other', packs: ['other'] }], packs: [], servedBy: ['o'] }), undefined,
+    'a pack with no works-for command serves nobody’s cards')
 })
 
 // ── C4 · a pack's step in the desk's New patient ──
