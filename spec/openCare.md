@@ -1539,6 +1539,41 @@ numbered as on its picture.
   Nurses. Demo: Heba Nabil (triage nurse) and Dr. Tamer Ezz in Emergency, which ticks Ward nursing after its own pack (the clinic's
   choice); Karim Mahmoud (2, Resus 2, no doctor for 12 minutes), Hany Sherif (4, on the chairs 72 minutes), Nadia Ibrahim (not
   triaged, 6 minutes). No client screen yet: the Patients tab, Arrived and the triage card are E2b's.
+- *Built 2026-10-09, E2b (chosen by Claude at the owner's request ('brainstorm best ideas and start building', 2026-10-08), awaiting
+  the owner)*: Emergency, the client (`src/packs/casualty`). The **Patients tab** (`casualty.patients`): every stay admitted here, not
+  triaged first (the longest arrived first), then by level, then the longest since triage; its counted views All, Not triaged (amber;
+  red once one has waited 15 minutes) and Past the level's time (red); each row its level, its time words and where it is (a bay, a
+  cubicle or Chairs), Triage or Retriage, and Take for whoever may discharge here (the base's `assigned`: the doctor is seeing the
+  patient). It is a tab because a pack may not add to the base board's toolbar or reorder its no-bed list without a core door (for the
+  owner: the picture puts Arrived on the board and sorts its chairs; the clinics lanes' C5 could carry the waiting list once merged).
+  **Arrived** (N, or the toolbar's button) opens a card under the toolbar: one search, New patient, or Unknown patient ("Unknown man",
+  "Unknown woman" or "Unknown patient", an age only as an estimated year; the record number tells them apart); how they came (with the
+  ambulance's call number) and what brings them. It writes the base's `admitted` with no place, then opens the triage card under that
+  patient's row, carrying how they came; a patient already on the list says "Already admitted". The **triage card** (inline under the
+  row; also from each board tile's **Triage** button, `?tab=casualty.patients&stay=…&card=triage`): how they came, what brings them
+  (13 chips and words), the danger signs, the vitals typed as `/v` words (the base's vitals with ACVPU and air or oxygen; a leading `/v`
+  is dropped, a bare `v` is Voice), the five levels of the clinic's scale each with its time to the doctor ("doctor at once", "doctor
+  within 10 min"), and the **suggestion**: one table of thresholds, the same on either scale, named on the card "(ATS/NEWS2
+  thresholds)" — level 1 from ACEM's category-1 descriptors for the Australasian scale (RR under 10, systolic under 80, responds to pain
+  or not at all); level 2 from NEWS2's single red parameter (RCP 2017: RR ≥ 25, SpO₂ ≤ 91, systolic ≤ 90, pulse ≤ 40 or ≥ 131,
+  temperature ≤ 35.0, new confusion or voice); level 3 from NEWS2's 2-point bands (RR 21–24, systolic 91–100, pulse 111–130,
+  temperature ≥ 39.1, on oxygen); "systolic ≥ 220 and SpO₂ 92–95 follow ACEM's category-3 descriptors (severe hypertension; SaO₂
+  90–95 %), not NEWS2". The danger signs suggest at least 1 (airway, breathing, fitting, bleeding that will not stop) or 2 (chest pain
+  like the heart, new weakness or speech loss, severe pain, violent). Higher only: never preselected, shown while no level is chosen
+  and then only when it is more urgent than the level chosen; none under 16 ("No suggestion under 16: the nurse decides"); a less
+  urgent level asks why (required, at most 200 letters), never a stop. Then the place: a free resus bay first for a level 1 or 2
+  (preset for a patient in the chairs; with no bay free, the first free cubicle, so a level 1 or 2 is never preset to the chairs
+  while a place is free), cubicles first for 3–5, or Chairs, or "Stay in <place>". One Done ("Triage · to Resus 1",
+  "Triage · wait", "Retriage · …", ⌘↵) writes the vitals, the triage (with the scale's version), the base's `urgent` to match the
+  level and the move; a warning comes back with Sign anyway, which resends the very set warned with its codes confirmed (a changed
+  draft drops the warning and goes back through a plain Triage). **The tile's words** (through the pack's board read): "2 · Very urgent ·
+  no doctor · 12 min" in a bay or "4 · Standard · waiting 72 min" in the chairs, red once past the level's time (or at once for level
+  1); "not triaged · 6 min", amber, red from 15 minutes; "3 · Urgent · seen 25 min ago" once a doctor has written in the stay; "in the
+  ER 12 min" before the read answers. The level's clock starts at triage (the Australasian scale's indicator is triage to medical
+  assessment); before triage the clock is the arrival's (RCEM's initial assessment within 15 minutes). **The banner's word**: the open
+  stay's latest level here, "2 · Very urgent" (red for 1–2, amber for 3). Its two refusals in words. *Question for the owner*: when
+  the clinic's scale is Manchester, should the card offer this suggestion at all, or none? (The Manchester Triage System triages by
+  its own flowcharts and discriminators, which are not used; openCare takes only its five categories and times.)
 
 ---
 
@@ -2167,4 +2202,9 @@ types, parked pack calls with per-call Retry, Postgres enums.
   observation, the two scales as code systems, `casualty.scale`, the triage nurse, `casualty.board`, the setup `casualty.er`), its seed
   and demo day, the ER ticking Ward nursing in `clinic_packs`, the regenerated shapes and logins. 35 suites (new `casualty` 62,
   `demo` 86), 1676 checks; `test:demo` 8 groups. No browser pass (no client yet).
+- 2026-10-09: **Emergency, piece E2b: the client** (§5.6; lane `beds-er`): `src/packs/casualty` (the scales, the suggestion, the
+  triage's entries, the board's words, the Patients tab, Arrived, the triage card, the tile's words and Triage button, the banner's
+  word), `scripts/test-casualty.ts`. Node: composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7,
+  demo 8, setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12, casualty 10; lint 0 errors; tsc stops only on
+  `src/pictures/bookings.tsx` (another session's). No SQL change.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
