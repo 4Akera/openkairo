@@ -1765,7 +1765,32 @@ numbered as on its picture.
   her record's, as the tile and the chart do; a failed read of her record leaves the chips to choose another. Each tile of a woman in
   labour has ObGyn's **Partograph** button after Move and Discharge, for a reader who may read the record there, opening the tab at
   her: a tile button gets no read since C7, so its show reads the board's last good answer the pack's hook kept (none until it lands,
-  forgotten when a read fails; a small core change, `ctx.read` for buttons too, noted, not asked).
+  forgotten when a read fails; a small core change, `ctx.read` for buttons too, noted, not asked). **L2b, the birth (server):** the
+  birth is the pack's own type `obgyn.birth` (a Procedure, not private: how — normal, vacuum, forceps, vaginal breech, caesarean —,
+  the perineum (intact, 1st–4th degree; never with a caesarean), episiotomy, repaired, the placenta, the blood loss in mL, who
+  delivered, and each baby: its record, born at, sex, grams 300–6500, breathing at birth; its check refuses a perineum, episiotomy or
+  repair after a caesarean, an episiotomy on an intact perineum, a blood loss not in mL or below 0, a baby that is not a patient, is
+  the mother or is listed twice, and a deliverer who is not a user; its line "Birth · normal · girl 3100 g · perineum: 2nd degree,
+  repaired · placenta complete · blood loss 350 mL"; FHIR a Procedure "Delivery, normal" recorded by whoever signed it (as the
+  base's Procedure) and performed by them only when they also delivered, its line the outcome — someone else who delivered is kept
+  in the birth, not exported, since the bundle's people are the entries' authors).
+  It is written in the mother's stay under `write:obgyn.birth` (by department, not everyday: the Midwife and the Obstetrician hold
+  it) in **one Done with each baby's record** (the owner's Q10, built in L2a): the mother's birth, her oxytocin (the base's given:
+  10 units IM after a vaginal birth, 5 units slow IV at a caesarean) and her pregnancy's end (a version of the standing one, ended,
+  delivered); then each baby's stay (admitted, born here, in a cot or none), its weight (the base's vitals), **Apgar** at 1 and 5
+  minutes (a declared score `obgyn.apgar`, Apgar 1953, alias `apgar`: colour, heart rate, grimace, activity, breathing, 0–2 each;
+  0–3 low, 4–6 moderately abnormal, 7–10 reassuring; the server adds it up) and its doses (the base's given, text-only drugs, none
+  in the demo's ATC subset: vitamin K 1 mg IM, 0.5 mg under 1500 g; eye ointment; hepatitis B 0.5 mL IM). A baby's entries never
+  refer to the mother's. A blood loss of 500 mL or more after a vaginal birth, 1000 after a caesarean, is a PPH notice (the card's,
+  L2c), never a stop or a flag. The board's read grows: the stay's birth (when, how, the blood loss, each baby's sex and weight) and
+  a baby's stay (admitted as born here, or with Apgar in it: its Apgar scores, none when left out, weight and doses given).
+  **Midwives and obstetricians hold `manage:patients` wherever they hold the role** (the birth's Done makes the records; a core
+  action counts in every department of the holding, whether or not it uses ObGyn: in the demo the Labour ward and the ObGyn clinic —
+  Dr. Nermeen Fathy, Dr. Ahmed Zaki, Samah Lotfy — and everywhere for a clinic-wide holding), **so they can register, merge and edit
+  patients there too — awaiting the owner**, who approved the baby's record (Q10), not those. Demo: Heba (a normal birth this morning, signed by Hanan Fouad; Post 1, her girl 3.1 kg in Cot 1,
+  Apgar 8 · 9, vitamin K and eye ointment) and Marwa (a caesarean yesterday by Dr. Nermeen Fathy, blood loss 700 mL; Post 2, her boy
+  3.35 kg in Cot 2, hepatitis B given too). *Chosen by Claude in the build, awaiting the owner:* the birth's fields and words, the
+  oxytocin and vitamin K doses, Apgar's table and words, the PPH thresholds' words.
 - **Built 2026-10-09, L2a (the owner's Q10):** the core part only — a set may make the newborns it is about (§3.9 step 3b): each a
   new record, its mother the patient of the set's first entry as "mother of", its own entries (the cot stay, …) beside hers in the
   same Done, twins (up to eight) numbered in turn, all or nothing (a refused, warned or busy set leaves no record, relation, snapshot
@@ -2997,4 +3022,17 @@ types, parked pack calls with per-call Retry, Postgres enums.
   export 50, rebuild 11, demo 98, newborn 65); `db:demo` twice (99 patients). Node: composer 19, chart 16, board 27, demo 8,
   registries 9, labour 9, bedside 12; typecheck clean; lint 0 errors; `npm run build` builds. A birth date must read `YYYY-MM-DD`
   (the date cast alone takes `today`).
+- 2026-10-09: **ObGyn's labour ward, piece L2b: the birth, server** (§5.6; lane `beds-labour`): migration 37 in place (`obgyn.birth`
+  with its line, check and FHIR; `obgyn.board` grown with the stay's birth and a baby's Apgar, weight and doses; `obgyn.apgar`
+  declared; `write:obgyn.birth`, and `manage:patients` for the Midwife and the Obstetrician wherever they hold the role, a core action, awaiting the owner), the day's two births
+  (Heba, Marwa) and their babies through `demo.w_born`, the demo suite's labour ward block (seven stays, the births, relations, cots,
+  Apgar, oxytocin, doses, the board), the `labour` suite's (n)–(t) (the birth's Done, twins, six refusals leaving no record, FHIR,
+  the board, a twin with no Apgar still a baby's stay); the check also refuses an episiotomy or repair at a caesarean, an episiotomy
+  on an intact perineum, a blood loss below 0, and a baby that is the mother or listed twice; FHIR's recorder is the signer, the
+  performer only when they also delivered; shapes regenerated (one type), logins unchanged. Run: `db reset`; `gen:shapes --check`
+  and `gen:logins --check` pass; SQL suites (this piece's and the demo's; the full run is the lane's end) labour 94, obgyn 28,
+  newborn 65, demo 107 ok; `db:demo` twice (103 patients). Node: composer 19, chart 16, screens 11, sections 19, banner 13,
+  settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2, bedside 12, obgyn 10,
+  clinics-core 11, labour 9; typecheck clean; lint 0 errors; `npm run build` and `npx vite build` build. MEOWS (L2d, L2e) waits for
+  the owner's next round.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

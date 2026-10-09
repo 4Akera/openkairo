@@ -2,6 +2,9 @@
 -- the labour examination, its line and its FHIR; the baby's heart as the base's observation (LOINC 55283-6); the partograph's setting;
 -- the Midwife's actions; the labour ward's starter setup; the board's read of each stay's exams, the baby's heart and the pregnancy
 -- through the pack's own op; refused where the department or the clinic does not use the pack, while the base's observation still lands.
+-- Piece L2b: the birth (obgyn.birth: its line, check and FHIR), Apgar as a declared score, write:obgyn.birth and manage:patients for the
+-- Midwife and the Obstetrician; one Done with the mother's birth, oxytocin and pregnancy's end and each baby's record, stay, weight,
+-- Apgar and doses (the owner's Q10), twins; all or nothing when refused; the board's birth and baby words.
 \set org   '00000000-0000-0000-0000-0000000000a1'
 \set im    '00000000-0000-0000-0000-0000000000d1'
 \set ward  '00000000-0000-0000-0000-0000000000d6'
@@ -16,6 +19,31 @@
 \set preg  '00000000-0000-0000-0000-00000000e806'
 \set ex3   '00000000-0000-0000-0000-00000000e807'
 \set ex4   '00000000-0000-0000-0000-00000000e808'
+\set baby  '00000000-0000-0000-0000-00000000e811'
+\set bstay '00000000-0000-0000-0000-00000000e812'
+\set bir   '00000000-0000-0000-0000-00000000e813'
+\set oxy   '00000000-0000-0000-0000-00000000e814'
+\set apg1  '00000000-0000-0000-0000-00000000e815'
+\set apg5  '00000000-0000-0000-0000-00000000e816'
+\set vk    '00000000-0000-0000-0000-00000000e817'
+\set baby2 '00000000-0000-0000-0000-00000000e821'
+\set bstay2 '00000000-0000-0000-0000-00000000e822'
+\set bir2  '00000000-0000-0000-0000-00000000e823'
+\set baby3 '00000000-0000-0000-0000-00000000e831'
+\set bstay3 '00000000-0000-0000-0000-00000000e832'
+\set bad1  '00000000-0000-0000-0000-00000000e841'
+\set bad2  '00000000-0000-0000-0000-00000000e842'
+\set bad3  '00000000-0000-0000-0000-00000000e843'
+\set bad4  '00000000-0000-0000-0000-00000000e844'
+\set bad5  '00000000-0000-0000-0000-00000000e845'
+\set bad6  '00000000-0000-0000-0000-00000000e846'
+\set bad7  '00000000-0000-0000-0000-00000000e847'
+\set bad8  '00000000-0000-0000-0000-00000000e848'
+\set bad9  '00000000-0000-0000-0000-00000000e849'
+\set bad10 '00000000-0000-0000-0000-00000000e84a'
+\set bad11 '00000000-0000-0000-0000-00000000e84b'
+\set mw    '11111111-0000-0000-0000-0000000000bc'
+\set mwu   '00000000-0000-0000-0000-0000000000bc'
 \set ow    '11111111-0000-0000-0000-0000000000b9'
 \set dr    '11111111-0000-0000-0000-0000000000b1'
 \set nurse '11111111-0000-0000-0000-0000000000b3'
@@ -167,6 +195,182 @@ select t.ok(jsonb_array_length(s -> 'exams') = 1 and (s -> 'exams' -> 0 ->> 'cer
 select t.refuses(format($q$select public.pack_op(jsonb_build_object('op','obgyn.board','department_id',%L))$q$, :'im'), 'not_used_here');
 select t.as(:'rec');
 select t.refuses(format($q$select public.pack_op(jsonb_build_object('op','obgyn.board','department_id',%L))$q$, :'ward'), 'not_allowed');
+
+\echo '── (n) the birth: the pack''s own type, a Procedure with its check and FHIR; write:obgyn.birth the Midwife''s and the Obstetrician''s, with manage:patients'
+reset role;
+select t.ok(y.resources = array['Procedure'] and cardinality(y.checks) = 1 and y.to_fhir is not null and not y.may_be_private and not y.other_patient,
+  'obgyn.birth v1: a Procedure, one check, its FHIR mapping, not private, no other patient') from core.types y where y.key = 'obgyn.birth' and y.version = 1;
+select t.ok(not a.everyday and a.scope = 'department', 'write:obgyn.birth: by department, not everyday') from core.actions a where a.key = 'write:obgyn.birth';
+select t.ok(core.gives(:'org', :'d302', 'write:obgyn.birth', :'ward') and core.gives(:'org', :'d301', 'write:obgyn.birth', :'ward')
+  and not core.gives(:'org', '00000000-0000-0000-0000-00000000c003', 'write:obgyn.birth', :'ward'), 'the Midwife and the Obstetrician sign a birth; the base''s Nurse does not');
+select t.ok(core.gives(:'org', :'d302', 'manage:patients', :'ward') and core.gives(:'org', :'d301', 'manage:patients', :'ward'), 'both register patients on the ward (awaiting the owner)');
+select t.ok(core.gives(:'org', :'d302', 'manage:patients', :'im') and not core.gives(:'org', :'d302', 'write:obgyn.birth', :'im'),
+  'manage:patients is a core action: the Midwife holds it wherever her role is, where ObGyn is not used too (awaiting the owner)');
+
+\echo '── (o) Apgar (1953) as a declared score: five signs 0–2, bands low, moderate, reassuring'
+select t.ok(s.version = '1953' and s.alias = 'apgar' and s.short = 'Apgar'
+  and (select array_agg(i ->> 'key' order by n) from jsonb_array_elements(s.items) with ordinality x(i, n)) = array['colour', 'heart', 'grimace', 'activity', 'breathing']
+  and (select array_agg(concat_ws(' ', b ->> 'key', b ->> 'min', b ->> 'max', coalesce(b ->> 'tone', 'none')) order by n) from jsonb_array_elements(s.bands) with ordinality x(b, n))
+    = array['low 0 3 danger', 'moderate 4 6 warn', 'reassuring 7 10 none'], 'obgyn.apgar 1953, alias apgar: colour, heart, grimace, activity, breathing; 0–3 low, 4–6 moderate, 7–10 reassuring')
+  from core.scores s where s.key = 'obgyn.apgar';
+create function pg_temp.apgar(c text, h text, g text, a text, b text) returns jsonb language sql stable as $$
+  select core.score('obgyn.apgar', '1953', jsonb_build_object('colour', c, 'heart', h, 'grimace', g, 'activity', a, 'breathing', b))
+$$;
+select t.ok((pg_temp.apgar('2', '2', '2', '2', '2') ->> 'total')::int = 10 and pg_temp.apgar('2', '2', '2', '2', '2') -> 'band' ->> 'key' = 'reassuring'
+  and (pg_temp.apgar('1', '2', '2', '1', '2') ->> 'total')::int = 8
+  and (pg_temp.apgar('1', '1', '1', '1', '1') ->> 'total')::int = 5 and pg_temp.apgar('1', '1', '1', '1', '1') -> 'band' ->> 'key' = 'moderate'
+  and (pg_temp.apgar('0', '1', '0', '1', '1') ->> 'total')::int = 3 and pg_temp.apgar('0', '1', '0', '1', '1') -> 'band' ->> 'key' = 'low',
+  'Apgar 10 reassuring, 8, 5 moderate, 3 low');
+
+\echo '── (p) a midwife signs a birth: one Done with the mother''s birth, oxytocin and pregnancy''s end, and the baby''s record, stay, weight, Apgar and dose'
+select t.as(:'ow');
+select public.save('user', jsonb_build_object('id', :'mwu', 'name', 'Midwife Nagla', 'login_id', :'mw',
+  'holdings', jsonb_build_array(jsonb_build_object('role_id', :'d302', 'department_id', :'ward')))) is not null as midwife;
+set role authenticated;
+-- one set through the one door, with the newborns it makes
+create function pg_temp.born(p_entries jsonb, p_patients jsonb, p_seen jsonb default '{}') returns jsonb language sql as $$
+  select public.write(jsonb_build_object('set_id', gen_random_uuid(), 'made_at', clock_timestamp(), 'entries', p_entries, 'confirmed', '[]'::jsonb, 'seen', p_seen,
+    'patients', p_patients))
+$$;
+-- a newborn as the card names it: Mona's, born today in the clinic's day, on the ward
+create function pg_temp.np(p_id uuid, p_name text, p_gender text) returns jsonb language sql stable as $$
+  select jsonb_build_object('id', p_id, 'mother', '00000000-0000-0000-0000-0000000000f2', 'full_name', p_name, 'gender', p_gender,
+    'birth_date', ((now() at time zone 'Africa/Cairo')::date)::text, 'department_id', '00000000-0000-0000-0000-0000000000d6')
+$$;
+-- the birth of Mona in her stay, and a baby's stay opened in the same set (a bed, or none)
+create function pg_temp.birth(p_data jsonb, p_id uuid default null, p_at timestamptz default now() - interval '10 minutes') returns jsonb language sql stable as $$
+  select t.e('obgyn.birth', '00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000d6', p_data, p_id, '00000000-0000-0000-0000-00000000e801',
+    p_extra => jsonb_build_object('occurred_at', p_at))
+$$;
+create function pg_temp.baby(p_id uuid, p_sex text, p_grams int, p_at timestamptz default now() - interval '10 minutes') returns jsonb language sql stable as $$
+  select jsonb_build_object('patient', jsonb_build_object('to', 'patient', 'id', p_id), 'born_at', p_at, 'sex', p_sex, 'grams', p_grams, 'breathing', 'cried')
+$$;
+create function pg_temp.admit(p_baby uuid, p_stay uuid, p_bed uuid default null) returns jsonb language sql as $$
+  select t.e('admitted', p_baby, '00000000-0000-0000-0000-0000000000d6', jsonb_strip_nulls(jsonb_build_object('department_id', '00000000-0000-0000-0000-0000000000d6',
+    'place_id', p_bed, 'admit_source', 'born', 'reason', 'born here')), p_stay, p_stay)
+$$;
+create function pg_temp.score(p_baby uuid, p_stay uuid, p_inputs jsonb, p_total int, p_note text, p_id uuid default null) returns jsonb language sql as $$
+  select t.e('score', p_baby, '00000000-0000-0000-0000-0000000000d6', jsonb_build_object('score', 'obgyn.apgar', 'version', '1953', 'inputs', p_inputs,
+    'total', p_total, 'band', 'reassuring', 'note', p_note), p_id, p_stay,
+    p_extra => jsonb_build_object('occurred_at', now() - interval '10 minutes' + case p_note when '1 min' then interval '1 minute' else interval '5 minutes' end))
+$$;
+select t.as(:'mw');
+create temp table p_out as select pg_temp.born(jsonb_build_array(
+  pg_temp.birth(jsonb_build_object('mode', 'normal', 'perineum', 'second', 'repaired', true, 'placenta', 'complete',
+    'blood_loss', '{"value":"350","unit":"mL","ucum":"mL"}'::jsonb, 'delivered_by', jsonb_build_object('to', 'user', 'id', :'mwu'),
+    'babies', jsonb_build_array(pg_temp.baby(:'baby', 'female', 3100))), :'bir'),
+  t.e('given', :'pt', :'ward', '{"drug":{"text":"Oxytocin","codings":[]},"dose":{"value":"10","unit":"units","ucum":"[iU]"},"route":"im","status":"completed"}', :'oxy', :'stay'),
+  t.e('pregnancy', :'pt', :'ward', jsonb_build_object('status', 'ended', 'pregnant', true, 'lmp', jsonb_build_object('value', (current_date - 275)::text, 'precision', 'day'),
+    'reason', 'delivered'), null, :'stay', :'preg', 'changes'),
+  pg_temp.admit(:'baby', :'bstay', '00000000-0000-0000-0000-000000000004'),
+  t.e('vitals', :'baby', :'ward', '{"weight":{"value":"3.1","unit":"kg","ucum":"kg"}}', null, :'bstay'),
+  pg_temp.score(:'baby', :'bstay', '{"colour":"1","heart":"2","grimace":"2","activity":"1","breathing":"2"}', 8, '1 min', :'apg1'),
+  pg_temp.score(:'baby', :'bstay', '{"colour":"2","heart":"2","grimace":"2","activity":"1","breathing":"2"}', 9, '5 min', :'apg5'),
+  t.e('given', :'baby', :'ward', '{"drug":{"text":"Vitamin K (phytomenadione)"},"dose":{"value":"1","unit":"mg","ucum":"mg"},"route":"im","status":"completed"}', :'vk', :'bstay')),
+  jsonb_build_array(pg_temp.np(:'baby', 'Baby of Mona Ali Fathy', 'female')), jsonb_build_object(:'preg', 1)) r;
+select t.landed(r, 'the birth''s Done lands, the baby''s record made in it') from p_out;
+select t.ok(r -> 'findings' = '[]'::jsonb and r -> 'patients' @> jsonb_build_array(jsonb_build_object('id', :'baby')), 'nothing found; the outcome names the baby: ' || coalesce(r ->> 'findings', 'null')) from p_out;
+select t.ok(t.entry(t.record(:'pt', :'ward'), :'bir') ->> 'line' = 'Birth · normal · girl 3100 g · perineum: 2nd degree, repaired · placenta complete · blood loss 350 mL',
+  'the birth: Birth · normal · girl 3100 g · perineum: 2nd degree, repaired · placenta complete · blood loss 350 mL');
+select t.ok(t.entry(t.record(:'baby', :'ward'), :'apg1') ->> 'line' = 'Apgar 8, 1953 · Reassuring', 'the Apgar: Apgar 8, 1953 · Reassuring');
+reset role;
+select t.ok(exists (select 1 from core.patient_relations r where r.patient_id = :'pt' and r.relation = 'mother_of' and r.other_id = :'baby'), 'Mona is "mother of" the baby');
+select t.ok(state = 'admitted' and place_id = '00000000-0000-0000-0000-000000000004', 'the baby''s own stay, in bed 4') from base.presence where patient_id = :'baby';
+select t.ok(e.data ->> 'status' = 'ended' and e.data ->> 'reason' = 'delivered', 'her pregnancy''s latest version: ended, delivered') from core.entries e
+ where e.item = :'preg' order by e.item_version desc limit 1;
+set role authenticated;
+
+\echo '── (q) twins: one birth, two babies, each its own record and stay (one in bed 2, one with no bed)'
+create temp table q_out as select pg_temp.born(jsonb_build_array(
+  pg_temp.birth(jsonb_build_object('mode', 'normal', 'babies', jsonb_build_array(pg_temp.baby(:'baby2', 'female', 2400, now() - interval '3 hours'),
+    pg_temp.baby(:'baby3', 'male', 2550, now() - interval '3 hours'))), :'bir2', now() - interval '3 hours'),
+  pg_temp.admit(:'baby2', :'bstay2', '00000000-0000-0000-0000-000000000002'), pg_temp.admit(:'baby3', :'bstay3')),
+  jsonb_build_array(pg_temp.np(:'baby2', 'Baby 1 of Mona Ali Fathy', 'female'), pg_temp.np(:'baby3', 'Baby 2 of Mona Ali Fathy', 'male'))) r;
+select t.landed(r, 'the twins'' Done lands') from q_out;
+select t.ok((select array_agg(x ->> 'id' order by n) from jsonb_array_elements(r -> 'patients') with ordinality y(x, n)) = array[:'baby2', :'baby3'], 'the outcome names both babies')
+  from q_out;
+select t.ok(t.entry(t.record(:'pt', :'ward'), :'bir2') ->> 'line' = 'Birth · normal · twins: girl 2400 g, boy 2550 g', 'the line: Birth · normal · twins: girl 2400 g, boy 2550 g');
+reset role;
+select t.ok(count(*) = 3, 'three "mother of" relations now') from core.patient_relations r where r.patient_id = :'pt' and r.relation = 'mother_of';
+select t.ok(bool_and(case patient_id when :'baby3' then place_id is null else place_id = '00000000-0000-0000-0000-000000000002' end) and count(*) = 2,
+  'the twins'' stays: bed 2, and one with no bed') from base.presence where patient_id in (:'baby2', :'baby3') and state = 'admitted';
+set role authenticated;
+
+\echo '── (q2) a caesarean''s oxytocin as the card writes it: 5 units slow IV'
+select t.ok(r ->> 'outcome' = 'landed' and r -> 'findings' = '[]'::jsonb, 'oxytocin 5 units IV, slow IV, lands with nothing found: ' || coalesce(r ->> 'findings', r::text))
+  from (select t.w(t.e('given', :'pt', :'ward', '{"drug":{"text":"Oxytocin","codings":[]},"dose":{"value":"5","unit":"units","ucum":"[iU]"},"route":"iv","note":"slow IV","status":"completed"}',
+    null, :'stay')) r) x;
+
+\echo '── (r) refused, all or nothing: no baby''s record is left behind'
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'caesarean', 'perineum', 'first', 'babies', jsonb_build_array(pg_temp.baby(:'bad1', 'female', 3000)))),
+  pg_temp.admit(:'bad1', gen_random_uuid())), jsonb_build_array(pg_temp.np(:'bad1', 'Baby of Mona Ali Fathy', 'female'))), 'perineum_after_caesarean', 'a perineum after a caesarean');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'delivered_by', jsonb_build_object('to', 'patient', 'id', :'pt'),
+  'babies', jsonb_build_array(pg_temp.baby(:'bad2', 'female', 3000)))), pg_temp.admit(:'bad2', gen_random_uuid())),
+  jsonb_build_array(pg_temp.np(:'bad2', 'Baby of Mona Ali Fathy', 'female'))), 'wrong_reference', 'delivered by a patient');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'babies', jsonb_build_array(jsonb_build_object('patient', jsonb_build_object('to', 'user', 'id', :'mwu'),
+  'born_at', now() - interval '10 minutes', 'sex', 'female')))), pg_temp.admit(:'bad3', gen_random_uuid())),
+  jsonb_build_array(pg_temp.np(:'bad3', 'Baby of Mona Ali Fathy', 'female'))), 'wrong_reference', 'a baby that is a user');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'blood_loss', '{"value":"0.4","unit":"L","ucum":"L"}'::jsonb,
+  'babies', jsonb_build_array(pg_temp.baby(:'bad4', 'female', 3000)))), pg_temp.admit(:'bad4', gen_random_uuid())),
+  jsonb_build_array(pg_temp.np(:'bad4', 'Baby of Mona Ali Fathy', 'female'))), 'blood_loss_unit', 'the blood loss in litres');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'blood_loss', '{"value":"-50","unit":"mL","ucum":"mL"}'::jsonb,
+  'babies', jsonb_build_array(pg_temp.baby(:'bad7', 'female', 3000)))), pg_temp.admit(:'bad7', gen_random_uuid())),
+  jsonb_build_array(pg_temp.np(:'bad7', 'Baby of Mona Ali Fathy', 'female'))), 'blood_loss_unit', 'a blood loss of -50 mL');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'caesarean', 'episiotomy', true, 'babies', jsonb_build_array(pg_temp.baby(:'bad8', 'female', 3000)))),
+  pg_temp.admit(:'bad8', gen_random_uuid())), jsonb_build_array(pg_temp.np(:'bad8', 'Baby of Mona Ali Fathy', 'female'))), 'perineum_after_caesarean', 'an episiotomy at a caesarean');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'caesarean', 'repaired', true, 'babies', jsonb_build_array(pg_temp.baby(:'bad9', 'female', 3000)))),
+  pg_temp.admit(:'bad9', gen_random_uuid())), jsonb_build_array(pg_temp.np(:'bad9', 'Baby of Mona Ali Fathy', 'female'))), 'perineum_after_caesarean', 'a repair at a caesarean');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'perineum', 'intact', 'episiotomy', true,
+  'babies', jsonb_build_array(pg_temp.baby(:'bad10', 'female', 3000)))), pg_temp.admit(:'bad10', gen_random_uuid())),
+  jsonb_build_array(pg_temp.np(:'bad10', 'Baby of Mona Ali Fathy', 'female'))), 'perineum_intact', 'an episiotomy on an intact perineum');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'babies', jsonb_build_array(pg_temp.baby(:'bad11', 'female', 3000), pg_temp.baby(:'pt', 'male', 3000)))),
+  pg_temp.admit(:'bad11', gen_random_uuid())), jsonb_build_array(pg_temp.np(:'bad11', 'Baby of Mona Ali Fathy', 'female'))), 'wrong_reference', 'a baby that is the mother');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'babies', jsonb_build_array(pg_temp.baby(:'bad11', 'female', 3000), pg_temp.baby(:'bad11', 'female', 3000)))),
+  pg_temp.admit(:'bad11', gen_random_uuid())), jsonb_build_array(pg_temp.np(:'bad11', 'Baby of Mona Ali Fathy', 'female'))), 'wrong_reference', 'the same baby listed twice');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'babies', jsonb_build_array(pg_temp.baby(:'bad5', 'female', 3000)))),
+  pg_temp.admit(:'bad5', :'bad5'),
+  pg_temp.score(:'bad5', :'bad5', '{"colour":"1","heart":"2","grimace":"2","activity":"1","breathing":"2"}', 9, '1 min')),
+  jsonb_build_array(pg_temp.np(:'bad5', 'Baby of Mona Ali Fathy', 'female'))), 'score_mismatch', 'an Apgar of 9 for signs worth 8');
+select t.as(:'nurse');
+select t.refused(pg_temp.born(jsonb_build_array(pg_temp.birth(jsonb_build_object('mode', 'normal', 'babies', jsonb_build_array(pg_temp.baby(:'bad6', 'female', 3000)))),
+  pg_temp.admit(:'bad6', gen_random_uuid())), jsonb_build_array(pg_temp.np(:'bad6', 'Baby of Mona Ali Fathy', 'female'))), 'not_allowed', 'the base''s Nurse');
+reset role;
+select t.ok(count(*) = 0, 'none of the refused sets left a record') from core.patients
+ where id in (:'bad1', :'bad2', :'bad3', :'bad4', :'bad5', :'bad6', :'bad7', :'bad8', :'bad9', :'bad10', :'bad11');
+set role authenticated;
+
+\echo '── (s) FHIR: the delivery a Procedure recorded and performed by the midwife (she delivered and signed it); the baby''s own export valid too'
+select t.as(:'dr');
+create temp table res2 as select e -> 'resource' r from jsonb_array_elements(public.read(jsonb_build_object('shape', 'fhir', 'patient_id', :'pt', 'department_id', :'ward')) -> 'entry') e;
+create temp table bres as select e -> 'resource' r from jsonb_array_elements(public.read(jsonb_build_object('shape', 'fhir', 'patient_id', :'baby', 'department_id', :'ward')) -> 'entry') e;
+reset role;
+select t.ok(r ->> 'resourceType' = 'Procedure' and r -> 'code' ->> 'text' = 'Delivery, normal' and r ->> 'status' = 'completed'
+  and r -> 'outcome' ->> 'text' = 'Birth · normal · girl 3100 g · perineum: 2nd degree, repaired · placenta complete · blood loss 350 mL'
+  and r -> 'recorder' ->> 'reference' = 'PractitionerRole/' || :'mwu' and r -> 'performer' -> 0 -> 'actor' ->> 'reference' = 'PractitionerRole/' || :'mwu',
+  'the birth: a Procedure, Delivery, normal, completed, its line as the outcome, the midwife recording and performing') from res2 where r ->> 'id' = :'bir';
+select t.ok(not (r ? 'performer') and r -> 'recorder' ->> 'reference' = 'PractitionerRole/' || :'mwu',
+  'the twins'' birth (no one named as delivering): recorded by the midwife, no performer') from res2 where r ->> 'id' = :'bir2';
+select t.report('labour', 'FHIR problem in ' || (r ->> 'resourceType') || '/' || (r ->> 'id') || ': ' || q) from (select r from res2 union all select r from bres) x, unnest(core.fhir_problems(r)) q
+ where r ->> 'resourceType' <> 'Bundle';
+select t.ok(true, 'no resource of the mother''s or the baby''s has a FHIR problem');
+with refs as (select distinct v #>> '{}' ref from res2, lateral jsonb_path_query(r, 'strict $.**.reference') v)
+select t.report('labour', 'unresolved reference ' || ref) from refs where not exists (select 1 from res2 where (r ->> 'resourceType') || '/' || (r ->> 'id') = ref);
+with refs as (select distinct v #>> '{}' ref from bres, lateral jsonb_path_query(r, 'strict $.**.reference') v)
+select t.report('labour', 'unresolved reference in the baby''s ' || ref) from refs where not exists (select 1 from bres where (r ->> 'resourceType') || '/' || (r ->> 'id') = ref);
+select t.ok(true, 'every reference resolves inside each bundle');
+set role authenticated;
+
+\echo '── (t) the board: the mother''s stay has her birth; the baby''s stay its Apgar, weight and doses'
+select t.as(:'nurse');
+select t.ok(s -> 'birth' ->> 'mode' = 'normal' and (s -> 'birth' ->> 'blood_loss')::numeric = 350 and jsonb_array_length(s -> 'birth' -> 'babies') = 1
+    and s -> 'birth' -> 'babies' -> 0 @> '{"sex":"female","grams":3100}',
+  'Mona''s stay: her birth, normal, 350 mL, a girl 3100 g') from (select pg_temp.board(:'ward') -> 'stays' -> :'stay' s) x;
+select t.ok(s -> 'baby' -> 'apgar' = '[{"note":"1 min","total":8},{"note":"5 min","total":9}]'::jsonb and (s -> 'baby' ->> 'kg')::numeric = 3.1
+  and s -> 'baby' -> 'given' @> '[{"drug":"Vitamin K (phytomenadione)"}]' and jsonb_array_length(s -> 'baby' -> 'given') = 1,
+  'the baby''s stay: Apgar 8 at 1 min and 9 at 5, 3.1 kg, vitamin K given') from (select pg_temp.board(:'ward') -> 'stays' -> :'bstay' s) x;
+select t.ok(s -> 'baby' -> 'apgar' = '[]'::jsonb and not (s ? 'birth'), 'a twin with no Apgar is still a baby''s stay on the board')
+  from (select pg_temp.board(:'ward') -> 'stays' -> :'bstay3' s) x;
+select t.ok(pg_temp.board(:'ward') -> 'patient_ids' @> jsonb_build_array(:'pt', :'baby'), 'the board names the mother and the baby for the read log');
 
 \echo '── the clinic turns the pack off: an exam is refused, the base''s observation still lands'
 select t.as(:'ow');

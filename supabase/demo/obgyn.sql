@@ -106,8 +106,11 @@ end $$;
 -- four hours ago, 5 cm two hours ago, 6 cm now — past the alert line), Doaa (G1 P0, 40+5 weeks, Delivery 2: 3 cm, then 4 cm an hour
 -- ago, when her active labour began) and Nesma (G3 P2, 38+1 weeks, a caesarean before, Delivery 3, urgent: 8 cm, the baby's heart 100
 -- five minutes ago). Each exam with the baby's heart (the base's observation, LOINC 55283-6) and, every hour or two, the mother's signs
--- (the base's vitals). Times relative to the load; a reload erases these patients first. Every stay is admitted at most 300 minutes
--- before the load, so it is today's however early it loads (demo.ago squeezes only within the day) ──
+-- (the base's vitals). Heba (after a normal birth this morning, in Post 1, her girl in Cot 1) and Marwa (after a caesarean yesterday,
+-- in Post 2, her boy in Cot 2), each birth signed in one Done with the baby's own record (the owner's Q10). Times relative to the load;
+-- a reload erases these patients first. The women in labour today (Salma, Doaa, Nesma) are admitted at most 300 minutes before the
+-- load, so their stays are today's however early it loads (demo.ago squeezes only within the day); the two births from earlier,
+-- Heba's this morning and Marwa's yesterday, are filtered out of day_is_today (the labour ward's own block checks them) ──
 
 -- a pregnancy standing from its LMP, so many days before today
 create or replace function pg_temp.lw_preg(p_days int) returns jsonb language sql stable as $$
@@ -144,13 +147,13 @@ create or replace function pg_temp.lw_at(p_stay uuid, p_at timestamptz, p_exam j
 $$;
 -- admitted into a bed of the labour ward by its key, else the next free one there (a patient admitted in the app keeps hers); the
 -- admission and the pregnancy in one set, as the midwife writes them
-create or replace function pg_temp.lw_admit(p_stay uuid, p_at timestamptz, p_bed text, p_reason text, p_lmp_days int) returns uuid language plpgsql as $$
+create or replace function pg_temp.lw_admit(p_stay uuid, p_at timestamptz, p_bed text, p_reason text, p_lmp_days int, p_preg uuid default null) returns uuid language plpgsql as $$
 declare lw uuid := demo.id('obgyn', 'labour ward'); b uuid; r jsonb; v jsonb;
 begin
   for b in select x.id from core.places x where x.organization_id = demo.base('clinic') and x.department_id = lw and x.retired_at is null
              order by x.id = demo.thing(lw, 'place', p_bed) desc, x.position loop
     v := jsonb_build_array(demo.e('admitted', lw, p_stay, p_at, jsonb_build_object('department_id', lw, 'place_id', b, 'admit_source', 'emd', 'reason', p_reason), p_stay),
-      demo.e('pregnancy', lw, p_stay, p_at, pg_temp.lw_preg(p_lmp_days)));
+      demo.e('pregnancy', lw, p_stay, p_at, pg_temp.lw_preg(p_lmp_days), p_preg));
     r := demo.send(demo.id('obgyn', 'hanan'), v);
     continue when r ->> 'outcome' <> 'landed' and jsonb_path_exists(coalesce(r -> 'findings', '[]'), '$[*] ? (@.code == "bed_taken")');
     perform demo.landed(r, v);
@@ -197,4 +200,75 @@ begin
   perform pg_temp.lw_at(s, demo.ago(90), pg_temp.lw_exam(7, 3, 'oa', 'clear', '0', 4, 45), 132, pg_temp.lw_vit(124, 78, 94, 37.1));
   perform pg_temp.lw_at(s, demo.ago(20), pg_temp.lw_exam(8, 2, 'oa', 'clear', '+', 4, 45), 128);
   perform pg_temp.lw_at(s, demo.ago(5), null, 100);
+end $$;
+
+-- a birth as the one who delivered signs it, in one Done (the owner's Q10): the mother's birth, her oxytocin (10 units IM, or 5 units
+-- slow IV at a caesarean) and her pregnancy's end; then the baby's new record, its stay in the cot (born here), its weight, its Apgar
+-- at 1 and 5 minutes and its doses (text-only drugs: none is in the demo's ATC subset). The baby's entries refer to nothing of the
+-- mother's, so a reload erases her, then demo.w_born erases the baby before making it again
+create or replace function pg_temp.lw_birth(p_by uuid, p_mother uuid, p_stay uuid, p_preg uuid, p_lmp_days int, p_at timestamptz, p_birth jsonb,
+  p_baby uuid, p_baby_stay uuid, p_sex text, p_grams int, p_cot text, p_name text, p_apgar1 jsonb, p_apgar5 jsonb, p_doses text[]) returns void language plpgsql as $$
+declare lw uuid := demo.id('obgyn', 'labour ward'); v jsonb; d text;
+begin
+  perform demo.use(p_mother);
+  v := jsonb_build_array(
+    demo.e('obgyn.birth', lw, p_stay, p_at, p_birth || jsonb_build_object('babies', jsonb_build_array(jsonb_build_object(
+      'patient', jsonb_build_object('to', 'patient', 'id', p_baby), 'born_at', p_at, 'sex', p_sex, 'grams', p_grams, 'breathing', 'cried')))),
+    demo.e('given', lw, p_stay, demo.after(p_at, 1), jsonb_build_object('drug', jsonb_build_object('text', 'Oxytocin', 'codings', '[]'::jsonb), 'status', 'completed')
+      || case when p_birth ->> 'mode' = 'caesarean' then jsonb_build_object('dose', demo.q(5, 'units', '[iU]'), 'route', 'iv', 'note', 'slow IV')
+         else jsonb_build_object('dose', demo.q(10, 'units', '[iU]'), 'route', 'im') end),
+    demo.e('pregnancy', lw, p_stay, p_at, pg_temp.lw_preg(p_lmp_days) || '{"status":"ended","reason":"delivered"}'::jsonb, null, p_preg, 'changes'));
+  perform demo.use(p_baby);
+  v := v || jsonb_build_array(
+    demo.e('admitted', lw, p_baby_stay, p_at, jsonb_build_object('department_id', lw, 'place_id', demo.thing(lw, 'place', p_cot), 'admit_source', 'born',
+      'reason', 'born here'), p_baby_stay),
+    demo.e('vitals', lw, p_baby_stay, p_at, jsonb_build_object('weight', demo.q(trim_scale(round(p_grams / 1000.0, 3)), 'kg', 'kg'))),
+    demo.e('score', lw, p_baby_stay, demo.after(p_at, 1), demo.score('obgyn.apgar', p_apgar1) || '{"note":"1 min"}'::jsonb),
+    demo.e('score', lw, p_baby_stay, demo.after(p_at, 5), demo.score('obgyn.apgar', p_apgar5) || '{"note":"5 min"}'::jsonb));
+  foreach d in array p_doses loop
+    v := v || jsonb_build_array(demo.e('given', lw, p_baby_stay, demo.after(p_at, 10), jsonb_build_object('status', 'completed') || case d
+      when 'vitamin_k' then jsonb_build_object('drug', jsonb_build_object('text', 'Vitamin K (phytomenadione)'),
+        'dose', demo.q(case when p_grams < 1500 then 0.5 else 1 end, 'mg', 'mg'), 'route', 'im')
+      when 'eye' then jsonb_build_object('drug', jsonb_build_object('text', 'Eye ointment (tetracycline 1%)'), 'route', 'eye')
+      when 'hep_b' then jsonb_build_object('drug', jsonb_build_object('text', 'Hepatitis B vaccine'), 'dose', demo.q(0.5, 'mL', 'mL'), 'route', 'im') end));
+  end loop;
+  perform demo.w_born(p_by, v, jsonb_build_array(jsonb_build_object('id', p_baby, 'mother', p_mother, 'full_name', p_name, 'gender', p_sex,
+    'birth_date', ((p_at at time zone 'Africa/Cairo')::date)::text, 'department_id', lw)));
+  perform demo.use(p_mother);
+end $$;
+
+do $$
+declare lw uuid := demo.id('obgyn', 'labour ward'); hanan uuid := demo.id('obgyn', 'hanan'); dr uuid := demo.id('obgyn', 'nermeen'); zaki uuid := demo.id('obgyn', 'zaki');
+  d1 timestamptz := demo.midnight() - interval '1 day'; s uuid; a uuid; preg uuid;
+begin
+  -- Marwa, 35: G3 P2 (two caesareans before), a caesarean yesterday by Dr. Nermeen Fathy, her boy 3350 g in Cot 2; she is in Post 2
+  -- now (written first: her stay frees Delivery 4 before Heba's)
+  perform demo.patient(demo.id('obgyn', 'patient:marwa'), array['Marwa', 'Adel'], 'Tawfik', 'female', demo.born(35, 20), '+201006631174');
+  s := gen_random_uuid(); a := gen_random_uuid(); preg := gen_random_uuid();
+  perform pg_temp.lw_admit(s, d1 + interval '8 hours', 'delivery_4', 'labour, two caesareans before', 274, preg);
+  perform demo.w(dr, jsonb_build_array(demo.move('assigned', lw, s, d1 + interval '8 hours 5 minutes', s, jsonb_build_object('user_id', dr), a)));
+  perform pg_temp.lw_at(s, d1 + interval '8 hours 10 minutes', pg_temp.lw_exam(3, 4, 'lot', 'intact', '0', 2, 30, 3, 2), 136);
+  perform pg_temp.lw_birth(dr, demo.id('obgyn', 'patient:marwa'), s, preg, 274, d1 + interval '10 hours 30 minutes',
+    jsonb_build_object('mode', 'caesarean', 'placenta', 'complete', 'blood_loss', demo.q(700, 'mL', 'mL'), 'delivered_by', jsonb_build_object('to', 'user', 'id', dr)),
+    demo.id('obgyn', 'patient:baby marwa'), gen_random_uuid(), 'male', 3350, 'cot_2', 'Baby of Marwa Adel Tawfik',
+    '{"colour":"1","heart":"2","grimace":"2","activity":"1","breathing":"2"}', '{"colour":"2","heart":"2","grimace":"2","activity":"1","breathing":"2"}',
+    array['vitamin_k', 'eye', 'hep_b']);
+  perform demo.w(hanan, jsonb_build_array(demo.move('moved', lw, s, d1 + interval '12 hours', a, jsonb_build_object('place_id', demo.thing(lw, 'place', 'post_2')))));
+
+  -- Heba, 30: G2 P1, a normal birth this morning, delivered and signed by Hanan Fouad; her girl 3100 g in Cot 1 (hepatitis B not yet);
+  -- she is in Post 1 now
+  perform demo.patient(demo.id('obgyn', 'patient:heba'), array['Heba', 'Mostafa'], 'Sherif', 'female', demo.born(30, 75), '+201112274406');
+  s := gen_random_uuid(); a := gen_random_uuid(); preg := gen_random_uuid();
+  perform pg_temp.lw_admit(s, demo.ago(720), 'delivery_4', 'labour', 280, preg);
+  perform demo.w(zaki, jsonb_build_array(demo.move('assigned', lw, s, demo.ago(715), s, jsonb_build_object('user_id', zaki), a)));
+  perform pg_temp.lw_at(s, demo.ago(660), pg_temp.lw_exam(4, 4, 'oa', 'intact', '0', 3, 35, 2, 1), 140);
+  perform pg_temp.lw_at(s, demo.ago(420), pg_temp.lw_exam(8, 2, 'oa', 'clear', '0', 4, 45), 138);
+  perform pg_temp.lw_at(s, demo.ago(340), pg_temp.lw_exam(10, 0, 'oa', 'clear', '+', 5, 50), 132);
+  perform pg_temp.lw_birth(hanan, demo.id('obgyn', 'patient:heba'), s, preg, 280, demo.ago(320),
+    jsonb_build_object('mode', 'normal', 'perineum', 'second', 'repaired', true, 'placenta', 'complete', 'blood_loss', demo.q(350, 'mL', 'mL'),
+      'delivered_by', jsonb_build_object('to', 'user', 'id', hanan)),
+    demo.id('obgyn', 'patient:baby heba'), gen_random_uuid(), 'female', 3100, 'cot_1', 'Baby of Heba Mostafa Sherif',
+    '{"colour":"1","heart":"2","grimace":"2","activity":"1","breathing":"2"}', '{"colour":"2","heart":"2","grimace":"2","activity":"1","breathing":"2"}',
+    array['vitamin_k', 'eye']);
+  perform demo.w(hanan, jsonb_build_array(demo.move('moved', lw, s, demo.ago(240), a, jsonb_build_object('place_id', demo.thing(lw, 'place', 'post_1')))));
 end $$;

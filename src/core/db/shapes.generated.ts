@@ -482,6 +482,24 @@ export interface ObgynAnc {
     text?: string
   }
 }
+/** obgyn.birth v1 (obgyn) */
+export interface ObgynBirth {
+  babies: {
+    born_at: Datetime
+    breathing?: 'cried' | 'rubbed' | 'bag_mask'
+    grams?: number
+    patient: Reference
+    sex: 'female' | 'male' | 'unknown'
+  }[]
+  blood_loss?: Quantity
+  delivered_by?: Reference
+  episiotomy?: boolean
+  mode: 'normal' | 'vacuum' | 'forceps' | 'breech' | 'caesarean'
+  note?: string
+  perineum?: 'intact' | 'first' | 'second' | 'third' | 'fourth'
+  placenta?: 'complete' | 'incomplete'
+  repaired?: boolean
+}
 /** obgyn.labour_exam v1 (obgyn) */
 export interface ObgynLabourExam {
   caput?: 'none' | '+' | '++'
@@ -1536,6 +1554,7 @@ export interface EntryData {
   'not_private': NotPrivate
   'note': Note
   'obgyn.anc': ObgynAnc
+  'obgyn.birth': ObgynBirth
   'obgyn.labour_exam': ObgynLabourExam
   'obgyn.periods': ObgynPeriods
   'obgyn.postnatal': ObgynPostnatal
