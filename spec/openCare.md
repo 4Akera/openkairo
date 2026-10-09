@@ -421,7 +421,7 @@ an `order` that `changes` the order. The performer's "not done" is a `step`. Pre
 | `transferred` | Send to…: the same visit moves to another department | location |
 | `left` | left before the end (not seen: cancelled; seen: finished + `aadvice`) | cancelled / finished |
 | `done` | the clinician's Done; `wait` (Wait for results; unsaid, true) keeps the visit open while orders are out | finished; period.end |
-| `admitted` | starts a stay item (`about` the visit it came from), department of work `stays`, optional place; admit source required | class IMP; admitSource |
+| `admitted` | starts a stay item (`about` the visit it came from, or the stay it came from, in one Done with that stay's `discharged`), department of work `stays`, optional place; admit source required | class IMP; admitSource |
 | `moved` | the stay moves to another place | location[] |
 | `discharged` | ends the stay; disposition required | finished; dischargeDisposition |
 
@@ -436,9 +436,11 @@ day) are clinical times too, and so are pharmacy's prepared and dispensed (`phar
 open at its clinical time; the chart's steps and a bench's reply show the clinical time.
 
 **A stay takes only its own moves**: `admitted`, `moved`, `discharged`, `assigned`, `urgent` (and a `crossed_out`). A visit's moves on
-a stay (`called`, `seen`, `back_to_waiting`, `done`, `left`, `here`, `not_here`, `away`, `transferred`; another ward with the bed is a
-later round) are refused `not_a_visit`, and one that lands late never moves it. Entries written in the stay land and move nothing, so
-the patient screen on a stay has no Done: Sign writes the drafts as one set and the patient keeps the bed ("Admitted · Bed 3 · day 2").
+a stay (`called`, `seen`, `back_to_waiting`, `done`, `left`, `here`, `not_here`, `away`, `transferred`; another department is one
+Done: the stay's `discharged` and the next department's `admitted` about it (owner, 2026-10-08, Q3)) are refused `not_a_visit`, and
+one that lands late never moves it. Entries written in the stay land and move nothing, so the patient screen on a stay has no Done:
+Sign writes the drafts as one set and the patient keeps the bed ("Admitted · Bed 3 · day 2"). Exported, the next stay's Encounter is
+`partOf` the one it came from, as a stay admitted from a clinic visit is (chosen by Claude in the build, awaiting the owner).
 
 **The review of results while the patient waits.** A `done` with `wait` and orders out leaves the visit `pending`; when every order
 from it has an answer it is `back`, and the clinician sees the patient again. A result that arrives while the patient still waits in
@@ -466,7 +468,10 @@ again, or when it was corrected after being seen.
 - **Claims**: `admitted` and `moved` claim `place:<id>`, so two patients cannot both pass "the bed is free". `base.presence` has no unique
   index on beds: a late conflict lands and shows on the bed board as a conflict.
 - **Presence**: `called` needs a waiting visit, and a second `called` for the same version is `already_called`; `discharged` needs an
-  admitted stay, and a stay refuses a visit's moves (`not_a_visit`, §4.2); `checked_in` refuses a second open visit of the patient in
+  admitted stay, and a stay refuses a visit's moves (`not_a_visit`, §4.2); `admitted` refuses a second open stay of the patient
+  (`already_admitted`), reading the whole set (owner, 2026-10-08, Q3): a stay the same set discharges does not count, so one Done
+  passes a stay to the next department; the stay that follows must be `about` that stay (`not_linked`) and in another department
+  (`same_department`); a second stay the same set opens does count; `checked_in` refuses a second open visit of the patient in
   the same department (`already_here`, and the client reuses the open visit); `transferred` needs an open visit and another department.
 - **Orders**: a service must belong to the target department; the target must work for the ordering department (`not_served`); a
   `result` may answer only an order whose service answers with results, and a note only a note-answered one (`wrong_answer`); a step

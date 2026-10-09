@@ -185,10 +185,12 @@ create function base.privacy_line(e jsonb) returns text language sql stable secu
 $$;
 
 -- ── checks ──
--- presence: moves change the visit's latest version; the visit must be open; called once; beds claimed
+-- presence: moves change the visit's latest version; the visit must be open; called once; beds claimed; one Done passes a stay to the
+-- next department (the check reads the whole set: the owner's Q3, 2026-10-08)
 create function base.presence_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_org uuid := (p_entry ->> 'organization_id')::uuid; v_type text := core.base_of(p_entry ->> 'type'); d jsonb := p_entry -> 'data';
         v_visit uuid := (p_entry ->> 'visit_id')::uuid; t core.entries; pr base.presence; v_dept core.departments; v_pat uuid[]; v_in_set boolean;
+        v_gone jsonb;
 begin
   v_pat := core.family(v_org, (p_entry ->> 'patient_id')::uuid);
   if v_type in ('checked_in', 'admitted') then
@@ -213,8 +215,24 @@ begin
       end if;
     else
       if v_dept.work <> 'stays' then return jsonb_build_array(base.find('wrong_work')); end if;
-      if exists (select 1 from base.presence p where p.organization_id = v_org and p.patient_id = any (v_pat) and p.kind = 'stay' and p.state = 'admitted') then
+      -- one Done passes a stay to the next department (§4.2, the owner's Q3, 2026-10-08): the check reads the whole set. A stay of the
+      -- patient this set discharges is admitted no more; the stay that follows it is about it, in another department; a second stay this
+      -- set opens for the patient counts as admitted
+      select x into v_gone from jsonb_array_elements(p_set) x
+       where core.base_of(x ->> 'type') = 'discharged' and (x ->> 'patient_id')::uuid = any (v_pat) limit 1;
+      if exists (select 1 from base.presence p where p.organization_id = v_org and p.patient_id = any (v_pat) and p.kind = 'stay' and p.state = 'admitted'
+                   and p.item is distinct from (v_gone ->> 'visit_id')::uuid)
+         or exists (select 1 from jsonb_array_elements(p_set) x where core.base_of(x ->> 'type') = 'admitted' and x ->> 'id' <> p_entry ->> 'id'
+                      and (x ->> 'patient_id')::uuid = any (v_pat)) then
         return jsonb_build_array(base.find('already_admitted'));
+      end if;
+      if v_gone is not null then
+        if p_entry ->> 'relation' is distinct from 'about' or (base.target(p_entry, p_set)).item is distinct from (v_gone ->> 'visit_id')::uuid then
+          return jsonb_build_array(base.find('not_linked', 'refuse', 'a stay passed on in one Done is about the stay it came from'));
+        end if;
+        if exists (select 1 from base.presence p where p.organization_id = v_org and p.item = (v_gone ->> 'visit_id')::uuid and p.department_id = v_dept.id) then
+          return jsonb_build_array(base.find('same_department'));
+        end if;
       end if;
       if d ? 'place_id' then
         if not exists (select 1 from core.places x where x.organization_id = v_org and x.id = (d ->> 'place_id')::uuid and x.department_id = v_dept.id and x.retired_at is null) then
@@ -233,7 +251,8 @@ begin
     return jsonb_build_array(base.find('bad_visit', 'refuse', 'a move changes the visit'));
   end if;
   -- a stay takes only its own moves (§4.2): a bed, a discharge, who has it, urgency. Calling, seeing, Done, back to waiting, here,
-  -- away, left and sending on are a clinic visit's; another ward with its bed is a later round
+  -- away, left and sending on are a clinic visit's; another department is one Done: the stay's discharged and the next department's
+  -- admitted about it (§4.2, the owner's Q3)
   if core.base_of((base.entry(v_org, v_visit, p_set)).type) = 'admitted' and v_type not in ('moved', 'discharged', 'assigned', 'urgent') then
     return jsonb_build_array(base.find('not_a_visit'));
   end if;
