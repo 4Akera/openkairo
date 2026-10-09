@@ -69,6 +69,7 @@ test('due and overdue: from the birth date and the doses; a later dose from the 
   const late4 = statusOf(sched.rows, [dose('opv', 4, 5)], birth, today).find((x) => x.row.key === 'opv5')!
   assert.equal(late4.dueOn, addDays(today, 23)); assert.equal(late4.state, 'later')
   assert.deepEqual(statusOf(sched.rows, farida, null, today), [], 'no birth date, nothing worked out')
+  assert.deepEqual(statusOf(sched.rows, [], addDays(today, -34 * 366), today).filter((x) => x.state !== 'given').map((x) => x.row.key), [], 'an adult: no child row is due')
   assert.deepEqual(byAge(s.filter((x) => x.row.national)).map((g) => g.age), ['Birth', '2 mo', '9 mo', '12 mo', '18 mo'])
   const sum = summaryOf(s); assert.deepEqual(sum.overdue.map((x) => x.row.key), ['opv4', 'opv5', 'mmr1'].filter((k) => k !== 'opv4' || st('opv4').state === 'overdue'))
 })

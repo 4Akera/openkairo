@@ -1605,7 +1605,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (pneumococcal, rotavirus, varicella, hepatitis A, influenza, tetanus in pregnancy: the setting's declared default until the clinic
   saves its own, since a starter setup carries only a department's settings). Due is worked out from the birth date, the doses
   and each row's earliest age and the interval after the last dose of its series; overdue four weeks after; too late past a latest age
-  (rotavirus); tetanus in pregnancy only while the base's pregnancy stands. Client (`src/packs/vaccines/`): `/vax mmr 1, opv 5` (lot,
+  (rotavirus); tetanus in pregnancy only while the base's pregnancy stands; from 19 years no child row is due (a dose recorded still
+  shows). Client (`src/packs/vaccines/`): `/vax mmr 1, opv 5` (lot,
   exp, a site, `card <date>`, `not <why>`), the dose's card (given or not, here or from the card, lot, expiry, site chips, given by) and
   under it the child's schedule (due and overdue, temperature, allergies, a live vaccine in the last four weeks, the optional ones not
   chosen as chips, the next worked out); the Vaccines section (the national rows by age, given with its date and *card* or *here*, not

@@ -52,8 +52,11 @@ export function statusOf(rows: Row[], doses: Dose[], birth: string | null | unde
   const b = birth.slice(0, 10)
   const given = doses.filter((d) => d.status === 'completed')
   const out: RowState[] = []
+  // the national rows are the children's: from 19 years nothing of them is due (a dose recorded still shows)
+  const adult = monthsAt(b, today.slice(0, 10)) >= 19 * 12
   for (const row of rows) {
     if (row.pregnancy && !pregnant && !given.some((d) => d.vaccine === row.vaccine)) continue
+    if (adult && !row.pregnancy && !doses.some((d) => d.vaccine === row.vaccine && d.dose === row.dose)) continue
     const mine = given.find((d) => d.vaccine === row.vaccine && d.dose === row.dose)
     const notGiven = doses.filter((d) => d.status === 'not-done' && d.vaccine === row.vaccine && d.dose === row.dose)
     const before = given.filter((d) => d.vaccine === row.vaccine && (d.dose ?? 0) < row.dose).sort((x, y) => x.given_at.localeCompare(y.given_at)).at(-1)

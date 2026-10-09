@@ -147,6 +147,6 @@ select core.declare_setup('vaccines.room', 'vaccines', 'visits', '{"en":"Vaccina
 
 -- its person (§5.2): the vaccinator runs the room — a nurse who also checks a walk-in in, registers a new child (the desk's card,
 -- here), gives the doses and finishes the visit
-select core.declare_role('00000000-0000-0000-0000-00000000e001', 'vaccines.vaccinator', 'vaccines', 'Vaccinator',
+select core.declare_role('00000000-0000-0000-0000-00000000e0a1', 'vaccines.vaccinator', 'vaccines', 'Vaccinator',
   array['write:vaccines.dose', 'write:checked_in', 'manage:patients', 'write:seen', 'write:done', 'write:left'], '{"en":"Vaccinator"}',
   built_on => '00000000-0000-0000-0000-00000000c003');

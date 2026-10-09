@@ -29,4 +29,4 @@ select demo.setting('vaccines.national', null, null, jsonb_build_object('version
 ]$j$::jsonb));
 
 select demo.person(demo.id('vaccines', 'vaccinator'), 'vaccines@demo.com', 'Rokaya Ghoneim');
-select demo.grant(demo.id('vaccines', 'vaccinator'), '00000000-0000-0000-0000-00000000e001', demo.id('vaccines', 'room'));
+select demo.grant(demo.id('vaccines', 'vaccinator'), '00000000-0000-0000-0000-00000000e0a1', demo.id('vaccines', 'room'));

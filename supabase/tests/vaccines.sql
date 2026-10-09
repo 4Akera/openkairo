@@ -17,7 +17,7 @@ select public.write_setting(jsonb_build_object('key', 'organization.packs_used',
 select public.write_setting(jsonb_build_object('key', 'department.packs', 'owner_id', :'im', 'data', '{"packs":["vaccines"]}'::jsonb)) ->> 'key' as ticked;
 select public.setup(jsonb_build_object('setup', 'vaccines.room', 'department_id', :'room', 'name', 'Vaccination room', 'apply', true)) is not null as made;
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000be', 'name', 'Vaccinator', 'login_id', :'vax', 'holdings', jsonb_build_array(
-  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000e001', 'department_id', :'room')))) ->> 'id' as vaccinator;
+  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000e0a1', 'department_id', :'room')))) ->> 'id' as vaccinator;
 create function pg_temp.dose(p_dept uuid, p_data jsonb, p_id uuid default null) returns jsonb language sql as $$
   select t.e('vaccines.dose', '00000000-0000-0000-0000-0000000000f1', p_dept, jsonb_build_object('status', 'completed',
     'drug', '{"text":"MMR","codings":[{"system":"vaccines.cvx","code":"03","display":"MMR"}]}'::jsonb, 'route', 'sc') || p_data, p_id)
