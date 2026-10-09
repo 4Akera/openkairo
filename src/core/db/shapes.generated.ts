@@ -319,6 +319,46 @@ export interface HaematoWeek {
   used_suggestion?: boolean
   was?: number
 }
+/** haemodialysis.prescription v1 (haemodialysis) */
+export interface HaemodialysisPrescription {
+  access?: {
+    kind: 'fistula' | 'graft' | 'catheter'
+    site?: string
+  }
+  bath?: {
+    ca?: number
+    hco3?: number
+    k?: number
+  }
+  blood_flow?: Quantity
+  dialysate_flow?: Quantity
+  dialyser?: string
+  dry_weight: Quantity
+  heparin?: {
+    bolus?: Quantity
+    none?: boolean
+    rate?: Quantity
+  }
+  hours: number
+  note?: string
+}
+/** haemodialysis.reading v1 (haemodialysis) */
+export type HaemodialysisReading = {
+  bp?: {
+    dia: Quantity
+    sys: Quantity
+  }
+  haemodialysis: {
+    arterial?: Quantity
+    blood_flow?: Quantity
+    heparin?: Quantity
+    tmp?: Quantity
+    uf?: Quantity
+    venous?: Quantity
+  }
+  hr?: Quantity
+  note?: string
+} & ({ bp: { dia: Quantity; sys: Quantity } } | { hr: Quantity })
 /** haemodialysis.session v1 (haemodialysis) */
 export interface HaemodialysisSession {
   concept: Concept
@@ -1561,6 +1601,8 @@ export interface EntryData {
   'haemato.plan': HaematoPlan
   'haemato.programme': HaematoProgramme
   'haemato.week': HaematoWeek
+  'haemodialysis.prescription': HaemodialysisPrescription
+  'haemodialysis.reading': HaemodialysisReading
   'haemodialysis.session': HaemodialysisSession
   'here': Here
   'left': Left

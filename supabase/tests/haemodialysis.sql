@@ -8,7 +8,10 @@
 -- patient's isolation; the session, the pack's own type on the base's procedure: started into a chair with the base's admitted in one
 -- set, one a stay and one a patient a day, missed in no stay, ended with the base's discharged and corrected after it; the board's read
 -- (the session, the last blood pressure, the isolation; a crossed-out one passed over), read-logged; the session as a Procedure in its Encounter; Erase removes a patient's rows; off, the
--- doors are shut.
+-- doors are shut. D2: the standing prescription (the pack's type, one a patient, the unit's doctor's; due takes its hours and access),
+-- Before (the base's vitals and the session's change with the prescription copied, the fluid to take off, the access), the machine
+-- readings on the base's vitals (in a session in progress only; their BP and pulse in the values and the export), the board's fluid
+-- words (the target and dry weight, taken off, the weights, the event of the last hour), End with the weight after.
 \set org   '00000000-0000-0000-0000-0000000000a1'
 \set im    '00000000-0000-0000-0000-0000000000d1'
 \set desk  '00000000-0000-0000-0000-0000000000d4'
@@ -27,6 +30,12 @@
 \set v1    '00000000-0000-0000-0000-00000000e821'
 \set v2    '00000000-0000-0000-0000-00000000e822'
 \set m1    '00000000-0000-0000-0000-00000000e831'
+\set rx1   '00000000-0000-0000-0000-00000000e841'
+\set rx4   '00000000-0000-0000-0000-00000000e844'
+\set r1    '00000000-0000-0000-0000-00000000e851'
+\set n1    '00000000-0000-0000-0000-00000000e861'
+\set g1    '00000000-0000-0000-0000-00000000e862'
+\set wt    '00000000-0000-0000-0000-00000000e871'
 \set ow    '11111111-0000-0000-0000-0000000000b9'
 \set dr    '11111111-0000-0000-0000-0000000000b1'
 \set nurse '11111111-0000-0000-0000-0000000000b3'
@@ -94,8 +103,8 @@ select t.ok(r.key = 'haemodialysis.nurse' and r.built_on = '00000000-0000-0000-0
   and (select array_agg(x.action order by x.action) from core.role_actions x where x.role_id = r.id) = array['write:admitted', 'write:discharged', 'write:haemodialysis.schedule'],
   'Dialysis nurse: built on Nurse; admits, discharges, changes the schedule') from core.roles r where r.id = '00000000-0000-0000-0000-00000000d401';
 select t.ok(r.key = 'haemodialysis.doctor' and r.built_on = '00000000-0000-0000-0000-00000000c002'
-  and (select array_agg(x.action order by x.action) from core.role_actions x where x.role_id = r.id) = array['write:haemodialysis.schedule'],
-  'Dialysis doctor: built on Doctor; changes the schedule') from core.roles r where r.id = '00000000-0000-0000-0000-00000000d402';
+  and (select array_agg(x.action order by x.action) from core.role_actions x where x.role_id = r.id) = array['write:haemodialysis.prescription', 'write:haemodialysis.schedule'],
+  'Dialysis doctor: built on Doctor; changes the schedule, writes the prescription') from core.roles r where r.id = '00000000-0000-0000-0000-00000000d402';
 select t.ok(core.gives(:'org', '00000000-0000-0000-0000-00000000d401', 'write:haemodialysis.schedule', :'hd')
   and not core.gives(:'org', '00000000-0000-0000-0000-00000000c003', 'write:haemodialysis.schedule', :'hd'), 'the base''s Nurse there does not change the schedule');
 select t.ok(core.gives(:'org', '00000000-0000-0000-0000-00000000d401', 'write:haemodialysis.session', :'hd'), 'the Dialysis nurse writes the session (the Nurse''s everyday)');
@@ -113,7 +122,8 @@ select t.ok(s.work = 'stays' and s.packs = array['haemodialysis'] and jsonb_arra
   and not exists (select 1 from jsonb_array_elements(s.places) p where p ->> 'label' <> 'chair')
   and s.settings -> 'department.encounter_class' ->> 'class' = 'AMB'
   and s.settings -> 'haemodialysis.unit' = '{"shifts":["07:00","11:30","16:00"],"hours":4,"hbv_chairs":["HBV chair 8"],"hcv_chairs":["HCV chair 7"]}'
-  and s.screens = '{"screens":["base.beds","haemodialysis.schedule"],"opens":"base.beds"}', 'haemodialysis.unit: eight chairs, AMB, three shifts, the board then the Schedule')
+  and s.screens = '{"screens":["base.beds","haemodialysis.session","haemodialysis.schedule"],"opens":"base.beds"}',
+  'haemodialysis.unit: eight chairs, AMB, three shifts, the board, the Session tab, the Schedule')
   from core.setups s where s.key = 'haemodialysis.unit';
 
 \echo '── (h) the ops: who is due and the week (read:queue), the plan (the schedule''s action), the board (read:record), each naming its patients'
@@ -331,12 +341,129 @@ select t.ok(b -> 'stays' -> :'s1' -> 'session' ->> 'item' = :'h4' and b -> 'stay
   from (select pg_temp.board(:'hd') b) x;
 rollback to savepoint struck;
 
+\echo '── D2: the prescription, readings, Before, the board''s words, End'
+-- a standing prescription's data (heparin none on a catheter, else 2000 then 1000 units)
+create function pg_temp.rx(p_hours numeric, p_dry text, p_kind text) returns jsonb language sql immutable as $$
+  select jsonb_build_object('hours', p_hours, 'blood_flow', '{"value":"300","unit":"mL/min","ucum":"mL/min"}'::jsonb,
+    'dialysate_flow', '{"value":"500","unit":"mL/min","ucum":"mL/min"}'::jsonb, 'dialyser', 'FX80', 'bath', '{"k":2,"ca":1.5,"hco3":32}'::jsonb,
+    'heparin', case when p_kind = 'catheter' then '{"none":true}'::jsonb
+      else '{"bolus":{"value":"2000","unit":"units","ucum":"[iU]"},"rate":{"value":"1000","unit":"units/h"}}'::jsonb end,
+    'dry_weight', jsonb_build_object('value', p_dry, 'unit', 'kg', 'ucum', 'kg'), 'access', jsonb_build_object('kind', p_kind))
+$$;
+-- a machine reading's data
+create function pg_temp.reading(p_sys int, p_dia int, p_hr int, p_uf int) returns jsonb language sql immutable as $$
+  select jsonb_build_object('bp', jsonb_build_object('sys', jsonb_build_object('value', p_sys::text, 'unit', 'mmHg', 'ucum', 'mm[Hg]'),
+      'dia', jsonb_build_object('value', p_dia::text, 'unit', 'mmHg', 'ucum', 'mm[Hg]')), 'hr', jsonb_build_object('value', p_hr::text, 'unit', 'bpm', 'ucum', '/min'),
+    'haemodialysis', jsonb_build_object('blood_flow', '{"value":"300","unit":"mL/min","ucum":"mL/min"}'::jsonb, 'arterial', '{"value":"-190","unit":"mmHg","ucum":"mm[Hg]"}'::jsonb,
+      'venous', '{"value":"150","unit":"mmHg","ucum":"mm[Hg]"}'::jsonb, 'tmp', '{"value":"70","unit":"mmHg","ucum":"mm[Hg]"}'::jsonb,
+      'uf', jsonb_build_object('value', p_uf::text, 'unit', 'mL', 'ucum', 'mL'), 'heparin', '{"value":"0","unit":"units/h"}'::jsonb))
+$$;
+
+\echo '── D2 (a) the declarations: the prescription (the pack''s own, no resource), the reading (on the base''s vitals), their actions, the Session tab'
+reset role;
+select t.ok(y.layer = 'haemodialysis' and y.base_type is null and y.resources = '{}' and y.in_record
+  and y.line = 'haemodialysis.prescription_line(jsonb)'::regprocedure and y.checks = array['haemodialysis.prescription_check(jsonb,jsonb)'::regprocedure],
+  'haemodialysis.prescription v1: the pack''s own, no resource, in the record, its line and check') from core.types y where y.key = 'haemodialysis.prescription' and y.version = 1;
+select t.ok(y.layer = 'haemodialysis' and y.base_type = 'vitals' and y.resources = array['Observation']
+  and y.line = 'haemodialysis.reading_line(jsonb)'::regprocedure and y.checks = array['haemodialysis.reading_check(jsonb,jsonb)'::regprocedure],
+  'haemodialysis.reading v1: on the base''s vitals, an Observation, its line and check') from core.types y where y.key = 'haemodialysis.reading' and y.version = 1;
+select t.ok(not a.everyday and a.scope = 'department' and exists (select 1 from core.role_actions x where x.role_id = '00000000-0000-0000-0000-00000000d402' and x.action = a.key),
+  'write:haemodialysis.prescription: not everyday, the Dialysis doctor''s') from core.actions a where a.key = 'write:haemodialysis.prescription';
+select t.ok(a.everyday and a.scope = 'department', 'write:haemodialysis.reading: everyday') from core.actions a where a.key = 'write:haemodialysis.reading';
+select t.ok(s.layer = 'haemodialysis' and s.work = 'stays' and s.action = 'read:record', 'haemodialysis.session: stays, read:record') from core.screens s where s.key = 'haemodialysis.session';
+select t.ok(s.screens -> 'screens' ->> 1 = 'haemodialysis.session', 'the setup''s line has the Session tab second') from core.setups s where s.key = 'haemodialysis.unit';
+set role authenticated;
+
+\echo '── D2 (b) the standing prescription: Dr Walid''s, one a patient, each change a version'
+select t.as(:'hdr');
+select t.landed(t.w(t.e('haemodialysis.prescription', :'p2', :'hd', pg_temp.rx(3.5, '60.0', 'catheter'), :'rx1')), 'Dr Walid writes Mona''s prescription');
+select t.ok(l like 'Dialysis prescription · 3.5 h%' and l like '% · no heparin · %' and l like '% · dry 60.0 kg' and l like '% · BF 300 · DF 500 · FX80 · K 2 Ca 1.5 HCO₃ 32 · %',
+  'its line: ' || l) from (select t.entry(t.record(:'p2', :'hd'), :'rx1') ->> 'line' l) x;
+select t.refused(t.w(t.e('haemodialysis.prescription', :'p2', :'hd', pg_temp.rx(4, '60.0', 'catheter'))), 'prescription_exists', 'a second one');
+select t.landed(t.w(t.e('haemodialysis.prescription', :'p2', :'hd', pg_temp.rx(3.5, '59.5', 'catheter'), null, null, t.latest(:'rx1'), 'changes')),
+  'a change: dry 59.5');
+select t.refused(t.w(t.e('haemodialysis.prescription', :'p2', :'hd', pg_temp.rx(3.5, '59.0', 'catheter'), null, null, t.latest(:'h1'), 'changes')),
+  'not_a_prescription', 'a change of the session typed as a prescription');
+select t.refused(t.w(t.e('haemodialysis.prescription', :'p2', :'hd', pg_temp.rx(3.5, '59.5', 'catheter') || '{"heparin":{"none":true,"bolus":{"value":"5000","unit":"units","ucum":"[iU]"}}}',
+    null, null, t.latest(:'rx1'), 'changes')), 'heparin_none_with_dose', 'no heparin with a 5000 units bolus');
+select t.as(:'hn');
+select t.refused(t.w(t.e('haemodialysis.prescription', :'p2', :'hd', pg_temp.rx(3.5, '59.0', 'catheter'), null, null, t.latest(:'rx1'), 'changes')),
+  'not_allowed', 'Rasha does not write the prescription');
+
+\echo '── D2 (c) who is due takes the hours and the access from the prescription'
+savepoint d2c;
+select t.ok(pg_temp.plan(:'hd', jsonb_build_object('do', 'move', 'patient_id', :'p4', 'to_on', :'today', 'shift', 1, 'place_id', :'c2', 'reason', 'extra this week')) ->> 'id' is not null,
+  'Hoda''s extra session today, in Chair 2');
+select t.as(:'hdr');
+select t.landed(t.w(t.e('haemodialysis.prescription', :'p4', :'hd', pg_temp.rx(3.5, '64.0', 'fistula'), :'rx4')), 'Dr Walid writes Hoda''s prescription: 3.5 h, a fistula');
+select t.as(:'hn');
+select t.ok((x ->> 'hours')::numeric = 3.5 and x ->> 'access' = 'fistula', 'due: Hoda''s row reads 3.5 h and her fistula')
+  from jsonb_array_elements(pg_temp.due(:'hd') -> 'rows') x where x ->> 'patient_id' = :'p4';
+-- a reading in the same set as Start (the stay admitted and the session begun, none stored yet)
+select gen_random_uuid() as s4 \gset
+select t.landed(t.w(jsonb_build_array(
+  t.e('admitted', :'p4', :'hd', jsonb_build_object('department_id', :'hd', 'admit_source', 'outp', 'place_id', :'c2', 'reason', 'Haemodialysis'), :'s4', :'s4'),
+  t.e('haemodialysis.session', :'p4', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c2', 'hours', 3.5)), null, :'s4'),
+  t.e('haemodialysis.reading', :'p4', :'hd', pg_temp.reading(150, 88, 80, 0), null, :'s4'))), 'Hoda started with her first reading, one set');
+rollback to savepoint d2c;
+
+\echo '── D2 (d) Before: the base''s vitals with the weight, and the session changed with the prescription copied, the fluid to take off and the access'
+select t.as(:'hn');
+-- the last session's weight after: two days ago, in the unit, no visit (written before Before, so it is the last before the stay)
+select t.landed(t.w(t.e('vitals', :'p2', :'hd', '{"weight":{"value":"60.4","unit":"kg","ucum":"kg"}}', :'wt', null, null, null, null,
+  jsonb_build_object('occurred_at', now() - interval '2 days'))), 'Mona''s weight two days ago: 60.4 kg');
+select t.landed(t.w(jsonb_build_array(
+  t.e('vitals', :'p2', :'hd', '{"bp":{"sys":{"value":"140","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"80","unit":"mmHg","ucum":"mm[Hg]"}},"hr":{"value":"80","unit":"bpm","ucum":"/min"},"temp":{"value":"36.8","unit":"°C","ucum":"Cel"},"weight":{"value":"62.8","unit":"kg","ucum":"kg"}}',
+    null, :'s1'),
+  t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4,
+    'prescription', pg_temp.rx(3.5, '59.5', 'catheter'), 'target', '{"value":"2600","unit":"mL","ucum":"mL"}'::jsonb, 'access', '{"kind":"catheter","ok":true}'::jsonb)),
+    null, :'s1', t.latest(:'h1'), 'changes'))), 'Rasha signs Before: 62.8 kg, 2.6 L to take off, the catheter fine');
+
+\echo '── D2 (e) a machine reading: the base''s vitals with the machine''s numbers, in a session in progress only'
+create temp table r1 as select t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(132, 78, 84, 900), :'r1', :'s1')) r;
+select t.ok(r ->> 'outcome' = 'landed' and not jsonb_path_exists(coalesce(r -> 'findings', '[]'), '$[*] ? (@.level == "flag")'), 'a reading lands, unflagged') from r1;
+select t.ok(t.entry(t.record(:'p2', :'hd'), :'r1') ->> 'line' = 'Reading · BP 132/78 · P 84 · BF 300 · AP -190 · VP 150 · TMP 70 · off 0.9 L · heparin 0 units/h',
+  'its line: Reading · BP 132/78 · P 84 · BF 300 · AP -190 · VP 150 · TMP 70 · off 0.9 L · heparin 0 units/h');
+select t.ok((r ->> 'has_vitals')::boolean, 'the stay has vitals') from t.rows('base.presence', :'hd', jsonb_build_object('item', :'s1')) r;
+reset role;
+select t.ok(exists (select 1 from base.values v where v.item = :'r1' and v.key = 'hr' and v.code = 'loinc:8867-4' and v.value = 84)
+  and exists (select 1 from base.values v where v.item = :'r1' and v.key = 'bp.sys' and v.value = 132), 'the values: its pulse 84 (LOINC 8867-4) and BP');
+set role authenticated;
+select t.as(:'hn');
+select t.refused(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(130, 76, 82, 1000))), 'reading_not_in_session', 'a reading in no stay');
+select t.refused(t.w(t.e('haemodialysis.reading', :'pt', :'hd', pg_temp.reading(130, 76, 82, 1000), null, :'s2')), 'reading_not_in_session', 'a reading in the ward''s stay (no session)');
+select t.refused(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(130, 76, 82, 1000) - 'bp' - 'hr', null, :'s1')), 'bad_shape',
+  'machine numbers alone, with no BP or pulse');
+savepoint pulse;
+select t.landed(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(130, 76, 82, 1000) - 'bp', null, :'s1')), 'a pulse alone is a reading');
+rollback to savepoint pulse;
+select t.refused(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(130, 76, 82, 1000), null, :'s1', t.latest(:'wt'), 'changes')), 'not_a_reading',
+  'the base''s vitals (60.4 kg) continued as a reading');
+select t.refused(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(130, 76, 82, 1000), null, :'s1', null, null, t.latest(:'wt'))), 'not_a_reading',
+  'the base''s vitals (60.4 kg) corrected as a reading');
+
+\echo '── D2 (g) an event: the base''s note and the saline given, one set'
+select t.landed(t.w(jsonb_build_array(
+  t.e('note', :'p2', :'hd', '{"kind":"dialysis_event","heading":"Low BP · Cramps","text":"Saline 200 mL"}', :'n1', :'s1'),
+  t.e('given', :'p2', :'hd', '{"drug":{"text":"Sodium chloride 0.9 %"},"dose":{"value":"200","unit":"mL","ucum":"mL"},"route":"IV","status":"completed"}', :'g1', :'s1'))),
+  'Low BP · Cramps, saline 200 mL given');
+
+\echo '── D2 (f) the board''s fluid words: the target and dry weight Before copied, taken off, the weight before and the last one, the event'
+select t.as(:'dr');
+select t.ok((x -> 'session' ->> 'target')::numeric = 2600 and (x -> 'session' ->> 'dry')::numeric = 59.5 and (x -> 'uf' ->> 'ml')::numeric = 900 and x -> 'uf' ? 'at'
+  and (x ->> 'pre')::numeric = 62.8 and (x ->> 'last')::numeric = 60.4 and x -> 'event' ->> 'heading' = 'Low BP · Cramps' and x -> 'event' ? 'at'
+  and (x -> 'bp' ->> 'sys')::numeric = 132, 'Mona: 2.6 L to take off, dry 59.5, 0.9 L off, 62.8 kg before, 60.4 last time, Low BP · Cramps, BP 132')
+  from (select pg_temp.board(:'hd') -> 'stays' -> :'s1' x) y;
+
 \echo '── (z) End: the session completed and the base''s discharged, one set'
 select t.as(:'hn');
 select t.landed(t.w(jsonb_build_array(
+  t.e('vitals', :'p2', :'hd', '{"bp":{"sys":{"value":"118","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"72","unit":"mmHg","ucum":"mm[Hg]"}},"hr":{"value":"82","unit":"bpm","ucum":"/min"},"weight":{"value":"60.2","unit":"kg","ucum":"kg"}}',
+    null, :'s1'),
   t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('completed', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4,
-    'removed', jsonb_build_object('value', '2600', 'unit', 'mL', 'ucum', 'mL'), 'ended', now())), :'h3', :'s1', t.latest(:'h1'), 'changes'),
-  t.move('discharged', :'s1', :'hd', '{"disposition":"home"}'))), 'Rasha ends Mona''s session: completed, 2.6 L off, discharged');
+    'prescription', pg_temp.rx(3.5, '59.5', 'catheter'), 'target', '{"value":"2600","unit":"mL","ucum":"mL"}'::jsonb, 'access', '{"kind":"catheter","ok":true}'::jsonb,
+    'removed', jsonb_build_object('value', '2600', 'unit', 'mL', 'ucum', 'mL'), 'needles', 'Dry, no bleeding', 'ended', now())), :'h3', :'s1', t.latest(:'h1'), 'changes'),
+  t.move('discharged', :'s1', :'hd', '{"disposition":"home"}'))), 'Rasha ends Mona''s session: 60.2 kg after, completed, 2.6 L off, discharged');
 select t.ok(r ->> 'state' = 'discharged', 'the stay is discharged') from t.rows('base.presence', :'hd', jsonb_build_object('item', :'s1')) r;
 select t.ok(t.entry(t.record(:'p2', :'hd'), :'h3') ->> 'line' = 'Dialysis · done · 2.6 L off', 'its line: Dialysis · done · 2.6 L off');
 -- after the discharge: the ended session may still be corrected (a late note); no new session goes into the closed stay
@@ -347,6 +474,11 @@ select t.landed(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('
 rollback to savepoint late;
 select t.refused(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4)), null, :'s1')),
   'session_not_in_stay', 'a new session in the discharged stay');
+select t.refused(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(120, 74, 80, 2600), null, :'s1')), 'reading_not_in_session', 'a reading after End');
+savepoint fix;
+select t.landed(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(132, 78, 84, 1000), null, :'s1', t.latest(:'r1'), 'changes')),
+  'after End, a reading is still corrected: 1.0 L off, not 0.9');
+rollback to savepoint fix;
 
 \echo '── (aa) a session moved and undone; a slot ended; a slot never used blocks nothing'
 select t.as(:'hn');
@@ -423,6 +555,13 @@ create temp table res as select e -> 'resource' r from bundle, jsonb_array_eleme
 select t.ok(count(*) = 1 and bool_and(r ->> 'status' = 'completed' and r -> 'code' -> 'coding' @> '[{"code":"haemodialysis"}]' and r -> 'encounter' ->> 'reference' = 'Encounter/' || :'s1'),
   'the Procedure: completed, haemodialysis, in its Encounter') from res where r ->> 'resourceType' = 'Procedure' and r ->> 'id' = :'h1';
 select t.ok(count(*) = 1 and bool_and(r -> 'class' ->> 'code' = 'AMB'), 'the Encounter: outpatient (AMB)') from res where r ->> 'resourceType' = 'Encounter' and r ->> 'id' = :'s1';
+select t.ok(count(*) = 1 and bool_and(r -> 'code' -> 'coding' @> '[{"system":"http://loinc.org","code":"8867-4"}]' and (r -> 'valueQuantity' ->> 'value')::numeric = 84
+    and r -> 'encounter' ->> 'reference' = 'Encounter/' || :'s1'),
+  'the reading''s pulse: an Observation (LOINC 8867-4, 84) in its Encounter') from res where r ->> 'resourceType' = 'Observation' and r ->> 'id' like :'r1' || '%' and r -> 'code' -> 'coding' @> '[{"code":"8867-4"}]';
+select t.ok(count(*) = 1 and bool_and(r -> 'code' -> 'coding' @> '[{"system":"http://loinc.org","code":"85354-9"}]'
+    and exists (select 1 from jsonb_array_elements(r -> 'component') c where c -> 'code' -> 'coding' @> '[{"code":"8480-6"}]' and (c -> 'valueQuantity' ->> 'value')::numeric = 132)),
+  'the reading''s BP: an Observation (LOINC 85354-9, systolic 132)') from res where r ->> 'resourceType' = 'Observation' and r ->> 'id' = :'r1' || '-bp';
+select t.ok(not exists (select 1 from res where r ->> 'id' like :'rx1' || '%'), 'no resource for the prescription');
 select t.ok(not exists (select 1 from res, unnest(core.fhir_problems(r)) q where r ->> 'resourceType' <> 'Bundle'), 'no resource has a problem');
 set role authenticated;
 
@@ -443,3 +582,4 @@ select t.refuses(format($q$select pg_temp.week(%L, '{}')$q$, :'hd'), 'pack_off')
 select t.refuses(format($q$select pg_temp.due(%L)$q$, :'hd'), 'pack_off');
 select t.refused(t.w(t.e('haemodialysis.session', :'p4', :'hd', pg_temp.session('not-done', jsonb_build_object('on', :'today', 'missed', 'not_came'), '{"reason":"Did not come"}'))),
   'pack_off', 'off: no session is written');
+select t.refused(t.w(t.e('haemodialysis.reading', :'p2', :'hd', pg_temp.reading(120, 74, 80, 2600), null, :'s1')), 'pack_off', 'off: no reading is written');

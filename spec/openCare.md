@@ -1766,6 +1766,33 @@ numbered as on its picture.
   day, or end the slot from a day (a slot already ending says when); a moved session's cell: its reason and "Undo the move", off with
   the refusal's words when another session was moved into the chair that day or the patient comes that day by another move. Another
   week is read afresh: its columns and cells are always one week's.
+- **Built 2026-10-09, D2a: Dialysis's session server (chosen by Claude at the owner's request, awaiting the owner)**: the patient's
+  standing prescription is the pack's own type `haemodialysis.prescription` (the base has none; no FHIR mapping yet): hours and dry
+  weight required, blood flow and dialysate flow (mL/min), the dialyser, the bath (K, Ca, HCO₃), heparin (a bolus in units and a rate in
+  units/h with no UCUM code, or none: never none beside a dose, `heparin_none_with_dose`), the access (fistula, graft or catheter, and
+  its site), a note. One a patient, one the writer may not see counted too: the first is new, each change continues it
+  (`prescription_exists`, `not_a_prescription`); written by the dialysis doctor only
+  (`write:haemodialysis.prescription`, not everyday, on the Dialysis doctor role). Its line: "Dialysis prescription · 4 h · BF 300 ·
+  DF 500 · FX80 · K 2 Ca 1.5 HCO₃ 32 · 2000 units then 1000 units/h · dry 72.0 kg". A machine reading is the pack's own type
+  `haemodialysis.reading` on the base's vitals (an Observation): BP and pulse as the base's (so the values, the vitals block, the stay's
+  has_vitals and the export have them; a BP or a pulse on each, since the export's vital-signs panel needs a member), the machine's
+  numbers under `haemodialysis` (blood flow, arterial, venous and transmembrane pressures, the fluid taken off so far in mL, the heparin
+  rate); a new one only in a stay whose session is in progress (`reading_not_in_session`); corrections free, of a reading only (the
+  base's vitals are never turned into one: `not_a_reading`); `write:haemodialysis.reading`, everyday. Its line: "Reading · BP 128/76 · P 84 · BF 300 ·
+  AP -190 · VP 150 · TMP 80 · off 0.9 L · heparin 1000 units/h". Before is one set: the base's vitals (the weight before is the stay's
+  first weight, never copied into the session) and the session changed with the prescription copied as given, the fluid to take off
+  (the weight above dry + 300 mL given back − 400 mL left above dry, to 100 mL; the nurse may type it) and the access checked. The
+  board's read gains the fluid to take off and the dry weight copied by Before, the latest fluid taken off, the weight before, the
+  patient's last weight in the 30 days before the stay (the last session's weight after) and the stay's dialysis event of the last hour (the base's
+  note of kind `dialysis_event`, its heading); who is due takes the hours and the access from the prescription. The Session tab
+  (`haemodialysis.session`, stays, read:record) is declared and sits second in the setup's line (its client is D2b): the chart's centre
+  cannot hold a pack's view, so the session is a tab beside the board, as Critical care's ICU chart is. Demo: the six prescriptions
+  (Shaimaa's 3.5 h), the past sessions' fluid and needles (each as long as its prescription's hours), Before for today's three (2.8, 2.5 and 2.7 L), a reading every 30 minutes
+  (Nadia's last with her event: low BP and cramps, saline 200 mL), Said's Epoetin alfa (IV, twice a week) given today. Noted, not built:
+  the prescription and the machine's numbers do not reach FHIR (BP and pulse do); the base's Discharge alone leaves a session in
+  progress (End, D2c, is the way); only the dialysis doctor writes the prescription; the 13 mL/kg/h and 4 % notices, the BP
+  thresholds and the 300 and 400 mL are Claude's choices; a reading every 30 minutes is not reminded; a reading of the machine's
+  numbers alone (no BP or pulse) is not taken, since its export would be an empty panel.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2970,4 +2997,10 @@ types, parked pack calls with per-call Retry, Postgres enums.
 - 2026-10-09: **Dialysis, piece D1d** (§5.6; lane `beds-dialysis`): the pack's client, part 2 (`src/packs/haemodialysis`: week,
   Schedule, PlanCards, hooks' useWeek and usePlan, the screen registered): the Schedule tab (the week by shift, Add a patient, move one
   session, take it off a day, end a slot, undo a move); `test:haemodialysis` 8 groups; no server change; no core file.
+- 2026-10-09: **Dialysis, piece D2a** (§5.6; lane `beds-dialysis`): migration 21 gains the standing prescription
+  (`haemodialysis.prescription`, its line and check, `write:haemodialysis.prescription` on the Dialysis doctor), the reading
+  (`haemodialysis.reading` on the base's vitals, its line and check, `write:haemodialysis.reading`), the Session screen, the board's fluid
+  words and due's hours and access from the prescription; the demo's prescriptions, Before, readings, Nadia's event, Said's EPO and the
+  past sessions' fluid; suite `haemodialysis` 145 checks, `demo` 106; shapes regenerated (HaemodialysisPrescription,
+  HaemodialysisReading); no file under src/packs; no core file.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

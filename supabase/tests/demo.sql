@@ -204,7 +204,8 @@ select t.ok(count(*) = case when (select dow from hd_day) = 5 then 5 else 0 end
 -- today's three: one session each, on dialysis, from the slots' shift; begun at or after its start (when loaded after 09:40)
 create temp view hd_on as select p.patient_id, p.place_id, p.checked_in_at, p.day, p.item, e.data from base.presence p, hd_day d, core.entries e
  where p.organization_id = demo.base('clinic') and p.department_id = d.hd and p.kind = 'stay' and p.state = 'admitted'
-   and e.organization_id = p.organization_id and e.visit_id = p.item and e.type = 'haemodialysis.session';
+   and e.organization_id = p.organization_id and e.visit_id = p.item and e.type = 'haemodialysis.session'
+   and not exists (select 1 from core.entries y where y.organization_id = e.organization_id and y.item = e.item and y.item_version > e.item_version);   -- as it stands (Before changed it)
 select t.ok(count(*) = 3 and count(distinct item) = 3 and bool_and(data ->> 'status' = 'in-progress' and (data -> 'haemodialysis' ->> 'hours')::numeric = 4
   and (data -> 'haemodialysis' ->> 'on')::date = (select today from hd_day)
   and (data -> 'haemodialysis' ->> 'shift')::int = (select min(s.shift) from haemodialysis.slots s where s.organization_id = demo.base('clinic') and s.patient_id = hd_on.patient_id))
@@ -218,8 +219,10 @@ select t.ok(count(*) = 3 and bool_and(day = (select today from hd_day)) and bool
     when demo.id('haemodialysis', 'patient:nadia') then demo.ago(160) when demo.id('haemodialysis', 'patient:mohamed') then demo.ago(140) end),
   'Said began 150 minutes ago, Nadia 160, Mohamed 140, today') from hd_on;
 select t.ok(count(*) = 5 and count(distinct e.patient_id) = 5 and bool_and((e.data -> 'haemodialysis' ->> 'on')::date = d.past and p.state = 'discharged' and p.department_id = d.hd
-  and haemodialysis.on_day(s.days, d.past) and (e.data -> 'haemodialysis' ->> 'ended')::timestamptz = (e.data -> 'performed' ->> 'value')::timestamptz + interval '4 hours'),
-  'five sessions done on the last pattern day, each in a stay since discharged, four hours each')
+  and haemodialysis.on_day(s.days, d.past) and (e.data -> 'haemodialysis' ->> 'ended')::timestamptz = (e.data -> 'performed' ->> 'value')::timestamptz
+    + make_interval(mins => ((e.data -> 'haemodialysis' ->> 'hours')::numeric * 60)::int)
+  and (e.data -> 'haemodialysis' ->> 'hours')::numeric = (e.data -> 'haemodialysis' -> 'prescription' ->> 'hours')::numeric),
+  'five sessions done on the last pattern day, each in a stay since discharged, each for its prescription''s hours')
   from core.entries e join hd_day d on true join base.presence p on p.organization_id = e.organization_id and p.item = e.visit_id
   join haemodialysis.slots s on s.organization_id = e.organization_id and s.id = (e.data -> 'haemodialysis' ->> 'slot')::uuid
  where e.organization_id = demo.base('clinic') and e.type = 'haemodialysis.session' and e.data ->> 'status' = 'completed';
@@ -235,8 +238,8 @@ select t.ok(jsonb_array_length(r -> 'rows') = 2 and r -> 'patient_ids' @> jsonb_
   and exists (select 1 from jsonb_array_elements(r -> 'rows') x where x ->> 'patient_id' = demo.id('haemodialysis', 'patient:hassan')::text
     and x ->> 'place_id' = core.setup_id(d.hd, 'place', 'chair_4')::text and (x ->> 'hours')::numeric = 4 and (x ->> 'last_on')::date = d.past)
   and exists (select 1 from jsonb_array_elements(r -> 'rows') x where x ->> 'patient_id' = demo.id('haemodialysis', 'patient:shaimaa')::text
-    and x ->> 'place_id' = core.setup_id(d.hd, 'place', 'chair_6')::text and (x ->> 'hours')::numeric = 4),
-  'as Rasha, due now: Hassan (Chair 4, last session on the last pattern day) and Shaimaa (Chair 6)')
+    and x ->> 'place_id' = core.setup_id(d.hd, 'place', 'chair_6')::text and (x ->> 'hours')::numeric = 3.5),
+  'as Rasha, due now: Hassan (Chair 4, 4 h, last session on the last pattern day) and Shaimaa (Chair 6, 3.5 h by her prescription)')
   from hd_day d, public.pack_op(jsonb_build_object('op', 'haemodialysis.due', 'department_id', d.hd, 'args', '{}'::jsonb)) r;
 select demo.as(demo.id('haemodialysis', 'doctor'));
 select t.ok((select count(*) from jsonb_each(b -> 'stays')) = 3 and (select bool_and(v -> 'session' ->> 'status' = 'in-progress' and (v -> 'session' ->> 'hours')::numeric = 4
@@ -248,6 +251,61 @@ select t.ok(count(*) = 2 and bool_or(e.patient_id = demo.id('haemodialysis', 'pa
   and bool_or(e.patient_id = demo.id('haemodialysis', 'patient:magdy') and e.codes @> array['local.alert:isolation_hbv']),
   'Mohamed''s HCV and Magdy''s HBV isolation, active; no other alert of the unit')
   from core.entries e, hd_day d where e.organization_id = demo.base('clinic') and e.type = 'alert' and e.department_id = d.hd and e.data ->> 'status' = 'active';
+-- D2: the standing prescriptions, Before, the readings, Nadia's event, Said's EPO, the past sessions' fluid
+select t.ok(count(*) = 6 and count(distinct e.patient_id) = 6 and bool_and(e.item_version = 1 and e.visit_id is null and e.department_id = d.hd
+  and e.author_id = (select u.id from core.users u where u.organization_id = e.organization_id and u.login_id = demo.id('haemodialysis', 'doctor'))),
+  'six standing prescriptions, one each, all Dr. Walid''s, in the unit')
+  from core.entries e, hd_day d where e.organization_id = demo.base('clinic') and e.type = 'haemodialysis.prescription';
+select demo.as(demo.id('haemodialysis', 'nurse'));
+select t.ok((x ->> 'hours')::numeric = 3.5 and x ->> 'access' = 'fistula', 'as Rasha, due: Shaimaa''s row reads 3.5 h (her prescription), a fistula')
+  from hd_day d, public.pack_op(jsonb_build_object('op', 'haemodialysis.due', 'department_id', d.hd, 'args', '{}'::jsonb)) r, jsonb_array_elements(r -> 'rows') x
+ where x ->> 'patient_id' = demo.id('haemodialysis', 'patient:shaimaa')::text;
+reset role;
+select t.ok(count(*) filter (where o.patient_id = demo.id('haemodialysis', 'patient:said')) = 5 and count(*) filter (where o.patient_id = demo.id('haemodialysis', 'patient:nadia')) = 5
+  and count(*) filter (where o.patient_id = demo.id('haemodialysis', 'patient:mohamed')) = 4 and count(*) = 14,
+  'readings: Said 5, Nadia 5, Mohamed 4, each in their stay today')
+  from core.entries e join hd_on o on o.item = e.visit_id where e.organization_id = demo.base('clinic') and e.type = 'haemodialysis.reading';
+select t.ok(count(*) = 0, 'no reading outside a stay of today''s three')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'haemodialysis.reading' and e.visit_id not in (select item from hd_on);
+select t.ok(bool_and(s.status = 'in-progress' and e.occurred_at >= o.checked_in_at and e.occurred_at <= demo.now()), 'each reading while its session is in progress')
+  from core.entries e join hd_on o on o.item = e.visit_id,
+  lateral (select x.data ->> 'status' status from core.entries x where x.organization_id = e.organization_id and x.visit_id = e.visit_id and x.type = 'haemodialysis.session'
+            and x.recorded_at <= e.recorded_at order by x.recorded_at desc limit 1) s
+ where e.organization_id = demo.base('clinic') and e.type = 'haemodialysis.reading';
+select t.ok(count(*) = 14 and not bool_or(jsonb_path_exists(coalesce(to_jsonb(e.findings), '[]'), '$[*] ? (@.level == "flag")')), 'none flagged')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'haemodialysis.reading';
+create temp view hd_latest as select distinct on (e.item) e.patient_id, e.visit_id, e.data from core.entries e
+ where e.organization_id = demo.base('clinic') and e.type = 'haemodialysis.session' order by e.item, e.item_version desc;
+select t.ok(bool_and((l.data -> 'haemodialysis' -> 'target' ->> 'value')::numeric = case l.patient_id when demo.id('haemodialysis', 'patient:said') then 2800
+    when demo.id('haemodialysis', 'patient:nadia') then 2500 when demo.id('haemodialysis', 'patient:mohamed') then 2700 end
+  and l.data -> 'haemodialysis' -> 'prescription' ? 'dry_weight' and (l.data -> 'haemodialysis' -> 'access' ->> 'ok')::boolean) and count(*) = 3,
+  'Before: Said 2.8 L to take off, Nadia 2.5, Mohamed 2.7, the prescription copied, the access fine')
+  from hd_latest l join hd_on o on o.item = l.visit_id;
+select t.ok(count(*) = 5 and bool_and((l.data -> 'haemodialysis' -> 'removed' ->> 'value')::numeric = case l.patient_id when demo.id('haemodialysis', 'patient:said') then 2500
+    when demo.id('haemodialysis', 'patient:nadia') then 2000 when demo.id('haemodialysis', 'patient:mohamed') then 2700 when demo.id('haemodialysis', 'patient:hassan') then 2500
+    when demo.id('haemodialysis', 'patient:shaimaa') then 2100 end and l.data -> 'haemodialysis' ->> 'needles' = 'Dry, no bleeding'),
+  'the past sessions'' fluid taken off: 2.5, 2.0, 2.7, 2.5, 2.1 L, the needles dry') from hd_latest l where l.data ->> 'status' = 'completed';
+select t.ok(count(distinct e.set_id) = 1 and count(*) = 3 and bool_or(e.type = 'note' and e.data ->> 'heading' = 'Low BP · Cramps')
+  and bool_or(e.type = 'given' and e.data -> 'dose' ->> 'value' = '200' and e.data -> 'dose' ->> 'unit' = 'mL')
+  and bool_or(e.type = 'haemodialysis.reading' and e.data -> 'bp' -> 'sys' ->> 'value' = '88' and e.data -> 'bp' -> 'dia' ->> 'value' = '54'),
+  'Nadia''s event: the note, the saline given and the 88/54 reading, one set')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = demo.id('haemodialysis', 'patient:nadia')
+   and e.set_id = (select x.set_id from core.entries x where x.organization_id = demo.base('clinic') and x.patient_id = demo.id('haemodialysis', 'patient:nadia')
+                    and x.type = 'note' and x.data ->> 'kind' = 'dialysis_event');
+select t.ok(count(*) = 1 and bool_and(m.codes @> array['atc:B03XA01'] and m.data -> 'dosage' ->> 'route' = 'iv' and m.data ->> 'status' = 'active'
+  and exists (select 1 from core.entries g join hd_on o on o.item = g.visit_id where g.organization_id = m.organization_id and g.type = 'given' and g.data ->> 'medication' = m.item::text
+                and o.patient_id = m.patient_id)),
+  'Said''s Epoetin alfa: active, IV, given today in his stay, linked to it')
+  from core.entries m where m.organization_id = demo.base('clinic') and m.type = 'medication' and m.patient_id = demo.id('haemodialysis', 'patient:said');
+select demo.as(demo.id('haemodialysis', 'doctor'));
+select t.ok((select (v -> 'session' ->> 'target')::numeric = 2800 and (v -> 'uf' ->> 'ml')::numeric = 1400 from jsonb_each(b -> 'stays') x(k, v)
+    join base.presence p on p.item = x.k::uuid where p.patient_id = demo.id('haemodialysis', 'patient:said'))
+  and (select v -> 'event' ->> 'heading' = 'Low BP · Cramps' and (v -> 'bp' ->> 'sys')::numeric = 88 and (v -> 'bp' ->> 'dia')::numeric = 54
+    and (v ->> 'pre')::numeric = 58.6 and (v ->> 'last')::numeric = 56.3 from jsonb_each(b -> 'stays') x(k, v)
+    join base.presence p on p.item = x.k::uuid where p.patient_id = demo.id('haemodialysis', 'patient:nadia')),
+  'as Dr. Walid, the board: Said 2.8 L to take off, 1.4 off; Nadia Low BP · Cramps, BP 88/54, 58.6 kg before, 56.3 last time')
+  from hd_day d, public.pack_op(jsonb_build_object('op', 'haemodialysis.board', 'department_id', d.hd, 'args', '{}'::jsonb, 'purpose', 'TREAT')) b;
+reset role;
 
 \echo '── billing''s demo and the clinic''s choices between its packs (§5.4): the Cashier and its person, Pay first at the Laboratory, the Pharmacy taking its own payment; one paid, one waiting, one sent from the Pharmacy'
 select t.ok(core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('billing', 'cashier')) ->> 'takes' = 'everyone'
