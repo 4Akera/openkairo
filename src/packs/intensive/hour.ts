@@ -18,7 +18,7 @@ import { bagOf, infusionOf, type UnitInfusion, type UnitSetting } from './unit'
 type Infusion = EntryData['intensive.infusion']; type Vent = EntryData['intensive.vent']
 export interface Prescription { item: string; drug: Concept; atc: string | null }
 /** an item as the card changes it: its data in force at the hour, and its latest version (by version), which a change refers to */
-interface Head { item: string; entry: string; version: number; latestAt: string }
+interface Head { item: string; entry: string; version: number; latestAt: string; recordedAt: string }
 export interface HourNow {
   airway: (Head & { kind: AirwayKind; since: string; data: EntryData['procedure'] }) | null
   vent: (Head & { data: Vent }) | null
@@ -27,7 +27,7 @@ export interface HourNow {
   kg: number | null
 }
 const dataOf = <T,>(e: ServerEntry) => (e.data ?? {}) as unknown as T
-const head = (it: Item): Head => { const l = latestOf(it); return { item: it.item, entry: l.id, version: l.item_version, latestAt: l.occurred_at } }
+const head = (it: Item): Head => { const l = latestOf(it); return { item: it.item, entry: l.id, version: l.item_version, latestAt: l.occurred_at, recordedAt: l.recorded_at } }
 /** what is in force at an instant (the end of the hour charted): the open ventilation, its settings, the running infusions, the active
  *  prescriptions, the weight. A change refers to the item's latest version, so the writer refuses it when that is newer than what showed */
 export function hourNow(entries: readonly ServerEntry[], lists: TableRead<ListRowData> | undefined, at: string, unit: UnitSetting, kg: number | null): HourNow {

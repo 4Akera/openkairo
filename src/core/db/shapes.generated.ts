@@ -212,6 +212,20 @@ export interface IntensiveInfusion {
   volume?: Quantity
   weight?: Quantity
 }
+/** intensive.reperfusion v1 (intensive) */
+export interface IntensiveReperfusion {
+  angiography?: 'within_24h' | 'rescue_now' | 'elective' | 'not_planned' | 'done'
+  angiography_by?: Datetime
+  diagnosis: 'stemi_anterior' | 'stemi_inferior' | 'stemi_lateral' | 'stemi_posterior' | 'stemi_other' | 'nstemi'
+  door_at?: Datetime
+  ecg_at?: Datetime
+  killip?: 'i' | 'ii' | 'iii' | 'iv'
+  lytic?: Concept
+  needle_at?: Datetime
+  note?: string
+  pain_at?: Datetime
+  reperfusion?: 'lysis' | 'primary_pci' | 'none'
+}
 /** intensive.vent v1 (intensive) */
 export interface IntensiveVent {
   fio2?: Quantity
@@ -544,6 +558,18 @@ export interface IntensiveCardiacSetting {
   needle_minutes?: number
   on: boolean
 }
+/** setting intensive.heparin (intensive; owner department) */
+export interface IntensiveHeparinSetting {
+  high: number
+  low: number
+  steps: {
+    change: number
+    hold?: number
+    max?: number
+    min?: number
+    next: number
+  }[]
+}
 /** setting intensive.unit (intensive; owner department) */
 export interface IntensiveUnitSetting {
   day_starts: number
@@ -697,6 +723,7 @@ export interface EntryData {
   'here': Here
   'intensive.goals': IntensiveGoals
   'intensive.infusion': IntensiveInfusion
+  'intensive.reperfusion': IntensiveReperfusion
   'intensive.vent': IntensiveVent
   'left': Left
   'list_review': ListReview
@@ -740,6 +767,7 @@ export interface SettingData {
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
   'intensive.cardiac': IntensiveCardiacSetting
+  'intensive.heparin': IntensiveHeparinSetting
   'intensive.unit': IntensiveUnitSetting
   'lis.large': LisLargeSetting
   'organization.packs_used': OrganizationPacksUsedSetting

@@ -3,7 +3,9 @@
 // through the pack's own op (the owner's C1), and its button ICU chart opens the pack's tab on that patient: the hourly chart, one
 // column an hour signed once (vitals, the ventilator, infusions, in and out). Its types (the ventilator's settings, an infusion's rate)
 // are the server's. Piece I2: the Round tab (SOFA from the record's worst of 24 hours and the daily goals, signed once), its button
-// Goals on each taken bed, and the banner's words: the ventilation's day, the stay's SOFA, "goals not done".
+// Goals on each taken bed, and the banner's words: the ventilation's day, the stay's SOFA, "goals not done". Piece I3: where the
+// department's cardiac rows are on (a CCU), the tile's rhythm, the chart's Heart and Bloods, the reperfusion strip, heparin by aPTT,
+// and the banner's Killip class.
 import { packOp } from '@core/db/rpc'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerScreen } from '@core/screens/registry'
@@ -26,5 +28,5 @@ registerTileButton('intensive', { label: 'ICU chart', path: (row) => `/?tab=inte
 registerScreen('intensive.round', Round)
 registerTileButton('intensive', { label: 'Goals', path: (row) => `/?tab=intensive.round&stay=${row.item}` })
 // the banner's words, only where the department uses the pack; never the infusions (the banner reads its types in one page)
-registerBannerWords({ key: 'intensive.icu', types: ['procedure', 'score', 'intensive.goals'], words: (x) => icuWords(x) })
+registerBannerWords({ key: 'intensive.icu', types: ['procedure', 'score', 'intensive.goals', 'intensive.reperfusion'], words: (x) => icuWords(x) })
 export const key = 'intensive'

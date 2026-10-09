@@ -1,12 +1,13 @@
 // Critical care's banner words (spec/openCare.md §5.6, piece I2), only where the department uses the pack and only in an open stay in a
 // department that uses it:
 // "Ventilated d3" or "NIV d1" from an open ventilation (rank 1), the stay's latest "SOFA n" (rank 2), and "goals not done" in amber
-// (rank 2) while no goals were signed since the ICU day began. No infusion word: the banner's types are read on every chart in one page,
+// (rank 2) while no goals were signed since the ICU day began. Piece I3: "Killip I–IV" (rank 2) from the stay's reperfusion record. No infusion word: the banner's types are read on every chart in one page,
 // and an infusion's hourly versions would push the other words off it. Pure: npm run test:intensive.
 import type { BannerWord, WordsInput } from '@core/screens/chart/words'
 import { stayDay } from '@core/screens/chart/model/encounter'
 import { AIRWAY, airwayOf } from './codes'
 import { dayStart } from './hours'
+import { killipWords } from './reperfusion'
 import { SOFA } from './sofa'
 import { unitOf } from './unit'
 
@@ -23,6 +24,10 @@ export function icuWords(x: WordsInput, now = new Date()): BannerWord[] {
   const mine = x.own.shown.filter((e) => e.visit_id === stay.item)
   const sofa = mine.filter((e) => e.type === 'score' && e.data?.score === SOFA).sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))[0]
   if (sofa) out.push({ word: `SOFA ${sofa.data?.total}`, rank: 2 })
+  // the stay's reperfusion record (one a stay; its latest version)
+  const rep = mine.filter((e) => e.type === 'intensive.reperfusion').sort((a, b) => b.item_version - a.item_version || b.occurred_at.localeCompare(a.occurred_at))[0]
+  const killip = killipWords(typeof rep?.data?.killip === 'string' ? rep.data.killip : undefined)
+  if (killip) out.push({ word: `Killip ${killip}`, rank: 2 })
   const start = Date.parse(dayStart(iso, unit.dayStarts))
   if (!mine.some((e) => e.type === 'intensive.goals' && Date.parse(e.occurred_at) >= start)) out.push({ word: 'goals not done', rank: 2, tone: 'warn' })
   return out

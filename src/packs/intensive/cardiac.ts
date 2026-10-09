@@ -84,7 +84,7 @@ const BLOODS: [string, string, string, string][] = [['aptt', 'loinc:3173-2', 'aP
 const flagOf = (i: string | null): Cell['flag'] => i === 'L' || i === 'LL' ? 'low' : i === 'H' || i === 'HH' ? 'high' : undefined
 export interface CardiacInput { entries: readonly ServerEntry[]; values: readonly ValueRow[]; hours: string[]; needleAt: string | null
   /** the unit's heparin target: the aPTT is flagged against it, else by its interpretation like the other bloods */
-  heparin?: { low: number; high: number } | null; hr: Row | null; bp: Row | null }
+  heparin: { low: number; high: number } | null; hr: Row | null; bp: Row | null }
 
 /** the Heart group (rhythm, heart rate, BP, chest pain, ST) and the Bloods */
 export function cardiacGroups(x: CardiacInput): Group[] {
@@ -130,7 +130,8 @@ export function cardiacGroups(x: CardiacInput): Group[] {
     return { key, label, unit, cells: best.map((v): Cell | null => {
       if (!v) return null
       const n = Number(v.value)
-      const flag = key === 'aptt' && x.heparin ? (n < x.heparin.low ? 'low' as const : n > x.heparin.high ? 'high' as const : undefined) : flagOf(v.interpretation)
+      // the target's seconds are whole, as the table's steps: 70.5 is still in 50–70's step, so high starts at 71
+      const flag = key === 'aptt' && x.heparin ? (n < x.heparin.low ? 'low' as const : n >= x.heparin.high + 1 ? 'high' as const : undefined) : flagOf(v.interpretation)
       return { text: String(n), ...(flag ? { flag } : {}) }
     }) }
   })

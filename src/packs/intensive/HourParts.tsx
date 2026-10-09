@@ -99,21 +99,22 @@ function StartCard({ s, i, p }: { s: Start; i: number; p: PartProps }) {
   </Card>
 }
 
-export function InfusionRows(p: PartProps) {
+/** under: what a running infusion's row says beneath it (the heparin's advice, piece I3) */
+export function InfusionRows(p: PartProps & { under?: (item: string) => ReactNode }) {
   const { d, set, now, unit, say } = p; const [adding, setAdding] = useState(false)
   const busy = new Set([...now.running.map((r) => r.data.key), ...d.starts.map((s) => s.key)])
   const put = (item: string, patch: { dose?: string; rate?: string; stop?: boolean }) => set((x) => ({ ...x, doses: { ...x.doses, [item]: { ...x.doses[item], ...patch } } }))
   return <Part title="Infusions">
     <div className="grid w-full gap-2">
       {now.running.map((r) => { const x = d.doses[r.item] ?? {}; const b = bagIn(r.data); const half = otherHalf(x, b.bag, b.unit, b.kg)
-        return <div key={r.item} className="flex flex-wrap items-start gap-x-3 gap-y-1">
+        return <div key={r.item} className="grid gap-1"><div className="flex flex-wrap items-start gap-x-3 gap-y-1">
           <span className="w-40 pt-6 text-13 text-fg">{r.data.drug.text}</span>
           {x.stop ? <span className="pt-6 text-13 text-warn">Stopped this hour</span> : <>
             <Num label="Dose" unit={b.unit ? DOSE_UNITS[b.unit].words : undefined} value={x.dose} placeholder={r.data.dose?.value} onChange={(v) => put(r.item, { dose: v })} s={say[`dose:${r.item}`]} />
             <Num label="Rate" unit="mL/h" value={x.rate} placeholder={r.data.rate?.value} onChange={(v) => put(r.item, { rate: v })} />
             {half && <span className="pt-6 text-13 text-muted tnum">= {half}</span>}</>}
           <span className="pt-6"><Chip on={!!x.stop} onClick={() => put(r.item, { stop: !x.stop })}>Stop</Chip></span>
-        </div> })}
+        </div>{p.under?.(r.item)}</div> })}
       {d.starts.map((s, i) => <StartCard key={`${s.key}:${i}`} s={s} i={i} p={p} />)}
       <div className="flex flex-wrap items-center gap-1"><Chip on={adding} onClick={() => setAdding(!adding)}>+ Infusion</Chip>
         {adding && unit.infusions.filter((r) => !busy.has(r.key)).slice(0, 9).map((r) =>

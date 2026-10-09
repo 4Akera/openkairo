@@ -1581,15 +1581,30 @@ numbered as on its picture.
   (`intensive.cardiac`: on, first ECG within 10 min, door to needle within 30, door to balloon within 90), on in the CCU and off in the
   ICU's setup, so a mixed unit switches them on in its own ICU. With them on, the hourly chart's first group is Heart: the rhythm ("SR",
   "SR · VEs", "AF · new"), the heart rate and BP (moved out of Vitals), chest pain 0–10 and ST ("resolving", "↓ 60 %"); and Bloods
-  (aPTT, troponin I, potassium, magnesium from `base.values`, flagged by their interpretation) comes before in and out. The hour card
+  (aPTT, troponin I, potassium, magnesium from `base.values`, flagged by their interpretation, the aPTT against the unit's heparin
+  target) comes before in and out. The hour card
   gains the rhythm chips (Other with its words), ectopics (VEs, AEs), chest pain and the ST chips with its fall in %. Rhythm, ectopics,
   ST and the ST elevation's fall are the base's observations coded in the pack's own open code system `intensive.cardiac` (the base's
   LOINC subset has no rhythm or ST rows: LOINC 8884-9 there would be a base change); chest pain is the vitals' `pain`. The board's op
-  returns the stay's latest rhythm, and the tile says it first, in amber, when it is not sinus ("AF", "CHB"). Demo: the CCU, Dr. Tarek
+  returns the stay's latest rhythm, and the tile says it first, in amber, when it is not sinus ("AF", "CHB"). Above the chart, a strip of
+  the reperfusion times: "Anterior STEMI · lysis (tenecteplase) | Pain began 06:10 | At the door 07:30 | First ECG 07:36 ✓ 6 min · target
+  10 | Lysis 07:58 ✓ ECG to needle 22 min · door to needle 28 min · pain to needle 1 h 48 | Into CCU 08:20 | Angiography by 07:58 tomorrow · 2–24 h after
+  lysis | Killip I", each target from the setting met ✓ or missed ✕ with its minutes, a fact and never a stop; a primary PCI reads "door to
+  balloon" against its own target, never "needle". "Into CCU" is the stay's own start, never copied. The record is the pack's own type,
+  `intensive.reperfusion` (an Observation with a component for each time, the diagnosis, the reperfusion, the angiography and the
+  Killip class), one a stay, its times in order and none still to come, lysis with its drug: one record checked, versioned and exported as one, where base
+  observations would hold each time apart. §5.6 does not list it among the packs' types, so it awaits the owner's yes. Its action
+  `write:intensive.reperfusion` is everyday, so the CCU's doctors and nurses both edit it (Edit under the strip: inline chips, four
+  HH:MM times each with "yesterday", Sign). Heparin by aPTT: a department setting, `intensive.heparin` (a target 50–70 s and the unit's
+  table of steps that touch, checked like a score's ranges), from which the hour card suggests under the heparin's row ("aPTT 44 s at
+  12:40 (target 50–70 s) → raise by 100 units/h to 1 100 · next aPTT 18:40", "Use 1 100" fills the dose) from the latest aPTT written
+  after the heparin's last change; nothing is written until the nurse signs, and an aPTT acted on says nothing. The banner says "Killip
+  I–IV" from the stay's record. The table, the targets and the bags are Claude's defaults, each unit's own on its card. Demo: the CCU, Dr. Tarek
   Nour its doctor and Mariam Saad nursing there too, Ward nursing ticked after Critical care; Maher Shokry Qandil, 58, anterior STEMI
   after tenecteplase, admitted today to CCU 2 (the picture's Adel Shawky, renamed: radiology's demo has an Adel Shawky), on heparin
   and GTN, his hours sinus with the ST resolving, then AF with chest pain (the amiodarone bolus as the base's `given`, its
-  infusion an hour later), the GTN stopped; his troponin, potassium, magnesium and an aPTT of 44 s the heparin has not been changed for.
+  infusion an hour later), the GTN stopped; his troponin, potassium, magnesium and an aPTT of 44 s the heparin has not been changed for;
+  his reperfusion times (lysis 28 minutes after the door, angiography within 24 hours of it, Killip I).
 
 ---
 
@@ -2243,4 +2258,11 @@ types, parked pack calls with per-call Retry, Postgres enums.
   (`intensive_ccu` 13 new, `demo` 101), the gen:shapes and gen:logins checks clean; `db:demo` twice (38 patients, 18 open visits and
   stays, 441 entries); `test:intensive` 7, 8 and 3 groups and the other node tests green; lint 0 errors; typecheck and build clean but
   for `src/pictures/bookings.tsx` (another session's), `vite build` ok.
+- 2026-10-09: **Critical care, piece I3b: the reperfusion times, heparin by aPTT and Killip** (§5.6; lane `beds-icu`; no core or base
+  change): migration 19 (`intensive.diagnosis_words`, the reperfusion record's check, line and FHIR, `intensive.heparin_check`, the type
+  `intensive.reperfusion`, its action, the setting `intensive.heparin`, the CCU setup's heparin table), the demo (Maher's reperfusion
+  record), `src/packs/intensive` (heparin, reperfusion, ReperfusionStrip; hours, cardiac, chart, HourParts, HourCard, IcuChart,
+  useIcu, words, index). As run: `db:test` every suite green (`intensive_ccu` 33 ok, `demo` 102 ok), the gen:shapes and gen:logins
+  checks clean; `db:demo` twice (38 patients, 18 open visits and stays, 442 entries); `test:intensive` 7, 8 and 8 groups, and the other
+  fifteen node suites green; lint no error; typecheck and build clean but for `src/pictures/bookings.tsx` (another session's).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

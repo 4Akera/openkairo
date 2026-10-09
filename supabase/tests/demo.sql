@@ -244,7 +244,7 @@ select t.ok((w -> 'sofa' ->> 'total')::int = 11 and (w ->> 'goals_at')::timestam
 select t.ok((w -> 'sofa' ->> 'total')::int = 4 and w -> 'goals_at' = 'null'::jsonb, 'the board as Dr. Hany, Samy: SOFA 4, no goals')
   from icu_board2, icu_stays s, lateral (select b -> 'stays' -> s.item::text w) x where s.patient_id = demo.id('intensive', 'patient:samy');
 
-\echo '── Critical care''s CCU (§5.6, piece I3): Maher in a CCU bed, his hours with the cardiac rows'
+\echo '── Critical care''s CCU (§5.6, piece I3): Maher in a CCU bed, his reperfusion times, his hours with the cardiac rows'
 select t.ok(core.setting_at(demo.base('clinic'), 'department.packs', demo.id('intensive', 'ccu')) -> 'packs' = '["intensive", "bedside"]'::jsonb,
   'the CCU uses Critical care, then Ward nursing (the clinic''s choice)');
 select t.ok(count(*) = 1 and bool_and(place_id is not null) and bool_and(patient_id = demo.id('intensive', 'patient:maher'))
@@ -263,6 +263,9 @@ select t.ok((select count(*) from ccu_hours) = 0 or (
     and not exists (select 1 from core.entries e, jsonb_array_elements(e.findings) f where e.organization_id = demo.base('clinic')
       and e.patient_id = demo.id('intensive', 'patient:maher') and f ->> 'level' = 'flag')),
   'his latest rhythm is AF, and none of his entries is flagged (when an hour is charted)');
+select t.ok(count(*) = 1 and bool_and(e.data ->> 'diagnosis' = 'stemi_anterior') and bool_and((e.data ->> 'needle_at')::timestamptz < s.checked_in_at),
+  count(*) || ' reperfusion record in his stay: anterior STEMI, lysed before he came up')
+  from core.entries e, ccu_stay s where e.organization_id = demo.base('clinic') and e.type = 'intensive.reperfusion' and e.patient_id = s.patient_id and e.visit_id = s.item;
 select demo.as(demo.id('intensive', 'ccu doctor'));
 select t.ok((select count(*) from ccu_hours) = 0 or w -> 'rhythm' ->> 'code' = 'af', 'the board as Dr. Tarek, Maher: rhythm AF: ' || coalesce((w -> 'rhythm')::text, 'none'))
   from ccu_stay s, lateral (select public.pack_op(jsonb_build_object('op', 'intensive.board', 'department_id', demo.id('intensive', 'ccu'), 'args', '{}'::jsonb,

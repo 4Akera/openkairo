@@ -1,7 +1,8 @@
 // The ICU chart's reads (spec/openCare.md §5.6), each through the one door out and logged by the server, for the stay chosen: the
 // ventilator's settings and the infusions in this stay, with the record's lists (the prescriptions a start links to); the stay's
 // vitals, observations and scores (the GCS); the patient's ventilation, wherever it began, and what was crossed out; the latest weight.
-// Where the cardiac rows are on (piece I3), the patient's values since the chart's first hour, for the Bloods. Every key starts with
+// Where the cardiac rows are on (piece I3), the stay's reperfusion record, and the patient's values since the chart's first hour (or the
+// last 24 h, if earlier), for the Bloods and the heparin's aPTT. Every key starts with
 // 'record', so a sign anywhere reads them again. The stays in bed order, and the one the link (?stay=) chose.
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -20,7 +21,7 @@ export function useIcu(dept: Department, stay: PresenceRow | undefined, cardiac:
     queryKey: ['record', pid, dept.id, 'intensive', sid, part], enabled: on,
     queryFn: () => read<ServerRecord>({ shape: 'record', patient_id: pid, department_id: dept.id, ...more, ...purposeFor(pid!) }),
   })
-  const settings = useQuery(record('settings', { visits: [sid], types: ['intensive.vent', 'intensive.infusion'], include: ['base.lists'], limit: 500 }))
+  const settings = useQuery(record('settings', { visits: [sid], types: ['intensive.vent', 'intensive.infusion', 'intensive.reperfusion'], include: ['base.lists'], limit: 500 }))
   // about three days of hourly charting; score brings the GCS (and other scores, which the chart leaves out)
   const measures = useQuery(record('measures', { visits: [sid], types: ['vitals', 'observation', 'score'], include: [], limit: 500 }))
   const facts = useQuery(record('facts', { types: ['procedure', 'crossed_out'], include: [], limit: 300 }))

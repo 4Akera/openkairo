@@ -164,7 +164,7 @@ export function chartOf(x: ChartInput): ChartModel {
   const nowAt = index.get(now)
   // the cardiac rows: the heart rate and BP move out of the vitals into the Heart group
   const vitals = vitalsGroup(items, hours, col); const take = (key: string) => vitals.rows.find((r) => r.key === key) ?? null
-  const cardiac = x.cardiac ? cardiacGroups({ entries: x.entries, values: x.cardiac.values, hours, needleAt: x.cardiac.needleAt, heparin: x.cardiac.heparin, hr: take('hr'), bp: take('bp') }) : []
+  const cardiac = x.cardiac ? cardiacGroups({ entries: x.entries, values: x.cardiac.values, hours, needleAt: x.cardiac.needleAt, heparin: x.cardiac.heparin ?? null, hr: take('hr'), bp: take('bp') }) : []
   if (x.cardiac) vitals.rows = vitals.rows.filter((r) => r.key !== 'hr' && r.key !== 'bp')
   const heart = cardiac.find((g) => g.key === 'heart') ?? null; const bloods = cardiac.find((g) => g.key === 'bloods') ?? null
   const groups = [heart, vitals, ventGroup(items, hours), infusionGroup(items, hours), bloods, fluidGroup(items, hours, x.dayStarts, x.kg),

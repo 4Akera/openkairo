@@ -7,7 +7,7 @@
 -- with the daily goals in one set) and this morning's bloods by the Laboratory; Samy's SOFA 4 on admission and no round yet this ICU day.
 -- Piece I3: the CCU's Maher (anterior STEMI after tenecteplase, admitted today in CCU 2), on heparin and GTN, his hours charted with the
 -- cardiac rows: sinus rhythm and the ST resolving, then AF with chest pain, the amiodarone bolus, its infusion an hour later, the GTN stopped; his
--- troponin, potassium, magnesium and an aPTT the heparin has not been changed for yet.
+-- troponin, potassium, magnesium, an aPTT the heparin has not been changed for yet, and his reperfusion times (Killip I).
 select demo.layer('intensive');
 
 -- a set whose first entry takes an ICU bed: the bed named, else the next free by position (a patient admitted in the app since keeps
@@ -226,7 +226,7 @@ begin
   perform demo.patient(demo.id('intensive', 'patient:maher'), array['Maher', 'Shokry'], 'Qandil', 'male', demo.born(58, 120), '+201015546620');
   perform pg_temp.icu_admit(tn, jsonb_build_array(demo.e('admitted', ccu, s, v_admit, jsonb_build_object('department_id', ccu,
     'admit_source', 'emd', 'reason', 'anterior STEMI, after tenecteplase'), s)), 'ccu_2');
-  -- on arrival, one set: his vitals, the history, the ER's troponin, the two infusions prescribed
+  -- on arrival, one set: his vitals, the history, the ER's troponin, the two infusions prescribed, his reperfusion times (the ER's)
   at := demo.after(v_admit, 5);
   perform demo.w(tn, jsonb_build_array(
     demo.e('vitals', ccu, s, at, pg_temp.icu_vit(78, 128, 74, 97, 16, 36.8, null, 84)
@@ -235,7 +235,10 @@ begin
       E'hx: central chest pain from early morning, anterior STEMI on the first ECG; tenecteplase in the ER\nex: pain 2/10, no crackles, Killip I\nplan: heparin by aPTT, GTN for pain, angiography within 24 h of lysis')),
     demo.e('result', ccu, s, at, pg_temp.ccu_result('Troponin I', demo.analyte('trop', 'Troponin I', '10839-9', 1.84, 'ng/mL', 'ng/mL', null, 0.04))),
     demo.e('medication', ccu, s, at, pg_temp.icu_rx(hep_d, 'infusion by aPTT, the unit''s table'), hep_rx),
-    demo.e('medication', ccu, s, at, pg_temp.icu_rx(gtn_d, 'infusion for chest pain; keep the systolic above 100'), gtn_rx)));
+    demo.e('medication', ccu, s, at, pg_temp.icu_rx(gtn_d, 'infusion for chest pain; keep the systolic above 100'), gtn_rx),
+    demo.e('intensive.reperfusion', ccu, s, at, jsonb_build_object('diagnosis', 'stemi_anterior', 'pain_at', v_admit - interval '130 minutes', 'door_at', v_admit - interval '50 minutes',
+      'ecg_at', v_admit - interval '44 minutes', 'reperfusion', 'lysis', 'lytic', jsonb_build_object('text', 'Tenecteplase'), 'needle_at', v_admit - interval '22 minutes',
+      'angiography', 'within_24h', 'angiography_by', v_admit - interval '22 minutes' + interval '24 hours', 'killip', 'i'))));
   -- the two infusions started by the nurse, linked to their prescriptions: heparin 1 000 units/h, GTN 20 µg/min
   at := demo.after(v_admit, 10);
   perform demo.w(rn, jsonb_build_array(

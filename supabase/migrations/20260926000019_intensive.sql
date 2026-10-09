@@ -10,7 +10,9 @@
 -- board's latest SOFA and "goals not done" through intensive.board.
 -- Piece I3: the CCU, the pack's second starter setup, and the cardiac rows a department switches on (intensive.cardiac): rhythm, ectopics
 -- and ST as the base's observations coded in the pack's own open code system (the base's LOINC subset has no rows for them), chest
--- pain as the vitals' pain, aPTT, troponin, potassium and magnesium from the base's values; the board's latest rhythm.
+-- pain as the vitals' pain, aPTT, troponin, potassium and magnesium from the base's values; the board's latest rhythm. Then the STEMI's
+-- reperfusion times as the pack's own type (intensive.reperfusion, one Observation with components a stay, its targets from the
+-- department's intensive.cardiac), and the unit's heparin table by aPTT (intensive.heparin), which the chart suggests from and the nurse signs.
 
 set client_min_messages = warning;
 
@@ -272,6 +274,94 @@ begin
     'activity', case when jsonb_array_length(a) > 0 then a end)));
 end $$;
 
+-- ── the reperfusion record (piece I3): a change continues it; its times in order; lysis with its drug and time; one record a stay ──
+create function intensive.diagnosis_words(t text) returns text language sql immutable as $$
+  select case t when 'stemi_anterior' then 'Anterior STEMI' when 'stemi_inferior' then 'Inferior STEMI' when 'stemi_lateral' then 'Lateral STEMI'
+    when 'stemi_posterior' then 'Posterior STEMI' when 'nstemi' then 'NSTEMI' when 'stemi_other' then 'STEMI' end
+$$;
+create function intensive.reperfusion_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p_entry ->> 'organization_id')::uuid; d jsonb := p_entry -> 'data'; f jsonb := intensive.same_item(p_entry, 'intensive.reperfusion');
+        k text; v_at timestamptz; v_prev timestamptz;
+begin
+  if jsonb_array_length(f) > 0 then return f; end if;
+  foreach k in array array['pain_at', 'door_at', 'ecg_at', 'needle_at'] loop
+    v_at := intensive.instant(d ->> k);
+    continue when v_at is null;
+    if v_prev is not null and v_at < v_prev then return jsonb_build_array(jsonb_build_object('code', 'times_out_of_order', 'level', 'refuse', 'detail', k)); end if;
+    -- a time still to come: typed as today when it was yesterday evening
+    if v_at > now() + interval '5 minutes' then return jsonb_build_array(jsonb_build_object('code', 'time_in_future', 'level', 'refuse', 'detail', k)); end if;
+    v_prev := v_at;
+  end loop;
+  if d ->> 'reperfusion' = 'lysis' and (d -> 'lytic' ->> 'text' is null or d ->> 'needle_at' is null) then
+    return jsonb_build_array(jsonb_build_object('code', 'lytic_missing', 'level', 'refuse'));
+  end if;
+  if p_entry ->> 'replaces' is null and coalesce(p_entry ->> 'relation', '') <> 'changes' and p_entry ->> 'visit_id' is not null
+     and exists (select 1 from core.pack_kind(v_org, (p_entry ->> 'patient_id')::uuid, 'intensive.reperfusion', '{"current":true}'::jsonb) x
+                  where x.visit_id = (p_entry ->> 'visit_id')::uuid and x.item <> (p_entry ->> 'item')::uuid) then
+    return jsonb_build_array(jsonb_build_object('code', 'already_recorded', 'level', 'refuse'));
+  end if;
+  return '[]';
+end $$;
+create function intensive.reperfusion_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
+  select concat_ws(' · ', intensive.diagnosis_words(e -> 'data' ->> 'diagnosis'),
+    case e -> 'data' ->> 'reperfusion' when 'lysis' then 'lysis' || coalesce(' (' || lower(e -> 'data' -> 'lytic' ->> 'text') || ')', '')
+      when 'primary_pci' then 'primary PCI' when 'none' then 'no reperfusion' end,
+    case e -> 'data' ->> 'reperfusion' when 'primary_pci' then 'door to balloon ' when 'lysis' then 'door to needle ' end
+      || round(extract(epoch from intensive.instant(e -> 'data' ->> 'needle_at') - intensive.instant(e -> 'data' ->> 'door_at')) / 60) || ' min',
+    'Killip ' || upper(e -> 'data' ->> 'killip'))
+$$;
+-- its FHIR: an Observation, a component for each time (valueDateTime) and for the diagnosis, reperfusion, angiography and Killip class
+create function intensive.reperfusion_fhir(p jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p ->> 'org')::uuid; l jsonb := p -> 'entries' -> (jsonb_array_length(p -> 'entries') - 1); o jsonb; c jsonb := '[]'; k record;
+begin
+  select e into o from jsonb_array_elements(p -> 'entries') with ordinality x(e, n) where e ->> 'type' <> 'crossed_out' order by n desc limit 1;
+  if o is null then return '[]'; end if;
+  c := jsonb_build_array(jsonb_build_object('code', jsonb_build_object('text', 'Diagnosis'), 'valueString', intensive.diagnosis_words(o -> 'data' ->> 'diagnosis')));
+  for k in select * from (values ('pain_at', 'Pain began'), ('door_at', 'At the door'), ('ecg_at', 'First ECG'), ('needle_at', 'Lysis or balloon'),
+                                 ('angiography_by', 'Angiography by')) v(key, words) loop
+    continue when intensive.instant(o -> 'data' ->> k.key) is null;
+    c := c || jsonb_build_array(jsonb_build_object('code', jsonb_build_object('text', k.words), 'valueDateTime', core.fhir_date(intensive.instant(o -> 'data' ->> k.key), 'minute', v_org)));
+  end loop;
+  if o -> 'data' ? 'reperfusion' then
+    c := c || jsonb_build_array(jsonb_build_object('code', jsonb_build_object('text', 'Reperfusion'), 'valueString',
+      replace(o -> 'data' ->> 'reperfusion', '_', ' ') || coalesce(': ' || (o -> 'data' -> 'lytic' ->> 'text'), '')));
+  end if;
+  if o -> 'data' ? 'angiography' then
+    c := c || jsonb_build_array(jsonb_build_object('code', jsonb_build_object('text', 'Angiography'), 'valueString', replace(o -> 'data' ->> 'angiography', '_', ' ')));
+  end if;
+  if o -> 'data' ? 'killip' then
+    c := c || jsonb_build_array(jsonb_build_object('code', jsonb_build_object('text', 'Killip class'), 'valueString', upper(o -> 'data' ->> 'killip')));
+  end if;
+  return jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('resourceType', 'Observation', 'id', o ->> 'item',
+    'meta', core.fhir_meta(l, coalesce((p ->> 'private')::boolean, false)),
+    'status', case when l ->> 'type' = 'crossed_out' or coalesce((l ->> 'redacted')::boolean, false) then 'entered-in-error' else 'final' end,
+    'code', jsonb_build_object('text', 'Reperfusion times'), 'subject', jsonb_build_object('reference', 'Patient/' || (p ->> 'patient')),
+    'encounter', case when o ->> 'visit_id' is not null then jsonb_build_object('reference', 'Encounter/' || (o ->> 'visit_id')) end,
+    'effectiveDateTime', core.fhir_date((o ->> 'occurred_at')::timestamptz, o ->> 'precision', v_org),
+    'performer', jsonb_build_array(jsonb_build_object('reference', 'PractitionerRole/' || (o ->> 'author_id'))), 'component', c,
+    'note', case when coalesce(o -> 'data' ->> 'note', '') <> '' then jsonb_build_array(jsonb_build_object('text', o -> 'data' ->> 'note')) end)));
+end $$;
+-- the unit's heparin table: a target low below high; steps in order, touching, open only at the two ends (as a score's ranges)
+create function intensive.heparin_check(p_where jsonb, p_data jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare s jsonb; n int := 0; v_prev int; v_count int := jsonb_array_length(coalesce(p_data -> 'steps', '[]'));
+begin
+  if (p_data ->> 'low')::int >= (p_data ->> 'high')::int then
+    return jsonb_build_array(jsonb_build_object('code', 'bad_target', 'level', 'refuse', 'field', 'high'));
+  end if;
+  for s in select y.x from jsonb_array_elements(coalesce(p_data -> 'steps', '[]')) as y(x) loop
+    n := n + 1;
+    if (n > 1 and not s ? 'min') or (n < v_count and not s ? 'max') or (s ->> 'min')::int > (s ->> 'max')::int then
+      return jsonb_build_array(jsonb_build_object('code', 'steps_open', 'level', 'refuse', 'field', 'steps.' || (n - 1) || '.min'));
+    end if;
+    if n > 1 and (s ->> 'min')::int <> v_prev + 1 then
+      return jsonb_build_array(jsonb_build_object('code', case when (s ->> 'min')::int <= v_prev then 'steps_overlap' else 'steps_gap' end,
+        'level', 'refuse', 'field', 'steps.' || (n - 1) || '.min'));
+    end if;
+    v_prev := (s ->> 'max')::int;
+  end loop;
+  return '[]';
+end $$;
+
 -- ── the unit's setting: each infusion's key once; a units/h dose takes a bag in units, a mass rate a bag by mass; a bag has all three ──
 create function intensive.unit_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
   select coalesce((select jsonb_agg(f) from (
@@ -473,7 +563,31 @@ select core.declare_setting('intensive.cardiac', 'intensive', 'department', $j${
     {"key":"needle_minutes","labels":{"en":"Door to needle within"},"unit":"min","help":{"en":"Lysis."}},
     {"key":"balloon_minutes","labels":{"en":"Door to balloon within"},"unit":"min","help":{"en":"Primary PCI."}}]$j$::jsonb);
 
--- the CCU's starter setup (Q14, as drawn): four CCU beds, the same chart and Round, the cardiac rows on, the CCU's infusions
+-- the reperfusion times: one record a stay, its action everyday (a CCU's doctors and nurses both write it)
+select core.declare_action('write:intensive.reperfusion', 'intensive', 'department', '{"en":"Write the reperfusion times"}', everyday => true);
+select core.declare_type('intensive.reperfusion', 1, 'intensive', $j${"type":"object","additionalProperties":false,"required":["diagnosis"],
+  "properties":{"diagnosis":{"enum":["stemi_anterior","stemi_inferior","stemi_lateral","stemi_posterior","stemi_other","nstemi"]},
+    "pain_at":{"$ref":"#/$defs/datetime"},"door_at":{"$ref":"#/$defs/datetime"},"ecg_at":{"$ref":"#/$defs/datetime"},
+    "reperfusion":{"enum":["lysis","primary_pci","none"]},"lytic":{"$ref":"#/$defs/concept"},"needle_at":{"$ref":"#/$defs/datetime"},
+    "angiography":{"enum":["within_24h","rescue_now","elective","not_planned","done"]},"angiography_by":{"$ref":"#/$defs/datetime"},
+    "killip":{"enum":["i","ii","iii","iv"]},"note":{"type":"string"}}}$j$::jsonb,
+  'intensive.reperfusion_line(jsonb)', array['Observation'], to_fhir => 'intensive.reperfusion_fhir(jsonb)',
+  checks => array['intensive.reperfusion_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Reperfusion times","ar":"أزمنة إعادة التروية"}');
+-- the unit's heparin by aPTT: its target and its table (the chart suggests the next rate; the nurse signs it)
+select core.declare_setting('intensive.heparin', 'intensive', 'department', $j${"type":"object","additionalProperties":false,"required":["low","high","steps"],
+  "properties":{"low":{"type":"integer","minimum":20,"maximum":200,"default":50},"high":{"type":"integer","minimum":20,"maximum":200,"default":70},
+    "steps":{"type":"array","default":[],"items":{"type":"object","additionalProperties":false,"required":["change","next"],
+      "properties":{"min":{"type":"integer","minimum":0},"max":{"type":"integer","minimum":0},"change":{"type":"integer","minimum":-2000,"maximum":2000},
+        "hold":{"type":"integer","minimum":0,"maximum":240},"next":{"type":"integer","minimum":1,"maximum":48}}}}}}$j$::jsonb,
+  'intensive.heparin_check(jsonb,jsonb)', labels => '{"en":"Heparin by aPTT","ar":"الهيبارين حسب APTT"}', form => 'department',
+  fields => $j$[{"key":"low","labels":{"en":"Target aPTT from"},"unit":"s"},{"key":"high","labels":{"en":"to"},"unit":"s"},
+    {"key":"steps","labels":{"en":"The unit's table"},"help":{"en":"For each aPTT range: the change to the rate, a stop first if any, and when the next aPTT is due. The chart suggests; the nurse signs."}},
+    {"key":"steps.min","labels":{"en":"aPTT from"},"unit":"s"},{"key":"steps.max","labels":{"en":"to"},"unit":"s"},
+    {"key":"steps.change","labels":{"en":"Change"},"unit":"units/h"},{"key":"steps.hold","labels":{"en":"Stop first"},"unit":"min"},
+    {"key":"steps.next","labels":{"en":"Next aPTT in"},"unit":"h"}]$j$::jsonb);
+
+-- the CCU's starter setup (Q14, as drawn): four CCU beds, the same chart and Round, the cardiac rows on, the CCU's infusions and its
+-- heparin table (Claude's defaults, awaiting the owner: each unit sets its own)
 select core.declare_setup('intensive.ccu', 'intensive', 'stays', '{"en":"CCU","ar":"العناية المركزة للقلب"}', packs => array['intensive'],
   screens => '{"screens":["base.beds","intensive.chart","intensive.round"],"opens":"base.beds"}',
   settings => $j${"department.encounter_class":{"class":"IMP"},"department.review_results":{"level":"critical"},
@@ -484,7 +598,10 @@ select core.declare_setup('intensive.ccu', 'intensive', 'stays', '{"en":"CCU","a
       {"key":"noradrenaline","name":"Noradrenaline","short":"noradrenaline","kind":"vasopressor","sofa":"noradrenaline","dose_unit":"ug/kg/min","amount":4,"amount_unit":"mg","volume":50},
       {"key":"dobutamine","name":"Dobutamine","short":"dobutamine","kind":"inotrope","sofa":"dobutamine","dose_unit":"ug/kg/min","amount":250,"amount_unit":"mg","volume":50},
       {"key":"insulin","name":"Soluble insulin","short":"insulin","kind":"insulin","dose_unit":"units/h","amount":50,"amount_unit":"units","volume":50}]},
-    "intensive.cardiac":{"on":true,"ecg_minutes":10,"needle_minutes":30,"balloon_minutes":90}}$j$::jsonb,
+    "intensive.cardiac":{"on":true,"ecg_minutes":10,"needle_minutes":30,"balloon_minutes":90},
+    "intensive.heparin":{"low":50,"high":70,"steps":[{"max":39,"change":200,"next":6},{"min":40,"max":49,"change":100,"next":6},
+      {"min":50,"max":70,"change":0,"next":24},{"min":71,"max":85,"change":-100,"next":6},{"min":86,"max":100,"change":-200,"hold":30,"next":6},
+      {"min":101,"change":-300,"hold":60,"next":6}]}}$j$::jsonb,
   places => (select jsonb_agg(jsonb_build_object('key', 'ccu_' || n, 'name', 'CCU ' || n, 'label', 'bed') order by n) from generate_series(1, 4) n),
   help => '{"en":"Four CCU beds on the board, and Critical care with its cardiac rows: rhythm, chest pain and ST each hour, the reperfusion times, heparin by aPTT."}');
 
