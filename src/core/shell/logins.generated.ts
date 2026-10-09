@@ -65,6 +65,14 @@ export const DEMO_GROUPS: DemoGroup[] = [
   { department: 'Diabetes clinic', departmentId: '043f9d6c-1d02-59f7-9e62-46aa91a5c248', people: [
     { email: 'diabetes@demo.com', name: 'Dr. Iman Sherif', role: 'Doctor' },
   ] },
+  { department: 'ICU', departmentId: '91fdec43-773f-5952-9026-a4d666c81df9', people: [
+    { email: 'hany@demo.com', name: 'Dr. Hany Salem', role: 'Doctor' },
+    { email: 'mariam@demo.com', name: 'Mariam Saad', role: 'Nurse' },
+  ] },
+  { department: 'CCU', departmentId: '59f739f5-2b82-57a7-ad7d-d6f551d80c96', people: [
+    { email: 'tarek@demo.com', name: 'Dr. Tarek Nour', role: 'Doctor' },
+    { email: 'mariam@demo.com', name: 'Mariam Saad', role: 'Nurse' },
+  ] },
   { department: 'Family medicine', departmentId: '15566c3b-bdc9-520b-a8ca-62a8ae46dcbc', people: [
     { email: 'family@demo.com', name: 'Dr. Hazem Ouda', role: 'Doctor' },
   ] },

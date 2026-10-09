@@ -377,6 +377,68 @@ export interface HaematoWeek {
 export interface Here {
   note?: string
 }
+/** intensive.goals v1 (intensive) */
+export interface IntensiveGoals {
+  analgesia?: 'controlled' | 'needs_more'
+  antibiotics?: 'keep' | 'narrow' | 'stop' | 'none'
+  balance_target?: Quantity
+  bowels?: 'opened' | 'not_opened'
+  feeding?: 'enteral' | 'nil_by_mouth' | 'eating' | 'parenteral'
+  glucose?: 'on_target' | 'insulin_infusion' | 'above_target'
+  head_up?: boolean
+  lines?: {
+    decision: 'keep' | 'remove'
+    item: string
+  }[]
+  map_target?: Quantity
+  note?: string
+  sedation?: 'light' | 'deep' | 'none'
+  text?: string
+  thrombo?: 'heparin' | 'stockings' | 'not_yet'
+  ulcer?: 'yes' | 'not_needed'
+  wean?: 'not_today' | 'today'
+}
+/** intensive.infusion v1 (intensive) */
+export interface IntensiveInfusion {
+  amount?: Quantity
+  dose?: Quantity
+  dose_unit?: 'ug/kg/min' | 'ug/min' | 'ug/h' | 'mg/h' | 'mg/kg/h' | 'g/h' | 'units/h'
+  drug: Concept
+  key?: string
+  medication?: string
+  note?: string
+  rate?: Quantity
+  reason?: string
+  status: 'running' | 'stopped'
+  volume?: Quantity
+  weight?: Quantity
+}
+/** intensive.reperfusion v1 (intensive) */
+export interface IntensiveReperfusion {
+  angiography?: 'within_24h' | 'rescue_now' | 'elective' | 'not_planned' | 'done'
+  angiography_by?: Datetime
+  diagnosis: 'stemi_anterior' | 'stemi_inferior' | 'stemi_lateral' | 'stemi_posterior' | 'stemi_other' | 'nstemi'
+  door_at?: Datetime
+  ecg_at?: Datetime
+  killip?: 'i' | 'ii' | 'iii' | 'iv'
+  lytic?: Concept
+  needle_at?: Datetime
+  note?: string
+  pain_at?: Datetime
+  reperfusion?: 'lysis' | 'primary_pci' | 'none'
+}
+/** intensive.vent v1 (intensive) */
+export interface IntensiveVent {
+  fio2?: Quantity
+  mode: 'vc' | 'pc' | 'prvc' | 'simv' | 'ps' | 'cpap' | 'other'
+  mode_text?: string
+  note?: string
+  peep?: Quantity
+  pinsp?: Quantity
+  ps?: Quantity
+  rate?: Quantity
+  vt?: Quantity
+}
 /** left v1 (base) */
 export interface Left {
   reason?: string
@@ -1236,6 +1298,41 @@ export interface HaematoInrSetting {
     reason: string
   }[]
 }
+/** setting intensive.cardiac (intensive; owner department) */
+export interface IntensiveCardiacSetting {
+  balloon_minutes?: number
+  ecg_minutes?: number
+  needle_minutes?: number
+  on: boolean
+}
+/** setting intensive.heparin (intensive; owner department) */
+export interface IntensiveHeparinSetting {
+  high: number
+  low: number
+  steps: {
+    change: number
+    hold?: number
+    max?: number
+    min?: number
+    next: number
+  }[]
+}
+/** setting intensive.unit (intensive; owner department) */
+export interface IntensiveUnitSetting {
+  day_starts: number
+  infusions: {
+    amount?: number
+    amount_unit?: 'ug' | 'mg' | 'g' | 'units'
+    atc?: string
+    dose_unit: 'ug/kg/min' | 'ug/min' | 'ug/h' | 'mg/h' | 'mg/kg/h' | 'g/h' | 'units/h'
+    key: string
+    kind?: 'vasopressor' | 'inotrope' | 'sedative' | 'opioid' | 'insulin' | 'anticoagulant' | 'antiarrhythmic' | 'vasodilator' | 'electrolyte' | 'other'
+    name: string
+    short?: string
+    sofa?: 'noradrenaline' | 'adrenaline' | 'dopamine' | 'dobutamine'
+    volume?: number
+  }[]
+}
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
   analysers: false
@@ -1576,6 +1673,10 @@ export interface EntryData {
   'haemato.programme': HaematoProgramme
   'haemato.week': HaematoWeek
   'here': Here
+  'intensive.goals': IntensiveGoals
+  'intensive.infusion': IntensiveInfusion
+  'intensive.reperfusion': IntensiveReperfusion
+  'intensive.vent': IntensiveVent
   'left': Left
   'lis.blood': LisBlood
   'lis.transfusion': LisTransfusion
@@ -1642,6 +1743,9 @@ export interface SettingData {
   'familycare.checks': FamilycareChecksSetting
   'familycare.files': FamilycareFilesSetting
   'haemato.inr': HaematoInrSetting
+  'intensive.cardiac': IntensiveCardiacSetting
+  'intensive.heparin': IntensiveHeparinSetting
+  'intensive.unit': IntensiveUnitSetting
   'lis.large': LisLargeSetting
   'nephrology.renal_list': NephrologyRenalListSetting
   'obgyn.gynaecology': ObgynGynaecologySetting

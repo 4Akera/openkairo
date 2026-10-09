@@ -3,8 +3,8 @@
 -- ticked there: its prices show, its Dispensing rows hand their lines) and takes its own payment at its counter, where the pharmacist
 -- holds the Cashier's role and has billing's Today on the Pharmacy's line, to count and close their own drawer. Written through the
 -- doors as the owner; run again, it adds only what is missing. Skipped while either pack is off. Emergency uses Ward nursing too, after
--- its own pack, so Emergency's words lead each tile's line and its two buttons are the tile's (skipped while either is off). Its day is
--- supabase/demo/clinic_packs.sql.
+-- its own pack, so Emergency's words lead each tile's line and its two buttons are the tile's (skipped while either is off). The ICU
+-- and the CCU use Ward nursing too, after Critical care in their pack order. Its day is supabase/demo/clinic_packs.sql.
 
 select demo.layer('clinic_packs');
 
@@ -22,6 +22,15 @@ begin
   perform demo.screen(ph, 'pharmacy.dispensing', true);
   perform demo.screen(ph, 'pharmacy.stock');
   perform demo.screen(ph, 'billing.today');
+end $$;
+
+-- the ICU and the CCU use Ward nursing too (its drug round and its handover, later), after Critical care in their pack order, so the
+-- tile's two buttons are Critical care's. Skipped while either pack is off.
+do $$
+begin
+  if not (core.packs_used(demo.base('clinic')) @> array['intensive', 'bedside']) then return; end if;
+  perform demo.tick(demo.id('intensive', 'icu'), 'bedside');
+  perform demo.tick(demo.id('intensive', 'ccu'), 'bedside');
 end $$;
 
 -- Family medicine uses chronic care and the immunisation pack too (§5.8 Q16), after its own and in that order, with the immunisation

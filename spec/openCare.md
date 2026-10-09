@@ -1704,6 +1704,108 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- *Built 2026-10-09 (Critical care, key intensive, piece I1, in two commits I1a and I1b; chosen by Claude in the build, awaiting the owner):* role block d2 and one
+  migration, 19, ending with `core.lock_pack('intensive')`; pieces I2 and I3 add to it. Its starter setup `intensive.icu`: six beds (ICU
+  1–6), inpatient stays (IMP), review of critical results, the line `{"screens":["base.beds","intensive.chart"],"opens":"base.beds"}`, and the unit's setting `intensive.unit` (the hour the ICU day starts, 8 by default, and the unit's nine infusions,
+  each with its usual bag and its kind), drawn on the ICU's card in Settings → Departments. The ICU chart is the pack's screen `intensive.chart` (work stays, read:record), a tab beside the
+  board, not the chart's center: a pack's view in the center is a core door (`chart/model/at.ts`, `center/EncounterPane.tsx`), noted
+  for the owner, who may choose it later; the record panel's section is too narrow for an hourly grid, and the composer writes one entry
+  per draft. The tile's button "ICU chart" opens the tab on that patient (`?tab=intensive.chart&stay=`). The tab: the ICU's patients as
+  chips, one line about the one chosen ("Open the chart"), "Since 08:00" (the ICU day) or "Last 24 h", and the grid, hours across, in
+  groups: vitals (heart rate, BP, MAP, SpO₂, RR, temperature, glucose, CVP, GCS from the base's GCS score, ACVPU, air or O₂), the
+  ventilator (mode, FiO₂ · PEEP, Vt · rate, PS), one row per infusion that ran (its dose; "off" the hour it stopped), in and out (in,
+  urine, "Output total" from 9257-7 in its own row, and the balance "in − urine" over the ICU day's hours; a column holds the hour up to it, so the day-start column closes the day before) and who signed (initials;
+  "due" for the hour now). A carried setting and a MAP worked out from the BP are faint (the MAP's title says so); a MAP under 65 and an
+  hour's urine under 0.5 mL/kg carry ↓ in amber. Under the grid, the hour card (for whoever writes vitals): the hour now or one of the
+  two before as chips; the vitals (the BP shows the MAP it gives); on a ventilator, the mode chips and FiO₂, PEEP, Vt, rate, PS with the
+  setting in force faint, and its end chip ("Extubated", "Off NIV"); off it, air or oxygen with its flow, ACVPU, and "Start ventilation"
+  or "Start NIV"; each running infusion's dose or rate (the other half shown at once, "= 5.9 mL/h") and Stop; "+ Infusion" with the
+  unit's rows as chips, a card for the dose, the bag and the weight; in and urine. A change at an earlier hour than its item's latest version, a rate of 0 and an FiO₂ under 21 are problems (the server would refuse them). It writes one column an hour as one set, signed once by the nurse: the base's vitals (with ACVPU and air
+  or oxygen, the owner's Q5), the base's observations for MAP (8478-0), CVP (60985-9), fluid in (9103-3) and urine (9188-4) (the
+  owner's B1), the base's procedure for the time on a ventilator (`local.procedure` invasive or non-invasive ventilation, in progress
+  until a version ends it), and the pack's own two types for what the base lacks: `intensive.vent`, the ventilator's settings (one item
+  an episode, a version whenever a setting changes: the settings are one set and the mode is a word, so not one base observation each),
+  and `intensive.infusion`, an infusion's rate (one item an infusion, a version for each rate change, stopped to end it; as an
+  extension of `given` its FHIR could not carry the rate). A setting carried on from the hour before is never written again (a blank keeps it),
+  and a MAP not typed is never written (it is worked out from the BP when drawn). The dose is always the dose the pump's rate gives (rate × the
+  bag's amount ÷ its volume, by the weight for a dose per kg), and the server checks it (`rate_mismatch` beyond half a step: its
+  arithmetic, not a clinical stop; the bag's volume must be in mL and the weight in kg, both above 0). UCUM only where exact: µg/kg/min and mg/h carry it; µg/min, µg/h, mg/kg/h, g/h and units/h are
+  words with no code (insulin and heparin never U/h). An infusion started links to the patient's prescription only when it is the same drug (an
+  equal ATC code, which also puts the prescription's drug on it, or the same whole name once normalised, the drug staying the unit's
+  row); a prescription sharing only the first word is a "Link to" chip the nurse taps, and with none "No prescription for … on the
+  record" shows, never a stop. Fluids are the base's observations,
+  shared with Ward nursing: the four codes (9103-3, 9187-6, 9188-4, 9257-7) are to be agreed with its fluid piece, so both draw one
+  balance. Only what cannot be written greys the sign (a BP with one side, FiO₂ typed as a fraction, the dose and the
+  rate both typed, a dose per kg with no weight); a value outside its usual range (HR 15 in an arrest) is a notice under its field and
+  "Sign anyway", never a stop. Sign (⌘↵) writes the column as one set through the writer, each change a version with the version it was
+  typed against (`seen`). Lines read "Ventilator VC · FiO2 80%
+  · PEEP 10 · Vt 420 · rate 18" and "Started: Noradrenaline 0.3 µg/kg/min · 17.6 mL/h · 4 mg in 50 mL"; FHIR: an Observation with a
+  component for each setting, a MedicationAdministration with its rate. The tile's words come from the op `intensive.board` (the
+  owner's C1): the airway ("Ventilated d3" in blue, "NIV d1", "Extubated 09:15" for a day after a completed or stopped version, else "On air", "O₂ 2 L/min"), one infusion
+  (the first vasopressor or inotrope in amber, "noradrenaline 0.15", else the first running, "insulin 4 units/h"), "MAP n" while a
+  pressor runs or under 65 (amber; of the last two hours, the newer of the typed MAP and the one worked out from the BP, so an older
+  typed MAP never hides a falling pressure), and "urine 0.4 mL/kg/h" in amber under 0.5 over the last hours. Demo: the ICU (position 10), its
+  nurse Mariam Saad and its doctor Dr. Hany Salem; Nabil (septic shock, ventilated, noradrenaline titrated 0.2 → 0.25 → 0.2 → 0.15)
+  and Samy (DKA with kidney injury, on air, insulin, little urine), six hours charted each. The clinic also ticks Ward nursing on the
+  ICU, after Critical care. Drawn in the picture and not built: RASS (the base has no RASS score), the "By day" chip, lactate under
+  Bloods (no LOINC row in the base's subset), FiO₂ as a fraction (written and drawn in %); LOINC rows for the ventilator's settings and
+  UCUM rows for every dose rate would each be a base change.
+- *Built 2026-10-09 (Critical care, piece I2; chosen by Claude in the build, awaiting the owner):* SOFA (1996) is a declared score
+  table, `intensive.sofa` (Vincent et al., Intensive Care Med 1996): six items, each a choice '0'–'4' worth its value (breathing ·
+  PaO₂/FiO₂, platelets, bilirubin, blood pressure · drugs in µg/kg/min, GCS, kidney · creatinine or urine), one band 0–24 "of 24" with
+  no tone, alias `/sofa`, no coding (no SOFA code in the base's LOINC subset); its line reads "SOFA 11, 1996 · of 24", Settings → Scores
+  lists it. A third ICU tab, Round (`intensive.round`, on the setup's line), opened on a patient by each taken bed's second button,
+  Goals. Its left card, "SOFA · this morning", suggests each row from the record's worst of the last 24 hours, read through the reader
+  (one `base.values` table read, the stay's scores, the ICU chart's reads): the lowest platelets, the highest bilirubin and creatinine
+  (µmol/L converted), the day's urine only when the 24 whole hours before the current one are all charted ("urine charted 6 of 24 hours:
+  not enough to score"), the highest pressor dose above 0 in µg/kg/min by the unit's setting (each infusion row's new `sofa` field names noradrenaline, adrenaline,
+  dopamine or dobutamine) else the lowest MAP typed or worked out from a BP, the lowest GCS (shown but not chosen under a sedative:
+  "sedated (propofol): score the GCS before sedation"). Nothing is suggested for PaO₂ (not in the base's codes: "score it from the blood
+  gas") or for a GCS not recorded;
+  the core's score card shows each row's chips and points, the doctor checks each one, and the server adds them up, the earlier SOFAs
+  beside it ("yesterday 12 · admission 13"). The right card, "Daily goals · ward round", is the pack's own type `intensive.goals` (a
+  CarePlan; a round's goals, and their activities, are completed by the next round's; its check takes only the patient's line
+  procedures and targets in mmHg and mL): FAST HUGS BID as chips (the trial off the ventilator only while
+  ventilated), each line's keep or remove, the targets (MAP at least, the day's fluid balance) and the goals in words. The lines are
+  the base's procedures (`local.procedure` central_line, arterial_line, urinary_catheter, with their site), in progress until "Removed
+  now" writes a version that ends them (outcome removed, its own set), with their day since they went in; "+ Line" puts one in, and a
+  line the last round decided to remove that is still in reads "remove decided 09:30" in amber. One round card and one Sign (⌘↵): the
+  SOFA and the goals as two entries in one set (Q8 as drawn, awaiting the owner's answer); `write:intensive.goals` is everyday like
+  `write:score`, so the Nurse may sign it too. The board adds "SOFA n" and, in amber, "goals not done" until the round is signed after
+  the ICU day began (08:00, the unit's setting), through the op `intensive.board`; the chart's banner, for a stay in a department that uses the pack, says "Ventilated d3",
+  "SOFA 11" and "goals not done" (never an infusion: the banner's types are read on every chart in one page, so a pressor word there is
+  noted for the owner). Demo: Nabil's three lines, his SOFAs 13 → 12 → 11 and this morning's bloods (platelets 96, creatinine 1.6),
+  today's round with its goals; Samy's SOFA 4 on admission, his goals not done.
+- *Built 2026-10-09 (Critical care, piece I3; chosen by Claude in the build, awaiting the owner; Q14 as drawn):* the pack's second
+  starter setup, the CCU (`intensive.ccu`: four beds CCU 1–4, inpatient stays, the same board, ICU chart and Round, review level
+  critical, its own infusions: heparin, GTN, amiodarone, noradrenaline, dobutamine, insulin), and a department setting, "Cardiac rows"
+  (`intensive.cardiac`: on, first ECG within 10 min, door to needle within 30, door to balloon within 90), on in the CCU and off in the
+  ICU's setup, so a mixed unit switches them on in its own ICU. With them on, the hourly chart's first group is Heart: the rhythm ("SR",
+  "SR · VEs", "AF · new"), the heart rate and BP (moved out of Vitals), chest pain 0–10 and ST ("resolving", "↓ 60 %"); and Bloods
+  (aPTT, troponin I, potassium, magnesium from `base.values`, flagged by their interpretation, the aPTT against the unit's heparin
+  target) comes before in and out. The hour card
+  gains the rhythm chips (Other with its words), ectopics (VEs, AEs), chest pain and the ST chips with its fall in %. Rhythm, ectopics,
+  ST and the ST elevation's fall are the base's observations coded in the pack's own open code system `intensive.cardiac` (the base's
+  LOINC subset has no rhythm or ST rows: LOINC 8884-9 there would be a base change); chest pain is the vitals' `pain`. The board's op
+  returns the stay's latest rhythm, and the tile says it first, in amber, when it is not sinus ("AF", "CHB"). Above the chart, a strip of
+  the reperfusion times: "Anterior STEMI · lysis (tenecteplase) | Pain began 06:10 | At the door 07:30 | First ECG 07:36 ✓ 6 min · target
+  10 | Lysis 07:58 ✓ ECG to needle 22 min · door to needle 28 min · pain to needle 1 h 48 | Into CCU 08:20 | Angiography by 07:58 tomorrow · 2–24 h after
+  lysis | Killip I", each target from the setting met ✓ or missed ✕ with its minutes, a fact and never a stop; a primary PCI reads "door to
+  balloon" against its own target, never "needle". "Into CCU" is the stay's own start, never copied. The record is the pack's own type,
+  `intensive.reperfusion` (an Observation with a component for each time, the diagnosis, the reperfusion, the angiography and the
+  Killip class), one a stay, its times in order and none still to come, lysis with its drug: one record checked, versioned and exported as one, where base
+  observations would hold each time apart. §5.6 does not list it among the packs' types, so it awaits the owner's yes. Its action
+  `write:intensive.reperfusion` is everyday, so the CCU's doctors and nurses both edit it (Edit under the strip: inline chips, four
+  HH:MM times each with "yesterday", Sign). Heparin by aPTT: a department setting, `intensive.heparin` (a target 50–70 s and the unit's
+  table of steps that touch, checked like a score's ranges), from which the hour card suggests under the heparin's row ("aPTT 44 s at
+  12:40 (target 50–70 s) → raise by 100 units/h to 1 100 · next aPTT 18:40", "Use 1 100" fills the dose) from the latest aPTT written
+  after the heparin's last change; nothing is written until the nurse signs, and an aPTT acted on says nothing. The banner says "Killip
+  I–IV" from the stay's record. The table, the targets and the bags are Claude's defaults, each unit's own on its card. Demo: the CCU, Dr. Tarek
+  Nour its doctor and Mariam Saad nursing there too, Ward nursing ticked after Critical care; Maher Shokry Qandil, 58, anterior STEMI
+  after tenecteplase, admitted today to CCU 2 (the picture's Adel Shawky, renamed: radiology's demo has an Adel Shawky), on heparin
+  and GTN, his hours sinus with the ST resolving, then AF with chest pain (the amiodarone bolus as the base's `given`, its
+  infusion an hour later), the GTN stopped; his troponin, potassium, magnesium and an aPTT of 44 s the heparin has not been changed for;
+  his reperfusion times (lysis 28 minutes after the door, angiography within 24 hours of it, Killip I).
 - *Built 2026-10-09, E1 (owner, Q3)*: one Done passes a stay to the next department. The base's presence check reads the whole set: a
   stay the same set discharges no longer counts as admitted, so the stay's `discharged` and the next department's `admitted` land
   together; a second stay the set opens does count (`already_admitted`); the stay that follows must be `about` the stay it ends
@@ -3080,9 +3182,24 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **Critical care, piece I1a: the ICU, its types, its demo and the board's words** (§5.6; lane `beds-icu`; no core or base
+  change): migration 19 (`intensive`: `intensive.vent`, `intensive.infusion`, `intensive.unit`, the op `intensive.board`, the setup
+  `intensive.icu`), seed and demo (Mariam Saad, Dr. Hany Salem; Nabil, Samy), `src/packs/intensive` (codes, unit, board, the tile
+  line). As run in the lane: `db:test` 34 suites, 1655 checks, all green (`intensive` 63, new; `demo` 90); gen:shapes and gen:logins
+  checks clean; `db:demo` twice (37 patients, 17 open visits and stays, 397 entries); `test:intensive` 1 group (tileWords), and composer
+  18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis
+  12, billing 19, bedside 12; lint 0 errors; typecheck and `vite build` clean but for `src/pictures/bookings.tsx` (another session's).
 - 2026-10-09: **one Done passes a stay to the next department, E1** (§4.2, §4.4, §5.6; the owner's Q3; lane `beds-er`): 08's
   `base.presence_check` edited in place to read the whole set, one words entry (`not_linked`); no client change but one words entry.
   34 suites (new `next_stay` 26), 1607 checks.
+- 2026-10-09: **Critical care, piece I1b: the ICU chart, one column an hour signed once** (§5.6; lane `beds-icu`; no core or base
+  change): the screen `intensive.chart` declared in migration 19 and on the setup's line; `src/packs/intensive` (rates, hours, items,
+  chart, hour, useIcu, StayPicker, Grid, HourParts, HourCard, IcuChart; the tile's ICU chart button). As run in the lane: `db:test`
+  34 suites, 1656 checks, all green (`intensive` 64, `demo` 90); gen:shapes and gen:logins checks clean; `db:demo` twice (37 patients,
+  17 open visits and stays, 397 entries); `test:intensive` 7 groups (rates, hours, items, chartOf, entriesOf, problems and notices,
+  tileWords), and composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11,
+  registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; typecheck and `vite build` clean but for
+  `src/pictures/bookings.tsx` (another session's).
 - 2026-10-09: **Emergency, piece E2a: the server** (§5.6; lane `beds-er`): migration 18 (`casualty`: the triage on the base's
   observation, the two scales as code systems, `casualty.scale`, the triage nurse, `casualty.board`, the setup `casualty.er`), its seed
   and demo day, the ER ticking Ward nursing in `clinic_packs`, the regenerated shapes and logins. 35 suites (new `casualty` 62,
@@ -3092,16 +3209,40 @@ types, parked pack calls with per-call Retry, Postgres enums.
   word), `scripts/test-casualty.ts`. Node: composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7,
   demo 8, setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12, casualty 10; lint 0 errors; tsc stops only on
   `src/pictures/bookings.tsx` (another session's). No SQL change.
+- 2026-10-09: **Critical care, piece I2: SOFA (1996) and the daily goals, one round signed once** (§5.6; lane `beds-icu`; no core or
+  base change): migration 19 (`intensive.sofa` 1996, `intensive.goals` with its check, line and CarePlan, `write:intensive.goals`, the
+  screen `intensive.round`, the unit's `sofa` field, the board's SOFA and goals), the demo (Nabil's lines, SOFAs and round, Samy's
+  SOFA), `src/packs/intensive` (sofa, goals, words, useRound, SofaCard, GoalsCard, Lines, Round; the tile's Goals button and words; the
+  banner's words). As run: `db:test` 35 suites, 1700 ok (intensive 64, intensive_round 39 new, registry 16, demo 95), the gen:shapes
+  and gen:logins checks clean; `db:demo` twice (37 patients, 17 open visits and stays, 413 entries); node tests composer 18, chart 24
+  and 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 12,
+  billing 19, bedside 12, `test:intensive` 7 and `test-intensive-round` 8 groups (coag, liver, renal, cardio, cns, resp and the
+  history, goals and lines, words and tile); lint 0 errors; typecheck and `vite build` clean but for `src/pictures/bookings.tsx`
+  (another session's).
 - 2026-10-09: **Emergency, piece E3a: the server for Where to** (§5.6; lane `beds-er`): migration 18 in place (the triage's police
   case, `casualty.disposition` with its line and check, `write:casualty.disposition`, `casualty.beds`, the board's decided and
   police), the demo's Salwa and Mostafa and Karim's police case, the regenerated shapes. Suites: all 35 green, 1727 checks (`casualty` 107,
   `demo` 92); db:demo twice (40 patients, 352 entries); node tests unchanged (casualty 10 groups); lint 0 errors; tsc stops only on
   `src/pictures/bookings.tsx`; vite build ok. No browser pass (no client change: E2b's client ignores the board's new fields until
   E3b; E3b's words.ts names `not_leaving`).
+- 2026-10-09: **Critical care, piece I3a: the CCU and its cardiac rows** (§5.6; lane `beds-icu`; no core or base change): migration 19
+  (`intensive.instant`, the code system `intensive.cardiac`, the setting `intensive.cardiac`, the setup `intensive.ccu`, the board's
+  rhythm), the seeds (the CCU, Dr. Tarek Nour, Mariam Saad there too, Ward nursing ticked), the demo (Maher), `src/packs/intensive`
+  (cardiac, HourCardiac; hour, chart, unit, useIcu, board, HourCard, IcuChart). As run: `db:test` 36 suites, 1 719 ok
+  (`intensive_ccu` 13 new, `demo` 101), the gen:shapes and gen:logins checks clean; `db:demo` twice (38 patients, 18 open visits and
+  stays, 441 entries); `test:intensive` 7, 8 and 3 groups and the other node tests green; lint 0 errors; typecheck and build clean but
+  for `src/pictures/bookings.tsx` (another session's), `vite build` ok.
 - 2026-10-09: **Emergency, piece E3b: Where to on screen** (§5.6; lane `beds-er`): `src/packs/casualty` (`where.ts`, pure: the
   choices, the codes of each leaving, the destinations and `kindOf`, the decision's and the leaving's sets, the ER's times, the police
   notice; `WhereTo.tsx`, `Disposition.tsx`; the board's decided and police in the tile's and the rows' words, To leave; the triage
   card's police case; the tile's second button Where to), `scripts/test-casualty.ts` (19 groups); migration 18's board read carries the decision's why (the pack's own op, no shape change).
+- 2026-10-09: **Critical care, piece I3b: the reperfusion times, heparin by aPTT and Killip** (§5.6; lane `beds-icu`; no core or base
+  change): migration 19 (`intensive.diagnosis_words`, the reperfusion record's check, line and FHIR, `intensive.heparin_check`, the type
+  `intensive.reperfusion`, its action, the setting `intensive.heparin`, the CCU setup's heparin table), the demo (Maher's reperfusion
+  record), `src/packs/intensive` (heparin, reperfusion, ReperfusionStrip; hours, cardiac, chart, HourParts, HourCard, IcuChart,
+  useIcu, words, index). As run: `db:test` every suite green (`intensive_ccu` 33 ok, `demo` 102 ok), the gen:shapes and gen:logins
+  checks clean; `db:demo` twice (38 patients, 18 open visits and stays, 442 entries); `test:intensive` 7, 8 and 8 groups, and the other
+  fifteen node suites green; lint no error; typecheck and build clean but for `src/pictures/bookings.tsx` (another session's).
 - 2026-10-09: **Ward nursing, piece 3a: the drug round** (§5.6; lane `beds`; no core or base change): migration 17 edited in place
   (`bedside.dose`, `write:bedside.dose`, `bedside.round` setting and screen, `bedside.stay_doses`, the ops `bedside.round` and
   `bedside.sheet`, `bedside.board`'s doses), the base demo's three admission doses, Ward nursing's demo (medicines and rounds),
