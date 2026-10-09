@@ -2,7 +2,8 @@
 // (one search), Sat · Mon · Wed or Sun · Tue · Thu, the shift, the chair (one taken on that pattern and shift is off, and says so), from
 // when, a note; a chair that does not fit the patient's HBV or HCV isolation is shown in amber, never a stop. A patient's cell: move this
 // one session to another day, shift or chair (with a reason), or take it off that day, or end the slot from a day; a moved session's
-// cell: its reason, and Undo. Every change goes through the pack's one door (haemodialysis.plan); a refusal's words show under it.
+// cell: its reason, and Undo; and the patient's standing prescription, which the dialysis doctor writes or changes there. Every change
+// of the schedule goes through the pack's one door (haemodialysis.plan); a refusal's words show under it.
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { TriangleAlert, X } from 'lucide-react'
 import { usePatientSearch } from '@core/hooks/reads'
@@ -10,6 +11,7 @@ import type { Department, PatientBanner, PatientHit, Place } from '@core/db/type
 import { Button, Chip, Input, Kbd, PatientLine, SearchInput, errorText } from '@core/ui'
 import { DAYS, addDays, dayDate, type Days } from './days'
 import { useIsolation, usePlan } from './hooks'
+import { RxCard } from './RxCard'
 import { chairWarning, keptFor, shiftWords, type Unit } from './unit'
 import { nameOf, patternTaken, taken, undoBlocked, type Cell, type Week } from './week'
 import { REFUSALS } from './words'
@@ -123,6 +125,7 @@ export function SlotCard({ dept, unit, chairs, week, cell, on, names, onDone, on
       <p className="text-14 font-semibold text-fg">{head}{slot?.ends_on && <span className="font-normal text-muted"> · until {dayDate(slot.ends_on)}</span>}</p>
       {slot?.note && <p className="text-12 text-muted">{slot.note}</p>}
       <Warn text={cell.kind === 'away' ? null : cell.warn} /></Head>
+    <RxCard dept={dept} patientId={pid} />
     {cell.kind === 'slot' ? <>
       <div className="grid gap-3" onKeyDown={keys(onCancel, move)}>
         <p className={LABEL}>Move this session ({dayDate(on)})</p>

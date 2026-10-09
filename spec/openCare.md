@@ -1793,6 +1793,36 @@ numbered as on its picture.
   progress (End, D2c, is the way); only the dialysis doctor writes the prescription; the 13 mL/kg/h and 4 % notices, the BP
   thresholds and the 300 and 400 mL are Claude's choices; a reading every 30 minutes is not reminded; a reading of the machine's
   numbers alone (no BP or pulse) is not taken, since its export would be an empty panel.
+- **Built 2026-10-09, D2b: Dialysis's Session tab (chosen by Claude at the owner's request, awaiting the owner)**: the tab
+  `haemodialysis.session` beside the board, opened at a chair by the tile's **Readings** (`?stay=…`, for whoever may write a reading;
+  the tile's second button, End, comes with D2c): the unit's stays as chips in chair order ("Chair 1 · Said Abdelaziz"; a stay that has
+  ended moves the tab on to the next, and says so), "Open the chart", and the patient line (name, age, sex, number, the chair, "2:30 of
+  4:00"). On the left, Before for the nurse while the session is on and Before is not signed: the weight (with "dry 72.0 · 2.9 above dry
+  · after the last session 72.4, gained 2.5", or "lost 0.6"; once the stay has a weight it is shown, not typed again: the weight before
+  is the stay's first, corrected from the chart), BP (the composer's /v words: "146/84", or "146/84 82 36.8"), pulse, temperature, the
+  access (fistula, graft or catheter, preset from the prescription, with "thrill and bruit ✓" or "dressing clean ✓", its site and a
+  note), and the fluid to take off with its parts ("2.9 above dry + 0.3 given back − 0.4 left above dry", or "0.4 under dry: nothing to take off") and its hourly rate, or the
+  nurse's own figure in litres; no prescription, a rate over 13 mL/kg/h and a gain over 4 % of the dry weight are notices, never a stop.
+  Sign Before (⌘↵) writes one set: the base's vitals (with the weight only when the stay had none; left out when the stay's first vitals are the ones
+  shown and nothing changed) and the
+  session changed with the prescription copied, the fluid in mL and the access. Once signed, its summary ("Before · 11:35"; the BP, pulse and temperature Before wrote, else the
+  first vitals'). Under it the
+  prescription card: the session's copy once Before is signed (saying when the standing one has changed since), else the patient's
+  current one, with who wrote it and when (not named over a copy the standing one has moved on from); for the dialysis doctor "Change" (or "Write the prescription") folds the editor out under its
+  lines (the numbers with their usual ranges as notices: time 2–5.5 h, blood flow 200–450, dialysate 300–800 mL/min, K 1–4, Ca 1–1.75,
+  HCO₃ 28–38 mmol/L, heparin bolus 0–5000 units and rate 0–2000 units/h or none — a dose or None must be said —, dry weight 25–200 kg; the dialyser, the access and its
+  site, a note). The Schedule's slot card draws the same card for its patient, so the doctor writes or changes a prescription for a
+  patient not on dialysis today. On the right the readings: a grid by time (BP and pulse, then the machine's blood flow, arterial,
+  venous, TMP, the fluid taken off in litres and the heparin rate; a BP under 100 systolic amber and under 90 red, with ↓ and words for a
+  screen reader), then, while the session is on, the reading card: one row of fields in the grid's order with the last reading's
+  numbers as placeholders (a blank machine field keeps the last one; the fluid typed in litres, kept in mL, over 10 L taken for the machine's mL and
+  refused; the pulse, blood flow, fluid and heparin never under 0; the arterial field takes a minus on a tablet; a BP or a pulse needed,
+  and on the first reading a machine number, each said as what is missing),
+  ⌘↵ signs. A BP under 90, a fall of 30 or more since the start, a venous pressure over 250, an arterial under −250 or over 0 (the minus left off?), or less taken off than the
+  last reading is a notice; the nurse decides. An entry crossed out (a reading, a weight, the session, the prescription) is left out
+  of the tab. A write that comes back with warnings shows them with Sign anyway; a refusal shows its words above the button. The
+  tile now reads "off 1.4 of 2.8 L" after the time once Before set a target ("off 0 of 2.8 L" before the first reading), then the BP,
+  then "gained 2.3 kg" in amber over 4 % of the dry weight; Start's stay takes the access as its reason ("Haemodialysis · AV fistula").
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -3003,4 +3033,10 @@ types, parked pack calls with per-call Retry, Postgres enums.
   words and due's hours and access from the prescription; the demo's prescriptions, Before, readings, Nadia's event, Said's EPO and the
   past sessions' fluid; suite `haemodialysis` 145 checks, `demo` 106; shapes regenerated (HaemodialysisPrescription,
   HaemodialysisReading); no file under src/packs; no core file.
+- 2026-10-09: **Dialysis, piece D2b** (§5.6; lane `beds-dialysis`): the pack's client, the session part 1 (`src/packs/haemodialysis`:
+  session, rx, reading, useSession, parts, SessionTab, BeforeCard, RxCard, Readings; board's fluid and gain words, due's access reason,
+  the Schedule's slot card with the prescription, the tile's Readings button, the screen registered, the D2a refusals' words): the
+  Session tab (Before and the fluid to take off, the prescription and its editor, the readings grid and card); `test:haemodialysis` 15
+  groups (the session's in `scripts/test-haemodialysis-session.ts`); no server change; no core file. The screen's file is
+  `SessionTab.tsx`, since `Session.tsx` and the pure `session.ts` collide on a case-insensitive disk.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

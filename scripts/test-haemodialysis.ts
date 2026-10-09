@@ -1,6 +1,7 @@
 // Dialysis's client (spec/openCare.md §5.6): the unit's days (Sat · Mon · Wed, Sun · Tue · Thu; a week Saturday … Thursday), its setting
 // (shifts, hours, the chairs kept for HBV and HCV, shown, never a stop), who is due under the board (the clinics' C5 rows: their words,
-// Start's session and Missed), the tile's words from the board's read (C7), the Schedule tab's week, and the refusals' words. Pure: no browser, no database.
+// Start's session and Missed), the tile's words from the board's read (C7), the Schedule tab's week, the refusals' words, and the session
+// (test-haemodialysis-session.ts: Before, the prescription, the readings). Pure: no browser, no database.
 //   npm run test:haemodialysis
 import assert from 'node:assert/strict'
 import { setClinicTimeZone } from '../src/core/ui/time'
@@ -15,6 +16,7 @@ import { boardOf, hmm, staysKey, tileWords, type Board } from '../src/packs/haem
 import { REFUSALS } from '../src/packs/haemodialysis/words'
 import { awayWords, grid, inWords, nameOf, patternTaken, slotCount, taken, undoBlocked, weekOfData, type Week } from '../src/packs/haemodialysis/week'
 import { E, presence } from './chart-fixtures'
+import { sessionGroups } from './test-haemodialysis-session'
 
 setClinicTimeZone('Africa/Cairo')
 let n = 0
@@ -204,5 +206,8 @@ test('words: the refusals in the pack\'s words', () => {
   assert.equal(words('chair_taken'), 'That chair is taken then'); assert.equal(words('session_on_day'), 'A session is recorded for this patient today already')
   assert.equal(words('shifts_out_of_order'), 'Shifts start in order: earliest first'); assert.equal(words('already_due'), 'This patient comes that day already')
 })
+
+// the session (D2b): Before, the prescription, the readings, the tile's fluid words
+sessionGroups(test)
 
 console.log(`haemodialysis: ${n} groups passed`)

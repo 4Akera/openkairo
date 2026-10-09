@@ -1,13 +1,18 @@
 // Dialysis's words on each chair's tile (spec/openCare.md §5.6; the owner's C1 through the core's tile read, C7): the pack's op
-// haemodialysis.board reads, once per board, each stay's session, its latest blood pressure and the patient's isolation. The tile says
-// the session ("on · 1:30 left", "over by 0:10" in amber, "ended · not discharged" or "no session" in amber), "BP 146/84" (amber under
-// 100 systolic, red under 90) and a chair that does not fit the patient's isolation, in amber. Pure: npm run test:haemodialysis.
+// haemodialysis.board reads, once per board, each stay's session (with the fluid to take off and the dry weight Before copied), its latest
+// blood pressure and fluid taken off, the weight before and the last session's weight after, and the patient's isolation. The tile says
+// the session ("on · 1:30 left", "over by 0:10" in amber, "ended · not discharged" or "no session" in amber), "off 1.4 of 2.8 L" once
+// there is a target, "BP 146/84" (amber under 100 systolic, red under 90), "gained 2.3 kg" in amber over 4 % of the dry weight, and a
+// chair that does not fit the patient's isolation, in amber. Pure: npm run test:haemodialysis.
 import type { PresenceRow } from '@core/db/types'
 import type { TileCtx, TileWord, TileWords } from '@core/screens/ward/tiles'
 import { chairWarning, keptFor, unitOf } from './unit'
 
-export interface StayFacts { session?: { item: string; status: string; on?: string; shift?: number; hours?: number; started?: string }; bp?: { sys: number; dia: number; at: string }
-  isolation?: string[] }
+export interface StayFacts {
+  session?: { item: string; status: string; on?: string; shift?: number; hours?: number; started?: string; target?: number; dry?: number }
+  bp?: { sys: number; dia: number; at: string }; uf?: { ml: number; at: string }; pre?: number; last?: number; event?: { heading: string; at: string }
+  isolation?: string[]
+}
 /** now: the read's clock (the board's hook moves it each minute so the tiles' time words move; the line reads the time itself) */
 export interface Board { patient_ids: string[]; stays: Record<string, StayFacts>; now?: number }
 /** the op's answer, or null when it is not one */
@@ -19,6 +24,8 @@ export function boardOf(data: unknown): Board | null {
 }
 /** the board's stays as its read's key: read again when a stay changes or has its first vitals */
 export const staysKey = (rows: readonly Pick<PresenceRow, 'item' | 'version' | 'has_vitals'>[]) => rows.map((r) => `${r.item}@${r.version}:${r.has_vitals ? 1 : 0}`).sort().join(',')
+/** litres in words: 2800 → "2.8", 2000 → "2", 0 → "0" */
+export const litres = (ml: number) => String(Math.round(ml / 100) / 10)
 /** minutes as 'H:MM' */
 export function hmm(min: number): string {
   const m = Math.max(0, Math.floor(min)); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
@@ -40,6 +47,20 @@ function bpWord(bp: StayFacts['bp']): string | TileWord | null {
   const text = `BP ${bp.sys}/${bp.dia}`
   return bp.sys < 90 ? { text, tone: 'danger' } : bp.sys < 100 ? { text, tone: 'warn' } : text
 }
+const n = (x: unknown) => typeof x === 'number' && Number.isFinite(x) ? x : typeof x === 'string' && x.trim() && Number.isFinite(Number(x)) ? Number(x) : undefined
+/** "off 1.4 of 2.8 L" once Before set the fluid to take off ("off 0 of 2.8 L" before the first reading) */
+function fluidWord(f: StayFacts): string | null {
+  const target = n(f.session?.target); if (target === undefined) return null
+  return `off ${litres(n(f.uf?.ml) ?? 0)} of ${litres(target)} L`
+}
+/** the weight gained since the last session, in amber over 4 % of the dry weight */
+export const GAIN_SHARE = 0.04
+function gainedWord(f: StayFacts): TileWord | null {
+  const pre = n(f.pre); const last = n(f.last); const dry = n(f.session?.dry)
+  if (pre === undefined || last === undefined || dry === undefined) return null
+  const g = pre - last
+  return g > GAIN_SHARE * dry ? { text: `gained ${g.toFixed(1)} kg`, tone: 'warn' } : null
+}
 /** the tile's words for an admitted stay, from the board's read; nothing while it reads (or failed), or for a visit */
 export function tileWords(row: PresenceRow, ctx: Pick<TileCtx, 'place' | 'org' | 'dept'>, data: unknown, now: number): TileWords | null {
   if (row.kind !== 'stay' || row.state !== 'admitted') return null
@@ -48,7 +69,9 @@ export function tileWords(row: PresenceRow, ctx: Pick<TileCtx, 'place' | 'org' |
   if (!b || !Object.hasOwn(b.stays, row.item)) return null
   const f = b.stays[row.item] ?? {}
   const words: (string | TileWord)[] = [sessionWord(f.session, now)]
+  const fluid = fluidWord(f); if (fluid) words.push(fluid)
   const bp = bpWord(f.bp); if (bp) words.push(bp)
+  const gained = gainedWord(f); if (gained) words.push(gained)
   if (ctx.place?.name) {
     const warn = chairWarning(Array.isArray(f.isolation) ? f.isolation : [], keptFor(ctx.place, unitOf(ctx.org, ctx.dept.id)), ctx.place.name)
     if (warn) words.push({ text: warn, tone: 'warn' })

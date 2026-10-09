@@ -2,7 +2,8 @@
 // standing schedule and its one-off moves — today's shift on now and every earlier one, the next within the hour — less whoever has a
 // session today or a stay here. Each row says the scheduled chair, "due 11:30" (amber from 30 minutes late), HBV or HCV, a chair that
 // does not fit, a session moved here for today, the last session's day, and a stay in another department. Start is C5's admission into a
-// chair with the session begun in the same set; Missed records the session not done ("Did not come"). Pure: npm run test:haemodialysis.
+// chair (its reason the access: "Haemodialysis · AV fistula") with the session begun in the same set; Missed records the session not
+// done ("Did not come"). Pure: npm run test:haemodialysis.
 import { newId } from '@core/db/entries'
 import type { EntryIn } from '@core/db/rpc'
 import type { EntryData } from '@core/db/shapes.generated'
@@ -10,10 +11,11 @@ import type { PatientBanner, Place, ServerEntry } from '@core/db/types'
 import type { BoardRow } from '@core/screens/ward/rows'
 import type { TileWord } from '@core/screens/ward/tiles'
 import { dayWord, daysBetween } from './days'
+import { accessWords } from './rx'
 import { chairWarning, keptFor, type Unit } from './unit'
 
 export interface DueRow { patient_id: string; slot_id?: string; move_id?: string; on: string; shift: number; starts?: string; starts_at?: string; place_id: string; hours: number
-  isolation: string[]; last_on?: string; elsewhere?: string }
+  isolation: string[]; last_on?: string; elsewhere?: string; access?: string }
 export interface Due { on: string; shift: number; patient_ids: string[]; rows: DueRow[] }
 
 const str = (x: unknown) => typeof x === 'string' && x ? x : undefined
@@ -26,7 +28,8 @@ export function dueOf(data: unknown): Due | null {
     if (!r || typeof r !== 'object' || !str(r.patient_id) || !str(r.on) || typeof r.shift !== 'number' || !str(r.place_id)) return []
     const iso = Array.isArray(r.isolation) ? r.isolation.filter((x): x is string => typeof x === 'string') : []
     return [{ patient_id: r.patient_id as string, slot_id: str(r.slot_id), move_id: str(r.move_id), on: r.on as string, shift: r.shift, starts: str(r.starts), starts_at: str(r.starts_at),
-      place_id: r.place_id as string, hours: typeof r.hours === 'number' ? r.hours : Number(r.hours) || 4, isolation: iso, last_on: str(r.last_on), elsewhere: str(r.elsewhere) }]
+      place_id: r.place_id as string, hours: typeof r.hours === 'number' ? r.hours : Number(r.hours) || 4, isolation: iso, last_on: str(r.last_on), elsewhere: str(r.elsewhere),
+      access: str(r.access) }]
   })
   const ids = Array.isArray(d.patient_ids) ? d.patient_ids.filter((x): x is string => typeof x === 'string') : rows.map((r) => r.patient_id)
   return { on: str(d.on) ?? rows[0]?.on ?? '', shift: typeof d.shift === 'number' ? d.shift : 0, patient_ids: ids, rows }
@@ -61,10 +64,12 @@ export function dueWords(r: DueRow, chair: Pick<Place, 'name'> | undefined, u: P
   if (r.elsewhere) out.push({ text: `in ${r.elsewhere}`, tone: 'warn' })
   return out
 }
+/** the stay's reason once started: 'Haemodialysis · AV fistula' (the access from the patient's standing prescription) */
+export const reasonOf = (access: string | undefined) => { const a = accessWords(access); return a ? `Haemodialysis · ${a}` : 'Haemodialysis' }
 /** C5's row: who, the words, the minutes from the shift's start, the stay's reason once started */
 export function boardRow(r: DueRow, who: PatientBanner | undefined, chair: Pick<Place, 'name'> | undefined, u: Pick<Unit, 'shifts' | 'hbv' | 'hcv'>, now: number): BoardRow {
   return { key: keyOf(r), patientId: r.patient_id, number: who?.record_number ?? null, name: who ? `${who.given_name} ${who.family_name}` : 'Patient',
-    sexAge: who ? `${who.sex[0]?.toUpperCase() ?? ''} ${who.age}`.trim() : '', words: dueWords(r, chair, u, now), since: r.starts_at ?? null, reason: 'Haemodialysis' }
+    sexAge: who ? `${who.sex[0]?.toUpperCase() ?? ''} ${who.age}`.trim() : '', words: dueWords(r, chair, u, now), since: r.starts_at ?? null, reason: reasonOf(r.access) }
 }
 /** by shift, then the chair's place on the board */
 export function orderRows<R extends Pick<BoardRow, 'key'>>(rows: R[], chairs: Pick<Place, 'id' | 'position'>[]): R[] {
