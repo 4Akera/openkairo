@@ -57,7 +57,7 @@ select t.ok(f.settings = (select count(*) from core.settings where organization_
 \echo '── the demo''s departments are made from starter setups (§5.2), and a reload''s setups add nothing'
 select t.ok((select jsonb_object_agg(d.name, core.setting_at(d.organization_id, 'department.setup', d.id) ->> 'setup') from core.departments d
     where d.organization_id = demo.base('clinic') and d.work <> 'outside')
-  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier","Radiology":"radiology.department","Paediatrics clinic":"paediatrics.clinic","Children''s ward":"paediatrics.ward","ObGyn clinic":"obgyn.clinic"}',
+  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier","Radiology":"radiology.department","Paediatrics clinic":"paeds.clinic","Children''s ward":"paeds.ward","ObGyn clinic":"obgyn.clinic"}',
   'each department records the setup it was made from');
 select t.ok((select count(*) from core.places where organization_id = demo.base('clinic') and department_id = demo.base('ward')
     and id = core.setup_id(demo.base('ward'), 'place', 'bed_' || substr(name, 5))) = 8, 'the ward''s eight beds are the Ward setup''s, ids from their keys');
@@ -84,14 +84,14 @@ select t.ok((select called_at from base.presence where organization_id = demo.ba
 select t.ok(count(*) = 3 and bool_and(checked_in_at between now() - interval '3 days' and now()), count(*) || ' in a ward bed, admitted in the last three days')
   from base.presence where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.base('ward');
 select t.ok(count(*) = 5 and bool_and(checked_in_at between now() - interval '3 days' and now()), count(*) || ' on the Children''s ward, admitted in the last three days')
-  from base.presence where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.id('paediatrics', 'ward');
+  from base.presence where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.id('paeds', 'ward');
 select t.ok((select (now() at time zone 'Africa/Cairo')::date - day from base.presence where organization_id = demo.base('clinic') and kind = 'stay'
   and patient_id = demo.id('base', 'patient:nadia') and state = 'admitted') = 2, 'Nadia was admitted two days ago (day 3 today)');
 select t.ok(max(e.occurred_at) <= clock_timestamp() and min(e.occurred_at) >= now() - interval '200 days', 'every clinical time within the last 200 days, none ahead')
-  from core.entries e where e.organization_id = demo.base('clinic') and e.department_id not in (demo.id('paediatrics', 'clinic'), demo.id('obgyn', 'clinic'));
+  from core.entries e where e.organization_id = demo.base('clinic') and e.department_id not in (demo.id('paeds', 'clinic'), demo.id('obgyn', 'clinic'));
 -- a child's measurements since birth and a method in place for ten years are older, never ahead
 select t.ok(max(e.occurred_at) <= clock_timestamp() and min(e.occurred_at) >= now() - interval '11 years', 'the clinics'' histories: none ahead, none older than 11 years')
-  from core.entries e where e.organization_id = demo.base('clinic') and e.department_id in (demo.id('paediatrics', 'clinic'), demo.id('obgyn', 'clinic'));
+  from core.entries e where e.organization_id = demo.base('clinic') and e.department_id in (demo.id('paeds', 'clinic'), demo.id('obgyn', 'clinic'));
 select t.ok(bool_and(p.birth_date between current_date - interval '90 years' and current_date) and bool_and(p.birth_date is not null), 'birth dates relative to today')
   from core.patients p where p.organization_id = demo.base('clinic');
 select pg_temp.day_is_today();
@@ -126,7 +126,7 @@ select t.ok(bool_and(case when years < 1 then w between 2 and 12 and hr between 
 select t.ok(not exists (select 1 from aged where type = 'vitals' and years < 3 and data ? 'bp'), 'no blood pressure on a baby');
 select t.ok(bool_and((a -> 'range' -> 'low' ->> 'value')::numeric = case when gender = 'female' then 12 else 13.5 end), 'haemoglobin ranges by sex')
   from aged, jsonb_array_elements(data -> 'analytes') a where type = 'result' and a ->> 'key' = 'hb' and data ->> 'status' = 'final';
-select t.ok(bool_and(years >= 18 or department_id = demo.id('paediatrics', 'clinic')), 'adults'' medicines on adults only; a child''s from the Paediatrics clinic') from aged where type = 'medication';
+select t.ok(bool_and(years >= 18 or department_id = demo.id('paeds', 'clinic')), 'adults'' medicines on adults only; a child''s from the Paediatrics clinic') from aged where type = 'medication';
 
 \echo '── logins: a demo person for every built-in role, each with a login'
 select t.ok(not exists (select 1 from core.roles r where r.organization_id is null and core.layer_on(demo.base('clinic'), r.layer)

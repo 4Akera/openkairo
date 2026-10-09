@@ -50,15 +50,15 @@ export function DevCard({ q, set, ctx }: CardEditorProps) {
   const d = q as Partial<DevData>
   // the list for the age, once, from the clinic's setting (its source kept as the check's version)
   useEffect(() => {
-    if (d.paediatrics || months === null) return
+    if (d.paeds || months === null) return
     const fresh = newCheck(ms.milestones, months, ms.source ?? undefined)
     if (fresh) set(fresh as unknown as Record<string, unknown>)
-  }, [d.paediatrics, months]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d.paeds, months]) // eslint-disable-line react-hooks/exhaustive-deps
   if (months === null) return <p className="text-13 text-warn">The birth date is not recorded: the list goes by age.</p>
-  if (!d.paediatrics) return <p className="text-13 text-muted">{ms.milestones.length ? 'Opening the list…' : 'The clinic has no milestones yet (Settings → Packs → Paediatrics).'}</p>
-  const full = d as DevData; const dp = full.paediatrics
+  if (!d.paeds) return <p className="text-13 text-muted">{ms.milestones.length ? 'Opening the list…' : 'The clinic has no milestones yet (Settings → Packs → Paediatrics).'}</p>
+  const full = d as DevData; const dp = full.paeds
   const [he, his] = pronoun(pt?.sex)
-  const put = (patch: Partial<DevData['paediatrics']>) => set(withSummary({ ...full, paediatrics: { ...dp, ...patch } }) as unknown as Record<string, unknown>)
+  const put = (patch: Partial<DevData['paeds']>) => set(withSummary({ ...full, paeds: { ...dp, ...patch } }) as unknown as Record<string, unknown>)
   const toggle = (i: number, yes: boolean) => put({ items: dp.items.map((x, j) => j === i ? { ...x, yes } : x) })
   const plan = dp.plan ?? []
   const take = (w: string) => put({ plan: plan.includes(w) ? plan.filter((x) => x !== w) : [...plan, w] })

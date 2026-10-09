@@ -5,7 +5,7 @@
 -- repeated). On the Children's ward, five children in beds 1, 2, 3, 5 and 6 (days 2, 1, 3, 1 and 4) with their latest weights (one weighed
 -- 4 days ago) and two
 -- Brighton PEWS (3 and 4). Times relative to the load; ids in the pack's namespace; a reload erases these patients first.
-select demo.layer('paediatrics');
+select demo.layer('paeds');
 
 -- a weight, length and head (a baby's length is measured lying)
 create or replace function pg_temp.grow(p_wt numeric, p_len numeric default null, p_head numeric default null, p_more jsonb default '{}') returns jsonb language sql immutable as $$
@@ -14,12 +14,12 @@ create or replace function pg_temp.grow(p_wt numeric, p_len numeric default null
 $$;
 -- a newborn check: an observation by the pack's own code, its value in words or a quantity, a note
 create or replace function pg_temp.newborn(p_code text, p_label text, p_value jsonb, p_note text default null) returns jsonb language sql immutable as $$
-  select jsonb_strip_nulls(jsonb_build_object('code', demo.concept('paediatrics.newborn', p_code, p_label), 'value', p_value, 'note', p_note))
+  select jsonb_strip_nulls(jsonb_build_object('code', demo.concept('paeds.newborn', p_code, p_label), 'value', p_value, 'note', p_note))
 $$;
 -- a development check at a list age, every milestone yes (the clinic's list as the seed loads it)
 create or replace function pg_temp.dev(p_months int, p_age int) returns jsonb language sql immutable as $$
   select jsonb_build_object('code', jsonb_build_object('text', 'Development check'), 'value', jsonb_build_object('text', '4 yes · all yes'),
-    'paediatrics', jsonb_build_object('list', p_months || '-month', 'months', p_months, 'age_months', p_age, 'version', 'CDC 2022 (Learn the Signs. Act Early.)',
+    'paeds', jsonb_build_object('list', p_months || '-month', 'months', p_months, 'age_months', p_age, 'version', 'CDC 2022 (Learn the Signs. Act Early.)',
       'items', case p_months
         when 2 then '[{"area":"movement","text":"Holds the head up on the tummy","short":"head up","yes":true},{"area":"hands","text":"Opens the hands briefly","short":"opens hands","yes":true},
                       {"area":"talking","text":"Makes sounds other than crying","short":"sounds","yes":true},{"area":"social","text":"Smiles when you talk or smile","short":"smiles","yes":true}]'::jsonb
@@ -31,7 +31,7 @@ create or replace function pg_temp.dev(p_months int, p_age int) returns jsonb la
 $$;
 -- a stay on the Children's ward: the named bed when free, else the next free one (a child admitted in the app since keeps theirs)
 create or replace function pg_temp.admit(p_doctor uuid, p_bed int, p_min int, p_reason text, p_urgent boolean default false) returns uuid language plpgsql as $$
-declare s uuid := gen_random_uuid(); w uuid := demo.id('paediatrics', 'ward'); b uuid; r jsonb; v_last uuid;
+declare s uuid := gen_random_uuid(); w uuid := demo.id('paeds', 'ward'); b uuid; r jsonb; v_last uuid;
   e jsonb := demo.e('admitted', w, s, demo.ago(p_min), jsonb_build_object('admit_source', 'outp', 'reason', p_reason), s);
 begin
   for b in select x.id from core.places x where x.organization_id = demo.base('clinic') and x.department_id = w and x.retired_at is null
@@ -49,12 +49,12 @@ begin
 end $$;
 
 do $$
-declare pc uuid := demo.id('paediatrics', 'clinic'); ward uuid := demo.id('paediatrics', 'ward');
-  rehab uuid := demo.id('paediatrics', 'rehab'); kandil uuid := demo.id('paediatrics', 'kandil'); doha uuid := demo.id('paediatrics', 'doha');
+declare pc uuid := demo.id('paeds', 'clinic'); ward uuid := demo.id('paeds', 'ward');
+  rehab uuid := demo.id('paeds', 'rehab'); kandil uuid := demo.id('paeds', 'kandil'); doha uuid := demo.id('paeds', 'doha');
   day int := 60 * 24; v uuid; s uuid;
 begin
   -- ── Malek: 11 months; the weight from the 24th centile at 4 months to the 2nd today; in consult 6 minutes ──
-  perform demo.patient(demo.id('paediatrics', 'patient:malek'), array['Malek'], 'Shoukry', 'male', demo.born(0, 335), '+201014473281');
+  perform demo.patient(demo.id('paeds', 'patient:malek'), array['Malek'], 'Shoukry', 'male', demo.born(0, 335), '+201014473281');
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, null, demo.ago(335 * day - 60), pg_temp.grow(3.3, 50.0, 34.5, '{"note":"at birth, from the card"}'))));
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, null, demo.ago(274 * day), pg_temp.grow(5.4, 57.5, 39.0))));
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, null, demo.ago(213 * day), pg_temp.grow(6.5, 62.6, 41.4))));
@@ -66,7 +66,7 @@ begin
   perform demo.consult(v, 6, '[]', null, false, pc, rehab);
 
   -- ── Jana: 3 years 2 months; fever and a red left ear; amoxicillin in July; waiting 25 minutes ──
-  perform demo.patient(demo.id('paediatrics', 'patient:jana'), array['Jana'], 'Moataz', 'female', demo.born(3, 61), '+201227716540');
+  perform demo.patient(demo.id('paeds', 'patient:jana'), array['Jana'], 'Moataz', 'female', demo.born(3, 61), '+201227716540');
   perform demo.w(rehab, jsonb_build_array(demo.e('medication', pc, null, demo.ago(90 * day), demo.med('Amoxicillin', 'J01CA04', 5, 'mL', 'TDS',
     '{"duration_days":7,"status":"stopped","status_reason":"Course complete","instructions":"250 mg/5 ml suspension"}'))));
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, null, demo.ago(90 * day), pg_temp.grow(13.6, null, null))));
@@ -74,45 +74,45 @@ begin
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, v, demo.ago(18), demo.vitals(null, null, 128, 38.6, 98, 28, 14.2, 96.0))));
 
   -- ── Kenzy: 10 months; her development to 6 months all yes; the newborn hearing screen to repeat; waiting 15 minutes ──
-  perform demo.patient(demo.id('paediatrics', 'patient:kenzy'), array['Kenzy'], 'Hafez', 'female', demo.born(0, 310), '+201153328876');
+  perform demo.patient(demo.id('paeds', 'patient:kenzy'), array['Kenzy'], 'Hafez', 'female', demo.born(0, 310), '+201153328876');
   perform demo.w(rehab, jsonb_build_array(
     demo.e('observation', pc, null, demo.ago(310 * day - 60), pg_temp.newborn('birth', 'Birth', '{"text":"39 wk · 3.1 kg · normal birth at another hospital"}')),
     demo.e('observation', pc, null, demo.ago(309 * day), pg_temp.newborn('hips', 'Hips', '{"text":"Ortolani and Barlow negative"}', 'day 1 and 6 wk')),
     demo.e('observation', pc, null, demo.ago(309 * day), pg_temp.newborn('eyes', 'Eyes', '{"text":"red reflex present, both"}', 'day 1 and 6 wk')),
-    demo.e('procedure', pc, null, demo.ago(308 * day), jsonb_build_object('concept', demo.concept('paediatrics.newborn', 'hearing', 'Newborn hearing screen (OAE)'),
+    demo.e('procedure', pc, null, demo.ago(308 * day), jsonb_build_object('concept', demo.concept('paeds.newborn', 'hearing', 'Newborn hearing screen (OAE)'),
       'status', 'completed', 'outcome', 'refer, both ears', 'note', 'OAE on day 2 · repeat not done')),
     demo.e('observation', pc, null, demo.ago(307 * day), pg_temp.newborn('jaundice', 'Jaundice', jsonb_build_object('quantity', demo.q(11.6, 'mg/dL', 'mg/dL')), 'day 3 bilirubin · no phototherapy')),
     demo.e('observation', pc, null, demo.ago(306 * day), pg_temp.newborn('heel_prick', 'Heel prick', '{"text":"thyroid (TSH) normal"}', 'day 4 · the health unit''s slip'))));
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, null, demo.ago(249 * day), pg_temp.grow(5.0, 56.5, 38.0)),
-    demo.e('paediatrics.development', pc, null, demo.ago(249 * day - 5), pg_temp.dev(2, 2))));
+    demo.e('paeds.development', pc, null, demo.ago(249 * day - 5), pg_temp.dev(2, 2))));
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, null, demo.ago(188 * day), pg_temp.grow(6.3, 62.0, 40.5)),
-    demo.e('paediatrics.development', pc, null, demo.ago(188 * day - 5), pg_temp.dev(4, 4))));
+    demo.e('paeds.development', pc, null, demo.ago(188 * day - 5), pg_temp.dev(4, 4))));
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, null, demo.ago(127 * day), pg_temp.grow(7.2, 65.5, 42.0)),
-    demo.e('paediatrics.development', pc, null, demo.ago(127 * day - 5), pg_temp.dev(6, 6))));
+    demo.e('paeds.development', pc, null, demo.ago(127 * day - 5), pg_temp.dev(6, 6))));
   v := demo.arrive('10-month check', 15, pc);
   perform demo.w(rehab, jsonb_build_array(demo.e('vitals', pc, v, demo.ago(10), pg_temp.grow(8.4, 71.0, 43.6))));
 
   -- ── the Children's ward: five children, each with the latest weight the board reads ──
-  perform demo.patient(demo.id('paediatrics', 'patient:ziad'), array['Ziad'], 'Barakat', 'male', demo.born(2, 40), '+201006631174');
+  perform demo.patient(demo.id('paeds', 'patient:ziad'), array['Ziad'], 'Barakat', 'male', demo.born(2, 40), '+201006631174');
   s := pg_temp.admit(kandil, 1, day + 120, 'pneumonia');
   perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(day + 60), demo.vitals(null, null, 132, 38.2, 95, 38, 12.4))));
-  perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(180), demo.score('paediatrics.pews', '{"behaviour":"sleeping","circulation":"pink","breathing":"normal","nebulisers":false,"vomiting":false}'))));
+  perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(180), demo.score('paeds.pews', '{"behaviour":"sleeping","circulation":"pink","breathing":"normal","nebulisers":false,"vomiting":false}'))));
 
-  perform demo.patient(demo.id('paediatrics', 'patient:rawan'), array['Rawan'], 'Mekky', 'female', demo.born(6, 100), '+201114490023');
+  perform demo.patient(demo.id('paeds', 'patient:rawan'), array['Rawan'], 'Mekky', 'female', demo.born(6, 100), '+201114490023');
   s := pg_temp.admit(rehab, 2, 300, 'gastroenteritis, dehydration');
   perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(280), demo.vitals(92, 58, 138, 38.4, 98, 26, 20.0))));
-  perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(60), demo.score('paediatrics.pews', '{"behaviour":"irritable","circulation":"pale","breathing":"normal","nebulisers":false,"vomiting":false}'))));
+  perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(60), demo.score('paeds.pews', '{"behaviour":"irritable","circulation":"pale","breathing":"normal","nebulisers":false,"vomiting":false}'))));
 
-  perform demo.patient(demo.id('paediatrics', 'patient:adam'), array['Adam'], 'Abdelmoneim', 'male', demo.born(0, 152), '+201228875519');
+  perform demo.patient(demo.id('paeds', 'patient:adam'), array['Adam'], 'Abdelmoneim', 'male', demo.born(0, 152), '+201228875519');
   s := pg_temp.admit(kandil, 3, 2 * day + 120, 'bronchiolitis', true);
   perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(2 * day + 60), demo.vitals(null, null, 168, 37.9, 92, 64, 6.8))));
-  perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(40), demo.score('paediatrics.pews', '{"behaviour":"irritable","circulation":"pink","breathing":"recessing","nebulisers":false,"vomiting":false}'))));
+  perform demo.w(doha, jsonb_build_array(demo.e('score', ward, s, demo.ago(40), demo.score('paeds.pews', '{"behaviour":"irritable","circulation":"pink","breathing":"recessing","nebulisers":false,"vomiting":false}'))));
 
-  perform demo.patient(demo.id('paediatrics', 'patient:retaj'), array['Retaj'], 'Zidan', 'female', demo.born(9, 70), '+201009926631');
+  perform demo.patient(demo.id('paeds', 'patient:retaj'), array['Retaj'], 'Zidan', 'female', demo.born(9, 70), '+201009926631');
   s := pg_temp.admit(rehab, 5, 200, 'β-thalassaemia, transfusion');
   perform demo.w(doha, jsonb_build_array(demo.e('vitals', ward, s, demo.ago(190), demo.vitals(104, 62, 96, 36.8, 99, 20, 24.0))));
 
-  perform demo.patient(demo.id('paediatrics', 'patient:yehia'), array['Yehia'], 'Sallam', 'male', demo.born(4, 20), '+201143367708');
+  perform demo.patient(demo.id('paeds', 'patient:yehia'), array['Yehia'], 'Sallam', 'male', demo.born(4, 20), '+201143367708');
   -- weighed in the emergency room the day before he came up (4 days ago): amber on the board
   perform demo.w(kandil, jsonb_build_array(demo.e('vitals', ward, null, demo.ago(4 * day), demo.vitals(98, 60, 124, 39.1, 97, 24, 16.0))));
   s := pg_temp.admit(kandil, 6, 3 * day - 60, 'UTI, febrile convulsion');

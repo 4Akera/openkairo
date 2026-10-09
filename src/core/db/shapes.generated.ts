@@ -366,13 +366,13 @@ export interface Order {
   }
   status: 'active' | 'on-hold' | 'revoked' | 'completed'
 }
-/** paediatrics.development v1 (paediatrics) */
-export interface PaediatricsDevelopment {
+/** paeds.development v1 (paeds) */
+export interface PaedsDevelopment {
   code: Concept
   interpretation?: string
   method?: string
   note?: string
-  paediatrics?: {
+  paeds?: {
     age_months?: number
     items: {
       area: 'movement' | 'hands' | 'talking' | 'social'
@@ -696,8 +696,8 @@ export interface OrganizationRecordViewSetting {
 export interface OrganizationTimeZoneSetting {
   zone: string
 }
-/** setting paediatrics.doses (paediatrics; owner organization) */
-export interface PaediatricsDosesSetting {
+/** setting paeds.doses (paeds; owner organization) */
+export interface PaedsDosesSetting {
   doses: {
     drug: string
     from: number
@@ -709,8 +709,8 @@ export interface PaediatricsDosesSetting {
     to: number
   }[]
 }
-/** setting paediatrics.milestones (paediatrics; owner organization) */
-export interface PaediatricsMilestonesSetting {
+/** setting paeds.milestones (paeds; owner organization) */
+export interface PaedsMilestonesSetting {
   milestones: {
     area: 'movement' | 'hands' | 'talking' | 'social'
     months: number
@@ -852,7 +852,7 @@ export interface EntryData {
   'observation': Observation
   'opened_anyway': OpenedAnyway
   'order': Order
-  'paediatrics.development': PaediatricsDevelopment
+  'paeds.development': PaedsDevelopment
   'pharmacy.dispense': PharmacyDispense
   'pregnancy': Pregnancy
   'private': Private
@@ -893,8 +893,8 @@ export interface SettingData {
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
-  'paediatrics.doses': PaediatricsDosesSetting
-  'paediatrics.milestones': PaediatricsMilestonesSetting
+  'paeds.doses': PaedsDosesSetting
+  'paeds.milestones': PaedsMilestonesSetting
   'pharmacy.counselling': PharmacyCounsellingSetting
   'pharmacy.keep_stock': PharmacyKeepStockSetting
   'pharmacy.late_after': PharmacyLateAfterSetting

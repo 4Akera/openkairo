@@ -1,11 +1,11 @@
 // Paediatrics' growth as its section, banner and lines read it (spec/openCare.md §5.7, the picture #paeds-growth): the rows of its own
-// table, paediatrics.growth, which the server fills from the base's vitals with each value's z-score and centile on the WHO tables (the
+// table, paeds.growth, which the server fills from the base's vitals with each value's z-score and centile on the WHO tables (the
 // age on the day, the sex, the tables' version). Nothing here works out a z-score; it only says what the server worked out. Also the
 // words a child's age and weight are said in, centile lines crossed, and Holliday–Segar's maintenance from a weight. Pure.
 import type { TableRead } from '@core/db/types'
 import type { TileWords } from '@core/screens/ward/tiles'
 
-export const GROWTH = 'paediatrics.growth'
+export const GROWTH = 'paeds.growth'
 export type Ind = 'wfa' | 'lfa' | 'hcfa' | 'wfl'
 export const INDICATORS: { key: Ind; label: string; unit: string }[] = [
   { key: 'wfa', label: 'Weight-for-age', unit: 'kg' }, { key: 'lfa', label: 'Length-for-age', unit: 'cm' },

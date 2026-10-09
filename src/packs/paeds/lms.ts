@@ -1,4 +1,4 @@
-// The WHO LMS sums, as the server's paediatrics.measure does them (spec/openCare.md §5.7): L, M and S at a point between two rows of a
+// The WHO LMS sums, as the server's paeds.measure does them (spec/openCare.md §5.7): L, M and S at a point between two rows of a
 // loaded table (by age in months, or length to half a centimetre), and the z-score by the LMS method with the WHO's restricted way past
 // ±3. The record keeps the server's; the line under /v shows the same sums for values being typed. Pure.
 export type Lms = [number, number, number]

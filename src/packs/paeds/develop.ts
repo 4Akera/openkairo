@@ -1,16 +1,16 @@
 // Development and the newborn checks as paediatrics reads them (spec/openCare.md §5.7, the picture #paeds-develop). A check is one entry
-// of the pack's own type, paediatrics.development (the base's observation: the list, the age, its version, each milestone yes or not
-// yet, what was chosen next); the milestones are the clinic's list (the setting paediatrics.milestones), the list for an age the latest
+// of the pack's own type, paeds.development (the base's observation: the list, the age, its version, each milestone yes or not
+// yet, what was chosen next); the milestones are the clinic's list (the setting paeds.milestones), the list for an age the latest
 // one at or before it. "Not yet" past the list's age is a notice, never a stop. The newborn checks are base entries by the pack's own
-// codes (paediatrics.newborn): observations (the birth, the heel prick, hips, eyes, jaundice) and a procedure (the hearing test). Pure.
+// codes (paeds.newborn): observations (the birth, the heel prick, hips, eyes, jaundice) and a procedure (the hearing test). Pure.
 import type { ServerEntry } from '@core/db/types'
 
-export const DEV = 'paediatrics.development'
+export const DEV = 'paeds.development'
 export type Area = 'movement' | 'hands' | 'talking' | 'social'
 export const AREAS: { key: Area; label: string }[] = [{ key: 'movement', label: 'Movement' }, { key: 'hands', label: 'Hands' }, { key: 'talking', label: 'Talking' }, { key: 'social', label: 'Social' }]
 export interface Milestone { months: number; area: Area; text: string; short?: string }
 export interface Item { area: Area; text: string; short?: string; yes: boolean }
-export interface DevData { code: { text: string }; value: { text: string }; paediatrics: { list: string; months: number; age_months: number; version?: string; items: Item[]; plan?: string[] } }
+export interface DevData { code: { text: string }; value: { text: string }; paeds: { list: string; months: number; age_months: number; version?: string; items: Item[]; plan?: string[] } }
 
 /** the child's age in completed months on today's date (the composer's patient) */
 export function ageMonths(born: string | null | undefined, now = new Date()): number | null {
@@ -35,18 +35,18 @@ export function summaryOf(items: Item[], plan: string[] = []): string {
 export function newCheck(all: Milestone[] | undefined, ageMonths: number, version?: string): DevData | null {
   const l = listFor(all, ageMonths); if (!l) return null
   const items: Item[] = AREAS.flatMap((a) => l.items.filter((m) => m.area === a.key).map((m) => ({ area: m.area, text: m.text, ...(m.short ? { short: m.short } : {}), yes: true })))
-  return withSummary({ code: { text: 'Development check' }, value: { text: '' }, paediatrics: { list: listName(l.months), months: l.months, age_months: ageMonths, ...(version ? { version } : {}), items, plan: [] } })
+  return withSummary({ code: { text: 'Development check' }, value: { text: '' }, paeds: { list: listName(l.months), months: l.months, age_months: ageMonths, ...(version ? { version } : {}), items, plan: [] } })
 }
-export const withSummary = (d: DevData): DevData => ({ ...d, value: { text: summaryOf(d.paediatrics.items, d.paediatrics.plan) } })
+export const withSummary = (d: DevData): DevData => ({ ...d, value: { text: summaryOf(d.paeds.items, d.paeds.plan) } })
 /** the draft's line: "Development · the 9-month list at 10 mo · 7 yes · not yet: babbles, looks to the name" (the server's line says the same) */
-export const devLine = (d: Partial<DevData>) => d.paediatrics ? `Development · the ${d.paediatrics.list} list at ${d.paediatrics.age_months} mo · ${summaryOf(d.paediatrics.items, d.paediatrics.plan)}` : 'Development'
+export const devLine = (d: Partial<DevData>) => d.paeds ? `Development · the ${d.paeds.list} list at ${d.paeds.age_months} mo · ${summaryOf(d.paeds.items, d.paeds.plan)}` : 'Development'
 /** not yet past the list's age: the notice (the child older than the list, a milestone not yet) */
-export const lateOf = (d: DevData) => d.paediatrics.age_months > d.paediatrics.months ? d.paediatrics.items.filter((i) => !i.yes) : []
+export const lateOf = (d: DevData) => d.paeds.age_months > d.paeds.months ? d.paeds.items.filter((i) => !i.yes) : []
 
 /** the checks recorded, oldest first: each its list's age and, by area, all yes or which not yet */
 export interface Recorded { entry: ServerEntry; months: number; label: string; byArea: Partial<Record<Area, 'yes' | 'not yet'>>; version: string | null }
 export function recordedOf(own: ServerEntry[]): Recorded[] {
-  return own.filter((e) => e.type === DEV && e.data).map((e) => { const p = (e.data as unknown as DevData).paediatrics
+  return own.filter((e) => e.type === DEV && e.data).map((e) => { const p = (e.data as unknown as DevData).paeds
     const byArea: Recorded['byArea'] = {}
     for (const a of AREAS) { const is = p.items.filter((i) => i.area === a.key); if (is.length) byArea[a.key] = is.every((i) => i.yes) ? 'yes' : 'not yet' }
     return { entry: e, months: p.months, label: listName(p.months).replace('-month', ' mo').replace('-year', ' y'), byArea, version: p.version ?? null } })
@@ -54,7 +54,7 @@ export function recordedOf(own: ServerEntry[]): Recorded[] {
 }
 
 // ── the newborn checks ──
-export const NEWBORN = 'paediatrics.newborn'
+export const NEWBORN = 'paeds.newborn'
 export const CHECKS: { code: string; label: string }[] = [{ code: 'birth', label: 'Birth' }, { code: 'heel_prick', label: 'Heel prick' }, { code: 'hearing', label: 'Hearing' },
   { code: 'hips', label: 'Hips' }, { code: 'eyes', label: 'Eyes' }, { code: 'jaundice', label: 'Jaundice' }]
 type Coding = { system?: string; code?: string }

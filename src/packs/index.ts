@@ -3,6 +3,6 @@ import * as pharmacy from './pharmacy'
 import * as lis from './lis'
 import * as billing from './billing'
 import * as radiology from './radiology'
-import * as paediatrics from './paediatrics'
+import * as paeds from './paeds'
 import * as obgyn from './obgyn'
-export const packs = { pharmacy, lis, billing, radiology, paediatrics, obgyn }
+export const packs = { pharmacy, lis, billing, radiology, paeds, obgyn }

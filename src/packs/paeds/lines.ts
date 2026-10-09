@@ -1,7 +1,7 @@
 // Paediatrics' lines under the base's cards (spec/openCare.md §5.7, the pictures #paeds-growth and #paeds-dose; the core's C1): under
 // /rx the dose per kg — the latest weight, the mg/kg a prescription comes to and the clinic's range (dose.ts) — and under /v the
 // z-scores and centiles of the values being typed, for the age today and the sex, from the loaded WHO tables (the same tables and
-// sums the server keeps with the record: lms.ts here, paediatrics.measure there; who.ts reads the tables once). Shown, never a stop;
+// sums the server keeps with the record: lms.ts here, paeds.measure there; who.ts reads the tables once). Shown, never a stop;
 // nothing stored. For a child only (under 19). Pure.
 import type { CardLineCtx, Words } from '@core/screens/visit/lines'
 import { doseLine, type DoseRule } from './dose'
@@ -19,7 +19,7 @@ const child = (ctx: CardLineCtx) => { const n = ageDays(ctx.record?.patient.born
 export function rxLine(q: Record<string, unknown>, ctx: CardLineCtx): { rows: Words[]; short?: Words | null } | null {
   if (child(ctx) === null) return null
   const w = [...(ctx.record?.values ?? [])].filter((v) => v.key === 'weight').sort((a, b) => b.at.localeCompare(a.at))[0]
-  const rules = ((clinicSetting(ctx.org, 'paediatrics.doses') as { doses?: DoseRule[] } | undefined)?.doses) ?? []
+  const rules = ((clinicSetting(ctx.org, 'paeds.doses') as { doses?: DoseRule[] } | undefined)?.doses) ?? []
   const l = doseLine(q, w ? { kg: Number(w.value), at: w.at } : null, rules, ctx.now, ctx.record?.patient.sex)
   if (!l) return null
   const second: Words = [...(l.tag ? [{ text: l.tag.word, tone: l.tag.tone }] : []), ...(l.more ? [l.more] : [])]

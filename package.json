@@ -25,7 +25,7 @@
     "test:lis": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-lis.ts",
     "test:billing": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing.ts",
     "test:radiology": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-radiology.ts",
-    "test:paediatrics": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-paediatrics.ts",
+    "test:paeds": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-paeds.ts",
     "test:obgyn": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-obgyn.ts",
     "test:clinics-core": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-clinics-core.ts",
     "gen:types": "supabase gen types typescript --local --schema public > src/core/db/types.generated.ts",

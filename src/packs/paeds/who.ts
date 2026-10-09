@@ -7,7 +7,7 @@ let tables: Map<string, Lms> | null = null; let asking = false
 export function whoTables(): Map<string, Lms> | null {
   if (!tables && !asking) {
     asking = true
-    read<{ codes: { code: string; props: { L: number; M: number; S: number } }[] }>({ shape: 'codes', system: 'paediatrics.who_growth', limit: 2000 })
+    read<{ codes: { code: string; props: { L: number; M: number; S: number } }[] }>({ shape: 'codes', system: 'paeds.who_growth', limit: 2000 })
       .then((r) => { tables = new Map(r.codes.map((c) => [c.code, [c.props.L, c.props.M, c.props.S] as Lms])) }).catch(() => undefined).finally(() => { asking = false })
   }
   return tables

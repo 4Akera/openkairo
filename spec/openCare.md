@@ -1594,19 +1594,19 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   board (a patient with a stay here left out), counted as a view of the board's toolbar; Start is the base's admission into a free place
   chosen inline, with the pack's own entries in the same set; at most two buttons of the pack's own, never a base word. Tests:
   `npm run test:clinics-core`, `supabase/tests/clinics_core.sql`. The privileges migration is now `20260926000099_privileges.sql`.
-- *Built 2026-10-08 (lane L2, `clinics-mother-child`), Paediatrics* (`paediatrics`, migration 26, role block e3): the WHO tables as a
-  reference list (`paediatrics.who_growth`, L, M and S by age in months or length in cm; the demo loads birth to 2 years, marked
-  a demo sample) and the server's sums on them (`paediatrics.measure`: z-scores by the LMS method with the WHO's restricted way past ±3,
-  centiles); its table `paediatrics.growth` (one row per vitals item of a child under 19 with a weight, length or head: the z-scores and
+- *Built 2026-10-08 (lane L2, `clinics-mother-child`), Paediatrics* (key `paeds` — "paediatrics" is a word in core, so the key that collides with none, as the plan says —, migration 26, role block e3): the WHO tables as a
+  reference list (`paeds.who_growth`, L, M and S by age in months or length in cm; the demo loads birth to 2 years, marked
+  a demo sample) and the server's sums on them (`paeds.measure`: z-scores by the LMS method with the WHO's restricted way past ±3,
+  centiles); its table `paeds.growth` (one row per vitals item of a child under 19 with a weight, length or head: the z-scores and
   centiles, what lies beyond the loaded table, the tables' version), fed by a listener on the base's vitals and declared as reading
-  age and sex, read with the record; its op `paediatrics.growth_now` (the same sums for values being typed, for the /v line);
-  `paediatrics.development` (on the base's observation: the list, the age, its version, each milestone yes or not yet, the plan
+  age and sex, read with the record; its op `paeds.growth_now` (the same sums for values being typed, for the /v line);
+  `paeds.development` (on the base's observation: the list, the age, its version, each milestone yes or not yet, the plan
   taken from the notice; everyday, so a family medicine doctor writes it where the department ticks the pack); its own codes for the
-  newborn checks (`paediatrics.newborn`: birth, heel prick, hearing, hips, eyes, jaundice — base observations and a procedure); the
-  Brighton PEWS (`paediatrics.pews`, 2005, alias /pews; 3 in amber, 4 and over red); settings `paediatrics.doses` (the clinic's dose
-  list: drug, route, mg/kg a day or a dose, doses a day, most a dose) and `paediatrics.milestones` (the CDC's 2022 list to start, by
-  months and area), both on the pack's page; Paediatrician (`paediatrics.paediatrician`, built on Doctor); setups `paediatrics.clinic`
-  (the queue, a well-child preset) and `paediatrics.ward` (the board, six beds). Client (`src/packs/paediatrics/`): the Growth section
+  newborn checks (`paeds.newborn`: birth, heel prick, hearing, hips, eyes, jaundice — base observations and a procedure); the
+  Brighton PEWS (`paeds.pews`, 2005, alias /pews; 3 in amber, 4 and over red); settings `paeds.doses` (the clinic's dose
+  list: drug, route, mg/kg a day or a dose, doses a day, most a dose) and `paeds.milestones` (the CDC's 2022 list to start, by
+  months and area), both on the pack's page; Paediatrician (`paeds.paediatrician`, built on Doctor); setups `paeds.clinic`
+  (the queue, a well-child preset) and `paeds.ward` (the board, six beds). Client (`src/packs/paeds/`): the Growth section
   (each latest value with its z-score and centile, the WHO curve for weight, length, head or weight-for-length with the child's
   points, "Crossed two centile lines down since 4 months", every measurement), Development (each check by area) and Newborn checks
   (from the facts page) sections; banner words (the age and weight, a z-score beyond ±2, "hearing: refer, not repeated"); `/dev` with
@@ -1616,7 +1616,7 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   what the range is in ml for this weight; after the draft the mg/kg) and under /v the z-scores and centiles of the values being typed
   (the age today, the sex; beyond ±2 in amber; the tables named; weight-for-length below −2 "moderate wasting (WHO)" in amber). Demo: Dr. Rehab Shaker (paeds@demo.com), Dr. Hassan
   Kandil (kandil@demo.com), Doha Wagdy (children.nurse@demo.com, the base's Nurse); Malek, Jana, Kenzy in the clinic, five children on
-  the ward with two PEWS. Tests: `supabase/tests/paediatrics.sql`, `npm run test:paediatrics`. *Differences from the pictures, and
+  the ward with two PEWS. Tests: `supabase/tests/paeds.sql`, `npm run test:paeds`. *Differences from the pictures, and
   why:* the z-scores under /v are worked out in the browser from the same loaded tables by the same LMS sums as the server's (`lms.ts`,
   the record keeps the server's), since the core's line under a card is synchronous and cannot wait for the op (the op stays, tested,
   for whoever needs the server's answer); the /v card's "take or leave" chips (a problem, a lab order, a feeding note) are not drawn,
@@ -1624,7 +1624,7 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   shows her weight and length "beyond the table" rather than the picture's z −0.1; /dev's chips go into the check's plan, since a card
   cannot add drafts of its own (the order is typed on the line; a core question); the hearing test is a procedure, the other newborn
   checks observations; PEWS on the tile is ward nursing's word (the picture), so it shows there once the ward ticks ward nursing — the
-  starter setup ticks only paediatrics (a setup may tick only its own pack); the tile line reads the weights once per board from the
+  starter setup ticks only paeds (a setup may tick only its own pack); the tile line reads the weights once per board from the
   pack's table through a small store, because the board hands a line only its row (beds' approved "a pack reads its data once per
   board" replaces it at integration).
 - *Built 2026-10-08 (lane L2), ObGyn's clinic part* (`obgyn`, migration 27, role block d3; the pack created by this lane, agreed with

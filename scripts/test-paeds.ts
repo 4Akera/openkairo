@@ -3,14 +3,14 @@
 // beyond ±2, the hearing to repeat; none for an adult), Holliday–Segar and the board's line (a weight older than 3 days in amber), the
 // dose per kg against the clinic's list (a syrup by its strength, a day's or a dose's range, no weight in 30 days), the milestones list
 // for an age and a check's words, the newborn checks from base entries; and /dev registered for the departments that use the pack.
-//   npm run test:paediatrics
+//   npm run test:paeds
 import assert from 'node:assert/strict'
-import { ageText, centileText, crossed, crossedText, latestOf, lineOf, maintenance, rowsOf, weightAge, zText, type GrowthRow } from '../src/packs/paediatrics/growth'
-import { childWords, growthSummary, growthWord } from '../src/packs/paediatrics/words'
-import { doseLine, doseMg, mgPerMl, ruleFor, type DoseRule } from '../src/packs/paediatrics/dose'
-import { ageMonths, devLine, lateOf, listFor, newCheck, newbornOf, summaryOf, withSummary, type Milestone } from '../src/packs/paediatrics/develop'
-import { lmsAt, zOf, type Lms } from '../src/packs/paediatrics/lms'
-import { rxLine, vLine } from '../src/packs/paediatrics/lines'
+import { ageText, centileText, crossed, crossedText, latestOf, lineOf, maintenance, rowsOf, weightAge, zText, type GrowthRow } from '../src/packs/paeds/growth'
+import { childWords, growthSummary, growthWord } from '../src/packs/paeds/words'
+import { doseLine, doseMg, mgPerMl, ruleFor, type DoseRule } from '../src/packs/paeds/dose'
+import { ageMonths, devLine, lateOf, listFor, newCheck, newbornOf, summaryOf, withSummary, type Milestone } from '../src/packs/paeds/develop'
+import { lmsAt, zOf, type Lms } from '../src/packs/paeds/lms'
+import { rxLine, vLine } from '../src/packs/paeds/lines'
 import { cardLinesOf, cardLineDefs, registerCardLine } from '../src/core/screens/visit/lines'
 import type { ServerEntry } from '../src/core/db/types'
 
@@ -23,7 +23,7 @@ const ago = (days: number) => new Date(now.getTime() - days * DAY).toISOString()
 const row = (days: number, age: number, w: number, l: number, h: number, z: Record<string, [number, number]>): Record<string, unknown> =>
   ({ item: `v${age}`, patient_id: 'malek', at: ago(days), age_days: age, sex: 'male', weight: w, length: l, head: h, lying: true,
     z: Object.fromEntries(Object.entries(z).map(([k, [zz, c]]) => [k, { z: zz, c }])), outside: [], version: 'WHO 2006 · demo sample', source_entries: [`e${age}`] })
-const MALEK = { 'paediatrics.growth': { rows: [
+const MALEK = { 'paeds.growth': { rows: [
   row(335, 0, 3.3, 50.0, 34.5, { wfa: [-0.14, 44.4] }), row(213, 122, 6.5, 62.6, 41.4, { wfa: [-0.7, 24.2] }), row(152, 183, 7.0, 66.0, 43.0, { wfa: [-1.1, 13.6] }),
   row(61, 274, 7.3, 70.0, 44.6, { wfa: [-1.8, 3.6] }), row(0, 335, 7.5, 72.4, 45.4, { wfa: [-2.07, 1.9], lfa: [-0.92, 17.9], hcfa: [-0.28, 39], wfl: [-2.22, 1.3] })],
   entries: {}, patients: {}, withheld: 0 } }
@@ -54,7 +54,7 @@ test('banner words: the age and weight; a z-score beyond ±2; the hearing to rep
   assert.deepEqual(childWords(rows, { birth_date: born }, [], now).map((w) => [w.word, w.rank, w.tone]), [['11 mo · 7.5 kg', 1, undefined], ['weight z −2.1', 2, 'warn']])
   const refer = [{ code: 'hearing', label: 'Hearing', entry: {} as ServerEntry, text: 'refer, both ears', refer: true }]
   assert.ok(childWords([], { birth_date: born }, refer, now).some((w) => w.word === 'hearing: refer, not repeated' && w.tone === 'warn'))
-  assert.deepEqual(childWords([], { birth_date: '1980-01-01' }, refer, now), [], 'an adult: paediatrics says nothing')
+  assert.deepEqual(childWords([], { birth_date: '1980-01-01' }, refer, now), [], 'an adult: paeds says nothing')
   assert.deepEqual(childWords([], { birth_date: null }, [], now), [])
 })
 test('Holliday–Segar and the board\'s line: the picture\'s five children', () => {
@@ -97,18 +97,18 @@ const LIST: Milestone[] = [{ months: 6, area: 'movement', text: 'Rolls from tumm
 test('/dev: the list for the age, each milestone yes until not yet, the notice past the list\'s age', () => {
   assert.equal(listFor(LIST, 10)?.months, 9); assert.equal(listFor(LIST, 3)?.months, 6, 'under the first list: the first'); assert.equal(listFor([], 10), null)
   const c = newCheck(LIST, 10, 'CDC 2022')!
-  assert.equal(c.paediatrics.list, '9-month'); assert.equal(c.paediatrics.items.length, 3); assert.ok(c.paediatrics.items.every((i) => i.yes))
-  const no = withSummary({ ...c, paediatrics: { ...c.paediatrics, items: c.paediatrics.items.map((i) => i.area === 'movement' ? i : { ...i, yes: false }), plan: ['hearing test (ABR)'] } })
+  assert.equal(c.paeds.list, '9-month'); assert.equal(c.paeds.items.length, 3); assert.ok(c.paeds.items.every((i) => i.yes))
+  const no = withSummary({ ...c, paeds: { ...c.paeds, items: c.paeds.items.map((i) => i.area === 'movement' ? i : { ...i, yes: false }), plan: ['hearing test (ABR)'] } })
   assert.equal(no.value.text, '1 yes · not yet: babbles, looks to the name · plan: hearing test (ABR)')
   assert.equal(devLine(no), 'Development · the 9-month list at 10 mo · 1 yes · not yet: babbles, looks to the name · plan: hearing test (ABR)')
-  assert.equal(lateOf(no).length, 2, 'at 10 months, past the 9-month list'); assert.equal(lateOf({ ...no, paediatrics: { ...no.paediatrics, age_months: 9 } }).length, 0, 'at the list\'s own age: no notice')
-  assert.equal(summaryOf(c.paediatrics.items), '3 yes · all yes')
+  assert.equal(lateOf(no).length, 2, 'at 10 months, past the 9-month list'); assert.equal(lateOf({ ...no, paeds: { ...no.paeds, age_months: 9 } }).length, 0, 'at the list\'s own age: no notice')
+  assert.equal(summaryOf(c.paeds.items), '3 yes · all yes')
   assert.equal(ageMonths('2025-12-02', now), 10); assert.equal(ageMonths('2025-12-09', now), 9, 'the 9th not yet reached'); assert.equal(ageMonths(null, now), null)
 })
 const entry = (type: string, data: Record<string, unknown>, at: string, id = Math.random().toString(36)): ServerEntry =>
   ({ id, type, type_version: 1, item: id, item_version: 1, patient_id: 'k', department_id: 'pc', visit_id: null, occurred_at: at, precision: 'minute', recorded_at: at, set_id: 's',
      replaces: null, refers_to: null, relation: null, source: 'app', hidden: false, line: '', data })
-const nb = (code: string) => ({ codings: [{ system: 'paediatrics.newborn', code }] })
+const nb = (code: string) => ({ codings: [{ system: 'paeds.newborn', code }] })
 test('the newborn checks: base entries by the pack\'s codes, the latest of each, the hearing to repeat', () => {
   const facts = [entry('observation', { code: nb('hips'), value: { text: 'Ortolani and Barlow negative' }, note: 'day 1 and 6 wk' }, ago(300)),
     entry('procedure', { concept: nb('hearing'), status: 'completed', outcome: 'refer, both ears', note: 'OAE on day 2 · repeat not done' }, ago(308)),
@@ -134,9 +134,9 @@ test('the LMS sums the /v line shows are the server\'s: Malek at 11 months, weig
 })
 test('the lines under /rx and /v (C1): the picture\'s amoxicillin for Jana, the z-scores for Malek; nothing for an adult', () => {
   const born = (days: number) => new Date(now.getTime() - days * DAY).toISOString().slice(0, 10)
-  const org = { settings: [{ key: 'paediatrics.doses', thing_id: 'o', owner_id: null, recorded_at: '2026-10-01', data: { doses: RULES } }], settingKeys: [], datatypes: {} }
+  const org = { settings: [{ key: 'paeds.doses', thing_id: 'o', owner_id: null, recorded_at: '2026-10-01', data: { doses: RULES } }], settingKeys: [], datatypes: {} }
   const jana = { patient: { born_on: born(1157), sex: 'female' }, values: [{ key: 'weight', value: 14.2, at: new Date(now.getTime() - 25 * 60_000).toISOString() }] }
-  const ctx = (record: unknown) => ({ record, departmentId: 'pc', packs: ['paediatrics'], org, now }) as never
+  const ctx = (record: unknown) => ({ record, departmentId: 'pc', packs: ['paeds'], org, now }) as never
   const rx = rxLine({ action: 'start', drug: { name: 'Amoxicillin 250/5' }, dose_number: 7.5, dose_unit: 'ml', route: 'oral', frequency: 'TDS' }, ctx(jana))!
   assert.match(String((rx.rows[0] as string[])[0]), /= 79 mg\/kg\/day$/); assert.deepEqual(rx.short, [{ text: '79 mg/kg/day', tone: 'ok' }])
   assert.deepEqual((rx.rows[1] as unknown[])[0], { text: 'in the clinic\'s range', tone: 'ok' })
@@ -150,9 +150,9 @@ test('the lines under /rx and /v (C1): the picture\'s amoxicillin for Jana, the 
   assert.deepEqual(v.rows[2], [{ text: 'Weight-for-length below −2: moderate wasting (WHO).', tone: 'warn' }], 'the picture\'s amber sentence')
   assert.equal(v.short, 'weight z −2.07'); assert.equal(vLine({ weight: 7.5 }, ctx(malek), null), null, 'the tables not read yet: nothing yet')
   // through the core's registry, in a department that uses the pack, and nowhere else
-  registerCardLine('paediatrics', 'medication', 'Paediatrics', rxLine)
+  registerCardLine('paeds', 'medication', 'Paediatrics', rxLine)
   const params = { action: 'start', drug: { name: 'Amoxicillin 250/5' }, dose_number: 7.5, dose_unit: 'ml', route: 'oral', frequency: 'TDS' }
   assert.equal(cardLinesOf(cardLineDefs(), 'medication', params, ctx(jana)).length, 1)
   assert.equal(cardLinesOf(cardLineDefs(), 'medication', params, { ...(ctx(jana) as object), packs: [] } as never).length, 0)
 })
-console.log(`paediatrics: ${n} groups passed`)
+console.log(`paeds: ${n} groups passed`)

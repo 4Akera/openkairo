@@ -19,28 +19,28 @@ import { wardLine } from './ward'
 import { rxLine, vLine } from './lines'
 import { whoTables } from './who'
 
-const KEY = 'paediatrics'
+const KEY = 'paeds'
 // Growth: under 19 (§5.1 rule 2); its data is the pack's own table, filled from the base's vitals
-registerSection({ key: 'paediatrics.growth', title: 'Growth', types: [], fit: { sex: 'any', to: { n: 18, unit: 'years' } }, Body: GrowthBody,
+registerSection({ key: 'paeds.growth', title: 'Growth', types: [], fit: { sex: 'any', to: { n: 18, unit: 'years' } }, Body: GrowthBody,
   has: (x) => rowsOf(x.rec.tables as never).length > 0, word: (x) => growthWord(rowsOf(x.rec.tables as never)), summary: (x) => growthSummary(rowsOf(x.rec.tables as never)) })
 // Development: under 6, the pack's own checks
-registerSection({ key: 'paediatrics.development', title: 'Development', types: [DEV], fit: { sex: 'any', to: { n: 5, unit: 'years' } }, Body: DevelopmentBody,
+registerSection({ key: 'paeds.development', title: 'Development', types: [DEV], fit: { sex: 'any', to: { n: 5, unit: 'years' } }, Body: DevelopmentBody,
   word: () => null, summary: (x) => { const c = recordedOf(x.own.shown).pop(); return c ? devLine(c.entry.data as unknown as DevData).replace('Development · ', '') : null } })
 // the newborn checks: under 2, read from the base's observations and procedures (the facts page)
-registerSection({ key: 'paediatrics.newborn', title: 'Newborn checks', types: [], fit: { sex: 'any', to: { n: 1, unit: 'years' } }, Body: NewbornBody,
+registerSection({ key: 'paeds.newborn', title: 'Newborn checks', types: [], fit: { sex: 'any', to: { n: 1, unit: 'years' } }, Body: NewbornBody,
   has: (x) => newbornOf(x.facts).length > 0, word: (x) => hearingRefer(newbornOf(x.facts)) ? { word: 'refer', tone: 'warn' } : null,
   summary: (x) => { const rows = newbornOf(x.facts); return rows.length ? rows.filter((r) => r.refer).map((r) => `hearing: ${r.text}`)[0] ?? `${rows.length} checks recorded` : null } })
 // the banner: the age and the weight; a z-score beyond ±2; a hearing screen that said refer (procedures read with the packs' types)
-registerBannerWords({ key: 'paediatrics.child', types: ['procedure'], words: (x) => childWords(rowsOf(x.rec.tables as never), x.identity, newbornOf(x.own.shown)) })
+registerBannerWords({ key: 'paeds.child', types: ['procedure'], words: (x) => childWords(rowsOf(x.rec.tables as never), x.identity, newbornOf(x.own.shown)) })
 // /dev: the clinic's list for the age under the line
 registerCommand({ name: 'dev', pack: KEY, group: 'record', groupTitle: 'Paediatrics', title: 'Development', label: 'Development check — the milestones for the age',
-  example: '/dev', action: 'write:paediatrics.development', writes: [DEV],
-  parse: () => ({ ok: [{ function: DEV, kind: 'development', line: 'Development', params: {}, action: 'write:paediatrics.development' }] }),
-  empty: () => [{ function: DEV, kind: 'development', line: 'Development', params: {}, action: 'write:paediatrics.development' }] })
+  example: '/dev', action: 'write:paeds.development', writes: [DEV],
+  parse: () => ({ ok: [{ function: DEV, kind: 'development', line: 'Development', params: {}, action: 'write:paeds.development' }] }),
+  empty: () => [{ function: DEV, kind: 'development', line: 'Development', params: {}, action: 'write:paeds.development' }] })
 registerCard({ function: DEV, pack: KEY, Editor: DevCard, line: (q) => devLine(q as Partial<DevData>) })
 // a check in the record: the list, each area's milestones, the plan
 registerRenderer(DEV, {
-  Full: ({ data }) => { const p = (data as unknown as DevData).paediatrics
+  Full: ({ data }) => { const p = (data as unknown as DevData).paeds
     return <div className="grid gap-1 text-13"><p className="text-muted">The {p.list} list at {p.age_months} months{p.version ? ` · ${p.version}` : ''}</p>
       <ul className="grid gap-0.5">{p.items.map((i, n) => <li key={n} className="flex items-baseline gap-2"><Tag tone={i.yes ? 'ok' : 'warn'}>{i.yes ? 'yes' : 'not yet'}</Tag><span>{i.text}</span></li>)}</ul>
       {(p.plan ?? []).length > 0 && <p className="text-muted">Plan: {p.plan!.join(', ')}</p>}

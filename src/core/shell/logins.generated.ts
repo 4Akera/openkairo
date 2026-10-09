@@ -43,10 +43,10 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'xray@demo.com', name: 'Ahmed Saber', role: 'Radiographer' },
     { email: 'radiology@demo.com', name: 'Dr. Mai Farouk', role: 'Radiologist' },
   ] },
-  { department: 'Paediatrics clinic', departmentId: '4e2dbbbb-6f94-50a4-8a23-479b07eda2e3', people: [
+  { department: 'Paediatrics clinic', departmentId: 'eea2eb4f-e68c-504c-9cad-75e256702c06', people: [
     { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },
   ] },
-  { department: 'Children\'s ward', departmentId: '58ec0fa2-5859-57c9-9536-32fad2646095', people: [
+  { department: 'Children\'s ward', departmentId: '46cacda0-b807-52f8-be95-0b98ece5e191', people: [
     { email: 'children.nurse@demo.com', name: 'Doha Wagdy', role: 'Nurse' },
     { email: 'kandil@demo.com', name: 'Dr. Hassan Kandil', role: 'Paediatrician' },
     { email: 'paeds@demo.com', name: 'Dr. Rehab Shaker', role: 'Paediatrician' },

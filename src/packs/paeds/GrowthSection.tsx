@@ -1,6 +1,6 @@
 // The Growth section (spec/openCare.md §5.7, the picture #paeds-growth): each latest value with its z-score and centile, the WHO curve
 // for weight, length, head or weight-for-length with the child's own points, a word when the weight has crossed two centile lines, and
-// every measurement. The z-scores and centiles are the server's (paediatrics.growth); the curves are drawn from the loaded WHO tables
+// every measurement. The z-scores and centiles are the server's (paeds.growth); the curves are drawn from the loaded WHO tables
 // (the demo's: birth to 2 years, a demo sample). Read-only: a measurement opens its entry.
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -13,9 +13,9 @@ type Lms = [number, number, number]
 /** the loaded table for an indicator and sex: by age in months, or length in cm (weight-for-length) */
 function useTable(ind: Ind, sex: 'm' | 'f' | null) {
   return useQuery({
-    queryKey: ['paediatrics', 'who', ind, sex], enabled: !!sex, staleTime: Infinity,
+    queryKey: ['paeds', 'who', ind, sex], enabled: !!sex, staleTime: Infinity,
     queryFn: async () => {
-      const r = await read<{ codes: { code: string; props: { L: number; M: number; S: number } }[] }>({ shape: 'codes', system: 'paediatrics.who_growth', q: `${ind}.${sex}.`, limit: 2000 })
+      const r = await read<{ codes: { code: string; props: { L: number; M: number; S: number } }[] }>({ shape: 'codes', system: 'paeds.who_growth', q: `${ind}.${sex}.`, limit: 2000 })
       return r.codes.map((c) => ({ x: Number(c.code.split('.').slice(2).join('.')), lms: [c.props.L, c.props.M, c.props.S] as Lms })).sort((a, b) => a.x - b.x)
     },
   })
