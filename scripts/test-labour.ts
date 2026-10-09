@@ -1,22 +1,24 @@
 // ObGyn's labour ward (spec/openCare.md §5.6), the client's pure decisions: /ve's grammar and its line (the server's words, word for
 // word), /ctx and /fhr (the baby's heart as the base's observation, LOINC 55283-6, with a notice under 110 or over 160), the WHO's
 // modified partograph (active labour from the department's setting, the alert line at 1 cm an hour, the action line 4 hours to its
-// right, past a line strictly), the weeks and days, the tile's words from the board's read (through the core's tile line), the
-// banner's words (never G and P), and where the commands are offered. Pure: no browser, no database.   npm run test:labour
+// right, past a line strictly), the weeks and days, the tile's words from the board's read (through the core's tile line) and its
+// Partograph button, the banner's words (never G and P), the Labour tab's grid, its women and its notice, and where the commands are
+// offered. Pure: no browser, no database.   npm run test:labour
 import assert from 'node:assert/strict'
 import { setClinicTimeZone, hm } from '../src/core/ui/time'
 import '../src/packs/obgyn/labour/commands'
 import { EXAM, FHR_CODE, isFhr, type ExamData } from '../src/packs/obgyn/labour/codes'
 import { examLine, examProblem, fhrNote, parseCtx, parseExam, parseFhr } from '../src/packs/obgyn/labour/exam'
 import { activeFrom, gestation, gestationWords, lineAt, partographOf, type Point } from '../src/packs/obgyn/labour/partograph'
-import { gpOf, inLabour, labourWords, stayOf, tileWords, type LabourBoard, type LabourStay } from '../src/packs/obgyn/labour/board'
+import { gpOf, inLabour, labourWords, lastBoard, partographButton, rememberBoard, stayOf, tileWords, type LabourBoard, type LabourStay } from '../src/packs/obgyn/labour/board'
+import { COLUMNS, examPoints, gridOf, labourStays, noticeOf, span } from '../src/packs/obgyn/labour/grid'
 import { parse, type Ctx, type Parsed, type Result } from '../src/core/screens/visit/parse'
 import { cardFor, commandNamed, commandsFor, notHere } from '../src/core/screens/visit/commands'
-import { registerTileLine, tileLineDefs, tileLineOf, type TileCtx } from '../src/core/screens/ward/tiles'
+import { registerTileButton, registerTileLine, tileActions, tileButtonDefs, tileLineDefs, tileLineOf, type TileCtx } from '../src/core/screens/ward/tiles'
 import { ownOf } from '../src/core/screens/chart/sections'
 import type { WordsInput } from '../src/core/screens/chart/words'
 import { E, ctx as chartCtx, org as baseOrg, presence, record, table } from './chart-fixtures'
-import type { Organization, PresenceRow, ServerEntry } from '../src/core/db/types'
+import type { Organization, Place, PresenceRow, ServerEntry } from '../src/core/db/types'
 
 setClinicTimeZone('Africa/Cairo')
 let n = 0
@@ -149,6 +151,15 @@ test('the tile: G and P, the weeks, the cervix, the hours, past a line, the baby
     [{ pack: 'obgyn', words: [{ text: 'G2 P1' }, { text: '39+2 w' }, { text: '6 cm' }, { text: '4 h' }, { text: 'past alert line', tone: 'warn' }] }])
   assert.deepEqual(tileLineOf(tileLineDefs(), row('s1'), t), [], 'before the read lands: nothing')
   assert.deepEqual(tileLineOf(tileLineDefs(), row('s1'), { ...t, dept: { id: 'lw', packs: [] } }, { obgyn: BOARD }), [], 'only where the ward uses ObGyn')
+  // the Partograph button (L1c), as labour/index.tsx registers it: shown by the board's last answer the hook kept (a button gets no read)
+  assert.ok(registerTileButton('obgyn', partographButton))
+  const buttons = (item: string) => tileActions(tileButtonDefs(), { closed: false }, { row: row(item), ctx: t }, true).filter((a) => !a.base).map((a) => a.label)
+  assert.equal(lastBoard('lw'), undefined); assert.deepEqual(buttons('s1'), [], 'nothing remembered yet: no button')
+  rememberBoard('lw', BOARD)
+  assert.deepEqual(buttons('s1'), ['Partograph']); assert.deepEqual(buttons('s4'), ['Partograph'], 'a pregnancy standing'); assert.deepEqual(buttons('s9'), [], 'a stay the read does not name')
+  assert.deepEqual(tileActions(tileButtonDefs(), { closed: false }, { row: row('s1'), ctx: { ...t, dept: { id: 'lw', packs: [] } } }, true).filter((a) => !a.base), [], 'only where ObGyn is used')
+  assert.deepEqual(tileActions(tileButtonDefs(), { closed: false }, { row: row('s1'), ctx: { ...t, can: () => false } }, true).filter((a) => !a.base), [], 'not for a reader who may not read the record here')
+  assert.equal(partographButton.path?.(row('s1'), t), '/?tab=obgyn.labour&stay=s1')
 })
 
 // the record of a woman in labour on the ward, as the chart reads it
@@ -168,6 +179,36 @@ test('the banner: past a line, the baby\'s heart off; never G and P; nothing wit
   assert.deepEqual(labourWords(input([ex(4, 400), ex(5, 0)], closed), at), [])
   assert.deepEqual(labourWords(input([fh(100, 5)]), at), [], 'no exam')
   assert.deepEqual(labourWords(input([ex(4, 400, { visit_id: 'older' }), ex(5, 0, { visit_id: 'older' })]), at), [], 'another stay\'s exams')
+})
+const vit = (m: number, sys: number, dia: number, hr: number, temp?: number) => E('vitals', { visit_id: 'st1', occurred_at: ago(m), data: { bp: { sys: { value: String(sys), unit: 'mmHg', ucum: 'mm[Hg]' },
+  dia: { value: String(dia), unit: 'mmHg', ucum: 'mm[Hg]' } }, hr: { value: String(hr), unit: 'bpm', ucum: '/min' }, ...(temp ? { temp: { value: String(temp), unit: '°C', ucum: 'Cel' } } : {}) } })
+const place = (id: string, name: string, position: number): Place => ({ id, department_id: 'lw', parent_id: null, label: 'bed', name, position, closed: false, closed_reason: null })
+test('the Labour tab: the grid by minute, the last 12, a heart rate off flagged; the women in bed order; the notice in words', () => {
+  const es = [ex(4, 240, { data: { cervix: 4, descent: 5, liquor: 'intact', moulding: '0', contractions: { per_10: 3, seconds: 30 }, gravida: 2, para: 1 } }), fh(140, 240), vit(240, 118, 76, 88, 37.1),
+    ex(0, 180, { data: { contractions: { per_10: 3, seconds: 35 } } }), fh(100, 180), ex(6, 5, { data: { cervix: 6, descent: 3, liquor: 'clear', moulding: '+' } }), fh(172, 5), vit(5, 124, 80, 94)]
+  const g = gridOf(es)
+  assert.deepEqual(g.times, [hm(ago(240)), hm(ago(180)), hm(ago(5))], 'a column per minute, oldest first')
+  const r = (label: string) => g.rows.find((x) => x.label === label)?.cells.map((c) => c && (c.flag ? `${c.text}${c.flag === 'low' ? '↓' : '↑'}` : c.text))
+  assert.deepEqual(r('Heart rate'), ['140', '100↓', '172↑']); assert.deepEqual(r('Liquor'), ['I', null, 'C']); assert.deepEqual(r('Moulding'), ['0', null, '+'])
+  assert.deepEqual(r('in 10 min'), ['3', '3', null]); assert.deepEqual(r('lasting'), ['30', '35', null])
+  assert.deepEqual(r('Pulse'), ['88', null, '94']); assert.deepEqual(r('BP'), ['118/76', null, '124/80']); assert.deepEqual(r('Temperature'), ['37.1', null, null])
+  assert.deepEqual(g.rows.map((x) => x.group), ['Baby', 'Baby', 'Baby', 'Contractions', 'Contractions', 'Mother', 'Mother', 'Mother'])
+  const few = gridOf([ex(5, 60, { data: { cervix: 5 } })])
+  assert.deepEqual(few.rows.map((x) => x.label), ['Heart rate'], 'rows with nothing left out, but the heart rate'); assert.deepEqual(few.rows[0].cells, [null])
+  const many = gridOf(Array.from({ length: 15 }, (_, i) => fh(130 + i, 15 * (15 - i))))
+  assert.equal(many.times.length, COLUMNS); assert.equal(many.rows[0].cells[COLUMNS - 1]?.text, '144', 'the latest kept'); assert.equal(many.rows[0].cells[0]?.text, '133')
+  assert.equal(gridOf([fh(140, 10), E('observation', { visit_id: 'st1', occurred_at: ago(9), data: { code: { text: 'Weight' }, value: { quantity: { value: '70' } } } })]).times.length, 1, 'another observation is not the baby\'s heart')
+  assert.deepEqual(examPoints(es).map((e) => [e.cervix, e.gravida]), [[4, 2], [undefined, undefined], [6, undefined]])
+  const rows = [presence('a', { place_id: 'p3' }), presence('b', { place_id: 'p1' }), presence('c', { place_id: null }), presence('s3', { place_id: 'p2' }), presence('s1', { place_id: 'p2' })]
+  const B: LabourBoard = { patient_ids: [], stays: { a: SALMA, b: NESMA, c: DOAA, s1: SALMA, s3: { exams: [] } } }
+  assert.deepEqual(labourStays(B, rows, [place('p1', 'Delivery 1', 1), place('p2', 'Delivery 2', 2), place('p3', 'Delivery 3', 3)]).map((x) => x.item), ['b', 's1', 'a', 'c'], 'in bed order, no bed last, not in labour left out')
+  assert.deepEqual(labourStays(undefined, rows, []), [])
+  const salma = partographOf(pts([4, 240], [5, 120], [6, 5]), 4, NOW)
+  assert.deepEqual(noticeOf(salma), { tone: 'warn', title: 'Past the alert line', text: `4 → 6 cm in 3 h 55 min. Tell the doctor; the action line is at ${hm(ago(-120))}. Only a notice — the doctor decides.` })
+  assert.deepEqual(noticeOf(partographOf(pts([4, 360], [5, 0]), 4, NOW)), { tone: 'danger', title: 'Past the action line', text: '4 → 5 cm in 6 h. Tell the doctor now. Only a notice — the doctor decides.' })
+  assert.equal(noticeOf(partographOf(pts([4, 84], [5, 0]), 4, NOW))?.text.split('.')[0], '4 → 5 cm in 1 h 24 min', 'to the minute: never "1 cm in 1 h" past the line')
+  assert.deepEqual([span(40 * 60_000), span(6 * 3_600_000)], ['40 min', '6 h'])
+  assert.equal(noticeOf(partographOf(pts([3, 120], [4, 60]), 4, NOW)), null); assert.equal(noticeOf(partographOf(pts([3, 60]), 4, NOW)), null)
 })
 test('the commands: offered where ObGyn is used, to whoever may write them; elsewhere /ve says where', () => {
   const names = (packs: string[], can: (a: string) => boolean = () => true) => commandsFor({ packs, can }).map((c) => c.name).filter((x) => ['ve', 'ctx', 'fhr'].includes(x))

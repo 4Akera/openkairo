@@ -2,11 +2,12 @@
 // stay in labour (a labour examination or a pregnancy standing), "G2 P1 · 39+2 w · 6 cm · 4 h", then past the alert line (amber) or
 // the action line (red), and the baby's heart in red when it is off ("FHR 100 at 10:55"); each word only when known, nothing before
 // the board's read lands. The banner: past a line, the baby's heart off; never G and P, which the clinic's own words say from the
-// antenatal booking (rule 3: one fact once). The board's last answer is kept here for the tile's buttons, which get no read (C7).
+// antenatal booking (rule 3: one fact once). The board's last answer is kept here for the tile's Partograph button, which gets no
+// read (C7).
 // Pure: npm run test:labour.
 import type { PresenceRow } from '@core/db/types'
 import type { BannerWord, WordsInput } from '@core/screens/chart/words'
-import type { TileCtx, TileWord, TileWords } from '@core/screens/ward/tiles'
+import type { TileButtonIn, TileCtx, TileWord, TileWords } from '@core/screens/ward/tiles'
 import { hm, ymd } from '@core/ui/time'
 import { EXAM, isFhr } from './codes'
 import { activeFrom, fhrOff, gestation, gestationWords, partographOf, type Point } from './partograph'
@@ -65,3 +66,8 @@ export function labourWords(x: WordsInput, now = new Date()): BannerWord[] {
 const last = new Map<string, unknown>()
 export const rememberBoard = (deptId: string, data: unknown) => { last.set(deptId, data) }
 export const lastBoard = (deptId: string) => last.get(deptId)
+/** the tile's Partograph button (L1c): for a reader who may read the record here, while she is in labour by the board's last good
+ *  answer (none until it lands, none once a read fails), it opens the Labour tab at her */
+export const partographButton: TileButtonIn = { label: 'Partograph',
+  show: (row, ctx) => ctx.can('read:record') && inLabour(stayOf(lastBoard(ctx.dept.id), row.item)),
+  path: (row) => `/?tab=obgyn.labour&stay=${encodeURIComponent(row.item)}` }

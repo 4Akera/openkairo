@@ -19,7 +19,9 @@ export function useBoardRead(dept: { id: string }): LabourBoard | null | undefin
   const key = (rows ?? []).map((r) => `${r.item}@${r.version}`).sort().join(',')
   const q = useQuery({ queryKey: ['obgyn.board', dept.id, key], enabled: !!org && may && !!rows?.length,
     queryFn: () => packOp<LabourBoard>('obgyn.board', dept.id, {}, 'TREAT'), placeholderData: keepPreviousData, retry: false })
-  useEffect(() => { if (q.data) rememberBoard(dept.id, q.data) }, [dept.id, q.data])
+  // the button follows the line: the last good answer, forgotten when the read fails or the reader may not read here
+  const kept = !may || q.isError ? undefined : q.data
+  useEffect(() => { rememberBoard(dept.id, kept) }, [dept.id, kept])
   // a read that failed leaves the tile to the base's words
-  return q.isError ? undefined : q.data
+  return kept
 }

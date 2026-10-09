@@ -1728,9 +1728,22 @@ numbered as on its picture.
   code). Each tile of a woman in labour (an exam or a pregnancy standing) says "G2 P1 · 39+2 w · 6 cm · 4 h", "latent" before active
   labour, "fully dilated" at 10, then "past alert line" (amber) or "past action line" (red), and "FHR 100 at HH:MM" (red) when the
   baby's latest heart rate is off — from `obgyn.board` (the owner's C1, read once per board through C7's hook); nothing before the
-  read lands. The banner's words (`obgyn.labour`): past a line, "FHR n" off; never G and P. The pack keeps the board's last answer for
-  the Partograph button (L1c), since C7 hands a read to the line only. The Labour tab and the Partograph button are piece L1c, still to
-  come.
+  read lands. The banner's words (`obgyn.labour`): past a line, "FHR n" off; never G and P. The **Labour tab** (piece L1c,
+  `obgyn.labour`): the women in labour as chips in bed order ("Delivery 1 · Salma Ahmed", the chosen one kept in the link `?stay=`),
+  "Open the chart"; one line about her (name, age, G and P from her exam, the weeks, the bed, "active labour since HH:MM"); past a
+  line a notice ("Past the alert line: 4 → 6 cm in 3 h 55 min. Tell the doctor; the action line is at HH:MM. Only a notice — the
+  doctor decides.", amber; past the action line red; the time between the first and the latest exam to the minute, since rounded to
+  the hour "4 → 5 cm in 1 h" would read as on the line); the partograph as drawn (× the cervix, ○ the head on the fifths' scale from
+  every exam that palpated it, with or without a cervix, the alert line
+  from where active labour began, the action line 4 hours to its right, the clock every 2 hours as HH:MM since active labour need not
+  start on the hour), or "Latent phase: 3 cm at HH:MM — the partograph starts at 4 cm"; the grid by time under it (a column per minute
+  something was written, the last 12: the baby's heart rate, liquor I C M B A, moulding; contractions in 10 min and lasting; the
+  mother's pulse, BP, temperature; a heart rate under 110 or over 160 in red with ↓ or ↑; a row with nothing left out but the heart
+  rate); nothing typed there (the composer's `/ve`, `/ctx`, `/fhr`, `/v` in her chart); the tab reads again on the clinic's hints and
+  her record's, as the tile and the chart do; a failed read of her record leaves the chips to choose another. Each tile of a woman in
+  labour has ObGyn's **Partograph** button after Move and Discharge, for a reader who may read the record there, opening the tab at
+  her: a tile button gets no read since C7, so its show reads the board's last good answer the pack's hook kept (none until it lands,
+  forgotten when a read fails; a small core change, `ctx.read` for buttons too, noted, not asked).
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2936,4 +2949,13 @@ types, parked pack calls with per-call Retry, Postgres enums.
   registries 9, pharmacy 10, lis 19, billing 22 + 2, bedside 12, obgyn 10, clinics-core 11, labour 8; typecheck clean but for
   `src/pictures/bookings.tsx` (another session's); lint 0 errors; `vite build` builds. A weeks-and-days from an LMP only when it is a
   whole date.
+- 2026-10-09: **ObGyn's labour ward, piece L1c** (§5.6; lane `beds-labour`): the Labour tab and the tile's Partograph button —
+  `src/packs/obgyn/labour/` grid.ts (pure: the grid, the women in bed order, the notice), useLabour.ts (the tab's reads), Chart.tsx
+  (the partograph), LabourGrid.tsx (the grid; not `Grid.tsx`, which a case-insensitive disk takes for `grid.ts`), Labour.tsx, and in
+  index.tsx `registerScreen('obgyn.labour')` and the Partograph button (board.ts `partographButton`, the test registers the same);
+  `test:labour` 9 groups (group 8 the tab, the button in group 6). No SQL changed: `db reset`, `gen:shapes --check` and `gen:logins`
+  unchanged, SQL suites labour 53 and demo 98 ok, `db:demo` loads twice (99 patients). Node: composer 19, chart 16, screens 11, sections 19, banner 13,
+  settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2, bedside 12, obgyn 10,
+  clinics-core 11, labour 9; typecheck clean but for `src/pictures/bookings.tsx` (another session's); lint 0 errors; `npm run build`
+  builds.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
