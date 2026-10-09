@@ -11,7 +11,7 @@ import { answerEntry, oneSet, resultEntry, stepEntry } from '../../db/entries'
 import { replyFormFor } from '../../renderers'
 import type { RequestQueueRow, ServiceField } from '../../db/types'
 import { Badge, Button, Callout, Card, Centered, Heading, IconButton, Input, Kbd, Select, Spinner, Tag, Toolbar, cn, errorText, flagClass, hm } from '../../ui'
-import { ageOf, fieldTone, groupByPatient, nextSteps, STEP_TONE, stepLabel, stepName } from './shared'
+import { ageOf, fieldTone, groupByPatient, nextSteps, phaseOf, STEP_TONE, stepLabel, stepName, todayYmd } from './shared'
 import { ChartGlance } from '../chart/glance/ChartGlance'
 import { benchMarkRow } from '../marks'
 import { isStop, packRowOf } from '../rows'
@@ -53,7 +53,13 @@ export function BenchPatient() {
   const q = useRequestQueue(dept?.id ?? null)
   const groups = useMemo(() => groupByPatient(q.data?.requests ?? []), [q.data])
   const g = groups.find((x) => x.patient.id === patientId)
-  const next = groups.find((x) => x.patient.id !== patientId)
+  // the next patient as the bench lists them (§5.7): a booked patient at their place, and never an order a pack's own view holds (To
+  // book, booked for another day) nor one a pack holds waiting
+  const listRows = useMemo(() => groups.map((x) => packRowOf(x.patient.id, benchMarkRow(x))), [groups])
+  const list = usePackRows('bench', listRows, dept)
+  const held = new Set(list.views(listRows).flatMap((v) => [...v.groups.keys()]))
+  const next = groupByPatient((q.data?.requests ?? []).filter((r) => list.isFree(r.order.item) && !(phaseOf(r.request?.step) === 'todo' && held.has(r.order.item))),
+    todayYmd(), (x) => list.place(packRowOf(x.patient.id, benchMarkRow(x)))).find((x) => x.patient.id !== patientId)
   // the packs on the page (spec §5.4): a pack's button and card under the header; an order a pack holds waiting is greyed with its word
   // and goes ahead anyway with a reason, while the patient's other orders stay workable; a stop is never greyed — not done, and a pack's
   // own form stays open on it so its stop (not given) can be written; only what is not a stop waits
@@ -126,7 +132,6 @@ export function BenchPatient() {
       <div className="grid min-w-0 content-start gap-4">
       {bySection.map((sec) => <section key={sec}><Heading className="mb-1.5">{sec}</Heading><div className="grid gap-3">
         {g.rows.filter((r) => (r.section_name ?? 'Other') === sec).map((r) => { const x = e(r.id); const fields = fieldsOf(r); const held = !free(r); const or = orderRow(r)
-          const mayWork = can(formOf(r)?.action ?? 'write:result') || nextSteps([r], org, can).length > 0
           return <Card key={r.id} className={cn('p-4', (x.notDone || held) && 'bg-sunken')}>
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
             <span className="text-16 font-semibold">{r.type === 'request' ? (r.service_name ?? r.display_line) : r.display_line}</span>
@@ -134,7 +139,7 @@ export function BenchPatient() {
             {r.request?.priority !== 'routine' && <Badge tone="danger">{r.request?.priority}</Badge>}
             <span className="text-12 text-faint">{r.requester_name} · {r.from_department_name} · {hm(r.occurred_at)}</span>
             {held && <Tag tone={packs.waits.get(r.order.item)?.tone ?? 'warn'}>{packs.waits.get(r.order.item)?.word}</Tag>}
-            {held && mayWork && packs.anyway(or, [r.order.item], 'Go ahead')}
+            {held && can('read:bench') && packs.anyway(or, [r.order.item], 'Go ahead')}
             {!formOf(r) && <label className="ms-auto flex items-center gap-1.5 text-12 text-muted"><input type="checkbox" checked={x.notDone} onChange={(ev) => set(r.id, { notDone: ev.target.checked })} />not done</label>}
           </div>
           {r.question_text && <p className="mb-2 rounded-md bg-warn-soft px-2.5 py-1.5 text-14 text-warn">“{r.question_text}”</p>}

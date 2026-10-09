@@ -12,7 +12,7 @@ import { KINDS, examOf, packOrder } from './exams'
 import { MOST_ASKED, examsIn } from './walkin'
 import { contrastOf } from './line'
 
-export function ExamStep({ bench, busy, error, onStart, note }: WhatForProps) {
+export function ExamStep({ bench, busy, error, onStart, note, extra, start: startLabel }: WhatForProps) {
   const { org } = useDepartment(); const offered = benchOffers(org, bench.id)
   const [line, setLine] = useState('/xr '); const [ticked, setTicked] = useState<string[]>([]); const [asked, setAsked] = useState<string | null>(null)
   const typed = examsIn(line, offered, (s) => examOf(org, s).contrast || contrastOf(s))
@@ -34,12 +34,13 @@ export function ExamStep({ bench, busy, error, onStart, note }: WhatForProps) {
     {preps.map(({ s, e }) => <p key={s.id} className="flex flex-wrap items-center gap-2 text-12 text-muted">{s.name}: {e.prep!.toLowerCase()}
       {e.prep_ar && <span dir="rtl" lang="ar" className="text-13 text-fg">{e.prep_ar}</span>}</p>)}
     {noSide.length > 0 && <p className="text-12 font-medium text-warn">Which side? Type left, right or both ({noSide.map((s) => s.name).join(', ')}).</p>}
+    {extra?.(chosen)}
     {asked === null ? <button type="button" onClick={() => setAsked('')} className="justify-self-start rounded-sm text-13 text-accent hover:underline focus-ring">+ Who asked (optional)</button>
       : <div className="flex flex-wrap items-center gap-2"><span className="text-13 text-muted">Asked by</span>
           <Input value={asked} onChange={(e) => setAsked(e.target.value)} placeholder="The outside doctor" className="w-full sm:w-72" /><span className="text-12 text-faint">optional</span></div>}
     {!!error && <Callout tone="danger" title="Not started">{errorText(error)}</Callout>}
     <div className="flex flex-wrap items-center gap-2"><Button onClick={start} disabled={!chosen.length} loading={busy}>
-      {startWords(chosen.map((s) => `${s.name}${typed.said.words.side ? ` · ${typed.said.words.side}` : ''}`))}<Kbd className="ms-1 max-sm:hidden">⌘↵</Kbd></Button>
+      {startLabel?.(chosen) ?? startWords(chosen.map((s) => `${s.name}${typed.said.words.side ? ` · ${typed.said.words.side}` : ''}`))}<Kbd className="ms-1 max-sm:hidden">⌘↵</Kbd></Button>
       {note && <span className="text-12 text-faint">{note}</span>}</div>
   </div>
 }

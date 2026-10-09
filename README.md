@@ -45,6 +45,7 @@ Settings changes need a second factor. The dev seed turns that off locally (`cor
 | 12 | the laboratory pack (`lis`): Collect, Results, sample numbers, the large lab's switches | §5.3 |
 | 13 | the billing pack: charges, prices, payments, refunds, drawers, the cashier's reads | §5.4 |
 | 14 | privileges: every routine revoked from PUBLIC, then granted by name | §8 |
+| 16 | the bookings pack: sessions, bookings and what became of them, free places, the desk's and the clinic's reads | §5.7 |
 
 **The client** (`src/core/`, Vite · React · TanStack Query · zustand). Every read goes through `read`, every Done through `write` as one set; settings through `save`/`remove`/`write_setting`.
 
@@ -72,6 +73,8 @@ Settings changes need a second factor. The dev seed turns that off locally (`cor
 
 **The billing pack** (`…000013_billing.sql`, `src/packs/billing`, spec §5.4): the Cashier (who owes, the payment card under the row, receipts, Give back…), Today (the day's totals, closing the drawer) and Billing → Prices. Charges come from entries and settings only and carry no amount; money is only ever added to, in billing's own tables, through its operations. On the rows of any department that uses billing it puts one button (Pay where the department takes payment, Send to cashier with the lines the row prices itself where it does not) and its soft check (Pay first: "Waiting for payment" per order, "…anyway" with a reason).
 
+**The bookings pack** (`…000016_bookings.sql`, `src/packs/bookings`, spec §5.7): one diary for the clinic. A department's sessions book by time or by number; the desk books beside Send, the doctor with `/book 3m` at Done, a bench on an order's row or a walk-in's Then · when. Booked today (Here is the ordinary check-in), Tomorrow's calls, Missed, the Diary. A booking is the pack's own row, never a record entry; a booked patient goes into the queue (or a bench's To do) at their time or number, walk-ins in the gaps.
+
 ## Tests
 
 `supabase/tests/`, run by `scripts/db-test.sh`: spine · presence · clinic · review · lists · admin · privacy · pharmacy, and the eight permanent tests — rebuild (= live) · boundary · canary · concurrency · registry · fhir · tenancy · pack contract. `supabase/tests/ported.md` maps every check of the earlier suites to its new home.
@@ -86,7 +89,7 @@ supabase/demo/        each layer's demo day, the clinic's day between packs, and
 supabase/tests/       SQL suites (lib/: assertions and the fixture)
 scripts/              db-test.sh, demo.sh, include.awk, gen-logins.ts, gen-shapes.ts, gen-codes.py, import-codes.sh, test-*.ts
 src/core/             the client: db, auth, hooks, shell, screens, renderers
-src/packs/            packs: pharmacy, lis (the laboratory), billing
+src/packs/            packs: pharmacy, lis (the laboratory), billing, bookings
 ```
 
 ## Next

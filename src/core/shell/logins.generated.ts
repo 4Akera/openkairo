@@ -11,7 +11,7 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'admin@demo.com', name: 'Amira Lotfy', role: 'Owner' },
   ] },
   { department: 'Front desk', departmentId: '00000000-0000-0000-0000-00000000d001', people: [
-    { email: 'reception@demo.com', name: 'Mai Samir', role: 'Reception' },
+    { email: 'reception@demo.com', name: 'Mai Samir', role: 'Booking desk · Reception' },
   ] },
   { department: 'General Practice', departmentId: '00000000-0000-0000-0000-00000000d002', people: [
     { email: 'dr.ali@demo.com', name: 'Dr. Ali Hassan', role: 'Doctor' },
@@ -32,6 +32,9 @@ export const DEMO_GROUPS: DemoGroup[] = [
   { department: 'Pharmacy', departmentId: '647b8de4-8916-5c81-94b1-d0c1c4721d6f', people: [
     { email: 'pharm@demo.com', name: 'Dr. Reem Hamdy', role: 'Cashier · Pharmacist' },
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },
+  ] },
+  { department: 'ECG room', departmentId: '8a750cf3-d235-53b6-87b4-c93cb73cfa3c', people: [
+    { email: 'ecg@demo.com', name: 'Tamer Wahba', role: 'Books its rooms' },
   ] },
   { department: 'Main store', departmentId: '1d64cf4d-60f9-5945-a245-e9764b6c294f', people: [
     { email: 'store@demo.com', name: 'Hesham Ragab', role: 'Store keeper' },

@@ -105,3 +105,19 @@ export function registerCard(r: CardRegistration) {
 export const cardFor = (fn: string, w?: Where) =>
   (w?.departmentType && w.packCards !== false ? cards.find((c) => c.function === fn && c.departmentType === w.departmentType && (!w.packs || w.packs.includes(c.pack))) : undefined)
   ?? cards.find((c) => c.function === fn && !c.departmentType && !CORE.has(fn) && (!w?.packs || w.packs.includes(c.pack)))
+
+// ── (k) a pack's line saved by its own operation at Done (§5.7, owner 2026-10-08): a draft whose function a pack registers here is never a
+//    record entry; right after the entries land (or alone, when nothing else was written), the pack saves it through its own door. If it
+//    fails, the visit is still saved and the draft stays, saying what went wrong ──
+export interface DraftWhere { patientId: string; departmentId: string; visitId: string | null }
+export interface DraftSave { function: string; pack: string; save: (params: Record<string, unknown>, where: DraftWhere) => Promise<unknown> }
+const saves = new Map<string, DraftSave>()
+export function registerDraftSave(d: DraftSave) {
+  // only a pack's own function (<pack>.<name>), once: never a base line (an alert, a pregnancy) nor another pack's
+  if (!/^[a-z][a-z0-9_]*$/.test(d.pack) || d.pack === 'core' || d.pack === 'base' || !d.function.startsWith(`${d.pack}.`) || CORE.has(d.function) || saves.has(d.function)) {
+    console.error(`openCare: ${d.function} is not ${d.pack}'s own line to save`); return
+  }
+  saves.set(d.function, d)
+}
+/** the pack that saves this draft's function itself, or none (a record entry) */
+export const draftSaveFor = (fn: string) => saves.get(fn) ?? null

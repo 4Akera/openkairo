@@ -1,6 +1,7 @@
 // Billing's pure model (spec/openCare.md §5.4): money in whole piastres (no floating point), the server's lines turned into the payment
 // card's lines and back into what the pay operation takes, the row's words, the receipt's lines, the day's tiles and a drawer's words.
 // No React and no client here, so `npm run test:billing` reads it.
+import type { Recorded } from '@core/print/session'
 
 /** what billing.lines answers for a patient at this desk */
 export interface ChargeLine { item: string; department_id: string; kind: 'service' | 'visit'; name: string | null; from_department_id: string | null; at: string
@@ -18,7 +19,9 @@ export interface Owed { desk: Desk; rows: OwedRow[]; more: boolean; count: numbe
 export interface PaymentLine { n: number; kind: 'charge' | 'sent' | 'handed'; department_id: string; name: string | null; quantity: number | string | null; amount: number | string; typed: boolean }
 export interface Payment { payment_id: string; receipt: string; department_id: string; patient_id: string | null; method: 'cash' | 'card'; total: number | string; discount: number | string
   discount_reason: string | null; received: number | string | null; change: number | string | null; at: string; author_id: string; by: string | null; reason: string | null
-  refund_of: string | null; refunded_by: string | null; lines: PaymentLine[] }
+  refund_of: string | null; refunded_by: string | null; lines: PaymentLine[]
+  /** each copy printed, the first the original (billing.prints) */
+  prints?: { at: string; by: string | null }[] }
 
 export const MAX = 1_000_000_000   // 10,000,000.00: the most a price or a line may be (in piastres)
 
@@ -46,7 +49,7 @@ type Names = (id: string | null | undefined) => string | null
 export function cardLines(l: Pick<Lines, 'charges' | 'sent'>, nameOf: Names, timeOf: (iso: string) => string, handed: Handed[] = [], here?: string): CardLine[] {
   const out: CardLine[] = l.charges.map((c) => ({ key: `c:${c.item}:${c.department_id}`, kind: 'charge', department_id: c.department_id, at: c.at,
     words: c.kind === 'visit' ? `Visit · ${nameOf(c.department_id) ?? 'the clinic'}` : c.name ?? 'A service',
-    source: `${nameOf(c.department_id) ?? ''} · ${c.kind === 'visit' ? 'seen' : 'ordered'} ${timeOf(c.at)}`.replace(/^ · /, ''),
+    source: `${nameOf(c.department_id) ?? ''} · ${c.kind === 'visit' ? 'checked in' : 'ordered'} ${timeOf(c.at)}`.replace(/^ · /, ''),
     price: c.at_order ? null : cents(c.amount), open: !!c.at_order, charge: { item: c.item, department_id: c.department_id } }))
   const byDept = new Map<string, SentLine[]>()
   for (const s of l.sent) byDept.set(s.department_id, [...(byDept.get(s.department_id) ?? []), s])
@@ -116,6 +119,41 @@ export function receiptLines(p: Pick<Payment, 'lines'>, nameOf: Names): { words:
     amount: ls.reduce((n, l) => n + signed(l.amount), 0) })
   return out
 }
+
+/** the receipt as it is shown and kept, and printed the same (spec §5.4, §3.13 Printing): its kind and number, when, the patient, what a
+ *  refund gives back and why, the lines, the discount, the total, the cash received and the change (or the card), who took it, and, given
+ *  back since, on which refund. One model, so the paper says nothing the screen did not */
+export interface ReceiptView { refund: boolean; title: string; number: string; at: string; patient: string; gives_back: string | null
+  lines: { words: string; amount: number }[]; discount: { words: string; amount: number } | null; total: number; tender: { words: string; amount: number }[]
+  by: string; refunded: string | null }
+export function receiptView(p: Payment, nameOf: Names, patient: { name: string; number: number | string } | null): ReceiptView {
+  const refund = !!p.refund_of; const discount = signed(p.discount)
+  return { refund, title: refund ? 'Refund slip' : 'Receipt', number: p.receipt, at: p.at,
+    patient: patient ? `${patient.name} · ${patient.number}` : p.patient_id ? '…' : 'No patient on record',
+    gives_back: refund ? `Gives back receipt ${p.refund_of}${p.reason ? ` · ${p.reason}` : ''}` : null,
+    lines: receiptLines(p, nameOf), discount: discount ? { words: `Discount${p.discount_reason ? ` · ${p.discount_reason}` : ''}`, amount: -discount } : null,
+    total: signed(p.total),
+    tender: p.method === 'cash' && p.received != null ? [{ words: 'Cash received', amount: signed(p.received) }, { words: 'Change', amount: signed(p.change) }]
+      : [{ words: p.method === 'card' ? 'Card' : 'Cash', amount: signed(p.total) }],
+    by: `${refund ? 'Given back' : 'Taken'} by ${p.by ?? '…'}`, refunded: p.refunded_by ? `Refunded · given back on ${p.refunded_by}` : null }
+}
+/** the copies printed, in words: "Printed 10:42 · again 10:50" (none: nothing) */
+export function printedWords(prints: Payment['prints'], timeOf: (iso: string) => string): string {
+  const ps = prints ?? []
+  return ps.length ? `Printed ${timeOf(ps[0].at)}${ps.length > 1 ? ` · again ${ps.slice(1).map((x) => timeOf(x.at)).join(', ')}` : ''}` : ''
+}
+
+/** what billing.print answers for a copy: whether it is a later one, the server's time of it, and the receipt as it stands at that moment
+ *  (given back since, and on which slip) */
+export interface PrintCopy { copy: number; reprint: boolean; at: string; first_at: string; refunded_by: string | null; refund_of: string | null }
+/** a receipt's copy, recorded by billing (print: billing.print) once the core has logged the read and the printer is free — a print
+ *  refused before it counts no copy — then drawn as billing holds it at that moment (given back at another desk since this screen read
+ *  it: it says so), its reprint mark at the server's time of the copy */
+export const recordCopy = (p: Payment, print: (paymentId: string) => Promise<PrintCopy>, viewOf: (p: Payment) => ReceiptView) =>
+  async (): Promise<Recorded<ReceiptView>> => {
+    const c = await print(p.payment_id)
+    return { again: c.reprint, at: c.at, data: viewOf({ ...p, refunded_by: c.refunded_by === undefined ? p.refunded_by : c.refunded_by }) }
+  }
 
 /** a drawer counted against what it should hold */
 export function drawerWords(expected: number, counted: number | null) {

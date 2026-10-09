@@ -11,7 +11,7 @@ import type { Department, PatientHit, Service } from '../../db/types'
 import { Card, Input, Kbd, cn, errorText } from '../../ui'
 import { NewPatient } from '../../shell/NewPatient'
 import { walkInOrders } from './walkins'
-import { walkInStepFor } from './WhatFor'
+import { useWalkInPart, walkInStepFor } from './WhatFor'
 
 const LABEL = 'text-11 font-semibold uppercase tracking-[0.06em] text-faint'
 const fullName = (p: Pick<PatientHit, 'given_name' | 'family_name'>) => `${p.given_name} ${p.family_name}`
@@ -29,10 +29,14 @@ export function WalkIn({ dept, onClose, onStarted }: { dept: Department; onClose
   const nobody = settled && d.trim().length >= 2 && hits.isSuccess && !list.length
 
   const choose = (p: PatientHit) => { setWho(p); setCreating(false); w.reset() }
+  const part = useWalkInPart(dept, who?.id ?? null)   // a pack's part after what for (a diary's when), core change (j)
+  const [starting, setStarting] = useState(false)   // from Start until the part has done its own (a second Start never writes twice)
   const start = (services: Service[], askedBy?: string) => {
-    if (!who) return
-    w.mutate(oneSet(walkInOrders({ patientId: who.id, from: dept.id, to: dept.id, services, askedBy })),
-      { onSuccess: () => onStarted(`${fullName(who)} · ${services.map((s) => s.name).join(', ')}`) })
+    if (!who || starting) return
+    const es = walkInOrders({ patientId: who.id, from: dept.id, to: dept.id, services, askedBy }); setStarting(true)
+    w.mutate(oneSet(es), { onError: () => setStarting(false), onSuccess: async () => {
+      const more = await part.after({ from: dept.id, orders: es.map((e, i) => ({ id: e.id!, service: services[i] })) }).catch((x: unknown) => `not booked: ${errorText(x)}`)
+      setStarting(false); onStarted(`${fullName(who)} · ${services.map((s) => s.name).join(', ')}${more ? ` · ${more}` : ''}`) } })
   }
   const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!list.length) return; e.preventDefault(); setCursor(Math.max(0, Math.min(list.length - 1, c + (e.key === 'ArrowDown' ? 1 : -1)))) }
@@ -67,7 +71,8 @@ export function WalkIn({ dept, onClose, onStarted }: { dept: Department; onClose
     <Card className={cn('grid content-start gap-3 p-4 ring-1', who ? 'ring-accent-line' : 'ring-line')}>
       <p className={LABEL}>Then · what for</p>
       {/* the bench's packs may give their own step (the registry's, so drawn by createElement, never defined here) */}
-      {who ? createElement(walkInStepFor(dept.packs), { key: who.id, bench: dept, busy: w.isPending, error: w.error, onStart: start, note: 'They join To do like any order; it stays in the record.' })
+      {who ? createElement(walkInStepFor(dept.packs), { key: who.id, bench: dept, busy: w.isPending || starting, error: w.error, onStart: start, note: 'They join To do like any order; it stays in the record.',
+          extra: part.extra, start: part.start })
         : <p className="text-13 text-faint">Pick the patient first.</p>}
     </Card>
   </div>

@@ -23,7 +23,7 @@ const WORDS: Record<string, string> = {
   names_hiv: 'An alert shows in every department, so it never names HIV or AIDS', nothing_to_end: 'Nothing standing to end', already_ended: 'Already ended: a new one starts its own',
   already_recorded: 'Already recorded by someone else — look again and change that one', dates_not_pregnant: 'Not pregnant takes no dates', lmp_or_weeks: 'The LMP or the weeks, not both',
   lmp_future: 'The LMP is after the day written', bad_lmp: 'The LMP is not a day', lmp_long_ago: 'The LMP is more than 44 weeks back', sex_male: 'Recorded pregnant, but the patient is male',
-  note_missing: 'Write the note to show, or turn it off',
+  note_missing: 'Write the note to show, or turn it off', bad_printout: 'Not a printout this clinic knows', unknown_purpose: 'Not a reason to read this clinic knows',
   unknown_score: 'Not a score declared here', score_retired: 'That version of the score is retired — fill it again', score_mismatch: 'The total is not the server\'s — fill the score again',
   score_incomplete: 'Every item of the score needs an answer', bad_input: 'An answer the score cannot take', already_signed: 'Already signed off for this clinic', pack_not_used: 'That pack is not used in this department',
   would_overwrite: 'Staff changed it here: it stays as they set it', unknown_setup: 'Not a setup this clinic has', unknown_part: 'Not a part of that setup',

@@ -13,6 +13,13 @@ import { commandsFor } from '../src/core/screens/visit/commands'
 import { byWord, freeRows, packRowOf, waitsOf, type SoftCheckDef } from '../src/core/screens/rows'
 import { groupByPatient } from '../src/core/screens/bench/shared'
 import { benchMarkRow } from '../src/core/screens/marks'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { atCollected, collectedAt, labelsOf, printWords, sampleNumbers, samplesOf } from '../src/packs/lis/labels'
+import { LabelSheet } from '../src/packs/lis/LabelSheet'
+import { largeOf } from '../src/packs/lis/large'
+import { decode128, encode128 } from '../src/core/print/code128'
+import { setClinicTimeZone } from '../src/core/ui/time'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -159,5 +166,70 @@ test('where /lab is offered: where the Laboratory takes orders from; elsewhere i
   assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].detail, 'lcxr · Imaging', 'offered, with no tube')
   assert.equal(suggest('/lab lcx', lab, [], new Set())!.items[0].swatch, undefined, 'nor a colour')
   assert.deepEqual(ok('/lab lcxr', lab).map((p) => p.params.service_id), ['lcx'], 'ordered like any of its services')
+})
+// the specimen labels (§3.13 Printing, owner 2026-10-08): Rania's tests, collected under one number, then a second sample later
+setClinicTimeZone('Africa/Cairo')
+const born = `${new Date().getFullYear() - 26}-01-01`
+const LR = (item: string, code: string, name: string, section: string, specimen: string | null, at = '2026-10-08T07:24:00Z', step_key = 'collected', note?: string) => ({ item, id: item,
+  service_name: name, section_name: section, display_line: name, patient: { id: 'rania', given_name: 'Rania', family_name: 'Samir', record_number: 1042, sex: 'female', born_on: born },
+  step_data: specimen ? { specimen, ...(note ? { note } : {}) } : null, order: { item, status: 'in-progress', step_key, last_at: at } }) as unknown as RequestQueueRow
+const svcOf = (r: RequestQueueRow) => ({ code: r.item.split(':')[0] })
+test('labels: one a tube — the patient, age and sex, the record number, when collected, the tube\'s word and its tests, fasting where asked, the sample number', () => {
+  const rows = [LR('cbc:1', 'cbc', 'Complete blood count', 'Haematology', null), LR('hba1c:1', 'hba1c', 'HbA1c', 'Chemistry', null), LR('lipids:1', 'lipids', 'Lipid profile', 'Chemistry', null),
+    LR('fbs:1', 'fbs', 'Fasting glucose', 'Chemistry', null)]
+  const ls = labelsOf(rows, svcOf, { sample: 'S-1008-0003', at: '2026-10-08T07:30:00Z', fasting: true })
+  assert.deepEqual(ls.map((l) => [l.tube, l.tests.join(', '), l.fasting]), [['Purple · EDTA', 'Complete blood count, HbA1c', null], ['Yellow · gel', 'Lipid profile', 'Fasting'],
+    ['Grey · fluoride', 'Fasting glucose', 'Fasting']], 'three tubes, three labels, in the tubes\' order; fasting on the tubes whose tests ask it')
+  assert.ok(ls.every((l) => l.sample === 'S-1008-0003' && l.name === 'Rania Samir' && l.age_sex === '26 F' && l.record === 1042 && l.at === '2026-10-08T07:30:00Z'))
+  assert.deepEqual(labelsOf(rows, svcOf, { sample: 'S-1008-0003', at: '2026-10-08T07:30:00Z', fasting: false }).map((l) => l.fasting), [null, 'Not fasting', 'Not fasting'])
+  assert.equal(printWords(ls), 'Print 3 labels'); assert.equal(printWords(ls.slice(0, 1)), 'Print 1 label'); assert.equal(samplesOf(ls), 'S-1008-0003')
+})
+test('labels again: each tube its own sample\'s number where a patient has two samples waiting; the same numbers every time; only tubes still at Collected', () => {
+  const rows = [LR('cbc:1', 'cbc', 'Complete blood count', 'Haematology', 'S-1008-0001', '2026-10-08T06:10:00Z'),
+    LR('lipids:1', 'lipids', 'Lipid profile', 'Chemistry', 'S-1008-0004', '2026-10-08T07:40:00Z', 'collected', 'not fasting'),
+    LR('tsh:1', 'tsh', 'TSH', 'Hormones', 'S-1008-0004', '2026-10-08T07:40:00Z'), LR('kft:1', 'kft', 'Kidney function', 'Chemistry', 'S-1008-0002', '2026-10-08T06:30:00Z', 'received'),
+    LR('crp:1', 'crp', 'CRP', 'Chemistry', null, '2026-10-08T07:50:00Z', 'collected')]
+  const ls = labelsOf(rows.filter(atCollected), svcOf)
+  assert.deepEqual(ls.map((l) => `${l.sample} ${l.tube} ${l.tests.join('+')} ${l.fasting ?? ''}`.trim()),
+    ['S-1008-0001 Purple · EDTA Complete blood count', 'S-1008-0004 Yellow · gel Lipid profile+TSH Not fasting'], 'two samples, each tube its own number; received or unnumbered: no label')
+  assert.deepEqual(ls.map((l) => l.at), ['2026-10-08T06:10:00Z', '2026-10-08T07:40:00Z'], 'each when its sample was collected')
+  assert.deepEqual(labelsOf(rows.filter(atCollected), svcOf), ls, 'Print again: the same numbers'); assert.equal(samplesOf(ls), 'S-1008-0001 S-1008-0004')
+  assert.deepEqual(sampleNumbers(ls), ['S-1008-0001', 'S-1008-0004'], 'each sample a thing of its own for the reprint mark')
+})
+test('the first labels and Print again carry one time, the record\'s: the server\'s time the collected step was written, never this computer\'s clock', () => {
+  // the collection room's computer runs 9 minutes fast; the writer stamps the collected step (it names no time) with its own time
+  const landed = { set_id: 's', outcome: 'landed' as const, findings: [], recorded_at: '2026-10-08T07:24:00.512Z' }
+  const before = [LR('cbc:1', 'cbc', 'Complete blood count', 'Haematology', null, '2026-10-08T06:58:00Z', '')]
+  const first = labelsOf(before, svcOf, { sample: 'S-1008-0003', at: collectedAt(landed), fasting: null })
+  const after = [LR('cbc:1', 'cbc', 'Complete blood count', 'Haematology', 'S-1008-0003', '2026-10-08T07:24:00.512Z')]   // the queue read again: its last move
+  assert.deepEqual(first.map((l) => l.at), ['2026-10-08T07:24:00.512Z']); assert.deepEqual(labelsOf(after.filter(atCollected), svcOf).map((l) => l.at), first.map((l) => l.at))
+  assert.equal(collectedAt({}), null, 'no time from the record: none printed, rather than this computer\'s')
+  assert.equal(labelsOf(before, svcOf, { sample: 'S-1008-0003', at: null, fasting: null })[0].at, null)
+  const src = readFileSync(new URL('../src/packs/lis/Collect.tsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(src, /new Date\(|Date\.now\(/, 'Collect reads no clock of its own'); assert.match(src, /const landed = await write\(oneSet\(items\)\)/)
+  assert.match(src, /labelsAt\?\.\(collectedAt\(landed\)\)/, 'the first labels from the landed write\'s time')
+})
+test('a label as it prints: one a page, its words never a colour alone, the barcode Scan to receive reads back; a later copy says so', () => {
+  const ls = labelsOf([LR('cbc:1', 'cbc', 'Complete blood count', 'Haematology', 'S-1008-0001'), LR('fbs:1', 'fbs', 'Fasting glucose', 'Chemistry', 'S-1008-0001')], svcOf)
+  const html = renderToStaticMarkup(createElement(LabelSheet, { data: ls, header: { name: 'Nile', logo: null, address: null, phone: null, tax_number: null }, reprint: null }))
+  assert.equal((html.match(/<section/g) ?? []).length, 2, 'a page each'); assert.match(html, /Rania Samir/); assert.match(html, /26 F/); assert.match(html, /#1042/)
+  assert.match(html, /2026-10-08 10:24/, 'collected, in the clinic\'s time'); assert.match(html, /Purple · EDTA/); assert.match(html, /Grey · fluoride/); assert.match(html, />Fasting</)
+  assert.equal((html.match(/aria-label="Barcode S-1008-0001"/g) ?? []).length, 2); assert.doesNotMatch(html, /Reprint/); assert.doesNotMatch(html, /Nile/, 'no room for the header')
+  assert.match(renderToStaticMarkup(createElement(LabelSheet, { data: ls, header: { name: 'Nile', logo: null, address: null, phone: null, tax_number: null }, reprint: '10:42' })), /Reprint · 10:42/)
+  // Rania's two samples at Collected, from her row: each label marked by its own sample's prints, never by the sheet as a whole
+  const two = labelsOf([LR('cbc:1', 'cbc', 'Complete blood count', 'Haematology', 'S-1008-0001'), LR('lipids:1', 'lipids', 'Lipid profile', 'Chemistry', 'S-1008-0004')], svcOf)
+  const sheet = (reprinted: string[]) => renderToStaticMarkup(createElement(LabelSheet, { data: two, header: { name: 'N', logo: null, address: null, phone: null, tax_number: null }, reprint: '10:42', reprinted }))
+  assert.equal((sheet(['S-1008-0001', 'S-1008-0004']).match(/Reprint · 10:42/g) ?? []).length, 2, 'both printed before (each on its own): every label marked')
+  assert.deepEqual(sheet(['S-1008-0004']).split('<section').slice(1).map((x) => /Reprint/.test(x)), [false, true], 'S-1008-0001 printed for the first time: not marked')
+  const read = decode128(encode128(ls[0].sample).modules)!
+  assert.deepEqual(scanned([{ ...LR('cbc:1', 'cbc', 'CBC', 'Haematology', 'S-1008-0001'), reply: null } as RequestQueueRow], read).toReceive.map((r) => r.item), ['cbc:1'], 'the scanner types it back: received')
+})
+test('the Sample labels switch: written (a number on each tube) unless the laboratory says printed', () => {
+  const org = (labels?: string) => ({ settingKeys: [], datatypes: {}, settings: labels ? [{ key: 'lis.large', thing_id: 'lab', data: { labels } }] : [] }) as never
+  assert.equal(largeOf(org(), 'lab').labels, 'written'); assert.equal(largeOf(org('printed'), 'lab').labels, 'printed'); assert.equal(largeOf(org('written'), 'lab').labels, 'written')
+  const src = readFileSync(new URL('../src/packs/lis/Collect.tsx', import.meta.url), 'utf8')
+  assert.match(src, /const printing = large\.labels === 'printed'/); assert.match(src, /labels ready/); assert.match(src, /<PrintButton label=\{printWords\(ready\.labels\)\} keyed/, 'Print 3 labels (P)')
+  assert.match(src, /key: 'lis\.labels', data: labels, thing: samplesOf\(labels\), things: sampleNumbers\(labels\), patientId/, 'the print names the patient: logged like a read; each sample its own thing')
+  assert.match(src, /<PrintButton label=\{printWords\(again\(g\)\)\} print=/, 'the row\'s button says Print until it has printed (never "Print again" for labels never printed)')
 })
 console.log(`lis: ${n} groups passed`)
