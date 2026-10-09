@@ -17,6 +17,12 @@
 -- include: supabase/demo/radiology.sql
 -- include: supabase/seeds/bookings.sql
 -- include: supabase/demo/bookings.sql
+-- include: supabase/seeds/vaccines.sql
+-- include: supabase/demo/vaccines.sql
+-- include: supabase/seeds/chroniccare.sql
+-- include: supabase/demo/chroniccare.sql
+-- include: supabase/seeds/familycare.sql
+-- include: supabase/demo/familycare.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql

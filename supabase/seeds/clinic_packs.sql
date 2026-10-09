@@ -21,3 +21,19 @@ begin
   perform demo.screen(ph, 'pharmacy.stock');
   perform demo.screen(ph, 'billing.today');
 end $$;
+
+-- Family medicine uses chronic care and the immunisation pack too (§5.7 Q16), after its own and in that order, with the immunisation
+-- list a tab of its line; the desk asks for a family file at New patient (§5.7 C4), so it ticks the family medicine pack, whose door it writes
+-- the file through. Skipped while the family medicine pack is off; each other pack only while it is on.
+do $$
+declare c uuid := demo.base('clinic'); fm uuid := demo.id('familycare', 'department');
+begin
+  if not (core.packs_used(c) @> array['familycare']) then return; end if;
+  perform demo.tick(demo.base('desk'), 'familycare');
+  if core.packs_used(c) @> array['chroniccare'] then perform demo.tick(fm, 'chroniccare'); end if;
+  if core.packs_used(c) @> array['vaccines'] then
+    -- its line as drawn: the queue, Families, then the immunisation list
+    perform demo.tick(fm, 'vaccines');
+    perform demo.screen(fm, 'vaccines.room');
+  end if;
+end $$;

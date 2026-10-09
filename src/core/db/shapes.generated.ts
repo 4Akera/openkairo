@@ -140,6 +140,16 @@ export interface CheckedIn {
   priority?: 'routine' | 'urgent' | 'asap' | 'stat'
   reason?: string
 }
+/** chroniccare.target v1 (chroniccare) */
+export interface ChroniccareTarget {
+  condition: string
+  measure: string
+  op: '<' | '<=' | '>' | '>='
+  reason?: string
+  status?: 'active' | 'ended'
+  value: number
+  value2?: number
+}
 /** crossed_out v1 (base) */
 export interface CrossedOut {
   reason: 'typo' | 'wrong_value' | 'wrong_patient' | 'late_information' | 'other'
@@ -423,6 +433,26 @@ export interface Transferred {
 export interface Urgent {
   urgent: boolean
 }
+/** vaccines.dose v1 (vaccines) */
+export type VaccinesDose = {
+  dose?: Quantity
+  drug?: Concept
+  expiry?: string
+  lot?: string
+  medication?: string
+  note?: string
+  reason?: string
+  route?: string
+  site?: string
+  status: 'completed' | 'not-done'
+  vaccines?: {
+    dose?: number
+    given_by?: string
+    given_on?: string
+    source?: 'here' | 'card'
+    vaccine: string
+  }
+} & ({ medication: string } | { drug: Concept })
 /** vitals v1 (base) */
 export interface Vitals {
   bmi?: Quantity
@@ -468,42 +498,27 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
-/** setting bookings.rules (bookings; owner department) */
-export interface BookingsRulesSetting {
-  ahead?: number
-  same_doctor?: boolean
-}
-/** setting bookings.sessions (bookings; owner department) */
-export interface BookingsSessionsSetting {
-  leave?: {
-    doctor_id?: string
-    from: string
-    reason?: string
-    to: string
-  }[]
-  sessions?: {
-    days: ('sat' | 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri')[]
-    doctor_id?: string
-    every?: number
-    from: string
-    how: 'time' | 'number'
-    id: string
+/** setting chroniccare.conditions (chroniccare; owner organization) */
+export interface ChroniccareConditionsSetting {
+  conditions: {
+    checks?: {
+      codes: string[]
+      every_months: number
+      key?: string
+      name: string
+      off_target_months?: number
+    }[]
+    codes: string[]
+    key: string
     name: string
-    overbook?: number
-    place_id?: string
-    places?: number
-    services?: string[]
-    to: string
-    walk_ins?: number
+    targets?: {
+      measure: string
+      op: '<' | '<=' | '>' | '>='
+      value: number
+      value2?: number
+    }[]
   }[]
-}
-/** setting bookings.tell (bookings; owner department) */
-export interface BookingsTellSetting {
-  lines?: {
-    ar?: string
-    en: string
-    service_id?: string
-  }[]
+  window_months?: number
 }
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
@@ -544,12 +559,33 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
+/** setting familycare.checks (familycare; owner organization) */
+export interface FamilycareChecksSetting {
+  checks: {
+    bmi_age_from?: number
+    bmi_from?: number
+    codes: string[]
+    every_years?: number
+    from?: number
+    met_by?: string
+    name: string
+    once?: boolean
+    order?: string
+    sex?: 'any' | 'female' | 'male'
+    to?: number
+    who?: string
+  }[]
+}
+/** setting familycare.files (familycare; owner organization) */
+export interface FamilycareFilesSetting {
+  ask_at_new_patient?: boolean
+}
 /** setting lis.large (lis; owner department) */
 export interface LisLargeSetting {
   analysers: false
   auto_release: false
   chairs: number
-  labels: 'written' | 'printed'
+  labels: 'written'
   scan_receive: boolean
   second_check: boolean
   targets: {
@@ -561,14 +597,6 @@ export interface LisLargeSetting {
     urine_stool: number
   }
   turnaround: boolean
-}
-/** setting organization.header (core; owner organization) */
-export interface OrganizationHeaderSetting {
-  address?: string
-  logo?: string
-  name: string
-  phone?: string
-  tax_number?: string
 }
 /** setting organization.packs_used (core; owner organization) */
 export interface OrganizationPacksUsedSetting {
@@ -684,6 +712,43 @@ export interface ServiceSetting {
   section?: string
   steps?: string[]
 }
+/** setting vaccines.national (vaccines; owner organization) */
+export interface VaccinesNationalSetting {
+  rows: {
+    age: string
+    cvx?: string
+    dose: number
+    earliest_days: number
+    how?: string
+    interval_days?: number
+    key: string
+    latest_days?: number
+    name: string
+    route?: string
+    site?: string
+    vaccine: string
+  }[]
+  sample?: boolean
+  source?: string
+  version?: string
+}
+/** setting vaccines.optional (vaccines; owner organization) */
+export interface VaccinesOptionalSetting {
+  rows: {
+    age?: string
+    cvx?: string
+    dose: number
+    earliest_days?: number
+    how?: string
+    interval_days?: number
+    latest_days?: number
+    name: string
+    pregnancy?: boolean
+    route?: string
+    site?: string
+    vaccine: string
+  }[]
+}
 
 /** each entry type's data, by its key */
 export interface EntryData {
@@ -696,6 +761,7 @@ export interface EntryData {
   'breastfeeding': Breastfeeding
   'called': Called
   'checked_in': CheckedIn
+  'chroniccare.target': ChroniccareTarget
   'crossed_out': CrossedOut
   'died': Died
   'discharged': Discharged
@@ -726,6 +792,7 @@ export interface EntryData {
   'step': Step
   'transferred': Transferred
   'urgent': Urgent
+  'vaccines.dose': VaccinesDose
   'vitals': Vitals
 }
 /** each setting's data, by its key */
@@ -735,9 +802,7 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
-  'bookings.rules': BookingsRulesSetting
-  'bookings.sessions': BookingsSessionsSetting
-  'bookings.tell': BookingsTellSetting
+  'chroniccare.conditions': ChroniccareConditionsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
@@ -747,8 +812,9 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
+  'familycare.checks': FamilycareChecksSetting
+  'familycare.files': FamilycareFilesSetting
   'lis.large': LisLargeSetting
-  'organization.header': OrganizationHeaderSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting
   'organization.time_zone': OrganizationTimeZoneSetting
@@ -764,4 +830,6 @@ export interface SettingData {
   'radiology.options': RadiologyOptionsSetting
   'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
+  'vaccines.national': VaccinesNationalSetting
+  'vaccines.optional': VaccinesOptionalSetting
 }

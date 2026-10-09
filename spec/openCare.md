@@ -1822,6 +1822,101 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   echo, ECG and spirometer files, a peak-flow diary; blood bank stock and barcodes, MRI T2* trends; AJCC stage tables, the tumour
   board's list; monitor feeds into the anaesthetic record, sterilisation and implant registries, theatre use reports, e-signed consent;
   home visits and the ministry's family planning returns.
+- *Built 2026-10-08 (lane `clinics-shared`), the core and base changes the drawn choices need* (tag `clinics-core-ready`):
+  **C1** `registerCardLine(pack, 'medication' | 'vitals', title, line)` (`visit/lines.ts`, `CardLines.tsx`): a pack the department uses
+  adds its rows under the base's /rx and /v cards (its name over them; words plain or each with a state tone) and its short words after
+  the draft's line (the drafts' block hands `BlockEnv.draftLine`); the line reads the card's fields, what the chart shows (`Ctx.record`),
+  the clinic's settings (`Ctx.org`) and the moment; only the packs the department uses speak, in its pack order, one line a pack and card,
+  a pack whose line fails says nothing; nothing is stored and nothing waits for it. **C2** `/v` reads `len`/`length` and `hc`/`head`/`ofc`:
+  a length is written as the base's `height` with `method` *lying*, the head as `head`; a length and a height in one line are refused; the
+  card for a child under two is Wt, Length, Head, Temp, Pulse, RR, SpO₂, and anyone else's the adult card with length or head when said
+  (`visit/vitals.ts`). **C3** a pack command declared `worksFor` is offered where the department ticks the pack or a department using it
+  works for this one (`Ctx.servedBy`), and typed elsewhere says where it is offered; the pack's cards draw wherever such a command is
+  offered (`cardFor`: the Blood bank's transfusion card on a ward); migration 22 (`core.declare_served(type)`): a pack
+  type extending a base type (not order) declared *served* is written with the base type's action (`write:given` for a transfusion
+  record), and the pack's own check asks `core.pack_serves(org, department, pack)` (granted to it by the declaration) to refuse
+  `not_served` elsewhere. **C4** `registerNewPatientStep(pack, {show, Part, missing, after})` (`shell/newPatientSteps.ts`): asked in
+  New patient (the desk's and ⌘K's) where the pack is on and its own setting says so; Register waits for what it is missing; once
+  registered the pack does its own with the new patient, and a step that fails says so with Continue. **C5** `registerBoardRows(pack,
+  {title, view, useRows, start, buttons})` (`ward/rows.ts`, `PackRows.tsx`): a pack's rows of today's work not yet in a place, under the
+  board (a patient with a stay here left out), counted as a view of the board's toolbar; Start is the base's admission into a free place
+  chosen inline, with the pack's own entries in the same set; at most two buttons of the pack's own, never a base word. Tests:
+  `npm run test:clinics-core`, `supabase/tests/clinics_core.sql`. The privileges migration is now `20260926000099_privileges.sql`, and
+  `core.lock_pack` is defined in `20260926000010_core_guards.sql` so a pack migration below 99 may call it (tag `clinics-core-ready-2`).
+- *Built 2026-10-08 (lane `clinics-shared`), Vaccines* (`vaccines`, migration 23, role block e0; pictures #vax-chart, #vax-room): each dose is
+  the pack's type `vaccines.dose` extending the base's `given` (the vaccine as its drug with its CVX code, `vaccines.cvx`; route, site,
+  lot, expiry; given or `not-done` with its reason; under `data.vaccines` the series, the dose number, *here* or *card* with the card's
+  date) — everyday where a department ticks the pack; its line ("Vaccine · MMR dose 1 · lot 4K21M07 · exp 03/2027 · right arm, under
+  the skin"); its FHIR adds an Immunization (dose number, lot, site, route, a card's copy not a primary source) beside the base's
+  MedicationAdministration; its table `vaccines.doses` for the room. The schedule: the national rows are the setting `vaccines.national`
+  (the MOHP's, birth to 18 months, its version and source), written only by the import's action `import:vaccines.national` that no role
+  holds, so it shows read-only — the demo loads a sample said to be one; the optional rows are the clinic's own `vaccines.optional`
+  (pneumococcal, rotavirus, varicella, hepatitis A, influenza, tetanus in pregnancy: the setting's declared default until the clinic
+  saves its own, since a starter setup carries only a department's settings). Due is worked out from the birth date, the doses
+  and each row's earliest age and the interval after the last dose of its series; overdue four weeks after; too late past a latest age
+  (rotavirus); tetanus in pregnancy only while the base's pregnancy stands; from 19 years no child row is due (a dose recorded still
+  shows). Client (`src/packs/vaccines/`): `/vax mmr 1, opv 5` (lot,
+  exp, a site, `card <date>`, `not <why>`), the dose's card (given or not, here or from the card, lot, expiry, site chips, given by) and
+  under it the child's schedule (due and overdue, temperature, allergies, a live vaccine in the last four weeks, the optional ones not
+  chosen as chips, the next worked out); the Vaccines section (the national rows by age, given with its date and *card* or *here*, not
+  given with why, overdue, due; the optional ones apart), its chip ("2 overdue"), Summary line and banner word ("2 vaccines overdue");
+  the room's own screen `vaccines.room` (the Vaccination room's line alone; a tab beside the queue in a clinic using the pack, as drawn
+  for family medicine) (Due today: Here and Not here yet; This week; Overdue · to call with the
+  phone and *Called*, a note on the record; Given today) and its walk-in (who, then what is due today as chips, the earlier doses on the
+  MOHP card to copy, Start checks the child in and opens the visit with each dose drafted). The setup `vaccines.room`; the Vaccinator
+  (`vaccines.vaccinator`, built on Nurse: also checks a walk-in in, registers a child, finishes the visit). Demo: the Vaccination room,
+  Rokaya Ghoneim (vaccines@demo.com); Farida Bassem (13 months, OPV 5 and MMR 1 overdue, here), Talia Nassef (2 months, here), Layan
+  Hegab (18 months and five weeks, to call), Seif Yehia (4 months, never here: the walk-in). Tests: `supabase/tests/vaccines.sql`,
+  `npm run test:vaccines`. *Not as drawn:* the child's card printout (printing is not on this branch) and the booking of the next visit
+  (bookings') are left out; the room's marks on other departments' queues ("9-month vaccines due") wait for a mark that reads a pack's
+  data (a core door, asked below).
+- *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chroniccare`, migration 24, role block e1 unused; pictures #chronic-visit,
+  #chronic-list): the clinic's conditions, targets and checks as one setting `chroniccare.conditions` (its declared default the drawn table: diabetes,
+  hypertension, CKD, heart failure, asthma, COPD; a condition's codes are the register, ICD-10 by its start; a target a measure, a sign
+  and a value — a pressure's two; a check its codes and every how many months, sooner while off target; the list's window, 18 months).
+  Registers come from the problem list (active; resolved takes the patient off); the measures are the base's latest values by code; a
+  check is done when any entry with one of its codes was written — the base's values, or the coded observations and procedures the
+  pack keeps (`chroniccare.checks`, a listener) — and a check two conditions share is counted once. Its one type `chroniccare.target`
+  (a patient's own target with its reason, everyday; it wins over the clinic's) and its table. Client: the Chronic care section (each
+  condition with its code and since, its measures against the target with the last values as a line, its checks done or due), its chip
+  ("3 due"), Summary line and banner words ("HbA1c 8.2 ↑", "3 checks due"); `/review dm` (the feet and the eyes as the base's
+  observations coded `chroniccare.check:feet|eyes` — their card's chips: monofilament, pulses, skin, foot risk; seen here, referred, an
+  outside report — and the tests the clinic's checks find due, drafted as orders where a service here does them; under the card the
+  review's last date, each test due or not with its next date, and for a foot at risk what to tell the patient in Arabic); `/target htn
+  bp < 150/90 ; 81, falls`; the Chronic care tab `chroniccare.list` (Off target, Checks overdue, All; a chip per condition; the patients
+  seen here within the window; a row opens the chart). The setup `chroniccare.clinic` (a Diabetes clinic). Demo: Dr. Iman Sherif
+  (diabetes@demo.com); Ashraf Mokhtar (in consult: diabetes, hypertension, CKD 3a; HbA1c 8.2, BP 146/90, LDL 112; eyes, feet and urine
+  ACR due), Fawzia Darwish (81; her own target BP < 150/90, falls), Wafaa Abdelmoneim (diabetes and asthma; inhaler technique due).
+  Tests: `supabase/tests/chroniccare.sql`, `npm run test:chroniccare`. *Not as drawn, and why:* the key is `chroniccare` (the core says
+  "chronic" of a problem term, which the no-pack-names rule reads as naming the pack); the list's Next visit and "none booked first" are
+  bookings' and Print the list is printing's, both left out; the flu vaccine check is the immunisation pack's data, which this pack may
+  not read; a referral for the eyes is the doctor's /order (the review records "referred"); the review's card is registered for the base's
+  observation where the department ticks chronic care; the chart banner counts checks without the facts page (feet and eyes reviewed show
+  in the section, the chip and the list); the queue's "3 due" mark waits for the core door asked below.
+- *Built 2026-10-08 (lane `clinics-shared`), Family medicine* (`familycare`, migration 25, role block e2 unused; pictures
+  #family-folder, #family-day, #family-checks): the household as the pack's own table (`familycare.households`: the file number by
+  the unit, address, phone; `familycare.members`: who belongs and how, one file a patient, Erase reaching it), written through its
+  ops — `of_patient` and `find` for whoever finds patients, `start`, `join`, `leave` for whoever registers them (manage:patients) — only
+  where the department ticks the pack. The checks due by age and sex as the setting `familycare.checks` (its declared default the drawn table; who is a
+  sex, an age from and to, a BMI from an age; met by codes, never ticked); `familycare.files` (New patient asks for a file, on).
+  Client: the Family section (the file, its address and phone, each member — a name opening their chart — with what they are due: the
+  banner words of the packs this department uses, read through the core's banner-word registry from each member's record, so no pack
+  reads another's data, then their family checks), the Checks section (due or met; its chip "2 due", Summary line, banner word), /checks
+  (the due checks a service here does, drafted as orders; under the card the list and the family's members), the Families screen
+  (`familycare.files`: find a file by its number, a phone, an address or a member's name; open it; add a member), and the desk's
+  New patient step (core change C4: join a file found by its number, the phone or the address, with how they are related; start a new
+  file at an address; or not now). The setup `familycare.medicine` (Family medicine: its queue and Families). Demo: Dr. Hazem Ouda
+  (family@demo.com); file 1182 — Ayman Abdelrahman, his wife Basma Hegazy (in consult; sugar and cervical screening due), his mother
+  Zeinab Hamouda (diabetes, HbA1c late; waiting), Yassin (6, waiting) and Malak (14 months). The clinic's choices
+  (`seeds/clinic_packs.sql`): Family medicine ticks chronic care and the immunisation pack after its own, and its line is the queue, Families
+  and the immunisation list; the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/familycare.sql`, `npm run
+  test:familycare`. *Not as drawn, and why:* the key is `familycare` (the core's word "family" — a patient's family name, the
+  chart's families of types — would read as naming the pack); Book (bookings') and the Gynaecology section (ObGyn's) are left out; the
+  file number is not a banner word (it would need the pack's read on every chart); the queue's per-pack marks (Q50) wait for the core door
+  asked below.
+- *Asked by the lane, for the owner:* a row mark that reads a pack's own data (as row actions do, with a load) — today a mark sees only
+  the row (patient, visit, orders), so "9-month vaccines due", "3 due", "2 checks due" (and paediatrics' "weight z −2.3", ObGyn's
+  "32 w · BP 142/92") cannot be drawn on the queue without it.
 
 ---
 
