@@ -52,7 +52,7 @@ select t.landed(t.w(t.e('result', :'pt', :'labd', jsonb_build_object('status', '
   jsonb_build_object('key', 'note', 'name', 'Comment', 'text', 'normocytic'))), '00000000-0000-0000-0000-00000000ad02', null,
   '00000000-0000-0000-0000-00000000ad01', 'answers')), 'its result');
 reset role;
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 set role authenticated;
 select t.as(:'lt');
 select t.ok(count(*) = 1 and min(r ->> 'key') = 'hb' and min((r ->> 'value')::numeric) = 13.1, 'one number kept (the comment is not a number): hb 13.1')

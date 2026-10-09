@@ -9,7 +9,7 @@ create temp table first_load as select (select count(*) from core.patients where
   (select count(*) from core.holdings where organization_id = demo.base('clinic')) as holdings,
   (select count(*) from core.users where organization_id = demo.base('clinic')) as users;
 -- include: supabase/demo/load.sql
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 
 -- the shared journey's steps strictly in order, each at a time of its own: GP, Done, admitted, the round's last note, his
 -- medicines for home sent, given, home (spec §5.1 rule 9)
@@ -219,6 +219,6 @@ select t.ok(min(checked_in_at) = demo.ago(40) and min(checked_in_at) >= demo.mid
   from base.presence where organization_id = demo.base('clinic') and state = 'waiting';
 select t.ok(not exists (select 1 from core.entries e, jsonb_array_elements(e.findings) f where e.organization_id = demo.base('clinic') and f ->> 'level' = 'flag'),
   'nothing flagged loaded early');
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 select t.ok(r = '[]'::jsonb, 'rebuild = live after the early load: ' || left(r::text, 300)) from core.rebuild_check() r;
 select set_config('demo.now', '', true) is not null as clock_back;

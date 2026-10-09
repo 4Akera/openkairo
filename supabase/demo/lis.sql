@@ -126,4 +126,4 @@ begin
     demo.e('vitals', demo.base('ward'), stay, demo.ago(41), demo.vitals(132, 78, 94, 36.9, 97, 18))));
 end $$;
 -- the pack's background work so far, drained in the load (core.drain takes 500 at a time): the cashier's lines after it count on it
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows

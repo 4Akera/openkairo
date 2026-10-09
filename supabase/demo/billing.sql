@@ -40,7 +40,7 @@ end $$;
 
 -- billing hears the check-ins and orders after commit (its listener); the demo runs that background work now, as the job would, so the
 -- Cashier can take Hoda's payment in the same load
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 
 -- Hoda pays her visit and lipid profile in cash at the Cashier, through the pack's door as the payment card writes it
 do $$
