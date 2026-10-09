@@ -27,10 +27,11 @@ create function pg_temp.journey_in_order() returns text language sql as $$
   select t.ok(bool_and(at is not null and (before is null or at > before)) and max(at) <= demo.now(),
     'the journey in order, each step after the last: ' || string_agg(step || ' ' || coalesce(to_char(at at time zone 'Africa/Cairo', 'DD HH24:MI:SS'), 'missing'), ' → ' order by n)) from s
 $$;
--- today's visits, the two base admissions this morning and Ward nursing's Tahany (admitted with no bed yet) are today's, however early
+-- today's visits, the two base admissions this morning, Ward nursing's Tahany (admitted with no bed yet) and Emergency's five arrivals
+-- are today's, however early
 -- it loads; the morning's done count as done today
 create function pg_temp.day_is_today() returns setof text language sql as $$
-  select t.ok(count(*) = 63 and bool_and(day = (demo.now() at time zone 'Africa/Cairo')::date), count(*) || ' visits and stays of the day, each on today''s date')
+  select t.ok(count(*) = 68 and bool_and(day = (demo.now() at time zone 'Africa/Cairo')::date), count(*) || ' visits and stays of the day, each on today''s date')
     from base.presence where organization_id = demo.base('clinic') and checked_in_at > demo.now() - interval '1 day'
      and patient_id not in (select id from core.patients where full_name ilike 'walk in%')   -- the app's own (the bed check below)
   union all
@@ -46,7 +47,7 @@ select t.ok(not exists (select 1 from core.entries e, jsonb_array_elements(e.fin
   'no entry of the demo is flagged');
 select t.ok(not exists (select 1 from base.review where organization_id = demo.base('clinic') and why = 'flag'), 'nothing to review for a flag');
 select t.ok(not exists (select 1 from core.stale where organization_id = demo.base('clinic')), 'no pack is stale');
-select t.ok(f.patients = (select count(*) from core.patients where organization_id = demo.base('clinic')) and f.patients = 96, 'the same ' || f.patients || ' patients, once each')
+select t.ok(f.patients = (select count(*) from core.patients where organization_id = demo.base('clinic')) and f.patients = 101, 'the same ' || f.patients || ' patients, once each')
   from first_load f;
 select t.ok(f.entries = (select count(*) from core.entries where organization_id = demo.base('clinic')), 'the same ' || f.entries || ' entries') from first_load f;
 select t.ok((select count(*) from core.erasures where organization_id = demo.base('clinic')) = f.patients, 'the reload erased the first load''s patients through the eraser')
@@ -58,7 +59,7 @@ select t.ok(f.settings = (select count(*) from core.settings where organization_
 \echo '── the demo''s departments are made from starter setups (§5.2), and a reload''s setups add nothing'
 select t.ok((select jsonb_object_agg(d.name, core.setting_at(d.organization_id, 'department.setup', d.id) ->> 'setup') from core.departments d
     where d.organization_id = demo.base('clinic') and d.work <> 'outside')
-  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier","Radiology":"radiology.department","ECG room":"bookings.bench","Vaccination room":"vaccines.room","Diabetes clinic":"chroniccare.clinic","Family medicine":"familycare.medicine","Paediatrics clinic":"paeds.clinic","Children''s ward":"paeds.ward","ObGyn clinic":"obgyn.clinic","Cardiology clinic":"cardio.clinic","Echo room":"cardio.echo_room","Nephrology clinic":"nephrology.clinic","Chest clinic":"lungs.clinic","Haematology clinic":"haemato.clinic","Blood bank":"lis.blood_bank","Oncology clinic":"oncology.clinic","Chemotherapy day unit":"oncology.day_unit","Theatre":"theatre.department","Surgery clinic":"surgical.clinic","Pre-op clinic":"anaesthesia.preop_clinic","Recovery":"anaesthesia.recovery"}',
+  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier","Radiology":"radiology.department","ECG room":"bookings.bench","Vaccination room":"vaccines.room","Diabetes clinic":"chroniccare.clinic","Family medicine":"familycare.medicine","Paediatrics clinic":"paeds.clinic","Children''s ward":"paeds.ward","ObGyn clinic":"obgyn.clinic","Cardiology clinic":"cardio.clinic","Echo room":"cardio.echo_room","Nephrology clinic":"nephrology.clinic","Chest clinic":"lungs.clinic","Haematology clinic":"haemato.clinic","Blood bank":"lis.blood_bank","Oncology clinic":"oncology.clinic","Chemotherapy day unit":"oncology.day_unit","Theatre":"theatre.department","Surgery clinic":"surgical.clinic","Pre-op clinic":"anaesthesia.preop_clinic","Recovery":"anaesthesia.recovery","Emergency":"casualty.er"}',
   'each department records the setup it was made from');
 select t.ok((select count(*) from core.places where organization_id = demo.base('clinic') and department_id = demo.base('ward')
     and id = core.setup_id(demo.base('ward'), 'place', 'bed_' || substr(name, 5))) = 8, 'the ward''s eight beds are the Ward setup''s, ids from their keys');
@@ -67,7 +68,7 @@ select t.ok(not exists (select 1 from core.departments d, jsonb_array_elements(c
 select t.ok(core.department_uses(demo.base('clinic'), demo.id('pharmacy', 'department'), 'pharmacy')
   and (select count(*) from core.settings_at(demo.base('clinic'), 'service') s where s.owner_id = demo.id('pharmacy', 'department')) = 1,
   'the Pharmacy ticks its pack and has its one dispensing service, from its setup');
-select t.ok((select count(distinct full_name) from core.patients where organization_id = demo.base('clinic')) = 96, 'every patient''s name is their own');
+select t.ok((select count(distinct full_name) from core.patients where organization_id = demo.base('clinic')) = 101, 'every patient''s name is their own');
 select t.ok(not exists (select 1 from core.patients p join core.users u on u.organization_id = p.organization_id and u.name ilike '%' || p.full_name || '%'
   where p.organization_id = demo.base('clinic')), 'no patient shares a name with the staff');
 select t.ok(r = '[]'::jsonb, 'rebuild = live after the reload: ' || left(r::text, 300)) from core.rebuild_check() r;
@@ -219,6 +220,84 @@ select t.ok((select count(*) from core.entries e where e.organization_id = demo.
   and (select count(*) from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'given' and e.patient_id = pg_temp.pid('fathiya')
     and e.data ->> 'medication' in (select m.item::text from core.entries m where m.organization_id = e.organization_id and m.type = 'medication' and m.patient_id = e.patient_id)) = 1,
   'the base''s admission doses: Ibrahim 2, Fathiya 1');
+\echo '── Emergency''s own patients (§5.6): arrived, triaged with a time to the doctor, one not triaged yet, one boarding, one for home'
+select t.ok(core.department_uses(demo.base('clinic'), demo.id('casualty', 'department'), 'casualty') and core.department_uses(demo.base('clinic'), demo.id('casualty', 'department'), 'bedside')
+  and core.setting_at(demo.base('clinic'), 'department.packs', demo.id('casualty', 'department')) -> 'packs' = '["casualty","bedside"]'::jsonb,
+  'Emergency uses its pack, then Ward nursing, in that order');
+select t.ok(core.setting_at(demo.base('clinic'), 'department.encounter_class', demo.id('casualty', 'department')) ->> 'class' = 'EMER'
+  and (select count(*) filter (where label = 'bed') = 2 and count(*) filter (where label = 'cubicle') = 6 and count(*) = 8 from core.places
+       where organization_id = demo.base('clinic') and department_id = demo.id('casualty', 'department') and retired_at is null),
+  'its stays are emergency encounters; two resus bays and six cubicles');
+select t.ok(count(*) = 5 and count(*) filter (where place_id is null) = 2
+  and bool_or(patient_id = demo.id('casualty', 'patient:karim') and place_id = core.setup_id(demo.id('casualty', 'department'), 'place', 'resus_2'))
+  and bool_or(patient_id = demo.id('casualty', 'patient:salwa') and place_id = core.setup_id(demo.id('casualty', 'department'), 'place', 'cubicle_1'))
+  and bool_or(patient_id = demo.id('casualty', 'patient:mostafa') and place_id = core.setup_id(demo.id('casualty', 'department'), 'place', 'cubicle_3')),
+  'five admitted in Emergency: Karim in Resus 2, Salwa in Cubicle 1, Mostafa in Cubicle 3, two on the chairs') from base.presence
+ where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.id('casualty', 'department');
+create temp table er_now as
+  select p.patient_id, p.urgent, (select (e.data -> 'casualty' ->> 'level')::int from core.entries e where e.organization_id = p.organization_id and e.visit_id = p.item
+     and e.type = 'casualty.triage' order by e.occurred_at desc limit 1) lvl
+  from base.presence p where p.organization_id = demo.base('clinic') and p.kind = 'stay' and p.state = 'admitted' and p.department_id = demo.id('casualty', 'department');
+select t.ok((select lvl = 2 and urgent from er_now where patient_id = demo.id('casualty', 'patient:karim'))
+  and (select lvl = 4 and not urgent from er_now where patient_id = demo.id('casualty', 'patient:hany'))
+  and (select lvl is null from er_now where patient_id = demo.id('casualty', 'patient:nadia')),
+  'the level now: Karim 2 and urgent, Hany 4 and not urgent, Nadia not triaged');
+select t.ok(count(*) = 4 and bool_and(e.patient_id in (demo.id('casualty', 'patient:karim'), demo.id('casualty', 'patient:hany'),
+    demo.id('casualty', 'patient:salwa'), demo.id('casualty', 'patient:mostafa'))
+  and e.author_id = demo.id('casualty', 'triage nurse')
+  and e.visit_id in (select item from base.presence p where p.organization_id = e.organization_id and p.department_id = demo.id('casualty', 'department'))
+  and exists (select 1 from core.entries v where v.organization_id = e.organization_id and v.set_id = e.set_id and v.type = 'vitals')
+  and e.data -> 'casualty' ->> 'scale' = 'ats' and e.data -> 'casualty' ->> 'scale_version' = (select version from core.systems where key = 'casualty.ats')
+  and e.data -> 'casualty' ->> 'scale_version' = 'P06'),
+  'each triage: on Karim, Hany, Salwa or Mostafa, by the triage nurse, in an Emergency stay, signed with vitals, on the Australasian scale P06')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'casualty.triage';
+select t.ok(e.data -> 'casualty' -> 'suggested' = '{"level":2,"signs":["rr","severe_pain"]}'::jsonb and e.data -> 'casualty' ->> 'arrival_ref' = '4471',
+  'Karim''s triage: suggested 2 from RR 28 and severe pain; ambulance call 4471')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'casualty.triage' and e.patient_id = demo.id('casualty', 'patient:karim');
+select t.ok(coalesce((select count(*) = 1 and bool_and(not (e.data -> 'casualty' ? 'suggested') and (e.data -> 'casualty' ->> 'level')::int = 3)
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'casualty.triage' and e.patient_id = demo.id('casualty', 'patient:mostafa')), false),
+  'Mostafa''s triage: level 3, nothing suggested (he is under 16)');
+select t.ok(coalesce((select count(*) = 1 and bool_and(e.data -> 'casualty' -> 'suggested' = '{"level":2,"signs":["spo2"]}'::jsonb and (e.data -> 'casualty' ->> 'level')::int = 3
+  and e.data -> 'casualty' ->> 'why' like 'known COPD%')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'casualty.triage' and e.patient_id = demo.id('casualty', 'patient:salwa')), false),
+  'Salwa''s triage: suggested 2 from SpO₂ 88, level 3, and why');
+select t.ok(coalesce((select e.data -> 'casualty' -> 'police' = '{"case":true,"why":"road_accident"}'::jsonb
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'casualty.triage' and e.patient_id = demo.id('casualty', 'patient:karim')
+ order by e.occurred_at desc limit 1), false), 'Karim''s latest triage: a police case, a road accident');
+select current_setting('request.jwt.claim.sub', true) as was_sub \gset
+select demo.as(demo.id('casualty', 'doctor'));
+create temp table er_board as select public.pack_op(jsonb_build_object('op', 'casualty.board', 'department_id', demo.id('casualty', 'department'),
+  'args', '{}'::jsonb, 'purpose', 'TREAT')) b;
+select t.ok((b -> 'stays' -> (k.item::text) -> 'triage' ->> 'level')::int = 2 and (b -> 'stays' -> (k.item::text) -> 'triage' ->> 'at')::timestamptz = demo.ago(12)
+  and not (b -> 'stays' -> (k.item::text) ? 'seen_at')
+  and (b -> 'stays' -> (h.item::text) -> 'triage' ->> 'level')::int = 4 and (b -> 'stays' -> (h.item::text) -> 'triage' ->> 'at')::timestamptz = demo.ago(72)
+  and b -> 'stays' -> (n.item::text) = '{}'::jsonb
+  and b -> 'patient_ids' @> jsonb_build_array(demo.id('casualty', 'patient:karim'), demo.id('casualty', 'patient:hany'), demo.id('casualty', 'patient:nadia')),
+  'the board, as Dr. Tamer: Karim 2 twelve minutes ago, no doctor yet; Hany 4 seventy-two minutes ago; Nadia not triaged')
+  from er_board, base.presence k, base.presence h, base.presence n
+ where k.organization_id = demo.base('clinic') and k.kind = 'stay' and k.state = 'admitted' and k.patient_id = demo.id('casualty', 'patient:karim')
+   and h.organization_id = demo.base('clinic') and h.kind = 'stay' and h.state = 'admitted' and h.patient_id = demo.id('casualty', 'patient:hany')
+   and n.organization_id = demo.base('clinic') and n.kind = 'stay' and n.state = 'admitted' and n.patient_id = demo.id('casualty', 'patient:nadia');
+select t.ok(coalesce((select (b -> 'stays' -> (sa.item::text) ->> 'seen_at')::timestamptz = demo.ago(103)
+  and b -> 'stays' -> (sa.item::text) -> 'decided' ->> 'to' = 'ward' and b -> 'stays' -> (sa.item::text) -> 'decided' ->> 'department_id' = demo.base('ward')::text
+  and (b -> 'stays' -> (sa.item::text) -> 'decided' ->> 'at')::timestamptz = demo.ago(40)
+  and (b -> 'stays' -> (m.item::text) ->> 'seen_at')::timestamptz = demo.ago(280) and b -> 'stays' -> (m.item::text) -> 'decided' ->> 'to' = 'home'
+  and (b -> 'stays' -> (k.item::text) ->> 'police')::boolean and not (b -> 'stays' -> (k.item::text) ? 'decided')
+  from er_board, base.presence sa, base.presence m, base.presence k
+ where sa.organization_id = demo.base('clinic') and sa.kind = 'stay' and sa.state = 'admitted' and sa.patient_id = demo.id('casualty', 'patient:salwa')
+   and m.organization_id = demo.base('clinic') and m.kind = 'stay' and m.state = 'admitted' and m.patient_id = demo.id('casualty', 'patient:mostafa')
+   and k.organization_id = demo.base('clinic') and k.kind = 'stay' and k.state = 'admitted' and k.patient_id = demo.id('casualty', 'patient:karim')), false),
+  'the board, as Dr. Tamer: Salwa seen 103 minutes ago, decided for the Medical Ward forty minutes ago; Mostafa seen, decided for home; Karim a police case, undecided');
+select set_config('request.jwt.claim.sub', :'was_sub', true) is not null as back;
+select t.ok(count(*) = 2 and bool_and(e.author_id = demo.id('casualty', 'doctor') and e.refers_to is null
+  and e.visit_id in (select item from base.presence p where p.organization_id = e.organization_id and p.kind = 'stay' and p.state = 'admitted'
+                      and p.department_id = demo.id('casualty', 'department'))),
+  'each decision is Dr. Tamer''s, in an Emergency stay still admitted')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'casualty.disposition';
+select t.ok(not exists (select 1 from base.presence p where p.organization_id = demo.base('clinic') and p.department_id = demo.id('casualty', 'department') and p.state <> 'admitted')
+  and not exists (select 1 from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'admitted' and e.relation = 'about'
+                   and e.department_id = demo.id('casualty', 'department')),
+  'no Emergency stay is discharged in the demo, and none is passed to another department');
 
 \echo '── billing''s demo and the clinic''s choices between its packs (§5.4): the Cashier and its person, Pay first at the Laboratory, the Pharmacy taking its own payment; one paid, one waiting, one sent from the Pharmacy'
 select t.ok(core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('billing', 'cashier')) ->> 'takes' = 'everyone'

@@ -472,7 +472,7 @@ an `order` that `changes` the order. The performer's "not done" is a `step`. Pre
 | `transferred` | Send to…: the same visit moves to another department | location |
 | `left` | left before the end (not seen: cancelled; seen: finished + `aadvice`) | cancelled / finished |
 | `done` | the clinician's Done; `wait` (Wait for results; unsaid, true) keeps the visit open while orders are out | finished; period.end |
-| `admitted` | starts a stay item (`about` the visit it came from), department of work `stays`, optional place; admit source required | class IMP; admitSource |
+| `admitted` | starts a stay item (`about` the visit it came from, or the stay it came from, in one Done with that stay's `discharged`), department of work `stays`, optional place; admit source required | class IMP; admitSource |
 | `moved` | the stay moves to another place | location[] |
 | `discharged` | ends the stay; disposition required | finished; dischargeDisposition |
 
@@ -487,9 +487,11 @@ day) are clinical times too, and so are pharmacy's prepared and dispensed (`phar
 open at its clinical time; the chart's steps and a bench's reply show the clinical time.
 
 **A stay takes only its own moves**: `admitted`, `moved`, `discharged`, `assigned`, `urgent` (and a `crossed_out`). A visit's moves on
-a stay (`called`, `seen`, `back_to_waiting`, `done`, `left`, `here`, `not_here`, `away`, `transferred`; another ward with the bed is a
-later round) are refused `not_a_visit`, and one that lands late never moves it. Entries written in the stay land and move nothing, so
-the patient screen on a stay has no Done: Sign writes the drafts as one set and the patient keeps the bed ("Admitted · Bed 3 · day 2").
+a stay (`called`, `seen`, `back_to_waiting`, `done`, `left`, `here`, `not_here`, `away`, `transferred`; another department is one
+Done: the stay's `discharged` and the next department's `admitted` about it (owner, 2026-10-08, Q3)) are refused `not_a_visit`, and
+one that lands late never moves it. Entries written in the stay land and move nothing, so the patient screen on a stay has no Done:
+Sign writes the drafts as one set and the patient keeps the bed ("Admitted · Bed 3 · day 2"). Exported, the next stay's Encounter is
+`partOf` the one it came from, as a stay admitted from a clinic visit is (chosen by Claude in the build, awaiting the owner).
 
 **The review of results while the patient waits.** A `done` with `wait` and orders out leaves the visit `pending`; when every order
 from it has an answer it is `back`, and the clinician sees the patient again. A result that arrives while the patient still waits in
@@ -517,7 +519,10 @@ again, or when it was corrected after being seen.
 - **Claims**: `admitted` and `moved` claim `place:<id>`, so two patients cannot both pass "the bed is free". `base.presence` has no unique
   index on beds: a late conflict lands and shows on the bed board as a conflict.
 - **Presence**: `called` needs a waiting visit, and a second `called` for the same version is `already_called`; `discharged` needs an
-  admitted stay, and a stay refuses a visit's moves (`not_a_visit`, §4.2); `checked_in` refuses a second open visit of the patient in
+  admitted stay, and a stay refuses a visit's moves (`not_a_visit`, §4.2); `admitted` refuses a second open stay of the patient
+  (`already_admitted`), reading the whole set (owner, 2026-10-08, Q3): a stay the same set discharges does not count, so one Done
+  passes a stay to the next department; the stay that follows must be `about` that stay (`not_linked`) and in another department
+  (`same_department`); a second stay the same set opens does count; `checked_in` refuses a second open visit of the patient in
   the same department (`already_here`, and the client reuses the open visit); `transferred` needs an open visit and another department.
 - **Orders**: a service must belong to the target department; the target must work for the ordering department (`not_served`); a
   `result` may answer only an order whose service answers with results, and a note only a note-answered one (`wrong_answer`); a step
@@ -771,7 +776,8 @@ it works ("/x is used in: …").
   when the stays change, never on a timer (undefined while it loads, so a pack says what the row alone knows); `TileCtx.org`. Ward
   nursing's "NEWS2 n" (amber medium, red high, adults) comes through its op `bedside.board` (read:record, read-logged for treatment).
   *Merged 2026-10-09 with C7:* one mechanism, C7's `registerTileLine(pack, line, useRead)` (`ctx.read`); C1's `registerTileLoad` and the
-  `data` handed to lines and buttons are gone, Ward nursing's read is its hook (`packs/bedside/boardRead.ts`); `TileCtx.org` stays.
+  `data` handed to lines and buttons are gone, Ward nursing's read is its hook (`packs/bedside/boardRead.ts`); `TileCtx.org` stays. Emergency's the same way
+  (`packs/casualty/boardRead.ts`, the Patients tab's own query of `casualty.board`); its Triage and Where to buttons read only the row.
 - **Rule 5 · one frame for every screen.** The platform draws it for base and pack screens alike: the department's tab row, then one
   toolbar (the screen's views on the left; search, date and the main action on the right), then the content, at one width with one
   margin everywhere. No heading under the tabs: the selected tab is the title. The pack fills only the content; empty and "not for
@@ -1698,6 +1704,134 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- *Built 2026-10-09, E1 (owner, Q3)*: one Done passes a stay to the next department. The base's presence check reads the whole set: a
+  stay the same set discharges no longer counts as admitted, so the stay's `discharged` and the next department's `admitted` land
+  together; a second stay the set opens does count (`already_admitted`); the stay that follows must be `about` the stay it ends
+  (`not_linked`, words "A stay passed on in one Done names the stay it came from") and in another department (`same_department`).
+  A pass is `discharged` (changing the stay's latest version, disposition `oth` with the words "to <department>" in its note, never
+  `hosp`, which is hospice) and `admitted` about the stay's opening entry (admit source `emd` from the ER, `other` from a ward).
+  Exported, the next stay's Encounter is `partOf` the one it came from (*chosen by Claude in the build, awaiting the owner*). Nothing
+  on screen until Emergency's Where to.
+- *Built 2026-10-09, E2a (chosen by Claude at the owner's request ('brainstorm best ideas and start building', 2026-10-08), awaiting
+  the owner)*: Emergency, the server (migration 18). Its key is `casualty` (`emergency` is a word core and base files already use, so
+  the lint refuses it as a key); role block d1. The starter setup `casualty.er`: Resus 1–2 (label bed) and Cubicle 1–6 on the base's
+  board, stays of class EMER, the board then the Patients tab (`casualty.patients`, opening on the board); its patients with no place
+  are the waiting chairs, the board's no-bed list. Arrived is the base's `admitted` with no place (admit source `gp` when referred by a
+  doctor, `hosp-trans` from another hospital, else `other`; never `emd`, which is a stay that comes from the ER). The triage is the
+  pack's own type `casualty.triage` on the base's observation (so the export is the base's Observation): the level's words and its
+  coding on the clinic's scale, what brings them, and the pack's fields (scale, its version `P06` or `3`, level 1–5, how they came and
+  the ambulance's call number, one of 13 complaints, the danger signs, the suggestion when the card made one, and why a less urgent
+  level was chosen). Retriage is a new entry; the latest is the level now. The two scales are the pack's open code systems
+  `casualty.ats` (the Australasian Triage Scale, ACEM P06: now, 10, 30, 60, 120 min) and `casualty.mts` (the Manchester Triage System,
+  3rd edition: its five categories and times only, now, 10, 60, 120, 240 min); the clinic's setting `casualty.scale` (Australasian by
+  default) changes only new triages. Its check refuses a level said two ways (`triage_mismatch`: one coding, its scale's system and
+  its level's code and word, the same level in its words, the scale's name in its code) and a triage that is not in a stay admitted
+  in this department, nor in one this department opens in the same Done (`not_in_stay`). One Done of the card writes the vitals, the triage, the base's
+  `urgent` for levels 1 and 2 (so the Encounter's priority is UR; false again when a retriage is 3–5) and the move to a bay. The
+  board's read (`casualty.board`, the owner's C1) gives each stay admitted here its latest triage and "seen": the first entry in the
+  stay by someone who may discharge here (a doctor's Take, note, order or prescription); an entry crossed out never counts, and a
+  correction counts from when it was written. The triage nurse (`casualty.triage_nurse`)
+  is built on the base's Nurse and also arrives and registers patients; `write:casualty.triage` is everyday for the base's Doctors and
+  Nurses. Demo: Heba Nabil (triage nurse) and Dr. Tamer Ezz in Emergency, which ticks Ward nursing after its own pack (the clinic's
+  choice); Karim Mahmoud (2, Resus 2, no doctor for 12 minutes), Hany Sherif (4, on the chairs 72 minutes), Nadia Ibrahim (not
+  triaged, 6 minutes). No client screen yet: the Patients tab, Arrived and the triage card are E2b's.
+- *Built 2026-10-09, E2b (chosen by Claude at the owner's request ('brainstorm best ideas and start building', 2026-10-08), awaiting
+  the owner)*: Emergency, the client (`src/packs/casualty`). The **Patients tab** (`casualty.patients`): every stay admitted here, not
+  triaged first (the longest arrived first), then by level, then the longest since triage; its counted views All, Not triaged (amber;
+  red once one has waited 15 minutes) and Past the level's time (red); each row its level, its time words and where it is (a bay, a
+  cubicle or Chairs), Triage or Retriage, and Take for whoever may discharge here (the base's `assigned`: the doctor is seeing the
+  patient). It is a tab because a pack may not add to the base board's toolbar or reorder its no-bed list without a core door (for the
+  owner: the picture puts Arrived on the board and sorts its chairs; the clinics lanes' C5 could carry the waiting list once merged).
+  **Arrived** (N, or the toolbar's button) opens a card under the toolbar: one search, New patient, or Unknown patient ("Unknown man",
+  "Unknown woman" or "Unknown patient", an age only as an estimated year; the record number tells them apart); how they came (with the
+  ambulance's call number) and what brings them. It writes the base's `admitted` with no place, then opens the triage card under that
+  patient's row, carrying how they came; a patient already on the list says "Already admitted". The **triage card** (inline under the
+  row; also from each board tile's **Triage** button, `?tab=casualty.patients&stay=…&card=triage`): how they came, what brings them
+  (13 chips and words), the danger signs, the vitals typed as `/v` words (the base's vitals with ACVPU and air or oxygen; a leading `/v`
+  is dropped, a bare `v` is Voice), the five levels of the clinic's scale each with its time to the doctor ("doctor at once", "doctor
+  within 10 min"), and the **suggestion**: one table of thresholds, the same on either scale, named on the card "(ATS/NEWS2
+  thresholds)" — level 1 from ACEM's category-1 descriptors for the Australasian scale (RR under 10, systolic under 80, responds to pain
+  or not at all); level 2 from NEWS2's single red parameter (RCP 2017: RR ≥ 25, SpO₂ ≤ 91, systolic ≤ 90, pulse ≤ 40 or ≥ 131,
+  temperature ≤ 35.0, new confusion or voice); level 3 from NEWS2's 2-point bands (RR 21–24, systolic 91–100, pulse 111–130,
+  temperature ≥ 39.1, on oxygen); "systolic ≥ 220 and SpO₂ 92–95 follow ACEM's category-3 descriptors (severe hypertension; SaO₂
+  90–95 %), not NEWS2". The danger signs suggest at least 1 (airway, breathing, fitting, bleeding that will not stop) or 2 (chest pain
+  like the heart, new weakness or speech loss, severe pain, violent). Higher only: never preselected, shown while no level is chosen
+  and then only when it is more urgent than the level chosen; none under 16 ("No suggestion under 16: the nurse decides"); a less
+  urgent level asks why (required, at most 200 letters), never a stop. Then the place: a free resus bay first for a level 1 or 2
+  (preset for a patient in the chairs; with no bay free, the first free cubicle, so a level 1 or 2 is never preset to the chairs
+  while a place is free), cubicles first for 3–5, or Chairs, or "Stay in <place>". One Done ("Triage · to Resus 1",
+  "Triage · wait", "Retriage · …", ⌘↵) writes the vitals, the triage (with the scale's version), the base's `urgent` to match the
+  level and the move; a warning comes back with Sign anyway, which resends the very set warned with its codes confirmed (a changed
+  draft drops the warning and goes back through a plain Triage). **The tile's words** (through the pack's board read): "2 · Very urgent ·
+  no doctor · 12 min" in a bay or "4 · Standard · waiting 72 min" in the chairs, red once past the level's time (or at once for level
+  1); "not triaged · 6 min", amber, red from 15 minutes; "3 · Urgent · seen 25 min ago" once a doctor has written in the stay; "in the
+  ER 12 min" before the read answers. The level's clock starts at triage (the Australasian scale's indicator is triage to medical
+  assessment); before triage the clock is the arrival's (RCEM's initial assessment within 15 minutes). **The banner's word**: the open
+  stay's latest level here, "2 · Very urgent" (red for 1–2, amber for 3). Its two refusals in words. *Question for the owner*: when
+  the clinic's scale is Manchester, should the card offer this suggestion at all, or none? (The Manchester Triage System triages by
+  its own flowcharts and discriminators, which are not used; openCare takes only its five categories and times.)
+- *Built 2026-10-09, E3a (chosen by Claude at the owner's request, awaiting the owner; the pass is the owner's Q3)*: Where to, the
+  server (migration 18, in place). **The decision** is the pack's own type `casualty.disposition` (no base type, nothing exported: the
+  Encounter's dischargeDisposition says where the patient went; in the record): where to (home, a ward, ICU, CCU, the operating room
+  then a department, another facility, left before being seen, left against advice, died), the department of an admission, the
+  facility, why, who signed, brought in dead, the police report number and a note. Its time is the decision's: boarding counts from
+  it. A new decision changes the standing one. Its line: "Where to: home", "Where to: admit to Medical Ward", "Where to: the operating
+  room, then …", "Where to: <facility>", "Left before being seen", "Left against advice · signed by …", "Died in the ER" or "Brought
+  in dead", then " · police report …". Its check refuses a decision outside a stay admitted here (`not_in_stay`), an admission to no
+  live department of stays other than this one or to one whose encounters are EMER or AMB (another ER, a dialysis unit), or a
+  department named on a choice that is no admission (`unknown_destination`), another facility unnamed (`facility_missing`), left
+  before being seen, against advice or died with no leaving in the same Done (`not_leaving`; died with the base's `died` too), a
+  second decision in a stay or any target but the decision it changes (`wrong_target`), and a decision by anyone who may not
+  discharge here (`not_allowed`: where the patient goes is a doctor's, never the triage nurse's). `write:casualty.disposition` is
+  everyday. **The leaving** is one Done of base
+  entries, written by the client (E3b): the decision when it differs, then the base's `discharged` with FHIR's codes — home `home`,
+  an admission `oth` ("to Medical Ward"), another facility `other-hcf`, left before being seen `oth`, against advice `aadvice`, died
+  `exp` (after the base's `died`); never `hosp`, which is hospice — and for an admission the next department's `admitted` about the
+  stay (admit source `emd`, the bed chosen or none) with the ER's note (`emergency`) in it, through E1's pass. Only who holds
+  `write:discharged` (the ER's doctors, not the triage nurse) records a leaving. **The free beds** (`casualty.beds`, read as the
+  queue, naming no patient): for the departments the client names, each checked as the decision's check does, its places not
+  retired or closed that no admitted stay holds, in order. **The police case**: the triage's `casualty.police` (case, and why: road
+  accident, assault, burn, poisoning, fall, other); the report number lives on the decision, never a stop. **The board's read** adds
+  each stay's standing decision (where to, department, facility and why, report number, its entry, and when: the first version since where
+  to last changed, so a report number added does not restart boarding) and the police case of the latest
+  triage that answered it. The ER's times (door to doctor, in the ER, boarding) are worked out on screen, never stored. Demo: Salwa
+  Hamed (71, COPD, level 3 though 2 was suggested, why written; seen by Dr. Tamer after 22 minutes; decided for the Medical Ward 40
+  minutes ago: boarding), Mostafa Saeed (9, a scorpion sting, observed; decided for home), Karim a police case (a road accident, no
+  report number yet). No pass, discharge or death in the demo.
+- *Built 2026-10-09, E3b (chosen by Claude at the owner's request, awaiting the owner; the pass is the owner's Q3)*: Where to, the
+  client (`src/packs/casualty`). **The Where to card** opens under the patient's row on the Patients tab (inline, never an overlay),
+  from the row's **Where to** button or the board tile's second pack button (`?tab=casualty.patients&stay=…&card=where`), for whoever
+  holds `write:discharged` and `write:casualty.disposition` (the ER's doctors; Died also needs `write:died`); one card open at a time.
+  Its head: "Where to · from Emergency", the ER's times worked out from what is written ("door to doctor 22 min · in the ER 2 h 05 ·
+  boarding 40 min", or "no doctor yet · …"; boarding for an admission decided and not yet gone) and, for a police case with no report
+  number, "Police case · no report number yet — add it here, or later, before they leave" in amber, never a stop. The choices in the
+  picture's order (Home, Admit to a ward with each ward's free beds "Medical Ward 3 free", ICU and CCU only when the clinic has one,
+  Operating room "then a ward", Another facility, Left before being seen, Left against advice, Died), preset from the standing
+  decision. Where an admission may go: every live department of stays here but this one whose encounters are not EMER or AMB (none
+  set counts as a ward), by name; an ICU or a CCU is told by the starter setup it was made from (a key ending in `icu` or `ccu`, after
+  a dot or alone: `kindOf`), every other is a ward; the operating room lists them all. An admission's panel: the department's chips
+  ("· 2 free"), its free beds' chips (`casualty.beds`) and "the ward chooses" (the default: no bed, the ward's no-bed list), the
+  reason (preset from the stay's) and "For the ward" (the ER's note, kind `emergency`, written in the new stay). Another facility:
+  where (required) and why; against advice: who signed and what was explained; died: in the ER or brought in dead, now or minutes ago
+  (no clock typed; in the ER never before they came in, brought in dead up to 720; the time worked out as Sign is pressed), the cause
+  in words. The police report number field shows for a police case or a decision that has one.
+  **Decided** ("Decided · for Medical Ward", "· for home", "· to <facility>"; not for the three that leave at once) writes the decision
+  alone, changing the standing one; **Sign** ("Sign · admit to Medical Ward", "Sign · home now", "Sign · to the operating room, then …",
+  "Sign · left before being seen", "Sign · died", ⌘↵) writes the leaving in one Done: the decision when none stands or it differs
+  (where to, department, facility and why, report number), the base's `died` at its time for a death, the base's `discharged` (FHIR's codes as above,
+  never `hosp`, its note "to Medical Ward", "left against advice"), and for an admission the next department's `admitted` about the
+  ER stay (admit source `emd`, the bed chosen or none) and the ER's note in it. "That bed is taken" reads the beds again; a decision changed meanwhile
+  (`wrong_target`) reads the board again and asks to choose again; a warning comes back with Sign anyway. A card opened before the
+  board's first read waits for it, then never mounts again (what was typed stays). The board's decided also carries why (another
+  facility), so the card presets it and a changed decision keeps it. **The triage card** asks Police case: No · Yes (preset from the board's read; written only when answered on the card, so a retriage leaves the earlier answer and its why standing)
+  and, when yes, why: road accident, assault, burn, poisoning, fall, other. **The tile's words** gain, after the level and time, "for
+  home" (green), "for Medical Ward · boarding 40 min", "for the operating room", "to <facility>" and "police case"; the Patients tab's
+  rows say the same and its views gain **To leave** (decided, still here). **The record** draws the decision as its line ("Where to:
+  admit to Medical Ward · police report 2214/2026") with why, who signed and its note. The refusals `unknown_destination`,
+  `facility_missing`, `not_leaving` and `too_many` in words; `not_in_stay` now reads "Written only for a patient still in this
+  department" (the triage's and the decision's). For the owner: the picture opens Where to from the base's Discharge, which
+  has no door for a pack's card, so the ER's Where to is the pack's own button and the base's Discharge stays the base's chooser; "Under:
+  Dr. Ali Hassan / the ward's on-call" needs who works in the ward (administrators only read that): the ward assigns its own doctor.
 - **Built, piece 3a (Ward nursing: the drug round; 2026-10-09)**: no core or base change. The Medical Ward's line is Beds · Drug round
   (`bedside.round`, read:record). The round's views: Due now (a medicine first prescribed in this stay starts with "first dose now" at
   the top), Late, As needed, Given this round; under Due now, folded, "Times not set · ask the doctor" and "On the list, not prescribed
@@ -2946,6 +3080,28 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **one Done passes a stay to the next department, E1** (§4.2, §4.4, §5.6; the owner's Q3; lane `beds-er`): 08's
+  `base.presence_check` edited in place to read the whole set, one words entry (`not_linked`); no client change but one words entry.
+  34 suites (new `next_stay` 26), 1607 checks.
+- 2026-10-09: **Emergency, piece E2a: the server** (§5.6; lane `beds-er`): migration 18 (`casualty`: the triage on the base's
+  observation, the two scales as code systems, `casualty.scale`, the triage nurse, `casualty.board`, the setup `casualty.er`), its seed
+  and demo day, the ER ticking Ward nursing in `clinic_packs`, the regenerated shapes and logins. 35 suites (new `casualty` 62,
+  `demo` 86), 1676 checks; `test:demo` 8 groups. No browser pass (no client yet).
+- 2026-10-09: **Emergency, piece E2b: the client** (§5.6; lane `beds-er`): `src/packs/casualty` (the scales, the suggestion, the
+  triage's entries, the board's words, the Patients tab, Arrived, the triage card, the tile's words and Triage button, the banner's
+  word), `scripts/test-casualty.ts`. Node: composer 18, chart 10, screens 11, sections 19, banner 13, settings 12, board 25, scores 7,
+  demo 8, setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12, casualty 10; lint 0 errors; tsc stops only on
+  `src/pictures/bookings.tsx` (another session's). No SQL change.
+- 2026-10-09: **Emergency, piece E3a: the server for Where to** (§5.6; lane `beds-er`): migration 18 in place (the triage's police
+  case, `casualty.disposition` with its line and check, `write:casualty.disposition`, `casualty.beds`, the board's decided and
+  police), the demo's Salwa and Mostafa and Karim's police case, the regenerated shapes. Suites: all 35 green, 1727 checks (`casualty` 107,
+  `demo` 92); db:demo twice (40 patients, 352 entries); node tests unchanged (casualty 10 groups); lint 0 errors; tsc stops only on
+  `src/pictures/bookings.tsx`; vite build ok. No browser pass (no client change: E2b's client ignores the board's new fields until
+  E3b; E3b's words.ts names `not_leaving`).
+- 2026-10-09: **Emergency, piece E3b: Where to on screen** (§5.6; lane `beds-er`): `src/packs/casualty` (`where.ts`, pure: the
+  choices, the codes of each leaving, the destinations and `kindOf`, the decision's and the leaving's sets, the ER's times, the police
+  notice; `WhereTo.tsx`, `Disposition.tsx`; the board's decided and police in the tile's and the rows' words, To leave; the triage
+  card's police case; the tile's second button Where to), `scripts/test-casualty.ts` (19 groups); migration 18's board read carries the decision's why (the pack's own op, no shape change).
 - 2026-10-09: **Ward nursing, piece 3a: the drug round** (§5.6; lane `beds`; no core or base change): migration 17 edited in place
   (`bedside.dose`, `write:bedside.dose`, `bedside.round` setting and screen, `bedside.stay_doses`, the ops `bedside.round` and
   `bedside.sheet`, `bedside.board`'s doses), the base demo's three admission doses, Ward nursing's demo (medicines and rounds),

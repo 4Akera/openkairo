@@ -70,7 +70,7 @@ enabled = true
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql". Listed in order: the codes, the demo kit and the base's
 # clinic first, then each pack's seed (billing's prices the base's departments and services, never another pack's), then the
 # clinic's own choices between its packs (the Pharmacy bills and takes its own payment), which no pack's seed may make.
-sql_paths = ["./seeds/codes.sql", "./codes/who_growth_sample.sql", "./seeds/demo_kit.sql", "./seeds/dev.sql", "./seeds/lis.sql", "./seeds/pharmacy.sql", "./seeds/billing.sql", "./seeds/radiology.sql", "./seeds/bookings.sql", "./seeds/vaccines.sql", "./seeds/chroniccare.sql", "./seeds/familycare.sql", "./seeds/paeds.sql", "./seeds/obgyn.sql", "./seeds/cardio.sql", "./seeds/nephrology.sql", "./seeds/lungs.sql", "./seeds/haemato.sql", "./seeds/oncology.sql", "./seeds/theatre.sql", "./seeds/surgical.sql", "./seeds/anaesthesia.sql", "./seeds/bedside.sql", "./seeds/clinic_packs.sql"]
+sql_paths = ["./seeds/codes.sql", "./codes/who_growth_sample.sql", "./seeds/demo_kit.sql", "./seeds/dev.sql", "./seeds/lis.sql", "./seeds/pharmacy.sql", "./seeds/billing.sql", "./seeds/radiology.sql", "./seeds/bookings.sql", "./seeds/vaccines.sql", "./seeds/chroniccare.sql", "./seeds/familycare.sql", "./seeds/paeds.sql", "./seeds/obgyn.sql", "./seeds/cardio.sql", "./seeds/nephrology.sql", "./seeds/lungs.sql", "./seeds/haemato.sql", "./seeds/oncology.sql", "./seeds/theatre.sql", "./seeds/surgical.sql", "./seeds/anaesthesia.sql", "./seeds/bedside.sql", "./seeds/casualty.sql", "./seeds/clinic_packs.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

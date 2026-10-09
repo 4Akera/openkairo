@@ -247,6 +247,43 @@ export interface Breastfeeding {
 export interface Called {
   note?: string
 }
+/** casualty.disposition v1 (casualty) */
+export interface CasualtyDisposition {
+  brought_in_dead?: boolean
+  department_id?: string
+  facility?: string
+  note?: string
+  police_report?: string
+  signed_by?: string
+  to: 'home' | 'ward' | 'icu' | 'ccu' | 'operating_room' | 'other_facility' | 'left_unseen' | 'against_advice' | 'died'
+  why?: string
+}
+/** casualty.triage v1 (casualty) */
+export interface CasualtyTriage {
+  casualty: {
+    arrival?: 'walked_in' | 'ambulance' | 'family' | 'police' | 'referred' | 'other_hospital'
+    arrival_ref?: string
+    complaint?: 'chest_pain' | 'breath' | 'injury_road' | 'fall' | 'abdominal_pain' | 'fever' | 'poisoning' | 'sting_bite' | 'burn' | 'fits' | 'weakness_one_side' | 'bleeding_pregnancy' | 'wound'
+    danger?: ('airway' | 'breathing' | 'fitting' | 'bleeding' | 'chest_cardiac' | 'stroke' | 'severe_pain' | 'violent')[]
+    level: number
+    police?: {
+      case: boolean
+      why?: 'road_accident' | 'assault' | 'burn' | 'poisoning' | 'fall' | 'other'
+    }
+    scale: 'ats' | 'mts'
+    scale_version?: string
+    suggested?: {
+      level: number
+      signs: ('rr' | 'spo2' | 'sbp' | 'pulse' | 'temp' | 'acvpu' | 'oxygen' | 'airway' | 'breathing' | 'fitting' | 'bleeding' | 'chest_cardiac' | 'stroke' | 'severe_pain' | 'violent')[]
+    }
+    why?: string
+  }
+  code: Concept
+  note?: string
+  value: {
+    concept: Concept
+  }
+}
 /** checked_in v1 (base) */
 export interface CheckedIn {
   arrival?: string
@@ -1098,6 +1135,10 @@ export interface CardioHfTargetsSetting {
     name: string
   }[]
 }
+/** setting casualty.scale (casualty; owner organization) */
+export interface CasualtyScaleSetting {
+  scale: 'ats' | 'mts'
+}
 /** setting chroniccare.conditions (chroniccare; owner organization) */
 export interface ChroniccareConditionsSetting {
   conditions: {
@@ -1522,6 +1563,8 @@ export interface EntryData {
   'bedside.dose': BedsideDose
   'breastfeeding': Breastfeeding
   'called': Called
+  'casualty.disposition': CasualtyDisposition
+  'casualty.triage': CasualtyTriage
   'checked_in': CheckedIn
   'chroniccare.target': ChroniccareTarget
   'crossed_out': CrossedOut
@@ -1585,6 +1628,7 @@ export interface SettingData {
   'bookings.sessions': BookingsSessionsSetting
   'bookings.tell': BookingsTellSetting
   'cardio.hf_targets': CardioHfTargetsSetting
+  'casualty.scale': CasualtyScaleSetting
   'chroniccare.conditions': ChroniccareConditionsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting

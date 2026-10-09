@@ -8,7 +8,7 @@ const WORDS: Record<string, string> = {
   changed_since_opened: 'Changed by someone else since you opened it — look again', set_changed: 'This was already sent with other content', busy: 'Someone else is writing for this patient — try again',
   unknown_system: 'An unknown code system', wrong_resource: 'That cannot continue this entry', wrong_target: 'That cannot correct this entry', in_the_future: 'The time is in the future',
   already_here: 'Already here: the open visit is used', already_called: 'Someone called this patient first', visit_closed: 'This visit has ended', not_admitted: 'Not admitted',
-  already_admitted: 'Already admitted', not_a_visit: 'A stay is not a clinic visit: sign, move a bed or discharge', bed_taken: 'That bed is taken',
+  already_admitted: 'Already admitted', not_linked: 'A stay passed on in one Done names the stay it came from', not_a_visit: 'A stay is not a clinic visit: sign, move a bed or discharge', bed_taken: 'That bed is taken',
   wrong_work: 'Patients are not checked in there', not_served: 'That department does not work for this one',
   walk_in_elsewhere: 'A bench takes walk-ins only for itself; the desk only for the benches it checks in for',
   unknown_op: 'That is not something this screen can do', not_used_here: 'This department does not use that pack',
