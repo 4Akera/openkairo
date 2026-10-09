@@ -1718,9 +1718,19 @@ numbered as on its picture.
   pregnancy standing;
   the owner's C1, read once per board through C7's hook). Demo: the Labour ward (Ward nursing ticked after ObGyn), its midwife Hanan
   Fouad and the clinic's two obstetricians; Salma (6 cm, past the alert line), Doaa (4 cm, an hour into active labour) and Nesma
-  (8 cm, previous caesarean, urgent, the baby's heart 100) in Delivery 1–3. The tile's words, the Partograph button (reading the
-  pack's last board answer, since C7 hands a read to the line only), the banner's words and the composer's commands are the client's
-  pieces, still to come.
+  (8 cm, previous caesarean, urgent, the baby's heart 100) in Delivery 1–3. The client (piece L1b, `src/packs/obgyn/labour/`, one
+  `import './labour'` in the clinics' `index.tsx`): `/ve 6 3/5 oa clear m+ caput ctx 3/10 40s g2 p1` (any order; the cervix in half
+  centimetres, `full`; each finding said once; P under G; "3 10" is 3 in 10; no length with no contraction) and `/ctx 3/10 40s`
+  draft one labour examination on its card (Cervix, Head, Position, Liquor, Moulding, Caput, Contractions, G and P; the chosen chip
+  clears; the cervix kept in halves; what cannot be, said under the fields in `/ve`'s words), its line the server's words; `/fhr 142`
+  drafts the base's observation "Fetal heart rate: 142 bpm", and under 110 or over 160 a red notice under the card ("tell the doctor now. Only
+  a notice."); no empty `/ve` card and no observation card of the labour ward's (the clinics' contraception card draws only for its own
+  code). Each tile of a woman in labour (an exam or a pregnancy standing) says "G2 P1 · 39+2 w · 6 cm · 4 h", "latent" before active
+  labour, "fully dilated" at 10, then "past alert line" (amber) or "past action line" (red), and "FHR 100 at HH:MM" (red) when the
+  baby's latest heart rate is off — from `obgyn.board` (the owner's C1, read once per board through C7's hook); nothing before the
+  read lands. The banner's words (`obgyn.labour`): past a line, "FHR n" off; never G and P. The pack keeps the board's last answer for
+  the Partograph button (L1c), since C7 hands a read to the line only. The Labour tab and the Partograph button are piece L1c, still to
+  come.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2918,4 +2928,12 @@ types, parked pack calls with per-call Retry, Postgres enums.
   logins regenerated; the demo loads twice (99 patients); node: composer 19, chart 24 + 16, screens 11, sections 19, banner 13,
   settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 + 2, bedside 12, obgyn 10,
   clinics-core 11; lint 0 errors; `vite build` builds. No client file yet.
+- 2026-10-09: **ObGyn's labour ward, piece L1b** (§5.6; lane `beds-labour`): the client of the composer and the board —
+  `src/packs/obgyn/labour/` (codes, exam, partograph, board: pure; boardRead, ExamCard, commands, index), `/ve`, `/ctx`, `/fhr` and
+  the exam's card, the tile's and the banner's words, the one import line in the clinics' `index.tsx`; new node test `test:labour`
+  (8 groups). No SQL changed: `db reset`, labour 53 ok and demo 98 ok, shapes and logins unchanged, the demo loads twice (99
+  patients). Node: composer 19, chart 24 + 16, screens 11, sections 19, banner 13, settings 12, board 27, scores 7, demo 8, setups 11,
+  registries 9, pharmacy 10, lis 19, billing 22 + 2, bedside 12, obgyn 10, clinics-core 11, labour 8; typecheck clean but for
+  `src/pictures/bookings.tsx` (another session's); lint 0 errors; `vite build` builds. A weeks-and-days from an LMP only when it is a
+  whole date.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

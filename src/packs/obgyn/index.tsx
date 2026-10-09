@@ -1,5 +1,5 @@
-// The obgyn pack's client, its clinic part (spec/openCare.md §5.8, the pictures #anc-visit … #ob-settings; the labour ward's part comes
-// with the beds lane). Where a department uses it: the Pregnancy and Gynaecology sections, /anc (the base's vitals and the antenatal
+// The obgyn pack's client, its clinic part (spec/openCare.md §5.8, the pictures #anc-visit … #ob-settings; the labour ward's part is
+// ./labour, spec §5.6). Where a department uses it: the Pregnancy and Gynaecology sections, /anc (the base's vitals and the antenatal
 // check), /obus (the clinic's scan, a base result with no order), /fp (the method; a device put in, the base's procedure), /periods,
 // /pn (the visit after the birth; a birth elsewhere ends the pregnancy once), EPDS through the base's score card (/epds), its banner
 // words (G and P, Rh negative, a change due) and its one word a row on the queue.
@@ -14,6 +14,7 @@ import { GynaecologyBody, PregnancyBody } from './Sections'
 import { gynWord, obWords, pregnancyWord } from './words'
 import { gynOf } from './settings'
 import { obMark } from './marks'
+import './labour'
 
 const KEY = 'obgyn'
 const day = (ctx: { org?: unknown }) => { void ctx; return new Date().toISOString().slice(0, 10) }
