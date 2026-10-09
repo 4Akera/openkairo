@@ -1698,6 +1698,29 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- **Built 2026-10-09 (ObGyn's labour ward, piece L1; chosen by Claude in the build, awaiting the owner):** the pack is the clinics'
+  build's (migration 27, unchanged: block d3, the Obstetrician d301 on the Doctor, the Midwife d302 on the Nurse); the labour ward's
+  migration 37 adds to the same layer (no second declare_pack, no new role; `core.lock_pack('obgyn')` at its end). A **labour
+  examination** is the pack's own type `obgyn.labour_exam` (an Observation of its own, not private: cervix 0–10 cm in halves, the head
+  in fifths above the brim, position, liquor I C M B A, moulding, caput, contractions in 10 min and their length, G and P as said (each
+  kept in the line when said alone), a note that is not empty; at least one), written with `/ve` and `/ctx` under `write:obgyn.labour_exam` (everyday: the Doctor and the Nurse, so the
+  Obstetrician and the Midwife, where a department uses ObGyn). The **baby's heart** is the base's observation with LOINC 55283-6 (the
+  owner's B1) and `/fhr`, not a vitals key (vitals are the patient's own signs; a new key would be a base change); the mother's pulse,
+  BP and temperature are the base's vitals. G and P ride on the exam (the base has no G/P): on the tile and the Labour tab only, the
+  banner's G and P being the clinic's, from the antenatal booking (rule 3). The **partograph** is the WHO's modified one (Q9, as
+  drawn, awaiting the owner): active labour from the department's setting `obgyn.partograph` (4 cm, or 5 cm: the same lines started at
+  5 cm, not the Labour Care Guide), the alert line at 1 cm an hour, the action line 4 hours to its right; past a line, and a heart rate
+  under 110 or over 160, are notices, never a stop. It is ObGyn's screen `obgyn.labour` (the Labour tab beside the board), not the
+  chart's center as drawn: a pack's view there would be a core door. The starter setup `obgyn.labour_ward`: Delivery 1–4, Post 1–4
+  and Cot 1–6 (14 places labelled bed, six cots for twins), inpatient, the board and the Labour tab. The Midwife gains
+  `write:admitted` and `write:discharged` (she admits a woman in labour; the base's Nurse cannot). The board's words come from the
+  pack's op `obgyn.board` (each admitted stay's exams with a cervix or G and P, the baby's latest heart rate by when it was taken, the
+  pregnancy standing;
+  the owner's C1, read once per board through C7's hook). Demo: the Labour ward (Ward nursing ticked after ObGyn), its midwife Hanan
+  Fouad and the clinic's two obstetricians; Salma (6 cm, past the alert line), Doaa (4 cm, an hour into active labour) and Nesma
+  (8 cm, previous caesarean, urgent, the baby's heart 100) in Delivery 1–3. The tile's words, the Partograph button (reading the
+  pack's last board answer, since C7 hands a read to the line only), the banner's words and the composer's commands are the client's
+  pieces, still to come.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2888,4 +2911,11 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **ObGyn's labour ward, piece L1a** (§5.6; lane `beds-labour`): migration 37 (`obgyn.labour_exam`, `obgyn.partograph`,
+  the Labour tab's key, `obgyn.board`, the Midwife's admitting actions, the starter setup `obgyn.labour_ward`), the seed's and the
+  day's lines appended (the Labour ward, Hanan Fouad; Salma, Doaa, Nesma), clinic_packs, the demo suite's labour ward block, the new
+  suite `labour` (53 checks; `obgyn` 28, `demo` 98, `registry` 16, `boundary` 10; the full run is the lane's end's); shapes and
+  logins regenerated; the demo loads twice (99 patients); node: composer 19, chart 24 + 16, screens 11, sections 19, banner 13,
+  settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 + 2, bedside 12, obgyn 10,
+  clinics-core 11; lint 0 errors; `vite build` builds. No client file yet.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

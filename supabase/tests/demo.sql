@@ -32,6 +32,7 @@ $$;
 create function pg_temp.day_is_today() returns setof text language sql as $$
   select t.ok(count(*) = 63 and bool_and(day = (demo.now() at time zone 'Africa/Cairo')::date), count(*) || ' visits and stays of the day, each on today''s date')
     from base.presence where organization_id = demo.base('clinic') and checked_in_at > demo.now() - interval '1 day'
+     and department_id is distinct from demo.id('obgyn', 'labour ward')
      and patient_id not in (select id from core.patients where full_name ilike 'walk in%')   -- the app's own (the bed check below)
   union all
   select t.ok(count(*) = 2, 'both base admissions this morning are today''s') from base.presence where organization_id = demo.base('clinic') and kind = 'stay'
@@ -46,7 +47,7 @@ select t.ok(not exists (select 1 from core.entries e, jsonb_array_elements(e.fin
   'no entry of the demo is flagged');
 select t.ok(not exists (select 1 from base.review where organization_id = demo.base('clinic') and why = 'flag'), 'nothing to review for a flag');
 select t.ok(not exists (select 1 from core.stale where organization_id = demo.base('clinic')), 'no pack is stale');
-select t.ok(f.patients = (select count(*) from core.patients where organization_id = demo.base('clinic')) and f.patients = 96, 'the same ' || f.patients || ' patients, once each')
+select t.ok(f.patients = (select count(*) from core.patients where organization_id = demo.base('clinic')) and f.patients = 99, 'the same ' || f.patients || ' patients, once each')
   from first_load f;
 select t.ok(f.entries = (select count(*) from core.entries where organization_id = demo.base('clinic')), 'the same ' || f.entries || ' entries') from first_load f;
 select t.ok((select count(*) from core.erasures where organization_id = demo.base('clinic')) = f.patients, 'the reload erased the first load''s patients through the eraser')
@@ -58,7 +59,7 @@ select t.ok(f.settings = (select count(*) from core.settings where organization_
 \echo '── the demo''s departments are made from starter setups (§5.2), and a reload''s setups add nothing'
 select t.ok((select jsonb_object_agg(d.name, core.setting_at(d.organization_id, 'department.setup', d.id) ->> 'setup') from core.departments d
     where d.organization_id = demo.base('clinic') and d.work <> 'outside')
-  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier","Radiology":"radiology.department","ECG room":"bookings.bench","Vaccination room":"vaccines.room","Diabetes clinic":"chroniccare.clinic","Family medicine":"familycare.medicine","Paediatrics clinic":"paeds.clinic","Children''s ward":"paeds.ward","ObGyn clinic":"obgyn.clinic","Cardiology clinic":"cardio.clinic","Echo room":"cardio.echo_room","Nephrology clinic":"nephrology.clinic","Chest clinic":"lungs.clinic","Haematology clinic":"haemato.clinic","Blood bank":"lis.blood_bank","Oncology clinic":"oncology.clinic","Chemotherapy day unit":"oncology.day_unit","Theatre":"theatre.department","Surgery clinic":"surgical.clinic","Pre-op clinic":"anaesthesia.preop_clinic","Recovery":"anaesthesia.recovery"}',
+  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier","Radiology":"radiology.department","ECG room":"bookings.bench","Vaccination room":"vaccines.room","Diabetes clinic":"chroniccare.clinic","Family medicine":"familycare.medicine","Paediatrics clinic":"paeds.clinic","Children''s ward":"paeds.ward","ObGyn clinic":"obgyn.clinic","Cardiology clinic":"cardio.clinic","Echo room":"cardio.echo_room","Nephrology clinic":"nephrology.clinic","Chest clinic":"lungs.clinic","Haematology clinic":"haemato.clinic","Blood bank":"lis.blood_bank","Oncology clinic":"oncology.clinic","Chemotherapy day unit":"oncology.day_unit","Theatre":"theatre.department","Surgery clinic":"surgical.clinic","Pre-op clinic":"anaesthesia.preop_clinic","Recovery":"anaesthesia.recovery","Labour ward":"obgyn.labour_ward"}',
   'each department records the setup it was made from');
 select t.ok((select count(*) from core.places where organization_id = demo.base('clinic') and department_id = demo.base('ward')
     and id = core.setup_id(demo.base('ward'), 'place', 'bed_' || substr(name, 5))) = 8, 'the ward''s eight beds are the Ward setup''s, ids from their keys');
@@ -67,7 +68,7 @@ select t.ok(not exists (select 1 from core.departments d, jsonb_array_elements(c
 select t.ok(core.department_uses(demo.base('clinic'), demo.id('pharmacy', 'department'), 'pharmacy')
   and (select count(*) from core.settings_at(demo.base('clinic'), 'service') s where s.owner_id = demo.id('pharmacy', 'department')) = 1,
   'the Pharmacy ticks its pack and has its one dispensing service, from its setup');
-select t.ok((select count(distinct full_name) from core.patients where organization_id = demo.base('clinic')) = 96, 'every patient''s name is their own');
+select t.ok((select count(distinct full_name) from core.patients where organization_id = demo.base('clinic')) = 99, 'every patient''s name is their own');
 select t.ok(not exists (select 1 from core.patients p join core.users u on u.organization_id = p.organization_id and u.name ilike '%' || p.full_name || '%'
   where p.organization_id = demo.base('clinic')), 'no patient shares a name with the staff');
 select t.ok(r = '[]'::jsonb, 'rebuild = live after the reload: ' || left(r::text, 300)) from core.rebuild_check() r;
@@ -109,7 +110,8 @@ select t.ok(array_agg(distinct x.code order by x.code) = array['dnr', 'fall_risk
   from core.entries e, jsonb_to_recordset(e.data -> 'concept' -> 'codings') x(code text)
  where e.organization_id = demo.base('clinic') and e.type = 'alert' and e.data ->> 'status' = 'active';
 select t.ok(count(*) = 3, 'three critical results waiting (the base''s, and two haemoglobins under 7 asking for blood)') from base.review where organization_id = demo.base('clinic') and critical;
-select t.ok(count(*) = 6, 'six pregnant patients (the base''s, ObGyn''s four, and an echo for a murmur at 24 weeks)') from core.entries where organization_id = demo.base('clinic') and type = 'pregnancy' and (data ->> 'pregnant')::boolean;
+select t.ok(count(*) = 6, 'six pregnant patients (the base''s, ObGyn''s four, and an echo for a murmur at 24 weeks)') from core.entries where organization_id = demo.base('clinic') and type = 'pregnancy' and (data ->> 'pregnant')::boolean
+  and department_id is distinct from demo.id('obgyn', 'labour ward');
 select t.ok(count(*) = 1, 'a breastfeeding patient') from core.entries where organization_id = demo.base('clinic') and type = 'breastfeeding' and (data ->> 'breastfeeding')::boolean;
 select t.ok(count(*) = 1, 'a private note (Psychiatry)') from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'note' and e.department_id = demo.base('psychiatry');
 select t.ok(core.setting_at(demo.base('clinic'), 'organization.header', demo.base('clinic')) ->> 'tax_number' = '512-338-907', 'printouts carry the clinic''s header (§3.13)');
@@ -180,6 +182,51 @@ select t.ok(exists (select 1 from base.values x where x.organization_id = demo.b
   and x.key = 'oxygen.flow' and x.code = 'loinc:3151-8'), 'his flow is in the values, LOINC 3151-8');
 select t.ok(count(*) = 1 and bool_and(p.place_id is null and not p.has_vitals), 'Tahany is admitted with no bed yet and no obs') from base.presence p
  where p.organization_id = demo.base('clinic') and p.patient_id = demo.id('bedside', 'patient:tahany') and p.kind = 'stay' and p.state = 'admitted';
+
+\echo '── ObGyn''s labour ward (§5.6): three women in labour, their partographs'' points and the baby''s heart'
+create temp view lw as select demo.id('obgyn', 'labour ward') id, demo.id('obgyn', 'patient:salma') salma, demo.id('obgyn', 'patient:doaa') doaa,
+  demo.id('obgyn', 'patient:nesma') nesma;
+select t.ok(core.setting_at(demo.base('clinic'), 'department.packs', lw.id) -> 'packs' = '["obgyn", "bedside"]'::jsonb, 'the Labour ward uses ObGyn, then Ward nursing') from lw;
+select t.ok(count(*) = 3 and count(distinct p.place_id) = 3 and bool_and(p.day = (demo.now() at time zone 'Africa/Cairo')::date),
+  count(*) || ' admitted on the Labour ward, in three places, each today''s') from base.presence p, lw
+ where p.organization_id = demo.base('clinic') and p.department_id = lw.id and p.kind = 'stay' and p.state = 'admitted';
+select t.ok(array_agg(p.place_id order by p.place_id) = (select array_agg(x order by x) from unnest(array[demo.thing(lw.id, 'place', 'delivery_1'),
+    demo.thing(lw.id, 'place', 'delivery_2'), demo.thing(lw.id, 'place', 'delivery_3')]) x), 'in Delivery 1, 2 and 3') from base.presence p, lw
+ where p.organization_id = demo.base('clinic') and p.department_id = lw.id and p.kind = 'stay' and p.state = 'admitted' group by lw.id;
+select t.ok(count(*) > 0 and bool_and(e.patient_id in (lw.salma, lw.doaa, lw.nesma)), count(*) || ' labour examinations, all on Salma, Doaa or Nesma') from core.entries e, lw
+ where e.organization_id = demo.base('clinic') and e.type = 'obgyn.labour_exam';
+select t.ok(array_agg((e.data ->> 'cervix')::numeric order by e.occurred_at) filter (where e.patient_id = lw.salma) = array[4, 5, 6]::numeric[]
+  and array_agg((e.data ->> 'cervix')::numeric order by e.occurred_at) filter (where e.patient_id = lw.doaa) = array[3, 4]::numeric[]
+  and array_agg((e.data ->> 'cervix')::numeric order by e.occurred_at) filter (where e.patient_id = lw.nesma) = array[5, 7, 8]::numeric[],
+  'the partographs'' points: Salma 4, 5, 6 cm; Doaa 3, 4; Nesma 5, 7, 8') from core.entries e, lw
+ where e.organization_id = demo.base('clinic') and e.type = 'obgyn.labour_exam' and e.data ? 'cervix';
+select t.ok(array_agg((e.data ->> 'gravida') || '/' || (e.data ->> 'para')) filter (where e.patient_id = lw.salma) = array['2/1']
+  and array_agg((e.data ->> 'gravida') || '/' || (e.data ->> 'para')) filter (where e.patient_id = lw.doaa) = array['1/0']
+  and array_agg((e.data ->> 'gravida') || '/' || (e.data ->> 'para')) filter (where e.patient_id = lw.nesma) = array['3/2'],
+  'G and P said once each: Salma G2 P1, Doaa G1 P0, Nesma G3 P2') from core.entries e, lw
+ where e.organization_id = demo.base('clinic') and e.type = 'obgyn.labour_exam' and e.data ? 'gravida';
+select t.ok((select (e.data -> 'value' -> 'quantity' ->> 'value')::numeric from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = lw.nesma
+    and e.type = 'observation' and e.codes @> array['loinc:55283-6'] order by e.occurred_at desc limit 1) = 100
+  and exists (select 1 from base.values v where v.organization_id = demo.base('clinic') and v.patient_id = lw.nesma and v.code = 'loinc:55283-6'),
+  'Nesma''s baby''s heart 100 last, the base''s observation (LOINC 55283-6) in the values') from lw;
+select t.ok(count(*) = 3 and bool_and(e.data -> 'lmp' ? 'value'), count(*) || ' current pregnancies on the Labour ward''s women, each with an LMP') from core.entries e, lw
+ where e.organization_id = demo.base('clinic') and e.type = 'pregnancy' and e.data ->> 'status' = 'current' and (e.data ->> 'pregnant')::boolean
+   and e.patient_id in (lw.salma, lw.doaa, lw.nesma);
+select t.ok(p.urgent, 'Nesma''s stay is urgent') from base.presence p, lw
+ where p.organization_id = demo.base('clinic') and p.patient_id = lw.nesma and p.kind = 'stay' and p.state = 'admitted';
+select t.ok(not exists (select 1 from core.entries e, lw where e.organization_id = demo.base('clinic') and e.patient_id in (lw.salma, lw.doaa, lw.nesma)
+  and e.type in ('obgyn.labour_exam', 'observation', 'vitals') and e.department_id <> lw.id), 'every exam, heart rate and set of signs of theirs is the Labour ward''s');
+select demo.as(demo.id('obgyn', 'hanan'));
+create temp table lw_board as select public.pack_op(jsonb_build_object('op', 'obgyn.board', 'department_id', lw.id, 'args', '{}'::jsonb, 'purpose', 'TREAT')) b from lw;
+select t.ok((select count(*) from jsonb_object_keys(b -> 'stays')) = 3, 'the board, as Hanan Fouad: three stays') from lw_board;
+select t.ok((select jsonb_agg(x -> 'cervix' order by n) from jsonb_array_elements(s -> 'exams') with ordinality y(x, n)) = '[4, 5, 6]'::jsonb and s -> 'pregnancy' ? 'lmp',
+  'Salma''s exams'' cervixes 4, 5, 6 in order, her pregnancy with its LMP')
+  from lw_board, lw, base.presence p, lateral (select b -> 'stays' -> p.item::text s) z
+ where p.organization_id = demo.base('clinic') and p.patient_id = lw.salma and p.kind = 'stay' and p.state = 'admitted';
+select t.ok((s -> 'fhr' ->> 'value')::numeric = 100, 'Nesma''s baby''s heart on the board: 100')
+  from lw_board, lw, base.presence p, lateral (select b -> 'stays' -> p.item::text s) z
+ where p.organization_id = demo.base('clinic') and p.patient_id = lw.nesma and p.kind = 'stay' and p.state = 'admitted';
+select t.ok(b -> 'patient_ids' @> jsonb_build_array(lw.salma, lw.doaa, lw.nesma) and jsonb_array_length(b -> 'patient_ids') = 3, 'the board names the three women') from lw_board, lw;
 
 \echo '── billing''s demo and the clinic''s choices between its packs (§5.4): the Cashier and its person, Pay first at the Laboratory, the Pharmacy taking its own payment; one paid, one waiting, one sent from the Pharmacy'
 select t.ok(core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('billing', 'cashier')) ->> 'takes' = 'everyone'

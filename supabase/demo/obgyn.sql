@@ -4,6 +4,10 @@
 -- at 28 weeks), Eman Abdelaal (42, waiting: heavy periods, a fibroid, her copper IUD ten years and seven months in, a smear due next
 -- month), Aya Ramadan (waiting: her pregnancy never ended at 45 weeks — the birth not written) and Reham Nassar (30 weeks, next: BP
 -- 150/100 today). Times relative to the load; ids in the pack's namespace; a reload erases these patients first.
+-- The labour ward's women follow (§5.6): Salma Ahmed Abdelrahman, Doaa Hassan Mekky and Nesma Galal Badawy in labour on the Labour
+-- ward, examined by the midwife Hanan Fouad. Salma Ahmed Abdelrahman, Doaa Hassan Mekky, Nesma Galal Badawy (and in L2 Heba Mostafa
+-- Sherif and Marwa Adel Tawfik) are not the demo's other Salma Ali Saleh, Doaa Saber Hamed, Nesma Sabry, Heba Samir Gamal, Heba
+-- Abdelwahab (pregnant, 24 weeks) and Marwa Shalaby: the same first names, different women.
 select demo.layer('obgyn');
 
 -- a pregnancy standing from its LMP, written on the day it was booked
@@ -96,4 +100,101 @@ begin
   perform pg_temp.visit(nermeen, 212, 26, 2, 132, 84, 76, '{"sfh":26,"fhr":148,"protein":"trace"}');
   v := demo.arrive('headache since yesterday', 24, oc, 'urgent');
   perform demo.w(nermeen, jsonb_build_array(demo.e('vitals', oc, v, demo.ago(20), demo.vitals(150, 100, 96, 36.9, 98, null, 79))));
+end $$;
+
+-- ── the labour ward (§5.6): three women in labour, examined by Hanan Fouad, the midwife. Salma (G2 P1, 39+2 weeks, Delivery 1: 4 cm
+-- four hours ago, 5 cm two hours ago, 6 cm now — past the alert line), Doaa (G1 P0, 40+5 weeks, Delivery 2: 3 cm, then 4 cm an hour
+-- ago, when her active labour began) and Nesma (G3 P2, 38+1 weeks, a caesarean before, Delivery 3, urgent: 8 cm, the baby's heart 100
+-- five minutes ago). Each exam with the baby's heart (the base's observation, LOINC 55283-6) and, every hour or two, the mother's signs
+-- (the base's vitals). Times relative to the load; a reload erases these patients first. Every stay is admitted at most 300 minutes
+-- before the load, so it is today's however early it loads (demo.ago squeezes only within the day) ──
+
+-- a pregnancy standing from its LMP, so many days before today
+create or replace function pg_temp.lw_preg(p_days int) returns jsonb language sql stable as $$
+  select jsonb_build_object('status', 'current', 'pregnant', true,
+    'lmp', jsonb_build_object('value', ((demo.now() at time zone 'Africa/Cairo')::date - p_days)::text, 'precision', 'day'))
+$$;
+-- the baby's heart, as /fhr writes it
+create or replace function pg_temp.lw_fhr(p_value int) returns jsonb language sql immutable as $$
+  select jsonb_build_object('code', demo.concept('loinc', '55283-6', 'Fetal heart rate'), 'value', jsonb_build_object('quantity', demo.q(p_value, 'bpm', '/min')))
+$$;
+-- a labour examination's data
+create or replace function pg_temp.lw_exam(p_cervix numeric, p_descent int, p_position text, p_liquor text, p_moulding text, p_per10 int, p_seconds int,
+  p_g int default null, p_p int default null, p_caput text default 'none') returns jsonb language sql immutable as $$
+  select jsonb_strip_nulls(jsonb_build_object('cervix', p_cervix, 'descent', p_descent, 'position', p_position, 'liquor', p_liquor, 'moulding', p_moulding,
+    'caput', p_caput, 'contractions', case when p_per10 is not null then jsonb_strip_nulls(jsonb_build_object('per_10', p_per10, 'seconds', p_seconds)) end,
+    'gravida', p_g, 'para', p_p))
+$$;
+-- contractions alone, as /ctx writes them
+create or replace function pg_temp.lw_ctx(p_per10 int, p_seconds int) returns jsonb language sql immutable as $$
+  select jsonb_build_object('contractions', jsonb_build_object('per_10', p_per10, 'seconds', p_seconds))
+$$;
+-- the mother's signs, each only when given (demo.vitals writes a temperature with no value when it is null: bad_shape)
+create or replace function pg_temp.lw_vit(sys int, dia int, hr int, t numeric default null) returns jsonb language sql immutable as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'bp', case when sys is not null then jsonb_build_object('sys', demo.q(sys, 'mmHg', 'mm[Hg]'), 'dia', demo.q(dia, 'mmHg', 'mm[Hg]')) end,
+    'hr', case when hr is not null then demo.q(hr, 'bpm', '/min') end, 'temp', case when t is not null then demo.q(t, '°C', 'Cel') end))
+$$;
+-- one moment of a labour, as the midwife signs it: the exam (when given), the baby's heart (when given), the mother's signs (when given)
+create or replace function pg_temp.lw_at(p_stay uuid, p_at timestamptz, p_exam jsonb, p_fhr int, p_vitals jsonb default null) returns void language sql as $$
+  select demo.w(demo.id('obgyn', 'hanan'), (select jsonb_agg(e order by k) from (
+      select 1 k, demo.e('obgyn.labour_exam', demo.id('obgyn', 'labour ward'), p_stay, p_at, p_exam) e where p_exam is not null
+      union all select 2, demo.e('observation', demo.id('obgyn', 'labour ward'), p_stay, p_at, pg_temp.lw_fhr(p_fhr)) where p_fhr is not null
+      union all select 3, demo.e('vitals', demo.id('obgyn', 'labour ward'), p_stay, p_at, p_vitals) where p_vitals is not null) x));
+$$;
+-- admitted into a bed of the labour ward by its key, else the next free one there (a patient admitted in the app keeps hers); the
+-- admission and the pregnancy in one set, as the midwife writes them
+create or replace function pg_temp.lw_admit(p_stay uuid, p_at timestamptz, p_bed text, p_reason text, p_lmp_days int) returns uuid language plpgsql as $$
+declare lw uuid := demo.id('obgyn', 'labour ward'); b uuid; r jsonb; v jsonb;
+begin
+  for b in select x.id from core.places x where x.organization_id = demo.base('clinic') and x.department_id = lw and x.retired_at is null
+             order by x.id = demo.thing(lw, 'place', p_bed) desc, x.position loop
+    v := jsonb_build_array(demo.e('admitted', lw, p_stay, p_at, jsonb_build_object('department_id', lw, 'place_id', b, 'admit_source', 'emd', 'reason', p_reason), p_stay),
+      demo.e('pregnancy', lw, p_stay, p_at, pg_temp.lw_preg(p_lmp_days)));
+    r := demo.send(demo.id('obgyn', 'hanan'), v);
+    continue when r ->> 'outcome' <> 'landed' and jsonb_path_exists(coalesce(r -> 'findings', '[]'), '$[*] ? (@.code == "bed_taken")');
+    perform demo.landed(r, v);
+    return b;
+  end loop;
+  raise exception 'demo: no free bed on the labour ward';
+end $$;
+
+do $$
+declare lw uuid := demo.id('obgyn', 'labour ward'); dr uuid := demo.id('obgyn', 'nermeen'); zaki uuid := demo.id('obgyn', 'zaki'); s uuid; a uuid;
+begin
+  -- Salma, 27: G2 P1 at 39+2 weeks; active labour from 4 cm four hours ago, 5 cm at two hours, 6 cm now: right of the alert line
+  perform demo.patient(demo.id('obgyn', 'patient:salma'), array['Salma', 'Ahmed'], 'Abdelrahman', 'female', demo.born(27, 140), '+201014432907');
+  s := gen_random_uuid(); a := gen_random_uuid();
+  perform pg_temp.lw_admit(s, demo.ago(290), 'delivery_1', 'labour', 275);
+  perform demo.w(dr, jsonb_build_array(demo.move('assigned', lw, s, demo.ago(285), s, jsonb_build_object('user_id', dr), a)));
+  perform pg_temp.lw_at(s, demo.ago(240), pg_temp.lw_exam(4, 5, 'oa', 'intact', '0', 3, 30, 2, 1), 140, pg_temp.lw_vit(118, 76, 88, 37.1));
+  perform pg_temp.lw_at(s, demo.ago(210), null, 138);
+  perform pg_temp.lw_at(s, demo.ago(180), pg_temp.lw_ctx(3, 35), 144, pg_temp.lw_vit(null, null, 90));
+  perform pg_temp.lw_at(s, demo.ago(150), null, 142);
+  perform pg_temp.lw_at(s, demo.ago(120), pg_temp.lw_exam(5, 4, 'oa', 'clear', '0', 3, 35), 136, pg_temp.lw_vit(122, 78, 92, 37.2));
+  perform pg_temp.lw_at(s, demo.ago(90), null, 140);
+  perform pg_temp.lw_at(s, demo.ago(60), pg_temp.lw_ctx(3, 40), 148, pg_temp.lw_vit(null, null, 90));
+  perform pg_temp.lw_at(s, demo.ago(30), null, 146);
+  perform pg_temp.lw_at(s, demo.ago(5), pg_temp.lw_exam(6, 3, 'oa', 'clear', '+', 3, 40), 142, pg_temp.lw_vit(124, 80, 94, 37.4));
+
+  -- Doaa, 22: G1 P0 at 40+5 weeks; 3 cm two hours ago (latent), 4 cm an hour ago: her active labour began then
+  perform demo.patient(demo.id('obgyn', 'patient:doaa'), array['Doaa', 'Hassan'], 'Mekky', 'female', demo.born(22, 60), '+201117730215');
+  s := gen_random_uuid(); a := gen_random_uuid();
+  perform pg_temp.lw_admit(s, demo.ago(150), 'delivery_2', 'labour', 285);
+  perform demo.w(dr, jsonb_build_array(demo.move('assigned', lw, s, demo.ago(145), s, jsonb_build_object('user_id', dr), a)));
+  perform pg_temp.lw_at(s, demo.ago(120), pg_temp.lw_exam(3, 5, 'loa', 'intact', '0', 2, 25, 1, 0), 136, pg_temp.lw_vit(112, 70, 84, 36.9));
+  perform pg_temp.lw_at(s, demo.ago(60), pg_temp.lw_exam(4, 5, 'loa', 'intact', '0', 3, 30), 140, pg_temp.lw_vit(116, 72, 86, 37.0));
+  perform pg_temp.lw_at(s, demo.ago(30), null, 138);
+
+  -- Nesma, 33: G3 P2 at 38+1 weeks, a caesarean before; 5 cm three hours ago, 7, then 8 cm; the baby's heart 128, then 100 five
+  -- minutes ago (under 110: the tile says it in red). Urgent, with Dr. Ahmed Zaki
+  perform demo.patient(demo.id('obgyn', 'patient:nesma'), array['Nesma', 'Galal'], 'Badawy', 'female', demo.born(33, 210), '+201009917348');
+  s := gen_random_uuid(); a := gen_random_uuid();
+  perform pg_temp.lw_admit(s, demo.ago(200), 'delivery_3', 'labour, previous caesarean', 267);
+  perform demo.w(zaki, jsonb_build_array(demo.move('assigned', lw, s, demo.ago(195), s, jsonb_build_object('user_id', zaki), a)));
+  perform demo.w(zaki, jsonb_build_array(demo.move('urgent', lw, s, demo.ago(194), a, '{"urgent":true}'::jsonb)));
+  perform pg_temp.lw_at(s, demo.ago(180), pg_temp.lw_exam(5, 4, 'roa', 'clear', '0', 3, 40, 3, 2), 138, pg_temp.lw_vit(120, 76, 90, 37.0));
+  perform pg_temp.lw_at(s, demo.ago(90), pg_temp.lw_exam(7, 3, 'oa', 'clear', '0', 4, 45), 132, pg_temp.lw_vit(124, 78, 94, 37.1));
+  perform pg_temp.lw_at(s, demo.ago(20), pg_temp.lw_exam(8, 2, 'oa', 'clear', '+', 4, 45), 128);
+  perform pg_temp.lw_at(s, demo.ago(5), null, 100);
 end $$;

@@ -3,6 +3,7 @@
 -- ticked there: its prices show, its Dispensing rows hand their lines) and takes its own payment at its counter, where the pharmacist
 -- holds the Cashier's role and has billing's Today on the Pharmacy's line, to count and close their own drawer. Written through the
 -- doors as the owner; run again, it adds only what is missing. Skipped while either pack is off. Its day is supabase/demo/clinic_packs.sql.
+-- The Labour ward uses Ward nursing too, after ObGyn in its pack order.
 
 select demo.layer('clinic_packs');
 
@@ -59,4 +60,12 @@ begin
   perform demo.as(demo.base('owner'));
   perform public.write_setting(jsonb_build_object('key', 'service', 'owner_id', demo.base('lab'), 'thing_id', h,
     'data', '{"code":"histo","name":"Histopathology","section":"Histopathology","answer":"note","steps":["received"]}'::jsonb));
+end $$;
+
+-- the Labour ward uses Ward nursing too (its drug round, obs and handover, later), after ObGyn in its pack order, so the tile's two
+-- buttons are ObGyn's while a woman is in labour. Skipped while either pack is off.
+do $$
+begin
+  if not (core.packs_used(demo.base('clinic')) @> array['obgyn', 'bedside']) then return; end if;
+  perform demo.tick(demo.id('obgyn', 'labour ward'), 'bedside');
 end $$;
