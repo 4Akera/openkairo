@@ -1732,6 +1732,51 @@ numbered as on its picture.
   starts at the ward stay: a NEWS2 taken in the ER before the stay was passed on (Q3) is not counted, so the ward shows "no obs yet"
   and, an hour on, amber; reading the previous stay's NEWS2 would need to know the stay it came from. (16) The response line names the
   ward's "Tell" words, not a person (`#ward-obs` reads "Tell Dr. Ali Hassan now"). (17) A child's tile and row get no due word, and a child's `/v` line keeps piece 1's words with no due time.
+- **Built, W2 (Ward nursing: fluid balance; 2026-10-09; lane beds-ward2)**: in and out are the base's own observations with the LOINC
+  codes and the mL already approved (B1): `/in 250 iv ns` writes 9103-3 "Fluid intake total Measured" with the route (iv, oral, tube)
+  in `method`; `/out urine 300` writes 9187-6 "Urine output"; `/out drain 50` (or tube, vomit, stool) writes 9257-7 "Fluid output total
+  Measured" with the kind in `method`; the words left over go in `note`. Any amount from 0 mL up lands, with one decimal (urine 0, an
+  infant's 2.5, a 6 500 mL drain): a measure is a fact; only a missing number or route asks what to type, and so do a second number
+  (`/in ns 0.9 500 iv` is never 0.9 mL) and litres (`/in 1 L iv`: "Type the amount in mL"). A fluid chart, the pack's own
+  type `bedside.fluid_chart` (write action `write:bedside.fluid_chart`, everyday, for the doctor and the nurse), is started per stay by
+  `/fluids`, given the day's balance aim by `/fluids target -1000` (cleared by `/fluids target none`) and stopped by `/fluids stop` (or
+  `off`, `end`: a bare "off" never clears the aim); the aim is whole mL, at most five digits; each line is a new entry and the latest in the stay holds; the aim carries forward until a stop, and is always signed ("balance aim
+  −1 000 mL a day", never "target 1000"). The ward's shifts, a new department setting `bedside.shifts` ("Shifts", 08:00 14:00 20:00 by
+  default), are the chart's columns, and the earliest starts the fluid day; a measure counts in the shift it closes (the urine at 14:00
+  is in 08–14, the bag emptied at 08:00 closes the night). The record panel's **Fluid balance** section (the stay open now, on a ward: the stay's own department's line holds Obs due, and its
+  shifts make the day, whoever reads) shows the
+  chart's head (since when, the aim, the weight), today by shift (in by route, out by kind, in − out, urine mL/kg/h) and yesterday's
+  totals; its chip says the balance ("+390 mL", "nothing measured", "stopped") and its Summary line "balance +390 mL since 08:00 · no
+  balance aim". The banner says "balance +390 since 08:00" at rank 3, so NEWS2, a late dose and "times not set" come first. The tile
+  ends with "balance +390 mL" (or "nothing measured since 08:00") after NEWS2 and the due word, while a chart is on. Urine mL/kg/h is
+  worked out each time, never stored: the measure's mL over the hours since the patient's previous measured urine (within 24 h, any
+  stay, the ICU's hourly urine 9188-4 included) over the latest weight in kg; "low" below 0.5 (1.0 under 12 years), in words with a
+  glyph, never a stop. The op `bedside.fluids` gives the board each charted stay's measures, only where the department's line holds
+  Obs due (W1's rule); the client groups them into the day. The demo: Samira's chart since yesterday 08:30 (Dr. Ali Hassan, no aim),
+  68 kg, in 2 300 and out 1 050 yesterday, today in 700 and out 310 (+390) with her last urine 60 mL (0.4 mL/kg/h, low); Tahany's
+  chart since her arrival with an aim of +1 000 mL, IV 500 and urine 200 (+300); Abdelmoneim none. Where W2 differs from plan piece 7
+  and the picture: in and out are the base's observations, not a ward type (one fluid record with the ICU); IV bags are not yet
+  counted hour by hour from the drug round (beds pieces 3–4); no "Start fluid chart" button in an Obs card and no tile button (`/fluids`
+  does it; a tile allows two buttons); an unmeasured vomit is not taken (a number is asked for); the chart's start and aim are not in
+  the FHIR export (the measures are). *Chosen by Claude, awaiting the owner*: (1) in and out as the base's observations (B1), not a ward
+  type; (2) every output other than urine as LOINC's 9257-7 with the kind in words (more exact codes would be base data); (3) a measure
+  counts in the shift it closes, the fluid day starts at the earliest shift; (4) urine mL/kg/h since the previous measured urine,
+  "low" below 0.5 from 12 years and 1.0 under 12 — are these the thresholds, and should "low" apply only to catheter measures, since an
+  unmeasured void makes the rate read falsely low?; (5) a measure's time is when it is signed (a past time typed on the line would need
+  the composer to carry a draft's own time, a core change); (6) IV bags from the drug round after the merge; until then `/in`; (7) the
+  fluid chart is the pack's own entry, started, re-aimed and stopped by `/fluids`, by a doctor or a nurse — should only a doctor set
+  the aim?; (8) measures land with or without a chart, which decides only where the balance is spoken and the aim; (9) the aim is words
+  beside the day's balance, always signed, never compared or coloured; (10) the balance only where the line holds Obs due — the tile, and the section, chip, Summary line and banner by the stay's own
+  department, so an ICU or ER stay gets none; (11) no Start
+  button in an Obs card, no tile button; (12) no unmeasured vomit or incontinence count; (13) the chart not in the FHIR export yet;
+  (14) the shifts a new Ward nursing setting, for W3's handover and the drug round's day too; (15) the board's balance changes at its
+  next re-read; (16) any amount from 0 mL with one decimal, "check the number" above 5 000 mL, "a count?" for vomit or stool under
+  10 mL; (17) the banner's balance at rank 3, behind +n on a busy record, the chip always showing it; (18) where a department ticks both
+  Ward nursing and the chronic care pack, `/in` and `/out` drafts draw in that pack's observation card — should those departments get
+  Ward nursing's line instead?; (19) the section and the note under `/in` and `/out` read the record's values, which the core reads
+  capped at 2 000 rows for the patient (unordered past the cap): a long stay with hourly vitals can reach that in about ten days, and
+  the day's sums or the previous urine may then miss rows the board's op still counts. A read of the stay's measures through a pack op,
+  as the board's, would lift it: should it?
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2935,4 +2980,24 @@ types, parked pack calls with per-call Retry, Postgres enums.
   `npm run build` builds; shapes regenerated (`BedsideResponseSetting`), logins unchanged. Reviewed: a child's `/v` gets piece 1's
   words with no due time; the tab says nothing of a stay's NEWS2 until its read has answered; a time due just before midnight never
   reads "tomorrow". Browser pass by the lead (`spec/shots/2026-10-09/ward2-w1/`).
+- 2026-10-09: **Ward nursing W2, fluid balance** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` gains the
+  setting `bedside.shifts`, the type `bedside.fluid_chart` with `write:bedside.fluid_chart` and its line, and the op `bedside.fluids`;
+  `src/packs/bedside/` `fluids.ts` (/in, /out, /fluids), `balance.ts` (shifts, the fluid day, the table, urine mL/kg/h, the words),
+  `wardread.ts` (the tile's one read merged, keeping its identity), `FluidBalance.tsx` (the section and the note; `Fluids.tsx` would
+  clash with `fluids.ts` on a case-insensitive disk), `ward2.ts` (the three commands, the section, the banner word, the fluids read
+  beside obs due, `withWardWords`) and two lines of `index.tsx`; Samira's and Tahany's charts and measures appended to
+  `supabase/demo/bedside.sql`; suites `bedside_ward2_fluids` (66) and `bedside_ward2_demo` (16) green, with `bedside_ward2`, `bedside`,
+  `demo` (84), `registry` (16), `boundary` (10) and `pack_contract` (35) (the full `db:test` is the lead's); node `test:fluids` (fluids 7 groups, balance 9),
+  ward2 10, bedside 12, board 27, settings 12, composer 19, chart 24 and 16, screens 11, sections 19, banner 13, scores 7, demo 8,
+  setups 11, registries 9, pharmacy 10, lis 19, billing 22 and 2; typecheck clean; lint 0 errors in these files; shapes regenerated
+  (`BedsideFluidChart`, `BedsideShiftsSetting`), logins unchanged. A fluid measure cannot be made private (the base's observation is
+  never private), so the suite pins that refusal. W1's `bedside.obs_here` now tests the Screens line by containment (`@>`), the same
+  answer: `registry`'s data-key scan read its `? 'bedside.obs'` as a data key no shape declares. After review: a bare `/fluids off`
+  stops the chart (it cleared the aim); a second number or litres on `/in`/`/out` asks again (it went into the note); the aim is at most
+  five digits in the shape, the line, the op and the client (a longer one overflowed the op's `::int` for the whole ward); the section,
+  chip, Summary line and banner only on a stay whose department holds Obs due, grouped by that ward's shifts; a method with no row of
+  its own reads as Other; the rate shows two decimals where one would reach the threshold, and amounts keep one decimal; an old weight
+  is dated in the note; the current shift is marked with the word "now" and the accent tint; the 2 000-row read of the record's values
+  is item (19). Browser pass by the lead
+  (`spec/shots/2026-10-09/ward2-w2/`).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

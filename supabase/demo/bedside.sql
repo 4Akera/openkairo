@@ -63,3 +63,46 @@ begin
   -- the doctor caring for her to be told; nobody has repeated them, so the board and Obs due say "obs overdue 20 min" (W1)
   perform pg_temp.obs(s, demo.ago(80), 88, 54, 98, 38.0, 96, 18, 'air', 'a');   -- 4, low; 3 in sbp
 end $$;
+
+-- W2 · fluid balance (spec/openCare.md §5.6): Samira has had a fluid chart since yesterday 08:30 (Dr. Ali Hassan, no balance aim),
+-- weighed on admission (68 kg); IV fluids, drinks and urine through yesterday and this morning, her last urine only 60 mL (0.4 mL/kg/h,
+-- low). Tahany's chart started on arrival, a balance aim of +1 000 mL for today; IV fluids running, a first urine; no weight yet.
+-- Abdelmoneim keeps no chart. Each measure is the base's observation (LOINC 9103-3 in, 9187-6 urine, 9257-7 other output; mL) signed
+-- by Nour Adel; a chart is the pack's bedside.fluid_chart. Each stay is found from its admission, so piece 1's block is not touched.
+create or replace function pg_temp.fl(p_stay uuid, p_at timestamptz, p_code text, p_text text, p_ml int, p_method text default null, p_note text default null)
+returns void language sql as $$
+  select demo.w(demo.id('bedside', 'nurse'), jsonb_build_array(demo.e('observation', demo.base('ward'), p_stay, p_at, jsonb_strip_nulls(jsonb_build_object(
+    'code', jsonb_build_object('text', p_text, 'codings', jsonb_build_array(jsonb_build_object('system', 'loinc', 'code', p_code, 'display',
+      case p_code when '9103-3' then 'Fluid intake total Measured' when '9187-6' then 'Urine output' else 'Fluid output total Measured' end))),
+    'value', jsonb_build_object('quantity', demo.q(p_ml, 'mL', 'mL')), 'method', p_method, 'note', p_note)))));
+$$;
+
+do $$
+declare ward uuid := demo.base('ward'); doctor uuid := demo.base('doctor'); d1 timestamptz := demo.midnight() - interval '1 day';
+  d2 timestamptz := demo.midnight() - interval '2 days';
+  ss uuid := (select e.visit_id from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = demo.id('bedside', 'patient:samira')
+    and e.type = 'admitted' order by e.recorded_at desc limit 1);
+  st uuid := (select e.visit_id from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = demo.id('bedside', 'patient:tahany')
+    and e.type = 'admitted' order by e.recorded_at desc limit 1);
+begin
+  if ss is null or st is null then raise exception 'bedside W2: Samira''s or Tahany''s stay is not found'; end if;
+  perform demo.use(demo.id('bedside', 'patient:samira'));
+  perform demo.w(demo.id('bedside', 'nurse'), jsonb_build_array(demo.e('vitals', ward, ss, d2 + interval '10 hours 40 minutes', jsonb_build_object('weight', demo.q(68, 'kg', 'kg')))));
+  perform demo.w(doctor, jsonb_build_array(demo.e('bedside.fluid_chart', ward, ss, d1 + interval '8 hours 30 minutes',
+    '{"status":"active","note":"pneumonia with fever: watch the urine"}'::jsonb)));
+  perform pg_temp.fl(ss, d1 + interval '9 hours', '9103-3', 'Fluid in · IV', 1000, 'iv', 'NS 0.9%');
+  perform pg_temp.fl(ss, d1 + interval '11 hours', '9187-6', 'Urine', 350);
+  perform pg_temp.fl(ss, d1 + interval '13 hours', '9103-3', 'Fluid in · by mouth', 300, 'oral');
+  perform pg_temp.fl(ss, d1 + interval '17 hours', '9187-6', 'Urine', 400);
+  perform pg_temp.fl(ss, d1 + interval '21 hours', '9103-3', 'Fluid in · IV', 1000, 'iv', 'NS 0.9%');
+  perform pg_temp.fl(ss, d1 + interval '23 hours', '9187-6', 'Urine', 300);
+  perform pg_temp.fl(ss, demo.ago(150), '9103-3', 'Fluid in · IV', 500, 'iv', 'NS 0.9%');
+  perform pg_temp.fl(ss, demo.ago(140), '9187-6', 'Urine', 250);
+  perform pg_temp.fl(ss, demo.ago(60), '9103-3', 'Fluid in · by mouth', 200, 'oral');
+  perform pg_temp.fl(ss, demo.ago(20), '9187-6', 'Urine', 60);
+  perform demo.use(demo.id('bedside', 'patient:tahany'));
+  perform demo.w(doctor, jsonb_build_array(demo.e('bedside.fluid_chart', ward, st, demo.ago(85),
+    '{"status":"active","target":{"value":"+1000","unit":"mL","ucum":"mL"},"note":"pyelonephritis: rehydrate"}'::jsonb)));
+  perform pg_temp.fl(st, demo.ago(60), '9103-3', 'Fluid in · IV', 500, 'iv', 'NS 0.9%');
+  perform pg_temp.fl(st, demo.ago(25), '9187-6', 'Urine', 200);
+end $$;

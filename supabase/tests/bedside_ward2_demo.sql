@@ -27,3 +27,44 @@ select t.ok(s ->> 'score' = 'bedside.news2_s2' and s ->> 'level' = 'low' and (s 
   from (select pg_temp.stay_of(demo.id('bedside', 'patient:abdelmoneim')) s) x;
 select t.ok(d -> 'patient_ids' @> jsonb_build_array(demo.id('bedside', 'patient:tahany'), demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim')),
   'the three are named for the read log, among the ward''s patients') from due;
+
+-- W2 · the fluid balance in the demo: Samira's chart since yesterday 08:30 with her ten measures and her weight, Tahany's with a balance
+-- aim of +1 000 mL and her two, Abdelmoneim with none; each stay found from its admission, as the demo finds it. No balance "today":
+-- the load's hour moves the day's split.
+select set_config('request.jwt.claim.sub', '', false);
+create function pg_temp.admitted(p_patient uuid) returns uuid language sql as $$
+  select e.visit_id from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = p_patient and e.type = 'admitted' order by e.recorded_at desc limit 1
+$$;
+create function pg_temp.fluid(p_stay uuid, p_code text) returns table (n bigint, ml numeric, clean boolean) language sql as $$
+  select count(*), sum((e.data -> 'value' -> 'quantity' ->> 'value')::numeric), coalesce(bool_and(coalesce(e.findings, '[]'::jsonb) = '[]'::jsonb), true)
+    from core.entries e where e.organization_id = demo.base('clinic') and e.visit_id = p_stay and e.type = 'observation' and e.codes @> array['loinc:' || p_code]
+$$;
+select t.ok(pg_temp.admitted(demo.id('bedside', 'patient:samira')) is not null and pg_temp.admitted(demo.id('bedside', 'patient:tahany')) is not null
+  and (select count(*) from base.presence p where p.organization_id = demo.base('clinic') and p.kind = 'stay' and p.state = 'admitted'
+    and p.item in (pg_temp.admitted(demo.id('bedside', 'patient:samira')), pg_temp.admitted(demo.id('bedside', 'patient:tahany')))) = 2,
+  'Samira''s and Tahany''s stays, found from their admissions, are the admitted stays');
+select t.ok(count(*) = 1 and bool_and(e.author_id = demo.base('doctor') and e.occurred_at = demo.midnight() - interval '1 day' + interval '8 hours 30 minutes'
+  and e.data ->> 'status' = 'active' and not (e.data ? 'target')), 'Samira: one fluid chart, by Dr. Ali Hassan, yesterday 08:30, on, no balance aim')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.visit_id = pg_temp.admitted(demo.id('bedside', 'patient:samira')) and e.type = 'bedside.fluid_chart';
+select t.ok(i.n = 5 and i.ml = 3000 and i.clean and u.n = 5 and u.ml = 1360 and u.clean,
+  'Samira''s measures: 5 in (3 000 mL), 5 urines (350, 400, 300, 250, 60: 1 360 mL), none flagged')
+  from pg_temp.fluid(pg_temp.admitted(demo.id('bedside', 'patient:samira')), '9103-3') i, pg_temp.fluid(pg_temp.admitted(demo.id('bedside', 'patient:samira')), '9187-6') u;
+select t.ok((select v.value from base.values v where v.organization_id = demo.base('clinic') and v.patient_id = demo.id('bedside', 'patient:samira') and v.key = 'weight'
+  order by v.at desc limit 1) = 68, 'Samira''s latest weight: 68 kg');
+select t.ok(count(*) = 1 and bool_and(e.data ->> 'status' = 'active' and e.data -> 'target' ->> 'value' = '+1000'), 'Tahany: one chart, on, a balance aim of +1000')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.visit_id = pg_temp.admitted(demo.id('bedside', 'patient:tahany')) and e.type = 'bedside.fluid_chart';
+select t.ok(i.n = 1 and i.ml = 500 and u.n = 1 and u.ml = 200, 'Tahany''s measures: IV 500, urine 200')
+  from pg_temp.fluid(pg_temp.admitted(demo.id('bedside', 'patient:tahany')), '9103-3') i, pg_temp.fluid(pg_temp.admitted(demo.id('bedside', 'patient:tahany')), '9187-6') u;
+select t.ok(not exists (select 1 from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = demo.id('bedside', 'patient:abdelmoneim')
+  and e.type = 'bedside.fluid_chart'), 'Abdelmoneim: no fluid chart');
+select demo.as(demo.id('bedside', 'nurse'));
+create temp table fluids as select public.pack_op(jsonb_build_object('op', 'bedside.fluids', 'department_id', demo.base('ward'),
+  'args', jsonb_build_object('from', demo.now() - interval '3 days'), 'purpose', 'TREAT')) d;
+select t.ok(d -> 'patient_ids' @> jsonb_build_array(demo.id('bedside', 'patient:tahany'), demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim'))
+  and (select array_agg(k order by k) from jsonb_object_keys(d -> 'stays') k)
+    = (select array_agg(x::text order by x::text) from unnest(array[pg_temp.admitted(demo.id('bedside', 'patient:samira')), pg_temp.admitted(demo.id('bedside', 'patient:tahany'))]) x),
+  'as Nour, the fluids name the three, and hold exactly Samira''s and Tahany''s stays') from fluids;
+select t.ok(jsonb_array_length(d -> 'stays' -> pg_temp.admitted(demo.id('bedside', 'patient:samira'))::text -> 'measures') = 10
+  and jsonb_array_length(d -> 'stays' -> pg_temp.admitted(demo.id('bedside', 'patient:tahany'))::text -> 'measures') = 2
+  and (d -> 'stays' -> pg_temp.admitted(demo.id('bedside', 'patient:tahany'))::text -> 'chart' ->> 'target')::int = 1000,
+  'Samira: 10 measures; Tahany: 2, with the aim 1000') from fluids;

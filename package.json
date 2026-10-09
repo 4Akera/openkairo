@@ -43,6 +43,7 @@
     "test:familycare": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-familycare.ts",
     "test:bedside": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-bedside.ts",
     "test:ward2": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-ward2.ts",
+    "test:fluids": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-fluids.ts && npx --yes tsx --tsconfig tsconfig.app.json scripts/test-balance.ts",
     "gen:types": "supabase gen types typescript --local --schema public > src/core/db/types.generated.ts",
     "gen:shapes": "npx --yes tsx scripts/gen-shapes.ts",
     "gen:logins": "npx --yes tsx scripts/gen-logins.ts",

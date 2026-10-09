@@ -11,7 +11,7 @@ import { registerTileLine } from '@core/screens/ward/tiles'
 import { NEWS2_FIT, news2Chip, news2Rows, news2Summary, news2Words, tileWords } from './news2'
 import { News2 } from './Section'
 import './obs'
-import { useWardRead, withDueWord } from './ward2'
+import { useWardRead, withWardWords } from './ward2'
 
 // the banner's word, only where the department uses the pack: the open stay's latest NEWS2, amber at 5–6, red at 7 or more
 registerBannerWords({ key: 'bedside.news2', types: ['score'], words: news2Words })
@@ -20,5 +20,5 @@ registerSection({ key: 'bedside.news2', title: 'NEWS2', types: ['score'], fit: N
   word: news2Chip, summary: news2Summary, Body: News2 })
 // its words on each tile: the stay's latest NEWS2, then when its obs are due, from the board's read (once per board: boardRead.ts, with
 // ward2.ts's obs due beside it); else a stay with no obs yet
-registerTileLine('bedside', (row, ctx) => withDueWord(tileWords(row, ctx, ctx.read, Date.now()), row, ctx, ctx.read, Date.now()), useWardRead)
+registerTileLine('bedside', (row, ctx) => withWardWords(tileWords(row, ctx, ctx.read, Date.now()), row, ctx, ctx.read, Date.now()), useWardRead)
 export const key = 'bedside'

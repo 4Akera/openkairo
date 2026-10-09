@@ -220,6 +220,17 @@ export interface BackToWaiting {
   reason?: 'not_here' | 'sent_out' | 'other'
   text?: string
 }
+/** bedside.fluid_chart v1 (bedside) */
+export interface BedsideFluidChart {
+  no_target?: true
+  note?: string
+  status: 'active' | 'stopped'
+  target?: {
+    ucum: 'mL'
+    unit?: 'mL'
+    value: string
+  }
+}
 /** breastfeeding v1 (base) */
 export interface Breastfeeding {
   breastfeeding: boolean
@@ -1026,6 +1037,10 @@ export interface BedsideResponseSetting {
     tell?: string
   }
 }
+/** setting bedside.shifts (bedside; owner department) */
+export interface BedsideShiftsSetting {
+  starts: string
+}
 /** setting billing.desk (billing; owner department) */
 export interface BillingDeskSetting {
   float?: string
@@ -1516,6 +1531,7 @@ export interface EntryData {
   'assigned': Assigned
   'away': Away
   'back_to_waiting': BackToWaiting
+  'bedside.fluid_chart': BedsideFluidChart
   'breastfeeding': Breastfeeding
   'called': Called
   'checked_in': CheckedIn
@@ -1572,6 +1588,7 @@ export interface EntryData {
 export interface SettingData {
   'anaesthesia.stop_list': AnaesthesiaStopListSetting
   'bedside.response': BedsideResponseSetting
+  'bedside.shifts': BedsideShiftsSetting
   'billing.desk': BillingDeskSetting
   'billing.pay_first': BillingPayFirstSetting
   'billing.price': BillingPriceSetting
