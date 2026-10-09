@@ -2,7 +2,9 @@
 -- them is the clinic's, as its owner sets it in Settings → Departments — here, after every pack's seed. The Pharmacy bills (billing
 -- ticked there: its prices show, its Dispensing rows hand their lines) and takes its own payment at its counter, where the pharmacist
 -- holds the Cashier's role and has billing's Today on the Pharmacy's line, to count and close their own drawer. Written through the
--- doors as the owner; run again, it adds only what is missing. Skipped while either pack is off. Its day is supabase/demo/clinic_packs.sql.
+-- doors as the owner; run again, it adds only what is missing. Skipped while either pack is off. Emergency uses Ward nursing too, after
+-- its own pack, so Emergency's words lead each tile's line and its two buttons are the tile's (skipped while either is off). Its day is
+-- supabase/demo/clinic_packs.sql.
 
 select demo.layer('clinic_packs');
 
@@ -20,4 +22,11 @@ begin
   perform demo.screen(ph, 'pharmacy.dispensing', true);
   perform demo.screen(ph, 'pharmacy.stock');
   perform demo.screen(ph, 'billing.today');
+end $$;
+
+do $$
+declare c uuid := demo.base('clinic'); er uuid := demo.id('casualty', 'department');
+begin
+  if not (core.packs_used(c) @> array['casualty', 'bedside']) then return; end if;
+  perform demo.tick(er, 'bedside');
 end $$;

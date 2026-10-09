@@ -130,6 +130,28 @@ export interface Breastfeeding {
 export interface Called {
   note?: string
 }
+/** casualty.triage v1 (casualty) */
+export interface CasualtyTriage {
+  casualty: {
+    arrival?: 'walked_in' | 'ambulance' | 'family' | 'police' | 'referred' | 'other_hospital'
+    arrival_ref?: string
+    complaint?: 'chest_pain' | 'breath' | 'injury_road' | 'fall' | 'abdominal_pain' | 'fever' | 'poisoning' | 'sting_bite' | 'burn' | 'fits' | 'weakness_one_side' | 'bleeding_pregnancy' | 'wound'
+    danger?: ('airway' | 'breathing' | 'fitting' | 'bleeding' | 'chest_cardiac' | 'stroke' | 'severe_pain' | 'violent')[]
+    level: number
+    scale: 'ats' | 'mts'
+    scale_version?: string
+    suggested?: {
+      level: number
+      signs: ('rr' | 'spo2' | 'sbp' | 'pulse' | 'temp' | 'acvpu' | 'oxygen' | 'airway' | 'breathing' | 'fitting' | 'bleeding' | 'chest_cardiac' | 'stroke' | 'severe_pain' | 'violent')[]
+    }
+    why?: string
+  }
+  code: Concept
+  note?: string
+  value: {
+    concept: Concept
+  }
+}
 /** checked_in v1 (base) */
 export interface CheckedIn {
   arrival?: string
@@ -450,6 +472,10 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
+/** setting casualty.scale (casualty; owner organization) */
+export interface CasualtyScaleSetting {
+  scale: 'ats' | 'mts'
+}
 /** setting department.after_done (base; owner department) */
 export interface DepartmentAfterDoneSetting {
   after: 'next' | 'queue'
@@ -617,6 +643,7 @@ export interface EntryData {
   'back_to_waiting': BackToWaiting
   'breastfeeding': Breastfeeding
   'called': Called
+  'casualty.triage': CasualtyTriage
   'checked_in': CheckedIn
   'crossed_out': CrossedOut
   'died': Died
@@ -656,6 +683,7 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
+  'casualty.scale': CasualtyScaleSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting

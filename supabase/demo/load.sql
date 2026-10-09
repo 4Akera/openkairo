@@ -15,6 +15,8 @@
 -- include: supabase/demo/billing.sql
 -- include: supabase/seeds/bedside.sql
 -- include: supabase/demo/bedside.sql
+-- include: supabase/seeds/casualty.sql
+-- include: supabase/demo/casualty.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql

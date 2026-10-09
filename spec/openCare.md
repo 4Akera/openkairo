@@ -1508,6 +1508,37 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- *Built 2026-10-09, E1 (owner, Q3)*: one Done passes a stay to the next department. The base's presence check reads the whole set: a
+  stay the same set discharges no longer counts as admitted, so the stay's `discharged` and the next department's `admitted` land
+  together; a second stay the set opens does count (`already_admitted`); the stay that follows must be `about` the stay it ends
+  (`not_linked`, words "A stay passed on in one Done names the stay it came from") and in another department (`same_department`).
+  A pass is `discharged` (changing the stay's latest version, disposition `oth` with the words "to <department>" in its note, never
+  `hosp`, which is hospice) and `admitted` about the stay's opening entry (admit source `emd` from the ER, `other` from a ward).
+  Exported, the next stay's Encounter is `partOf` the one it came from (*chosen by Claude in the build, awaiting the owner*). Nothing
+  on screen until Emergency's Where to.
+- *Built 2026-10-09, E2a (chosen by Claude at the owner's request ('brainstorm best ideas and start building', 2026-10-08), awaiting
+  the owner)*: Emergency, the server (migration 18). Its key is `casualty` (`emergency` is a word core and base files already use, so
+  the lint refuses it as a key); role block d1. The starter setup `casualty.er`: Resus 1–2 (label bed) and Cubicle 1–6 on the base's
+  board, stays of class EMER, the board then the Patients tab (`casualty.patients`, opening on the board); its patients with no place
+  are the waiting chairs, the board's no-bed list. Arrived is the base's `admitted` with no place (admit source `gp` when referred by a
+  doctor, `hosp-trans` from another hospital, else `other`; never `emd`, which is a stay that comes from the ER). The triage is the
+  pack's own type `casualty.triage` on the base's observation (so the export is the base's Observation): the level's words and its
+  coding on the clinic's scale, what brings them, and the pack's fields (scale, its version `P06` or `3`, level 1–5, how they came and
+  the ambulance's call number, one of 13 complaints, the danger signs, the suggestion when the card made one, and why a less urgent
+  level was chosen). Retriage is a new entry; the latest is the level now. The two scales are the pack's open code systems
+  `casualty.ats` (the Australasian Triage Scale, ACEM P06: now, 10, 30, 60, 120 min) and `casualty.mts` (the Manchester Triage System,
+  3rd edition: its five categories and times only, now, 10, 60, 120, 240 min); the clinic's setting `casualty.scale` (Australasian by
+  default) changes only new triages. Its check refuses a level said two ways (`triage_mismatch`: one coding, its scale's system and
+  its level's code and word, the same level in its words, the scale's name in its code) and a triage that is not in a stay admitted
+  in this department, nor in one this department opens in the same Done (`not_in_stay`). One Done of the card writes the vitals, the triage, the base's
+  `urgent` for levels 1 and 2 (so the Encounter's priority is UR; false again when a retriage is 3–5) and the move to a bay. The
+  board's read (`casualty.board`, the owner's C1) gives each stay admitted here its latest triage and "seen": the first entry in the
+  stay by someone who may discharge here (a doctor's Take, note, order or prescription); an entry crossed out never counts, and a
+  correction counts from when it was written. The triage nurse (`casualty.triage_nurse`)
+  is built on the base's Nurse and also arrives and registers patients; `write:casualty.triage` is everyday for the base's Doctors and
+  Nurses. Demo: Heba Nabil (triage nurse) and Dr. Tamer Ezz in Emergency, which ticks Ward nursing after its own pack (the clinic's
+  choice); Karim Mahmoud (2, Resus 2, no doctor for 12 minutes), Hany Sherif (4, on the chairs 72 minutes), Nadia Ibrahim (not
+  triaged, 6 minutes). No client screen yet: the Patients tab, Arrived and the triage card are E2b's.
 
 ---
 
@@ -2129,4 +2160,11 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **one Done passes a stay to the next department, E1** (§4.2, §4.4, §5.6; the owner's Q3; lane `beds-er`): 08's
+  `base.presence_check` edited in place to read the whole set, one words entry (`not_linked`); no client change but one words entry.
+  34 suites (new `next_stay` 26), 1607 checks.
+- 2026-10-09: **Emergency, piece E2a: the server** (§5.6; lane `beds-er`): migration 18 (`casualty`: the triage on the base's
+  observation, the two scales as code systems, `casualty.scale`, the triage nurse, `casualty.board`, the setup `casualty.er`), its seed
+  and demo day, the ER ticking Ward nursing in `clinic_packs`, the regenerated shapes and logins. 35 suites (new `casualty` 62,
+  `demo` 86), 1676 checks; `test:demo` 8 groups. No browser pass (no client yet).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
