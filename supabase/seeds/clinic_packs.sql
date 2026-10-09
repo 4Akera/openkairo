@@ -23,17 +23,17 @@ begin
 end $$;
 
 -- The Theatre (spec §5.7, Q47 drawn: who ticks what): the surgeon's operation note and the anaesthetist's record are written there, so
--- the Theatre ticks surgery and anaesthesia too, its line has the Anaesthetic record beside the theatre list, the surgeon and the
+-- the Theatre ticks surgical and anaesthesia too, its line has the Anaesthetic record beside the theatre list, the surgeon and the
 -- anaesthetist hold their roles there; the Laboratory offers histopathology for the specimens sent at Sign out. Skipped while a pack is off.
 do $$
 declare c uuid := demo.base('clinic'); th uuid := demo.id('theatre', 'department');
 begin
-  if not (core.packs_used(c) @> array['theatre', 'surgery', 'anaesthesia']) then return; end if;
-  perform demo.tick(th, 'surgery');
+  if not (core.packs_used(c) @> array['theatre', 'surgical', 'anaesthesia']) then return; end if;
+  perform demo.tick(th, 'surgical');
   perform demo.tick(th, 'anaesthesia');
   perform demo.screen(th, 'theatre.list', true);
   perform demo.screen(th, 'anaesthesia.record');
-  perform demo.grant(demo.id('surgery', 'surgeon'), '00000000-0000-0000-0000-00000000e901', th);
+  perform demo.grant(demo.id('surgical', 'surgeon'), '00000000-0000-0000-0000-00000000e901', th);
   perform demo.grant(demo.id('anaesthesia', 'anaesthetist'), '00000000-0000-0000-0000-00000000eb01', th);
 end $$;
 do $$

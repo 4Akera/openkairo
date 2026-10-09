@@ -12,7 +12,7 @@ export const ageSex = (age: number, sex: string) => `${age} ${SEX[sex] ?? ''}`.t
 export const fullName = (p: { given_name: string; family_name: string }) => `${p.given_name} ${p.family_name}`
 
 const VISIT_WORDS: Record<VisitStatus, string> = { waiting: 'waiting', in_consult: 'with a doctor', pending: 'waiting for results', done: 'done', left: 'left', lapsed: 'lapsed', cancelled: 'cancelled', admitted: 'admitted', discharged: 'discharged' }
-/** where a found patient is now, in words: "Paediatrics · waiting", "Dermatology · away" */
+/** where a found patient is now, in words: "Paediatrics · waiting", "Surgery · away" */
 export const whereNow = (v: PatientHit['open_visits'][number]) => `${v.department_name} · ${v.present ? VISIT_WORDS[v.status] ?? v.status : 'away'}`
 
 /** what is happening to a queue row, in words */

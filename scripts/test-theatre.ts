@@ -12,7 +12,7 @@ let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
 const svc = (code: string, name: string) => ({ id: code, code, name, department_id: 'th', section_name: 'General surgery', steps: ['scheduled', 'operating'] })
 const OPS = [svc('ihr_mesh', 'Inguinal hernia repair, open mesh (Lichtenstein)'), svc('uhr_mesh', 'Umbilical hernia repair, mesh'), svc('lapchole', 'Laparoscopic cholecystectomy'), svc('lapappx', 'Laparoscopic appendicectomy')]
-const ctx: Ctx = { services: OPS, departments: [{ id: 'sc', name: 'Surgery clinic', packs: ['surgery'] }, { id: 'th', name: 'Theatre', packs: ['theatre'] }], problems: [], departmentId: 'sc', templates: [] }
+const ctx: Ctx = { services: OPS, departments: [{ id: 'sc', name: 'Surgery clinic', packs: [] }, { id: 'th', name: 'Theatre', packs: ['theatre'] }], problems: [], departmentId: 'sc', templates: [] }
 
 test('/op\'s words: the side, the priority, the stay, the anaesthetic wanted, the surgeon after "by", ? the question', () => {
   const s = opWords('lichtenstein right elective day spinal by Dr. Hesham Abdelaal')

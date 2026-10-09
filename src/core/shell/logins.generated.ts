@@ -50,7 +50,7 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'chemo@demo.com', name: 'Asmaa Farid', role: 'Chemotherapy nurse' },
     { email: 'oncology@demo.com', name: 'Dr. Hesham Abdallah', role: 'Oncologist' },
   ] },
-  { department: 'Surgery clinic', departmentId: '0f766d3a-8116-5d01-8688-43c892a35a56', people: [
+  { department: 'Surgery clinic', departmentId: '50a62a80-0700-5d15-8184-b6712bca74e5', people: [
     { email: 'surgery@demo.com', name: 'Dr. Hesham Abdelaal', role: 'Surgeon' },
   ] },
   { department: 'Pre-op clinic', departmentId: 'ef2aaf18-1883-50cc-8a26-684dd69969ac', people: [

@@ -16,7 +16,7 @@ export function parseOpnote(_rest: string, ctx: Ctx, seen: { orders: OrderLike[]
   const items: Parsed[] = [
     { function: 'procedure', action: 'write:procedure', kind: 'procedure', line: `Procedure · ${n.operation} · done`,
       params: { concept: { text: n.operation, codings: [] }, status: 'completed', performed: { value: today, precision: 'day' } } },
-    { function: 'surgery.opnote', action: 'write:surgery.opnote', kind: 'note', line: noteLine(n),
-      params: { kind: 'operation', heading: 'Operation note', text: noteText(n), surgery: n } }]
+    { function: 'surgical.opnote', action: 'write:surgical.opnote', kind: 'note', line: noteLine(n),
+      params: { kind: 'operation', heading: 'Operation note', text: noteText(n), surgical: n } }]
   return { ok: items }
 }

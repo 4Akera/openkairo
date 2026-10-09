@@ -104,7 +104,7 @@ export function parseChemo(rest: string, ctx: Ctx, seen: { regimens: Regimens; e
   const found = regimenNamed(seen.regimens.regimens, s.regimen)
   if (!found) return { error: `No regimen “${s.regimen}” in the clinic's list` }
   if (Array.isArray(found)) return { error: `“${s.regimen}” fits ${found.map((r) => r.name).join(', ')}: type more of it` }
-  return { ok: cycleItems(found, s, ctx, seen.entries) }
+  return { ok: cycleItems(found, s, ctx, seen.entries, ctx.now ?? new Date()) }
 }
 
 /** the cycle, each drug sent on, each toxicity graded: the drafts one /chemo line writes */

@@ -4,7 +4,7 @@ import * as lis from './lis'
 import * as billing from './billing'
 import * as radiology from './radiology'
 import * as oncology from './oncology'
-import * as surgery from './surgery'
+import * as surgical from './surgical'
 import * as theatre from './theatre'
 import * as anaesthesia from './anaesthesia'
-export const packs = { pharmacy, lis, billing, radiology, oncology, surgery, theatre, anaesthesia }
+export const packs = { pharmacy, lis, billing, radiology, oncology, surgical, theatre, anaesthesia }

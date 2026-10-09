@@ -67,7 +67,7 @@ export function freeSessions(sessions: Session[], usual: number, booked: Map<str
 export const freeWords = (f: Free) => `${f.free >= 60 ? `${Math.floor(f.free / 60)} h${f.free % 60 ? ` ${f.free % 60}` : ''}` : `${f.free} min`} free · from ${f.from}`
 export const dayWords = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
-// ── the WHO Surgical Safety Checklist (2009): each part's items, and who says each ──
+// ── the WHO safety checklist for surgery (2009): each part's items, and who says each ──
 export interface Item { key: string; text: string; who: 'nurse' | 'surgeon' | 'anaesthetist' | 'all' }
 export const WHO_ITEMS: Record<Part, Item[]> = {
   sign_in: [

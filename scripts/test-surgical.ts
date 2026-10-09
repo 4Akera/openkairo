@@ -1,9 +1,9 @@
 // Surgery (spec/openCare.md §5.7), as pure decisions: which orders are operations (by their service's steps, never a pack's name), the
 // banner's words ("for op · …", "op today · …"), the surgeon's template for an operation, /opnote's two drafts (the base's procedure
-// and the pack's operation note extending the base's note), the note's text and line.   npm run test:surgery
+// and the pack's operation note extending the base's note), the note's text and line.   npm run test:surgical
 import assert from 'node:assert/strict'
-import { isOperation, minutesBetween, noteLine, noteText, shortOp, surgeryWords, templateFor, templatesOf, type OrderLike } from '../src/packs/surgery/model'
-import { parseOpnote } from '../src/packs/surgery/line'
+import { isOperation, minutesBetween, noteLine, noteText, shortOp, surgeryWords, templateFor, templatesOf, type OrderLike } from '../src/packs/surgical/model'
+import { parseOpnote } from '../src/packs/surgical/line'
 import { draftEntries } from '../src/core/db/entries'
 import type { Ctx } from '../src/core/screens/visit/parse'
 
@@ -23,15 +23,15 @@ test('the banner: "for op" while one waits, "op today" while it is under way or 
   assert.equal(shortOp('Inguinal hernia repair, open mesh (Lichtenstein)'), 'inguinal hernia')
 })
 test('the surgeon\'s own template for the operation, else anyone\'s', () => {
-  const org = { organization: { id: 'c' }, settings: [{ key: 'surgery.templates', thing_id: 'c', data: { templates: [{ surgeon: 'Dr. A', operation: 'lapchole', steps: 'A' }, { operation: 'lapchole', steps: 'any' }] } }] }
+  const org = { organization: { id: 'c' }, settings: [{ key: 'surgical.templates', thing_id: 'c', data: { templates: [{ surgeon: 'Dr. A', operation: 'lapchole', steps: 'A' }, { operation: 'lapchole', steps: 'any' }] } }] }
   assert.equal(templateFor(templatesOf(org), 'lapchole', 'Dr. A')?.steps, 'A'); assert.equal(templateFor(templatesOf(org), 'lapchole', 'Dr. B')?.steps, 'any')
 })
 test('/opnote: the base\'s procedure, done today, and the pack\'s operation note from the template; no operation, no note', () => {
   const r = parseOpnote('', ctx, { orders: [o({ step_key: 'operating' })], services: SVC as never, templates: [{ operation: 'lapchole', steps: '1. Ports.', findings: 'Stones.' }] })
-  assert.ok(r && 'ok' in r); assert.deepEqual(r.ok.map((p) => p.function), ['procedure', 'surgery.opnote'])
+  assert.ok(r && 'ok' in r); assert.deepEqual(r.ok.map((p) => p.function), ['procedure', 'surgical.opnote'])
   assert.equal((r.ok[0].params.performed as { value: string }).value, '2026-10-08')
   const note = draftEntries({ id: 'n', function: r.ok[1].function, params: r.ok[1].params }, { patientId: 'p', departmentId: 'th' })[0]
-  assert.equal(note.type, 'surgery.opnote'); assert.match(String((note.data as { text: string }).text), /Findings: Stones\./)
+  assert.equal(note.type, 'surgical.opnote'); assert.match(String((note.data as { text: string }).text), /Findings: Stones\./)
   const none = parseOpnote('', ctx, { orders: [], services: SVC as never, templates: [] }); assert.ok(none && 'error' in none)
 })
 test('the note\'s words: blood loss, drain, complications; the minutes between the times', () => {
@@ -39,4 +39,4 @@ test('the note\'s words: blood loss, drain, complications; the minutes between t
   assert.equal(noteLine(n0), 'Operation note · Laparoscopic cholecystectomy · 08:55–09:40 · blood loss 30 mL · no drain · no complications')
   assert.match(noteText({ ...n0, complications: ['bile spilled'] }), /bile spilled/); assert.equal(minutesBetween('08:55', '09:40'), 45)
 })
-console.log(`surgery: ${n} groups passed`)
+console.log(`surgical: ${n} groups passed`)

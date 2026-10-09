@@ -1,14 +1,14 @@
--- The surgery pack's day (spec/openCare.md §5.1 rule 9, §5.7; the pictures #surg-clinic, #surg-opnote). Its own patients: Reda
+-- The surgical pack's day (spec/openCare.md §5.1 rule 9, §5.7; the pictures #surg-clinic, #surg-opnote). Its own patients: Reda
 -- Abdelhady (58; a right inguinal hernia for eight months, a stent in 2022, diabetes; in consult with Dr. Hesham now, his history and
 -- examination signed: the decision to operate is typed live, /op lichtenstein right) and Kamal Fouda (47; haemorrhoids; an operation
 -- decided 14 weeks ago: the clinic's day puts it on the Theatre's To schedule). Times relative to the load; ids in the pack's namespace;
 -- a reload erases these patients first.
-select demo.layer('surgery');
+select demo.layer('surgical');
 
 do $$
-declare sc uuid := demo.id('surgery', 'clinic'); dr uuid := demo.id('surgery', 'surgeon'); day int := 60 * 24; v uuid;
+declare sc uuid := demo.id('surgical', 'clinic'); dr uuid := demo.id('surgical', 'surgeon'); day int := 60 * 24; v uuid;
 begin
-  perform demo.patient(demo.id('surgery', 'patient:reda'), array['Reda'], 'Abdelhady', 'male', demo.born(58, 140), '+201006672013');
+  perform demo.patient(demo.id('surgical', 'patient:reda'), array['Reda'], 'Abdelhady', 'male', demo.born(58, 140), '+201006672013');
   perform demo.w(dr, jsonb_build_array(
     demo.e('problem', sc, null, demo.ago(4000 * 60), demo.problem('E11.9', 'Type 2 diabetes', jsonb_build_object('onset', jsonb_build_object('value', to_char(demo.now() - interval '11 years', 'YYYY'), 'precision', 'year')))),
     demo.e('problem', sc, null, demo.ago(4000 * 60), demo.problem('I10', 'Hypertension', jsonb_build_object('onset', jsonb_build_object('value', to_char(demo.now() - interval '14 years', 'YYYY'), 'precision', 'year')))),
@@ -27,6 +27,6 @@ begin
       E'Right groin swelling for 8 months, bigger on standing, aches after work; never stuck, no vomiting.\nReducible right inguinal swelling with a cough impulse, not into the scrotum; the left side and both testes normal.\nBefore: open appendicectomy 1989 · a general anaesthetic, no problems he knows of.'))), null, false, sc, dr);
 
   -- Kamal: haemorrhoids, decided 14 weeks ago; To schedule, where the Theatre is on
-  perform demo.patient(demo.id('surgery', 'patient:kamal'), array['Kamal'], 'Fouda', 'male', demo.born(47, 60), '+201114470928');
+  perform demo.patient(demo.id('surgical', 'patient:kamal'), array['Kamal'], 'Fouda', 'male', demo.born(47, 60), '+201114470928');
   perform demo.w(dr, jsonb_build_array(demo.e('problem', sc, null, demo.ago(98 * day), demo.problem('K64.9', 'Haemorrhoids, third degree'))));
 end $$;

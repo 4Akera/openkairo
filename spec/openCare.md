@@ -1645,24 +1645,24 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   list shows of the pre-op, the anaesthetic record and the consent is read by shape from what refers to the operation, never by another
   pack's name (rule: no pack names another). Demo: the Theatre, Iman Zidan (theatre@demo.com); Ghada Sharaf (operating, Sign out to say),
   Amr Nassar (under a spinal), Aya Shehata (To schedule, urgent), Ziad Hafez (an emergency); the clinic's choices (`seeds/clinic_packs.sql`):
-  the Theatre ticks surgery and anaesthesia, the Anaesthetic record on its line, the surgeon and anaesthetist hold their roles there, the
+  the Theatre ticks the surgical and anaesthesia packs, the Anaesthetic record on its line, the surgeon and anaesthetist hold their roles there, the
   Laboratory offers histopathology. Tests: `supabase/tests/theatre.sql`, `npm run test:theatre`. *Differences:* printing the list and the
   consent form waits for printing (not in core-v3); the pre-op clinic's booking is the bookings pack's; the operating list's Pre-op
   column fills once the pre-op refers to the operation (a composer draft cannot refer: the same core question as the cancer's change),
   its ASA from the anaesthetic record meanwhile; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
   anaesthesia out of the theatre pack).
-- *Built 2026-10-08 (lane `clinics-theatre`), surgery* (`surgery`, migration 34, role block e9): the operation note `surgery.opnote` (the
-  base's note plus `surgery` {the operation, surgeon, assistant, anaesthetist and technique, the times, why, findings, steps, closure,
+- *Built 2026-10-08 (lane `clinics-theatre`), surgery* (`surgical`, migration 34, role block e9): the operation note `surgical.opnote`
+  (the base's note plus `surgical` {the operation, surgeon, assistant, anaesthetist and technique, the times, why, findings, steps, closure,
   blood loss, drain, complications, specimen, implants}); the operation itself the base's procedure. The surgeons' templates are the
-  clinic setting `surgery.templates` (by surgeon and operation code; the post-op preset each offers); post-op orders are the base's
-  presets (`#postop`: the /rx lines and the plan, signed with the note, Q46 drawn). Surgeon (`surgery.surgeon`, built on Doctor,
-  `write:surgery.opnote`). The setup `surgery.clinic`. Client: the Surgery section (today's operation with its times, anaesthetic,
+  clinic setting `surgical.templates` (by surgeon and operation code; the post-op preset each offers); post-op orders are the base's
+  presets (`#postop`: the /rx lines and the plan, signed with the note, Q46 drawn). Surgeon (`surgical.surgeon`, built on Doctor,
+  `write:surgical.opnote`). The setup `surgical.clinic`. Client: the Surgery section (today's operation with its times, anaesthetic,
   specimen and implants; planned operations and where each stands; earlier procedures), its banner word ("for op · inguinal hernia",
   "op today · lap chole"), `/opnote` (the procedure and the note, from the surgeon's own template; the card fills the times, anaesthetist
   and blood loss from the anaesthetic record and the specimen and implants from Sign out, read by shape). Operations are told from other
   orders by their service's steps (it moves through "operating"). Demo: the Surgery clinic, Dr. Hesham Abdelaal (surgery@demo.com); Reda
   Abdelhady in consult (the decision to operate typed live: `/op lichtenstein right`), Kamal Fouda (a haemorrhoidectomy on To schedule);
-  the templates and two post-op presets. Tests: `supabase/tests/surgery.sql`, `npm run test:surgery`. *Differences:* the consent form's
+  the templates and two post-op presets. Tests: `supabase/tests/surgical.sql`, `npm run test:surgical`. *Differences:* the consent form's
   print waits for printing.
 - *Built 2026-10-08 (lane `clinics-theatre`), anaesthesia* (`anaesthesia`, migration 36, role block eb): the pre-op `anaesthesia.preop`
   (history, airway, ASA I–VI and E, plan, Fit or Not yet, the medicines to stop, the risks told); RCRI (Lee 1999), STOP-BANG (Chung
@@ -1684,7 +1684,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
   ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet waits for printing;
   recovery's ward nursing tick waits for the beds lane; Recovery's line shows at the board's next render (a pack's tile line is pure and
-  cannot ask the board to render again when its read lands: a core question).
+  cannot ask the board to render again when its read lands: a core question); EtCO₂, the agent and FiO₂ stay the pack's own on each
+  column, as drawn: FiO₂ moves to the base's key at integration if the beds lane's FiO₂ and O₂ flow rows land.
 
 ---
 

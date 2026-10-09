@@ -596,13 +596,13 @@ export interface Step {
   status: 'received' | 'accepted' | 'rejected' | 'in-progress' | 'on-hold' | 'completed' | 'cancelled' | 'failed'
   step?: string
 }
-/** surgery.opnote v1 (surgery) */
-export type SurgeryOpnote = {
+/** surgical.opnote v1 (surgical) */
+export type SurgicalOpnote = {
   attachments?: Attachment[]
   heading?: string
   kind?: string
   language?: string
-  surgery?: {
+  surgical?: {
     anaesthetist?: string
     assistant?: string
     blood_loss?: number
@@ -959,8 +959,8 @@ export interface ServiceSetting {
   section?: string
   steps?: string[]
 }
-/** setting surgery.templates (surgery; owner organization) */
-export interface SurgeryTemplatesSetting {
+/** setting surgical.templates (surgical; owner organization) */
+export interface SurgicalTemplatesSetting {
   templates: {
     closure?: string
     findings?: string
@@ -1039,7 +1039,7 @@ export interface EntryData {
   'score': Score
   'seen': Seen
   'step': Step
-  'surgery.opnote': SurgeryOpnote
+  'surgical.opnote': SurgicalOpnote
   'theatre.check': TheatreCheck
   'theatre.op': TheatreOp
   'theatre.step': TheatreStep
@@ -1081,7 +1081,7 @@ export interface SettingData {
   'radiology.options': RadiologyOptionsSetting
   'score.signed_off': ScoreSignedOffSetting
   'service': ServiceSetting
-  'surgery.templates': SurgeryTemplatesSetting
+  'surgical.templates': SurgicalTemplatesSetting
   'theatre.operations': TheatreOperationsSetting
   'theatre.rooms': TheatreRoomsSetting
 }

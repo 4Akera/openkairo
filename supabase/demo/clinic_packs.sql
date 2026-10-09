@@ -24,13 +24,13 @@ end $$;
 do $$
 declare c uuid := demo.base('clinic'); th uuid := demo.id('theatre', 'department'); day int := 60 * 24;
 begin
-  if not (core.packs_used(c) @> array['theatre', 'surgery', 'anaesthesia']) then return; end if;
-  perform demo.use(demo.id('surgery', 'patient:kamal'));
-  perform demo.w(demo.id('surgery', 'surgeon'), jsonb_build_array(demo.e('theatre.op', demo.id('surgery', 'clinic'), null, demo.ago(98 * day), jsonb_build_object('service', jsonb_build_object(
+  if not (core.packs_used(c) @> array['theatre', 'surgical', 'anaesthesia']) then return; end if;
+  perform demo.use(demo.id('surgical', 'patient:kamal'));
+  perform demo.w(demo.id('surgical', 'surgeon'), jsonb_build_array(demo.e('theatre.op', demo.id('surgical', 'clinic'), null, demo.ago(98 * day), jsonb_build_object('service', jsonb_build_object(
     'id', core.setup_id(th, 'service', 'haemorrhoid'), 'code', 'haemorrhoid', 'name', 'Haemorrhoidectomy'), 'department_id', th, 'priority', 'routine', 'status', 'active',
     'theatre', '{"side":"none","technique":"spinal","stay":"day","surgeon":"Dr. Mona Tawfik","usual_min":40}'::jsonb))));
   perform demo.use(demo.id('anaesthesia', 'patient:hamed'));
-  perform demo.w(demo.id('surgery', 'surgeon'), jsonb_build_array(demo.e('theatre.op', demo.id('surgery', 'clinic'), null, demo.ago(77 * day), jsonb_build_object('service', jsonb_build_object(
+  perform demo.w(demo.id('surgical', 'surgeon'), jsonb_build_array(demo.e('theatre.op', demo.id('surgical', 'clinic'), null, demo.ago(77 * day), jsonb_build_object('service', jsonb_build_object(
     'id', core.setup_id(th, 'service', 'ihr_mesh'), 'code', 'ihr_mesh', 'name', 'Inguinal hernia repair, open mesh (Lichtenstein)'), 'department_id', th, 'priority', 'routine', 'status', 'active',
     'theatre', '{"side":"left","technique":"anaesthetist","stay":"admitted","surgeon":"Dr. Hesham Abdelaal","usual_min":60}'::jsonb))));
 end $$;

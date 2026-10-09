@@ -1,4 +1,4 @@
-// The surgery pack's words (spec/openCare.md §5.7; the pictures #surg-clinic, #surg-opnote): which of a patient's orders are
+// The surgical pack's words (spec/openCare.md §5.7; the pictures #surg-clinic, #surg-opnote): which of a patient's orders are
 // operations (a service the department answering it moves through operating), the banner's "for op" and "op today", the surgeon's
 // template for an operation, the operation note's line. Pure: a node test imports it.
 
@@ -26,7 +26,7 @@ export function surgeryWords(orders: OrderLike[], services: ServiceLike[], notes
 export interface Template { surgeon?: string; operation: string; why?: string; findings?: string; steps?: string; closure?: string; postop?: string }
 type SettingsOrg = { organization: { id: string }; settings: { key: string; thing_id: string; data: Record<string, unknown> }[] }
 export const templatesOf = (org: SettingsOrg | null | undefined): Template[] =>
-  ((org?.settings.find((s) => s.key === 'surgery.templates' && s.thing_id === org.organization.id)?.data ?? {}) as { templates?: Template[] }).templates ?? []
+  ((org?.settings.find((s) => s.key === 'surgical.templates' && s.thing_id === org.organization.id)?.data ?? {}) as { templates?: Template[] }).templates ?? []
 /** the surgeon's own template for this operation, else anyone's for it */
 export const templateFor = (all: Template[], code: string | null | undefined, surgeon: string | null | undefined) =>
   all.find((t) => t.operation === code && t.surgeon === surgeon) ?? all.find((t) => t.operation === code && !t.surgeon) ?? all.find((t) => t.operation === code)

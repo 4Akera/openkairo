@@ -26,7 +26,7 @@
     "test:billing": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing.ts",
     "test:radiology": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-radiology.ts",
     "test:oncology": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-oncology.ts",
-    "test:surgery": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-surgery.ts",
+    "test:surgical": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-surgical.ts",
     "test:theatre": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-theatre.ts",
     "test:anaesthesia": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-anaesthesia.ts",
     "test:clinics-core": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-clinics-core.ts",

@@ -165,7 +165,7 @@ select core.declare_type('theatre.step', 1, 'theatre',
     '{"type":"object","additionalProperties":false,"required":["op"],"properties":{"op":{"type":"string","format":"uuid"},
       "room":{"type":"string"},"starts":{"$ref":"#/$defs/datetime"},"position":{"type":"integer","minimum":0}}}'),
   'theatre.step_line(jsonb)', array['Task'], base_type => 'step', feeds => array['theatre.slots'], labels => '{"en":"Theatre step"}');
--- a part of the WHO Surgical Safety Checklist (2009), signed by who said it when it was said: its items (each done or why not, who
+-- a part of the WHO safety checklist for surgery (2009), signed by who said it when it was said: its items (each done or why not, who
 -- said it), and at Sign out the counts, the implants with their lot, the specimen sent
 select core.declare_type('theatre.check', 1, 'theatre',
   '{"type":"object","additionalProperties":false,"required":["op","part","items"],"properties":{

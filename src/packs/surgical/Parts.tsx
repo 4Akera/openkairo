@@ -18,15 +18,15 @@ const COMPLICATIONS = ['None', 'Bile spilled', 'Stones spilled', 'Bleeding', 'Co
 
 /** what refers to the operation (the anaesthetic record, the checklist's Sign out), read once */
 function useAbout(deptId: string | undefined, op: string | undefined) {
-  return useQuery({ queryKey: ['surgery.about', deptId, op], enabled: !!deptId && !!op, staleTime: 30_000,
+  return useQuery({ queryKey: ['surgical.about', deptId, op], enabled: !!deptId && !!op, staleTime: 30_000,
     queryFn: async () => (await read<{ entries: ServerEntry[] | null }>({ shape: 'item', department_id: deptId, item: op })).entries ?? [] })
 }
 const latestWith = (es: ServerEntry[], f: (d: Record<string, unknown>) => boolean) => es.filter((e) => !e.hidden && e.data && f(e.data)).sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0]?.data
 
 export function OpNoteCard({ q, set }: CardEditorProps) {
   const { dept, org } = useDepartment()
-  const n = (q.surgery ?? {}) as OpNote
-  const put = (patch: Partial<OpNote>) => { const next = { ...n, ...patch }; set({ surgery: next, text: noteText(next) }) }
+  const n = (q.surgical ?? {}) as OpNote
+  const put = (patch: Partial<OpNote>) => { const next = { ...n, ...patch }; set({ surgical: next, text: noteText(next) }) }
   const about = useAbout(dept?.id, n.op)
   // once for each draft (a new line is a new draft, with no surgeon yet): the surgeon's own template, the record's times and anaesthetic,
   // Sign out's specimen and implants, where the note has none
@@ -67,7 +67,7 @@ export function OpNoteCard({ q, set }: CardEditorProps) {
     <p className="text-12 text-faint"><span className="font-mono">#postop</span> on the next line brings the post-op lines (the base's preset), each removable</p>
   </div>
 }
-export const opNoteCardLine = (p: Record<string, unknown>) => noteLine(p.surgery as OpNote)
+export const opNoteCardLine = (p: Record<string, unknown>) => noteLine(p.surgical as OpNote)
 
 // ── the Surgery section ──
 export const opsOf = (rows: OrderLike[], services: { id: string; steps?: string[] }[]) => rows.filter((o) => isOperation(o, services as never))
@@ -75,14 +75,14 @@ const STEP: Record<string, string> = { scheduled: 'scheduled', sent_for: 'sent f
 export function SurgerySection({ p, own }: SectionBody) {
   const orders = opsOf((p.rec.tables['base.orders']?.rows ?? []) as OrderLike[], p.ctx.org?.services ?? [])
   const procs = (p.facts ?? []).filter((e) => e.type === 'procedure' && !e.hidden).sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
-  const notes = own.shown.filter((e) => e.data?.surgery).sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+  const notes = own.shown.filter((e) => e.data?.surgical).sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
   const today = new Date().toISOString().slice(0, 10)
   const todays = notes.filter((e) => e.occurred_at.slice(0, 10) === today)
   const planned = orders.filter((o) => OPEN.has(o.status))
   const before = procs.filter((e) => e.occurred_at.slice(0, 10) !== today)
   if (!orders.length && !procs.length && !notes.length) return <Empty size="sm">No operation on record</Empty>
   return <div className="grid gap-0.5">
-    {todays.map((e) => { const n = e.data!.surgery as OpNote
+    {todays.map((e) => { const n = e.data!.surgical as OpNote
       return <div key={e.id}><Row k="Today"><button type="button" onClick={() => p.open(e.id)} className="rounded-sm text-start hover:underline focus-ring">{n.operation}</button>{n.times?.from ? ` · knife ${n.times.from}, closed ${n.times.to}` : ''}</Row>
         {n.anaesthetist && <Row k="Anaesthetic">{[n.technique, n.anaesthetist].filter(Boolean).join(' · ')}</Row>}
         {n.specimen && <Row k="Sent">{n.specimen}</Row>}{n.implants && <Row k="Implants">{n.implants}</Row>}</div> })}
