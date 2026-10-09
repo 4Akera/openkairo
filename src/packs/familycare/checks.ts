@@ -4,13 +4,13 @@
 import type { Organization } from '@core/db/types'
 import { settingIn } from '@core/screens/settings/form/model'
 
-export const PACK = 'family_medicine'
+export const PACK = 'familycare'
 export interface FamilyCheck { name: string; who?: string; sex?: 'any' | 'female' | 'male'; from?: number; to?: number; bmi_from?: number; bmi_age_from?: number
   every_years?: number; once?: boolean; codes: string[]; met_by?: string; order?: string }
 /** the clinic's settings (a clinic-wide key is kept under the clinic's own id) */
 type Org = (Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'> & { organization?: { id: string } }) | undefined
-export const checksOf = (org: Org): FamilyCheck[] => ((settingIn(org, 'family_medicine.checks' as never, org?.organization?.id ?? null) as { checks?: FamilyCheck[] }).checks ?? [])
-export const askAtNewPatient = (org: Org) => (settingIn(org, 'family_medicine.files' as never, org?.organization?.id ?? null) as { ask_at_new_patient?: boolean }).ask_at_new_patient !== false
+export const checksOf = (org: Org): FamilyCheck[] => ((settingIn(org, 'familycare.checks' as never, org?.organization?.id ?? null) as { checks?: FamilyCheck[] }).checks ?? [])
+export const askAtNewPatient = (org: Org) => (settingIn(org, 'familycare.files' as never, org?.organization?.id ?? null) as { ask_at_new_patient?: boolean }).ask_at_new_patient !== false
 
 export interface Person { sex: string | null | undefined; born: string | null | undefined }
 /** one thing done that may meet a check: its codes, when (a value by its code, a coded observation or procedure) */

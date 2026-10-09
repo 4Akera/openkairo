@@ -17,11 +17,11 @@ registerCommand({ name: 'checks', pack: PACK, groupTitle: 'Family medicine', tit
   example: '/checks', action: 'write:order', writes: ['order'], parse: (rest, ctx) => parseChecks(rest, ctx), note: (items, ctx) => <ChecksNote items={items} ctx={ctx} />,
   // the command alone is the whole of it: what is due now, the due ones a service here does drafted
   empty: (ctx) => { const r = parseChecks('', ctx); return r && 'ok' in r ? r.ok : [] } })
-registerSection({ key: 'family_medicine.file', title: 'Family', types: [], fit: ANYONE, Body: FamilySection,
+registerSection({ key: 'familycare.file', title: 'Family', types: [], fit: ANYONE, Body: FamilySection,
   word: (x) => { const f = fileSeen(x.identity.id); return f ? { word: String(f.members.length) } : null } })
-registerSection({ key: 'family_medicine.checks', title: 'Checks', types: [], fit: ANYONE, Body: ChecksSection,
+registerSection({ key: 'familycare.checks', title: 'Checks', types: [], fit: ANYONE, Body: ChecksSection,
   word: (x) => { const w = dueWords(checkStates(x)); return w ? { word: w.replace(/ checks? due$/, ' due') } : null }, summary: (x) => dueWords(checkStates(x)) })
-registerBannerWords({ key: 'family_medicine.checks', types: [], words: (x) => { const w = dueWords(checkStates({ ...x, facts: undefined })); return w ? [{ word: w, rank: 2, tone: 'warn' }] : [] } })
-registerScreen('family_medicine.files', Families)
+registerBannerWords({ key: 'familycare.checks', types: [], words: (x) => { const w = dueWords(checkStates({ ...x, facts: undefined })); return w ? [{ word: w, rank: 2, tone: 'warn' }] : [] } })
+registerScreen('familycare.files', Families)
 registerNewPatientStep(PACK, { show: showStep, Part: FamilyStep, missing: stepMissing, after: afterStep })
 export const key = PACK

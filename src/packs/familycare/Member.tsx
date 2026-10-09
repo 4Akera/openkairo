@@ -15,7 +15,7 @@ export function MemberRow({ m, dept, viewer, here }: { m: Member; dept: Departme
   const { org } = useDepartment(); const navigate = useNavigate()
   const r = useRecord(m.patient_id, dept.id); const packs = usePackEntries(m.patient_id, wordTypes())
   const p = r.data?.patient; const identity = r.data?.identity
-  const words = r.data && identity ? packWordsOf(wordDefs(), { rec: r.data.server, ctx: { org, me: org?.me.id ?? '', departmentId: dept.id }, identity, packs: packs.data }, dept.packs.filter((x) => x !== 'family_medicine')) : null
+  const words = r.data && identity ? packWordsOf(wordDefs(), { rec: r.data.server, ctx: { org, me: org?.me.id ?? '', departmentId: dept.id }, identity, packs: packs.data }, dept.packs.filter((x) => x !== 'familycare')) : null
   const checks = r.data ? checksFor(checksOf(org), { sex: p?.sex, born: p?.born_on }, metOf((r.data.server.tables['base.values']?.rows ?? []))) : []
   const said = [...(words ? [...words.shown, ...words.more] : []).map((w) => ({ word: w.word, tone: w.tone })), ...(dueWords(checks) ? [{ word: `${dueWords(checks)!} by age`, tone: 'warn' as const }] : [])]   // told apart from a condition's checks
   return <li className={cn('grid gap-0.5 py-1.5', here && 'rail ps-2')}>

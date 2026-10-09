@@ -1,8 +1,8 @@
 // The family pack's pure half (spec/openCare.md §5.7, Q49; pictures #family-folder, #family-checks): the checks due by age and sex (and a
 // BMI from an age), each met by an entry with one of its codes within its interval (or once); the member's relation as the viewer reads
-// it; the desk's step asked only while the setting says so, and what it still needs. No browser, no database. npm run test:family_medicine
+// it; the desk's step asked only while the setting says so, and what it still needs. No browser, no database. npm run test:familycare
 import assert from 'node:assert/strict'
-import { askAtNewPatient, checksFor, checksOf, dueWords, metOf, relationTo, stepMissing, type FamilyCheck } from '../src/packs/family_medicine/checks'
+import { askAtNewPatient, checksFor, checksOf, dueWords, metOf, relationTo, stepMissing, type FamilyCheck } from '../src/packs/familycare/checks'
 import type { Organization } from '../src/core/db/types'
 
 let n = 0
@@ -13,9 +13,9 @@ const CHECKS: FamilyCheck[] = [
   { name: 'Blood pressure', who: 'everyone 18 and over', sex: 'any', from: 18, every_years: 1, codes: ['loinc:8480-6'] },
   { name: 'Sugar', who: '35 and over; younger with BMI 25+', sex: 'any', from: 35, bmi_from: 25, bmi_age_from: 18, every_years: 3, codes: ['loinc:4548-4', 'loinc:1558-6'] },
   { name: 'Lipids', sex: 'male', from: 40, every_years: 5, codes: ['loinc:2089-1'] },
-  { name: 'Cervical screening', who: 'women 25–65', sex: 'female', from: 25, to: 65, every_years: 3, codes: ['family_medicine.check:cervical'] },
+  { name: 'Cervical screening', who: 'women 25–65', sex: 'female', from: 25, to: 65, every_years: 3, codes: ['familycare.check:cervical'] },
   { name: 'Hepatitis C', sex: 'any', from: 18, once: true, codes: ['loinc:16128-1'] }]
-const org = (ask?: boolean) => ({ settings: [{ key: 'family_medicine.checks', thing_id: null, data: { checks: CHECKS } }, ...(ask === undefined ? [] : [{ key: 'family_medicine.files', thing_id: null, data: { ask_at_new_patient: ask } }])],
+const org = (ask?: boolean) => ({ settings: [{ key: 'familycare.checks', thing_id: null, data: { checks: CHECKS } }, ...(ask === undefined ? [] : [{ key: 'familycare.files', thing_id: null, data: { ask_at_new_patient: ask } }])],
   settingKeys: [], datatypes: {} }) as unknown as Organization
 
 test('Basma, 34, BMI 31: blood pressure met today, sugar due (BMI 25+, last 2022), cervical never done, hepatitis C once and done', () => {
@@ -30,7 +30,7 @@ test('by age and sex: a man of 45 gets lipids, not cervical screening; a child n
   assert.deepEqual(checksFor(CHECKS, { sex: 'male', born: '2020-01-01' }, [], now), [])
   assert.deepEqual(checksFor(CHECKS, { sex: 'unknown', born: '1980-01-01' }, [], now).map((s) => s.check.name), ['Blood pressure', 'Sugar', 'Hepatitis C'])
   assert.deepEqual(checksFor(CHECKS, { sex: 'female', born: null }, [], now), [], 'no birth date: nothing worked out')
-  const coded = checksFor(CHECKS, { sex: 'female', born: '1980-01-01' }, metOf([], [{ codes: ['family_medicine.check:cervical'], occurred_at: ago(100) }]), now)
+  const coded = checksFor(CHECKS, { sex: 'female', born: '1980-01-01' }, metOf([], [{ codes: ['familycare.check:cervical'], occurred_at: ago(100) }]), now)
   assert.equal(coded.find((s) => s.check.name === 'Cervical screening')?.state, 'met', 'met by a coded observation')
   assert.equal(dueWords([]), null)
 })

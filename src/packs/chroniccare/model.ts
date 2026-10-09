@@ -5,8 +5,8 @@
 import type { Organization } from '@core/db/types'
 import { settingIn } from '@core/screens/settings/form/model'
 
-export const PACK = 'chronic_care'
-export const TARGET_TYPE = 'chronic_care.target'
+export const PACK = 'chroniccare'
+export const TARGET_TYPE = 'chroniccare.target'
 export type Op = '<' | '<=' | '>' | '>='
 export interface Target { measure: string; op: Op; value: number; value2?: number }
 export interface Check { key?: string; name: string; codes: string[]; every_months: number; off_target_months?: number }
@@ -14,7 +14,7 @@ export interface Condition { key: string; name: string; codes: string[]; targets
 export interface Conditions { window_months: number; conditions: Condition[] }
 /** the clinic's settings (a clinic-wide key is kept under the clinic's own id) */
 type Org = (Pick<Organization, 'settings' | 'settingKeys' | 'datatypes'> & { organization?: { id: string } }) | undefined
-export const conditionsOf = (org: Org): Conditions => { const s = settingIn(org, 'chronic_care.conditions' as never, org?.organization?.id ?? null) as Partial<Conditions>
+export const conditionsOf = (org: Org): Conditions => { const s = settingIn(org, 'chroniccare.conditions' as never, org?.organization?.id ?? null) as Partial<Conditions>
   return { window_months: s.window_months ?? 18, conditions: s.conditions ?? [] } }
 
 /** the measures a target may name: their name, unit, the codes whose latest value it reads (a pressure's two) */

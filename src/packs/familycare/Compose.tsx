@@ -18,7 +18,7 @@ export function parseChecks(_rest: string, ctx: Ctx): Result {
   if (!st.length) return { error: 'No check of the clinic’s list for this age and sex (Settings → Packs → Family medicine)' }
   const items: Parsed[] = st.filter((s) => s.state === 'due').flatMap((s) => {
     const svc = (ctx.services as Svc[]).find((x) => (s.check.order && x.code === s.check.order) || (x.fields ?? []).some((f) => s.check.codes.includes(f.code)))
-    return svc ? [{ function: 'order', kind: 'request', action: 'write:order', tag: 'family_medicine:checks', params: { service_id: svc.id, priority: 'routine' },
+    return svc ? [{ function: 'order', kind: 'request', action: 'write:order', tag: 'familycare:checks', params: { service_id: svc.id, priority: 'routine' },
       line: `${svc.name} → ${ctx.departments.find((d) => d.id === svc.department_id)?.name ?? ''}`.trim() }] : [] })
   return items.length ? { ok: items } : { error: st.some((s) => s.state === 'due') ? 'What is due here needs no order from this clinic: see the list under the line' : 'Every check is met' }
 }

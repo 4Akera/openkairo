@@ -3,8 +3,8 @@
 -- doctor, Dr. Hazem Ouda (the base's Doctor). The other packs Family medicine uses, and the desk's file at New patient, are the clinic's
 -- choices (supabase/seeds/clinic_packs.sql). Ids in the pack's own namespace; run again, it adds only what is missing.
 
-select demo.layer('family_medicine');
-select demo.pack_on('family_medicine');
-select demo.setup(demo.id('family_medicine', 'department'), 'family_medicine.medicine', 'Family medicine', 11);
-select demo.person(demo.id('family_medicine', 'doctor'), 'family@demo.com', 'Dr. Hazem Ouda', 'Dr');
-select demo.grant(demo.id('family_medicine', 'doctor'), '00000000-0000-0000-0000-00000000c002', demo.id('family_medicine', 'department'));
+select demo.layer('familycare');
+select demo.pack_on('familycare');
+select demo.setup(demo.id('familycare', 'department'), 'familycare.medicine', 'Family medicine', 11);
+select demo.person(demo.id('familycare', 'doctor'), 'family@demo.com', 'Dr. Hazem Ouda', 'Dr');
+select demo.grant(demo.id('familycare', 'doctor'), '00000000-0000-0000-0000-00000000c002', demo.id('familycare', 'department'));

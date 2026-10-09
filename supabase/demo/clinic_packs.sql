@@ -21,10 +21,10 @@ end $$;
 -- The family's children in Family medicine, which uses the immunisation pack too: Yassin (6) has every national dose to 18 months
 -- from his mother's card, and Malak (14 months) to 12 months, copied by Dr. Hazem Ouda. Skipped while either pack is off.
 do $$
-declare c uuid := demo.base('clinic'); fm uuid := demo.id('family_medicine', 'department'); hz uuid := demo.id('family_medicine', 'doctor'); r record; b date; e jsonb;
+declare c uuid := demo.base('clinic'); fm uuid := demo.id('familycare', 'department'); hz uuid := demo.id('familycare', 'doctor'); r record; b date; e jsonb;
 begin
-  if not (core.packs_used(c) @> array['family_medicine', 'vaccines']) then return; end if;
-  foreach e in array array[jsonb_build_object('id', demo.id('family_medicine', 'patient:yassin'), 'to', 545), jsonb_build_object('id', demo.id('family_medicine', 'patient:malak'), 'to', 365)] loop
+  if not (core.packs_used(c) @> array['familycare', 'vaccines']) then return; end if;
+  foreach e in array array[jsonb_build_object('id', demo.id('familycare', 'patient:yassin'), 'to', 545), jsonb_build_object('id', demo.id('familycare', 'patient:malak'), 'to', 365)] loop
     perform demo.use((e ->> 'id')::uuid);
     select p.birth_date into b from core.patients p where p.organization_id = c and p.id = (e ->> 'id')::uuid;
     perform demo.w(hz, (select jsonb_agg(demo.e('vaccines.dose', fm, null, demo.ago(60), jsonb_strip_nulls(jsonb_build_object('status', 'completed',

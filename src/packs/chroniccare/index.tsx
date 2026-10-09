@@ -17,11 +17,11 @@ import { bannerWords, chipWord, summaryLine } from './words'
 registerCommand({ name: 'review', pack: PACK, groupTitle: 'Chronic care', title: 'Yearly review', label: 'The yearly review of a condition: feet, eyes and the tests due',
   example: '/review dm', action: 'write:observation', writes: ['observation', 'order'], parse: (rest, ctx) => parseReview(rest, ctx), note: (items, ctx) => <ReviewNote items={items} ctx={ctx} /> })
 registerCommand({ name: 'target', pack: PACK, groupTitle: 'Chronic care', title: 'Own target', label: 'A patient’s own target, with its reason',
-  example: '/target htn bp < 150/90 ; 81, falls', action: 'write:chronic_care.target', writes: [TARGET_TYPE], parse: (rest, ctx) => parseTarget(rest, ctx) })
+  example: '/target htn bp < 150/90 ; 81, falls', action: 'write:chroniccare.target', writes: [TARGET_TYPE], parse: (rest, ctx) => parseTarget(rest, ctx) })
 // the review's observations: their card where the department ticks chronic care (the feet's and the eyes' chips)
 registerCard({ function: 'observation', Editor: ReviewCard, line: reviewCardLine, pack: PACK })
-registerSection({ key: 'chronic_care.care', title: 'Chronic care', types: [TARGET_TYPE], fit: ANYONE, Body: ChronicSection,
+registerSection({ key: 'chroniccare.care', title: 'Chronic care', types: [TARGET_TYPE], fit: ANYONE, Body: ChronicSection,
   has: (x) => chipWord(x) !== null, word: (x) => chipWord(x), summary: (x) => summaryLine(x) })
-registerBannerWords({ key: 'chronic_care.care', types: [TARGET_TYPE], words: (x) => bannerWords({ ...x, facts: undefined }) })
-registerScreen('chronic_care.list', ChronicList)
+registerBannerWords({ key: 'chroniccare.care', types: [TARGET_TYPE], words: (x) => bannerWords({ ...x, facts: undefined }) })
+registerScreen('chroniccare.list', ChronicList)
 export const key = PACK

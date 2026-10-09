@@ -3,7 +3,7 @@
 -- two on his problem list; HbA1c 8.2 (and rising), LDL 112, BP 146/90 today; eyes and feet last reviewed 14 months ago, his urine ACR 15
 -- months ago: three checks due. Fawzia Darwish, 81: her own target BP < 150/90 (falls), still above it. Wafaa Abdelmoneim: diabetes and
 -- asthma, HbA1c 7.3, her inhaler technique never checked. Times relative to the load; ids in the pack's namespace; a reload erases them.
-select demo.layer('chronic_care');
+select demo.layer('chroniccare');
 
 -- a result the clinic writes with no order (an outside paper): K and eGFR, or a urine ACR
 create or replace function pg_temp.outside(p_dept uuid, p_at timestamptz, p_analytes jsonb) returns jsonb language sql as $$
@@ -12,13 +12,13 @@ $$;
 -- the yearly review's observations: the feet, the eyes (the pack's check codes)
 create or replace function pg_temp.review(p_dept uuid, p_at timestamptz, p_feet text, p_eyes text) returns jsonb language sql as $$
   select jsonb_build_array(
-    demo.e('observation', p_dept, null, p_at, jsonb_build_object('code', demo.concept('chronic_care.check', 'feet', 'Feet'), 'value', jsonb_build_object('text', p_feet))),
-    demo.e('observation', p_dept, null, p_at, jsonb_build_object('code', demo.concept('chronic_care.check', 'eyes', 'Eyes'), 'value', jsonb_build_object('text', p_eyes))))
+    demo.e('observation', p_dept, null, p_at, jsonb_build_object('code', demo.concept('chroniccare.check', 'feet', 'Feet'), 'value', jsonb_build_object('text', p_feet))),
+    demo.e('observation', p_dept, null, p_at, jsonb_build_object('code', demo.concept('chroniccare.check', 'eyes', 'Eyes'), 'value', jsonb_build_object('text', p_eyes))))
 $$;
 create or replace function pg_temp.labs(p_dept uuid, p_visit uuid, p_min int, p_code text, p_result jsonb) returns void language plpgsql as $$
 declare o uuid := gen_random_uuid();
 begin
-  perform demo.w(demo.id('chronic_care', 'doctor'), jsonb_build_array(demo.lab_order(p_code, p_dept, p_visit, demo.ago(p_min), o)));
+  perform demo.w(demo.id('chroniccare', 'doctor'), jsonb_build_array(demo.lab_order(p_code, p_dept, p_visit, demo.ago(p_min), o)));
   perform demo.lab(o, demo.ago(p_min - 30), p_result);
 end $$;
 
@@ -28,10 +28,10 @@ create or replace function pg_temp.since(p_years int) returns jsonb language sql
 $$;
 
 do $$
-declare dm uuid := demo.id('chronic_care', 'clinic'); iman uuid := demo.id('chronic_care', 'doctor'); day int := 60 * 24; v uuid;
+declare dm uuid := demo.id('chroniccare', 'clinic'); iman uuid := demo.id('chroniccare', 'doctor'); day int := 60 * 24; v uuid;
 begin
   -- Ashraf Mokhtar, 58: in consult now
-  perform demo.patient(demo.id('chronic_care', 'patient:ashraf'), array['Ashraf'], 'Mokhtar', 'male', demo.born(58, 70), '+201001184523');
+  perform demo.patient(demo.id('chroniccare', 'patient:ashraf'), array['Ashraf'], 'Mokhtar', 'male', demo.born(58, 70), '+201001184523');
   v := demo.arrive('diabetes follow-up', 300 * day, dm);
   perform demo.consult(v, 300 * day - 10, jsonb_build_array(
     demo.e('problem', dm, v, demo.ago(300 * day - 15), demo.problem('E11.9', 'Type 2 diabetes mellitus', pg_temp.since(12))),
@@ -56,12 +56,12 @@ begin
   perform demo.consult(v, 9, '[]', null, false, dm, iman);
 
   -- Fawzia Darwish, 81: diabetes and hypertension; her own target BP < 150/90 (falls), 156/88 ten days ago
-  perform demo.patient(demo.id('chronic_care', 'patient:fawzia'), array['Fawzia'], 'Darwish', 'female', demo.born(81, 30), '+201225539061');
+  perform demo.patient(demo.id('chroniccare', 'patient:fawzia'), array['Fawzia'], 'Darwish', 'female', demo.born(81, 30), '+201225539061');
   v := demo.arrive('diabetes follow-up', 200 * day, dm);
   perform demo.consult(v, 200 * day - 10, jsonb_build_array(
     demo.e('problem', dm, v, demo.ago(200 * day - 15), demo.problem('E11.9', 'Type 2 diabetes mellitus', pg_temp.since(17))),
     demo.e('problem', dm, v, demo.ago(200 * day - 15), demo.problem('I10', 'Essential hypertension', pg_temp.since(21))),
-    demo.e('chronic_care.target', dm, v, demo.ago(200 * day - 15), '{"condition":"htn","measure":"bp","op":"<","value":150,"value2":90,"reason":"81, falls","status":"active"}')),
+    demo.e('chroniccare.target', dm, v, demo.ago(200 * day - 15), '{"condition":"htn","measure":"bp","op":"<","value":150,"value2":90,"reason":"81, falls","status":"active"}')),
     200 * day - 20, false, dm, iman);
   perform pg_temp.labs(dm, null, 40 * day, 'hba1c', demo.a1c(6.9));
   perform pg_temp.labs(dm, null, 40 * day, 'lipids', demo.lipids(160, 65, 52, 120));
@@ -74,7 +74,7 @@ begin
   perform demo.consult(v, 10 * day - 10, '[]', 10 * day - 25, false, dm, iman);
 
   -- Wafaa Abdelmoneim, 60: diabetes and asthma; HbA1c 7.3; her inhaler technique never checked
-  perform demo.patient(demo.id('chronic_care', 'patient:wafaa'), array['Wafaa'], 'Abdelmoneim', 'female', demo.born(60, 200), '+201114420877');
+  perform demo.patient(demo.id('chroniccare', 'patient:wafaa'), array['Wafaa'], 'Abdelmoneim', 'female', demo.born(60, 200), '+201114420877');
   v := demo.arrive('diabetes follow-up', 51 * day, dm);
   perform demo.consult(v, 51 * day - 10, jsonb_build_array(
     demo.e('problem', dm, v, demo.ago(51 * day - 15), demo.problem('E11.9', 'Type 2 diabetes mellitus', pg_temp.since(7))),

@@ -1,11 +1,11 @@
 // Chronic care's words in the composer (spec/openCare.md §5.7; picture #chronic-visit): /review dm — the yearly review of a condition:
-// the feet and the eyes as the base's observations (coded chronic_care.check:feet, :eyes; their card chooses what was found), and the tests
+// the feet and the eyes as the base's observations (coded chroniccare.check:feet, :eyes; their card chooses what was found), and the tests
 // its checks say are due drafted as the base's orders, each one left out with ×; /target htn bp < 150/90 ; 81, falls — a patient's own
 // target with its reason (the pack's one type). Pure.
 import type { Ctx, Parsed, Result } from '@core/screens/visit/parse'
 import { MEASURES, TARGET_TYPE, checkOf, conditionsOf, type Condition, type Op } from './model'
 
-export const CHECK_SYSTEM = 'chronic_care.check'
+export const CHECK_SYSTEM = 'chroniccare.check'
 const findCondition = (cs: Condition[], w: string) => { const s = w.toLowerCase().trim()
   return cs.find((c) => c.key.toLowerCase() === s) ?? cs.find((c) => c.name.toLowerCase().startsWith(s)) ?? (s === 'diabetes' || s === 't2dm' ? cs.find((c) => c.key === 'dm') : undefined) }
 
@@ -36,7 +36,7 @@ export function parseReview(rest: string, ctx: Ctx): Result {
     if (svc) items.push({ function: 'order', kind: 'request', action: 'write:order', params: { service_id: svc.id, priority: 'routine' }, line: `${svc.name} → ${ctx.departments.find((d) => d.id === svc.department_id)?.name ?? ''}`.trim() })
   }
   // each draft names the condition it reviews (its tag), so the words under the card know it
-  return items.length ? { ok: items.map((i) => ({ ...i, tag: `chronic_care:${c.key}` })) } : { error: `${c.name} has no checks to review here` }
+  return items.length ? { ok: items.map((i) => ({ ...i, tag: `chroniccare:${c.key}` })) } : { error: `${c.name} has no checks to review here` }
 }
 /** the service here that does a check: one whose results carry one of its codes (its own coding or an analyte's) */
 export function serviceFor(codes: string[], ctx: Pick<Ctx, 'services'>) {

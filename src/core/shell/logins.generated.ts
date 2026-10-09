@@ -46,10 +46,10 @@ export const DEMO_GROUPS: DemoGroup[] = [
   { department: 'Vaccination room', departmentId: 'f98715c0-781c-57a9-90a2-fd7c7fb129eb', people: [
     { email: 'vaccines@demo.com', name: 'Rokaya Ghoneim', role: 'Vaccinator' },
   ] },
-  { department: 'Diabetes clinic', departmentId: 'e469b069-2390-5b3a-8d1d-d34b1c61329d', people: [
+  { department: 'Diabetes clinic', departmentId: '043f9d6c-1d02-59f7-9e62-46aa91a5c248', people: [
     { email: 'diabetes@demo.com', name: 'Dr. Iman Sherif', role: 'Doctor' },
   ] },
-  { department: 'Family medicine', departmentId: '355cb203-87fe-528d-a370-c201802483af', people: [
+  { department: 'Family medicine', departmentId: '15566c3b-bdc9-520b-a8ca-62a8ae46dcbc', people: [
     { email: 'family@demo.com', name: 'Dr. Hazem Ouda', role: 'Doctor' },
   ] },
 ]

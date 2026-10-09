@@ -140,8 +140,8 @@ export interface CheckedIn {
   priority?: 'routine' | 'urgent' | 'asap' | 'stat'
   reason?: string
 }
-/** chronic_care.target v1 (chronic_care) */
-export interface ChronicCareTarget {
+/** chroniccare.target v1 (chroniccare) */
+export interface ChroniccareTarget {
   condition: string
   measure: string
   op: '<' | '<=' | '>' | '>='
@@ -498,8 +498,8 @@ export interface BillingReasonsSetting {
 export interface BillingVisitFeeSetting {
   amount: string
 }
-/** setting chronic_care.conditions (chronic_care; owner organization) */
-export interface ChronicCareConditionsSetting {
+/** setting chroniccare.conditions (chroniccare; owner organization) */
+export interface ChroniccareConditionsSetting {
   conditions: {
     checks?: {
       codes: string[]
@@ -559,8 +559,8 @@ export interface DepartmentWorksForSetting {
   all?: boolean
   departments?: string[]
 }
-/** setting family_medicine.checks (family_medicine; owner organization) */
-export interface FamilyMedicineChecksSetting {
+/** setting familycare.checks (familycare; owner organization) */
+export interface FamilycareChecksSetting {
   checks: {
     bmi_age_from?: number
     bmi_from?: number
@@ -576,8 +576,8 @@ export interface FamilyMedicineChecksSetting {
     who?: string
   }[]
 }
-/** setting family_medicine.files (family_medicine; owner organization) */
-export interface FamilyMedicineFilesSetting {
+/** setting familycare.files (familycare; owner organization) */
+export interface FamilycareFilesSetting {
   ask_at_new_patient?: boolean
 }
 /** setting lis.large (lis; owner department) */
@@ -761,7 +761,7 @@ export interface EntryData {
   'breastfeeding': Breastfeeding
   'called': Called
   'checked_in': CheckedIn
-  'chronic_care.target': ChronicCareTarget
+  'chroniccare.target': ChroniccareTarget
   'crossed_out': CrossedOut
   'died': Died
   'discharged': Discharged
@@ -802,7 +802,7 @@ export interface SettingData {
   'billing.price': BillingPriceSetting
   'billing.reasons': BillingReasonsSetting
   'billing.visit_fee': BillingVisitFeeSetting
-  'chronic_care.conditions': ChronicCareConditionsSetting
+  'chroniccare.conditions': ChroniccareConditionsSetting
   'department.after_done': DepartmentAfterDoneSetting
   'department.checks_in_for': DepartmentChecksInForSetting
   'department.encounter_class': DepartmentEncounterClassSetting
@@ -812,8 +812,8 @@ export interface SettingData {
   'department.screens': DepartmentScreensSetting
   'department.setup': DepartmentSetupSetting
   'department.works_for': DepartmentWorksForSetting
-  'family_medicine.checks': FamilyMedicineChecksSetting
-  'family_medicine.files': FamilyMedicineFilesSetting
+  'familycare.checks': FamilycareChecksSetting
+  'familycare.files': FamilycareFilesSetting
   'lis.large': LisLargeSetting
   'organization.packs_used': OrganizationPacksUsedSetting
   'organization.record_view': OrganizationRecordViewSetting

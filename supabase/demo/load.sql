@@ -17,10 +17,10 @@
 -- include: supabase/demo/radiology.sql
 -- include: supabase/seeds/vaccines.sql
 -- include: supabase/demo/vaccines.sql
--- include: supabase/seeds/chronic_care.sql
--- include: supabase/demo/chronic_care.sql
--- include: supabase/seeds/family_medicine.sql
--- include: supabase/demo/family_medicine.sql
+-- include: supabase/seeds/chroniccare.sql
+-- include: supabase/demo/chroniccare.sql
+-- include: supabase/seeds/familycare.sql
+-- include: supabase/demo/familycare.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql

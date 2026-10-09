@@ -1623,47 +1623,47 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   `npm run test:vaccines`. *Not as drawn:* the child's card printout (printing is not on this branch) and the booking of the next visit
   (bookings') are left out; the room's marks on other departments' queues ("9-month vaccines due") wait for a mark that reads a pack's
   data (a core door, asked below).
-- *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chronic_care`, migration 24, role block e1 unused; pictures #chronic-visit,
-  #chronic-list): the clinic's conditions, targets and checks as one setting `chronic_care.conditions` (its declared default the drawn table: diabetes,
+- *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chroniccare`, migration 24, role block e1 unused; pictures #chronic-visit,
+  #chronic-list): the clinic's conditions, targets and checks as one setting `chroniccare.conditions` (its declared default the drawn table: diabetes,
   hypertension, CKD, heart failure, asthma, COPD; a condition's codes are the register, ICD-10 by its start; a target a measure, a sign
   and a value — a pressure's two; a check its codes and every how many months, sooner while off target; the list's window, 18 months).
   Registers come from the problem list (active; resolved takes the patient off); the measures are the base's latest values by code; a
   check is done when any entry with one of its codes was written — the base's values, or the coded observations and procedures the
-  pack keeps (`chronic_care.checks`, a listener) — and a check two conditions share is counted once. Its one type `chronic_care.target`
+  pack keeps (`chroniccare.checks`, a listener) — and a check two conditions share is counted once. Its one type `chroniccare.target`
   (a patient's own target with its reason, everyday; it wins over the clinic's) and its table. Client: the Chronic care section (each
   condition with its code and since, its measures against the target with the last values as a line, its checks done or due), its chip
   ("3 due"), Summary line and banner words ("HbA1c 8.2 ↑", "3 checks due"); `/review dm` (the feet and the eyes as the base's
-  observations coded `chronic_care.check:feet|eyes` — their card's chips: monofilament, pulses, skin, foot risk; seen here, referred, an
+  observations coded `chroniccare.check:feet|eyes` — their card's chips: monofilament, pulses, skin, foot risk; seen here, referred, an
   outside report — and the tests the clinic's checks find due, drafted as orders where a service here does them; under the card the
   review's last date, each test due or not with its next date, and for a foot at risk what to tell the patient in Arabic); `/target htn
-  bp < 150/90 ; 81, falls`; the Chronic care tab `chronic_care.list` (Off target, Checks overdue, All; a chip per condition; the patients
-  seen here within the window; a row opens the chart). The setup `chronic_care.clinic` (a Diabetes clinic). Demo: Dr. Iman Sherif
+  bp < 150/90 ; 81, falls`; the Chronic care tab `chroniccare.list` (Off target, Checks overdue, All; a chip per condition; the patients
+  seen here within the window; a row opens the chart). The setup `chroniccare.clinic` (a Diabetes clinic). Demo: Dr. Iman Sherif
   (diabetes@demo.com); Ashraf Mokhtar (in consult: diabetes, hypertension, CKD 3a; HbA1c 8.2, BP 146/90, LDL 112; eyes, feet and urine
   ACR due), Fawzia Darwish (81; her own target BP < 150/90, falls), Wafaa Abdelmoneim (diabetes and asthma; inhaler technique due).
-  Tests: `supabase/tests/chronic_care.sql`, `npm run test:chronic_care`. *Not as drawn, and why:* the key is `chronic_care` (the core says
+  Tests: `supabase/tests/chroniccare.sql`, `npm run test:chroniccare`. *Not as drawn, and why:* the key is `chroniccare` (the core says
   "chronic" of a problem term, which the no-pack-names rule reads as naming the pack); the list's Next visit and "none booked first" are
   bookings' and Print the list is printing's, both left out; the flu vaccine check is the immunisation pack's data, which this pack may
   not read; a referral for the eyes is the doctor's /order (the review records "referred"); the review's card is registered for the base's
   observation where the department ticks chronic care; the chart banner counts checks without the facts page (feet and eyes reviewed show
   in the section, the chip and the list); the queue's "3 due" mark waits for the core door asked below.
-- *Built 2026-10-08 (lane `clinics-shared`), Family medicine* (`family_medicine`, migration 25, role block e2 unused; pictures
-  #family-folder, #family-day, #family-checks): the household as the pack's own table (`family_medicine.households`: the file number by
-  the unit, address, phone; `family_medicine.members`: who belongs and how, one file a patient, Erase reaching it), written through its
+- *Built 2026-10-08 (lane `clinics-shared`), Family medicine* (`familycare`, migration 25, role block e2 unused; pictures
+  #family-folder, #family-day, #family-checks): the household as the pack's own table (`familycare.households`: the file number by
+  the unit, address, phone; `familycare.members`: who belongs and how, one file a patient, Erase reaching it), written through its
   ops — `of_patient` and `find` for whoever finds patients, `start`, `join`, `leave` for whoever registers them (manage:patients) — only
-  where the department ticks the pack. The checks due by age and sex as the setting `family_medicine.checks` (its declared default the drawn table; who is a
-  sex, an age from and to, a BMI from an age; met by codes, never ticked); `family_medicine.files` (New patient asks for a file, on).
+  where the department ticks the pack. The checks due by age and sex as the setting `familycare.checks` (its declared default the drawn table; who is a
+  sex, an age from and to, a BMI from an age; met by codes, never ticked); `familycare.files` (New patient asks for a file, on).
   Client: the Family section (the file, its address and phone, each member — a name opening their chart — with what they are due: the
   banner words of the packs this department uses, read through the core's banner-word registry from each member's record, so no pack
   reads another's data, then their family checks), the Checks section (due or met; its chip "2 due", Summary line, banner word), /checks
   (the due checks a service here does, drafted as orders; under the card the list and the family's members), the Families screen
-  (`family_medicine.files`: find a file by its number, a phone, an address or a member's name; open it; add a member), and the desk's
+  (`familycare.files`: find a file by its number, a phone, an address or a member's name; open it; add a member), and the desk's
   New patient step (core change C4: join a file found by its number, the phone or the address, with how they are related; start a new
-  file at an address; or not now). The setup `family_medicine.medicine` (Family medicine: its queue and Families). Demo: Dr. Hazem Ouda
+  file at an address; or not now). The setup `familycare.medicine` (Family medicine: its queue and Families). Demo: Dr. Hazem Ouda
   (family@demo.com); file 1182 — Ayman Abdelrahman, his wife Basma Hegazy (in consult; sugar and cervical screening due), his mother
   Zeinab Hamouda (diabetes, HbA1c late; waiting), Yassin (6, waiting) and Malak (14 months). The clinic's choices
   (`seeds/clinic_packs.sql`): Family medicine ticks chronic care and the immunisation pack after its own, and its line is the queue, Families
-  and the immunisation list; the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/family_medicine.sql`, `npm run
-  test:family_medicine`. *Not as drawn, and why:* the key is `family_medicine` (the core's word "family" — a patient's family name, the
+  and the immunisation list; the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/familycare.sql`, `npm run
+  test:familycare`. *Not as drawn, and why:* the key is `familycare` (the core's word "family" — a patient's family name, the
   chart's families of types — would read as naming the pack); Book (bookings') and the Gynaecology section (ObGyn's) are left out; the
   file number is not a banner word (it would need the pack's read on every chart); the queue's per-pack marks (Q50) wait for the core door
   asked below.

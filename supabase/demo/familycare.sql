@@ -3,7 +3,7 @@
 -- her fasting sugar four years ago and never screened for cervical cancer, so two checks due), his mother Zeinab Hamouda (68, diabetes: her
 -- HbA1c five months old and high; waiting with knee pain), their son Yassin (6, waiting with ear pain) and daughter Malak (14 months).
 -- The file is the pack's own table, written through its door; times relative to the load; a reload erases these patients first.
-select demo.layer('family_medicine');
+select demo.layer('familycare');
 
 -- a problem's onset, years before the load
 create or replace function pg_temp.since(p_years int) returns jsonb language sql stable as $$
@@ -11,9 +11,9 @@ create or replace function pg_temp.since(p_years int) returns jsonb language sql
 $$;
 
 do $$
-declare fm uuid := demo.id('family_medicine', 'department'); hz uuid := demo.id('family_medicine', 'doctor'); day int := 60 * 24; v uuid; o uuid;
-  ayman uuid := demo.id('family_medicine', 'patient:ayman'); basma uuid := demo.id('family_medicine', 'patient:basma'); zeinab uuid := demo.id('family_medicine', 'patient:zeinab');
-  yassin uuid := demo.id('family_medicine', 'patient:yassin'); malak uuid := demo.id('family_medicine', 'patient:malak'); f uuid := demo.id('family_medicine', 'file:1182');
+declare fm uuid := demo.id('familycare', 'department'); hz uuid := demo.id('familycare', 'doctor'); day int := 60 * 24; v uuid; o uuid;
+  ayman uuid := demo.id('familycare', 'patient:ayman'); basma uuid := demo.id('familycare', 'patient:basma'); zeinab uuid := demo.id('familycare', 'patient:zeinab');
+  yassin uuid := demo.id('familycare', 'patient:yassin'); malak uuid := demo.id('familycare', 'patient:malak'); f uuid := demo.id('familycare', 'file:1182');
 begin
   perform demo.patient(ayman, array['Ayman'], 'Abdelrahman', 'male', demo.born(39, 80), '+201022147781');
   v := demo.arrive('headache', 200 * day, fm);
@@ -44,10 +44,10 @@ begin
 
   -- the household's file, through the pack's door (the owner, as the desk would)
   perform demo.as(demo.base('owner'));
-  perform public.pack_op(jsonb_build_object('op', 'family_medicine.start', 'department_id', fm, 'args', jsonb_build_object('id', f, 'number', 1182, 'patient_id', ayman,
+  perform public.pack_op(jsonb_build_object('op', 'familycare.start', 'department_id', fm, 'args', jsonb_build_object('id', f, 'number', 1182, 'patient_id', ayman,
     'address', 'Al-Gomhoria St, Mit Ghamr', 'phone', '010 2214 7781 (Ayman)')));
-  perform public.pack_op(jsonb_build_object('op', 'family_medicine.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', basma, 'relation', 'wife')));
-  perform public.pack_op(jsonb_build_object('op', 'family_medicine.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', zeinab, 'relation', 'mother')));
-  perform public.pack_op(jsonb_build_object('op', 'family_medicine.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', yassin, 'relation', 'son')));
-  perform public.pack_op(jsonb_build_object('op', 'family_medicine.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', malak, 'relation', 'daughter')));
+  perform public.pack_op(jsonb_build_object('op', 'familycare.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', basma, 'relation', 'wife')));
+  perform public.pack_op(jsonb_build_object('op', 'familycare.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', zeinab, 'relation', 'mother')));
+  perform public.pack_op(jsonb_build_object('op', 'familycare.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', yassin, 'relation', 'son')));
+  perform public.pack_op(jsonb_build_object('op', 'familycare.join', 'department_id', fm, 'args', jsonb_build_object('household_id', f, 'patient_id', malak, 'relation', 'daughter')));
 end $$;

@@ -51,7 +51,7 @@ export function ReviewNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
   const values = (ctx.record?.values ?? []).map((v) => ({ code: v.code, value: v.value, at: v.at }))
   const done: Done[] = (facts.data ?? []).filter((e) => !e.hidden).map((e) => ({ codes: e.codes ?? [], at: e.occurred_at, text: String((e.data as Obs | undefined)?.value?.text ?? '') }))
   const problems = cs.flatMap((c) => c.codes.map((k) => ({ code: `icd10:${k}`, status: 'active' })))   // the review names its condition: its checks, as if on it
-  const which = cs.find((c) => items.some((i) => i.tag === `chronic_care:${c.key}`))
+  const which = cs.find((c) => items.some((i) => i.tag === `chroniccare:${c.key}`))
   const st = careOf(cs.filter((c) => c.key === which?.key), problems, values, done, [])[0]
   if (!st) return null
   const reviewed = st.checks.filter((c) => c.check.codes.some((x) => x.startsWith(`${CHECK_SYSTEM}:`))).map((c) => c.last).filter(Boolean).sort().at(-1)

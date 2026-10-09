@@ -18,13 +18,13 @@ const t = <R,>(table: string, dept: string, where: Record<string, unknown> = {})
 
 /** everything the list reads, once: the problems, the values its measures and checks name, the visits here, the pack's own rows */
 function useCare(deptId: string, codes: string[]) {
-  return useQuery({ queryKey: ['chronic_care.list', deptId, codes.join(',')], staleTime: 30_000, queryFn: async () => {
+  return useQuery({ queryKey: ['chroniccare.list', deptId, codes.join(',')], staleTime: 30_000, queryFn: async () => {
     const [lists, values, visits, checks, targets] = await Promise.all([
       t<{ patient_id: string; code: string | null; status: string; list: string }>('base.lists', deptId, { list: 'problems' }),
       t<{ patient_id: string; code: string | null; value: number; at: string }>('base.values', deptId, { code: codes }),
       t<{ patient_id: string; checked_in_at: string }>('base.presence', deptId, { department_id: deptId }),
-      t<{ patient_id: string; codes: string[]; at: string; text: string | null }>('chronic_care.checks', deptId),
-      t<{ patient_id: string; condition: string; measure: string; op: OwnTarget['op']; value: number; value2: number | null; reason: string | null; at: string }>('chronic_care.targets', deptId)])
+      t<{ patient_id: string; codes: string[]; at: string; text: string | null }>('chroniccare.checks', deptId),
+      t<{ patient_id: string; condition: string; measure: string; op: OwnTarget['op']; value: number; value2: number | null; reason: string | null; at: string }>('chroniccare.targets', deptId)])
     return { lists, values, visits, checks, targets }
   } })
 }
