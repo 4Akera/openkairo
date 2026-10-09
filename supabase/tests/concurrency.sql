@@ -61,6 +61,28 @@ select t.landed(pg_temp.remote('a', '{"set_id":"00000000-0000-0000-0000-00000000
 select t.ok(r ->> 'outcome' = 'busy', 'B sends the same set: waits on the set') from pg_temp.remote('b', '{"set_id":"00000000-0000-0000-0000-00000000dd01","entries":[{"id":"00000000-0000-0000-0000-0000000000e9","type":"note","patient_id":"00000000-0000-0000-0000-0000000000f2","department_id":"00000000-0000-0000-0000-0000000000d1","data":{"text":"once"}}]}') r;
 select extensions.dblink_exec('a', 'commit');
 select t.ok((r ->> 'repeat')::boolean, 'B''s retry returns the stored outcome') from pg_temp.remote('b', '{"set_id":"00000000-0000-0000-0000-00000000dd01","entries":[{"id":"00000000-0000-0000-0000-0000000000e9","type":"note","patient_id":"00000000-0000-0000-0000-0000000000f2","department_id":"00000000-0000-0000-0000-0000000000d1","data":{"text":"once"}}]}') r;
+
+\echo '── two sets making newborns at once (§3.9 step 3b): the second waits for the record number, is busy, and leaves nothing'
+select * from extensions.dblink('a', $$select set_config('request.jwt.claim.sub', '11111111-0000-0000-0000-0000000000b9', false)$$) as x(v text);
+select * from extensions.dblink('b', $$select set_config('request.jwt.claim.sub', '11111111-0000-0000-0000-0000000000b9', false)$$) as x(v text);
+create or replace function pg_temp.born_set(p_set uuid, p_mother uuid, p_newborn uuid) returns jsonb language sql as $$
+  select jsonb_build_object('set_id', p_set, 'made_at', clock_timestamp(), 'entries', jsonb_build_array(
+      t.e('note', p_mother, '00000000-0000-0000-0000-0000000000d1', '{"text":"a birth"}'),
+      t.e('admitted', p_newborn, '00000000-0000-0000-0000-0000000000d6', '{"admit_source":"born"}', p_newborn, p_newborn)),
+    'patients', jsonb_build_array(jsonb_build_object('id', p_newborn, 'mother', p_mother, 'full_name', 'Newborn', 'gender', 'unknown',
+      'birth_date', ((now() at time zone 'Africa/Cairo')::date)::text, 'department_id', '00000000-0000-0000-0000-0000000000d6')))
+$$;
+select value as nb_before from core.counters where organization_id = '00000000-0000-0000-0000-0000000000a1' and key = 'record_number' \gset
+select extensions.dblink_exec('a', 'begin');
+select t.landed(pg_temp.remote('a', pg_temp.born_set('00000000-0000-0000-0000-00000000dd11', '00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-00000000ee01')),
+  'A makes a newborn of Ahmed''s (not yet committed)');
+select t.ok(r ->> 'outcome' = 'busy', 'B making a newborn of Omar''s waits for the record number and is told busy')
+  from pg_temp.remote('b', pg_temp.born_set('00000000-0000-0000-0000-00000000dd12', '00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-00000000ee02')) r;
+select extensions.dblink_exec('a', 'commit');
+select t.ok(not exists (select 1 from core.patients where id = '00000000-0000-0000-0000-00000000ee02') and not exists (select 1 from core.sets where id = '00000000-0000-0000-0000-00000000dd12')
+  and (select value from core.counters where organization_id = '00000000-0000-0000-0000-0000000000a1' and key = 'record_number') = :nb_before + 1, 'B''s busy set left no record, ledger row or number');
+select t.ok(r ->> 'outcome' = 'landed' and r -> 'patients' -> 0 ->> 'number' = (:nb_before + 2)::text, 'B retries the same set: it lands, numbered next')
+  from pg_temp.remote('b', pg_temp.born_set('00000000-0000-0000-0000-00000000dd12', '00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-00000000ee02')) r;
 select extensions.dblink_disconnect('a');
 select extensions.dblink_disconnect('b');
 select t.ok(core.rebuild_check() = '[]'::jsonb, 'rebuild = live after the races');

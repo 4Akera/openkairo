@@ -1,5 +1,6 @@
 -- 03 · core: the writer, the only way in (spec/openCare.md §3.9), and the visibility rule runner it shares with the reader (§3.10).
 -- It knows no type: shapes, permissions, items and findings come from the registry; meaning comes from the base's checks.
+-- A set may make the newborns it is about (§3.9 step 3b, the owner's Q10).
 
 set client_min_messages = warning;
 
@@ -58,13 +59,15 @@ declare
   v_find jsonb := '[]'; f jsonb; fs jsonb; fn regprocedure; cur int; seen int;
   v_setj jsonb; v_result jsonb; v_refuse jsonb; v_warn jsonb; v_items uuid[] := '{}'; v_types text[] := '{}'; v_patients uuid[];
   dv core.derived; lv core.listeners; v_err text; v_hidden uuid[]; v_idle boolean;
+  np jsonb; v_mother uuid; v_new uuid[] := '{}'; v_made jsonb := '[]'; v_new_id uuid; v_born date; v_dept uuid; v_mid uuid; v_newborn core.patients;
+  v_today date;
 begin
   -- the envelope
   begin v_set_id := (p_set ->> 'set_id')::uuid; exception when others then v_set_id := null; end;
   if v_set_id is null then return core.refused(null, 'bad_set', null, 'set_id'); end if;
   if jsonb_typeof(v_in) is distinct from 'array' or jsonb_array_length(v_in) = 0 then return core.refused(v_set_id, 'empty_set'); end if;
   begin v_made_at := coalesce((p_set ->> 'made_at')::timestamptz, clock_timestamp()); exception when others then return core.refused(v_set_id, 'bad_set', null, 'made_at'); end;
-  v_hash := md5(v_in::text);
+  v_hash := md5(v_in::text || coalesce((p_set -> 'patients')::text, ''));
   v_source := case me.kind when 'staff' then 'staff' when 'machine' then 'machine' when 'importer' then 'import' else 'patient' end;
   v_live := v_source = 'staff' and v_made_at between clock_timestamp() - interval '5 minutes' and clock_timestamp() + interval '1 minute';
   n := jsonb_array_length(v_in);
@@ -83,6 +86,73 @@ begin
     perform set_config('lock_timeout', v_timeout, true);
     if v_prev.hash = v_hash then return v_prev.outcome || '{"repeat": true}'::jsonb; end if;
     return core.refused(v_set_id, 'set_changed');
+  end if;
+
+  -- 3b. the newborns this set makes (the owner's Q10, 2026-10-08: a newborn's record inside the birth's own Done, twins included). Each a new
+  -- patient whose mother is the patient of the set's first entry, registered as the desk's door registers one (the next record number,
+  -- the folded name, a full snapshot), with her as "mother of", and the patient of at least one entry of the set. Made before the rows,
+  -- so every check and refresh sees them; public.write takes them back with the set when it does not land: all or nothing
+  if p_set ? 'patients' then
+    -- each test apart: SQL does not promise to stop an OR at its first true, and jsonb_array_length or jsonb_object_keys raise on a scalar
+    if jsonb_typeof(p_set -> 'patients') is distinct from 'array' then return core.refused(v_set_id, 'bad_set', null, 'patients'); end if;
+    if jsonb_array_length(p_set -> 'patients') not between 1 and 8 then return core.refused(v_set_id, 'bad_set', null, 'patients'); end if;
+    if exists (select 1 from jsonb_array_elements(p_set -> 'patients') x where jsonb_typeof(x) is distinct from 'object') then
+      return core.refused(v_set_id, 'bad_set', null, 'patients');
+    end if;
+    if (select count(distinct x ->> 'id') from jsonb_array_elements(p_set -> 'patients') x) <> jsonb_array_length(p_set -> 'patients') then
+      return core.refused(v_set_id, 'bad_set', null, 'patients');
+    end if;
+    -- never with an import: an already-imported set lands as a repeat without its entries (below), which would keep the newborns
+    if exists (select 1 from jsonb_array_elements(v_in) x where x ? 'source_system' or x ? 'source_id') then
+      return core.refused(v_set_id, 'bad_set', null, 'patients');
+    end if;
+    v_today := (now() at time zone coalesce(core.setting_at(v_org, 'organization.time_zone', v_org) ->> 'zone', 'Africa/Cairo'))::date;
+    begin v_mother := core.survivor(v_org, (v_in -> 0 ->> 'patient_id')::uuid); exception when others then v_mother := null; end;
+    for np in select x from jsonb_array_elements(p_set -> 'patients') x loop
+      if exists (select 1 from jsonb_object_keys(np) nk where nk not in ('id', 'mother', 'full_name', 'gender', 'birth_date', 'department_id')) then
+        return core.refused(v_set_id, 'bad_set', null, 'patients');
+      end if;
+      begin
+        v_new_id := (np ->> 'id')::uuid; v_mid := (np ->> 'mother')::uuid; v_born := (np ->> 'birth_date')::date; v_dept := (np ->> 'department_id')::uuid;
+      exception when others then return core.refused(v_set_id, 'bad_set', null, 'patients');
+      end;
+      -- a date as YYYY-MM-DD (the cast alone would take words such as 'today')
+      if v_new_id is null or v_mid is null or v_born is null or v_dept is null or coalesce(np ->> 'gender', '') not in ('male', 'female', 'other', 'unknown')
+         or np ->> 'birth_date' !~ '^\d{4}-\d{2}-\d{2}$' then
+        return core.refused(v_set_id, 'bad_set', null, 'patients');
+      end if;
+      -- a newborn only: born today or in the 28 days before (the clinic's day)
+      if v_born > v_today or v_born < v_today - 28 then return core.refused(v_set_id, 'bad_set', null, 'patients'); end if;
+      if coalesce(trim(np ->> 'full_name'), '') = '' then return core.refused(v_set_id, 'name_missing', null, v_new_id::text); end if;
+      if v_mother is null or core.survivor(v_org, v_mid) is distinct from v_mother then return core.refused(v_set_id, 'wrong_patient', null, 'mother'); end if;
+      if exists (select 1 from core.patients p where p.id = v_new_id) then return core.refused(v_set_id, 'patient_exists', null, v_new_id::text); end if;
+      if not exists (select 1 from core.departments d where d.organization_id = v_org and d.id = v_dept and d.retired_at is null) then
+        return core.refused(v_set_id, 'not_found', null, 'department');
+      end if;
+      if not core.may(me.id, 'manage:patients', v_dept) then return core.refused(v_set_id, 'not_allowed', null, 'manage:patients'); end if;
+      if not exists (select 1 from jsonb_array_elements(v_in) x where lower(x ->> 'patient_id') = v_new_id::text) then
+        return core.refused(v_set_id, 'patient_unused', null, v_new_id::text);
+      end if;
+      -- still under the ledger's lock timeout: a wait for the record number (another set making a newborn holds it to its commit) or
+      -- for the same id made by another set in flight is busy as step 4's waits are, and that same id once made is patient_exists
+      begin
+        insert into core.patients (organization_id, id, number, full_name, folded, gender, birth_date, birth_precision, created_by)
+          values (v_org, v_new_id, core.next_number(v_org, 'record_number'), trim(np ->> 'full_name'), core.fold(trim(np ->> 'full_name')),
+                  np ->> 'gender', v_born, 'day', me.id)
+          returning * into v_newborn;
+        insert into core.patient_changes (organization_id, patient_id, data, reason, author_id) values (v_org, v_new_id, core.patient_snapshot(v_newborn), 'born', me.id);
+        insert into core.patient_relations (organization_id, patient_id, relation, other_id, author_id) values (v_org, v_mother, 'mother_of', v_new_id, me.id);
+      exception
+        when lock_not_available then
+          perform set_config('lock_timeout', v_timeout, true);
+          return jsonb_build_object('set_id', v_set_id, 'outcome', 'busy', 'findings', '[]'::jsonb);
+        when unique_violation then
+          perform set_config('lock_timeout', v_timeout, true);
+          return core.refused(v_set_id, 'patient_exists', null, v_new_id::text);
+      end;
+      v_new := v_new || v_new_id;
+      v_made := v_made || jsonb_build_array(jsonb_build_object('id', v_new_id, 'number', v_newborn.number));
+    end loop;
   end if;
 
   -- the rows, before any lock: ids, types, patients, claims
@@ -169,9 +239,9 @@ begin
     v_idle := coalesce((r.replaces is not null or r.relation = 'changes') and t.layer <> 'base' and not core.department_uses(v_org, r.department_id, t.layer)
               and not core.may(me.id, core.write_action(t.key), r.department_id), false);
     if not v_idle and not core.may(me.id, core.write_action(t.key), r.department_id) then return core.refused(v_set_id, 'not_allowed', r.id, core.write_action(t.key)); end if;
-    -- one family per set, unless the type declares it may sit beside another patient
+    -- one family per set, unless the type declares it may sit beside another patient, or the patient is a newborn this set made (Q10)
     if i = 1 then v_family := r.patient_id;
-    elsif r.patient_id <> v_family and not t.other_patient then return core.refused(v_set_id, 'two_patients', r.id);
+    elsif r.patient_id <> v_family and not t.other_patient and not (r.patient_id = any (v_new)) then return core.refused(v_set_id, 'two_patients', r.id);
     end if;
     v_fam := core.family(v_org, r.patient_id);
     -- the visit: an item of this family, stored or opened in this set
@@ -288,7 +358,7 @@ begin
      where a ? 'sha256' and a ? 'mime' on conflict do nothing;
   v_result := jsonb_build_object('set_id', v_set_id, 'outcome', 'landed', 'recorded_at', v_now,
     'entries', (select jsonb_agg(jsonb_build_object('id', x.id, 'item', x.item, 'item_version', x.item_version)) from unnest(rows) x),
-    'findings', v_find);
+    'findings', v_find) || case when jsonb_array_length(v_made) > 0 then jsonb_build_object('patients', v_made) else '{}'::jsonb end;
   insert into core.sets (organization_id, id, hash, user_id, made_at, recorded_at, live, outcome)
     values (v_org, v_set_id, v_hash, me.id, v_made_at, v_now, v_live, v_result);
 
@@ -337,7 +407,17 @@ begin
   if current_setting('transaction_isolation') <> 'read committed' then perform core.refuse('read_committed_only'); end if;
   me := core.me();
   perform set_config('core.in_writer', 'on', true);
-  v := core.writer(me, p_set);
+  if p_set ? 'patients' then
+    -- a set that makes a patient (a newborn in the birth's own Done, the owner's Q10) is all or nothing: refused, warned or busy, the
+    -- records it made go back with it (the block's savepoint), and its outcome is returned as it came
+    begin
+      v := core.writer(me, p_set);
+      if v ->> 'outcome' is distinct from 'landed' then raise exception 'take the newborns back' using errcode = 'OCNB1'; end if;
+    exception when sqlstate 'OCNB1' then null;   -- the writer's own code only: any other error, P0002 too, still fails the call
+    end;
+  else
+    v := core.writer(me, p_set);
+  end if;
   perform set_config('core.in_writer', '', true);
   return v;
 end $$;

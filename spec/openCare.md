@@ -108,7 +108,9 @@ entries. Everything that happens is an entry, including "made private", "called"
 - `gender`: male · female · other · unknown. Birth date with precision and an `estimated` flag. An unknown patient has `anonymous`.
 - Identifiers `(system key, value, verified)`. The system's check function validates the value (§7.3). The record number is an
   integer from `next_number(organization, 'record_number')`, exported as an identifier in the organization's MR system.
-- Relations: mother of, guardian of, not the same person as; each with who recorded it and when.
+- Relations: mother of, guardian of, not the same person as; each with who recorded it and when. *Built 2026-10-09 (owner,
+  2026-10-08, Q10):* a newborn's record may be made inside a set, its mother the set's first patient, written as mother of (§3.9
+  step 3b).
 - **Identity changes are insert-only** (`core.patient_changes` holds each full snapshot); `core.patients` is the current state built from
   them. Death is not a patient field: it comes from the base's `died` entry.
 - **Merge.** `merged_into` points to the survivor. The merged family counts as one patient everywhere: reads take the family, the
@@ -271,13 +273,32 @@ select core.retire_score    ('gcs', '1974');           -- new entries may no lon
   every row it owns that depends on those items.
 
 ### 3.9 The writer: `public.write(set)` (the only way in)
-The client sends `{set_id, made_at, entries[], confirmed[], seen{item: version}}`; each entry is `{id, type, type_version?, patient_id,
+The client sends `{set_id, made_at, entries[], confirmed[], seen{item: version}, patients[]?}`; each entry is `{id, type, type_version?, patient_id,
 department_id, visit_id?, occurred_at?, precision?, until?, data, replaces?, refers_to?, relation?, source_system?, source_id?}`.
 The writer:
 1. **Refuses nested calls** (a transaction-local flag) and asserts READ COMMITTED.
 2. Takes **identity from the JWT** (the login, the session's chosen user, its organization and kind). Never from parameters or GUCs.
 3. **Checks the set ledger** (`core.sets`). The same `set_id` with the same hash (md5 of the entries) returns the stored outcome without
-   running checks again; with a different hash it is refused `set_changed`.
+   running checks again; with a different hash it is refused `set_changed`. A set with `patients` hashes them with its entries.
+3b. **Newborns** (*built 2026-10-09; owner, 2026-10-08, Q10: "the baby's record made inside the birth's own Done, twins included"*).
+   A set may name the newborns it is about: `patients: [{id, mother, full_name, gender, birth_date, department_id}]`. Right after
+   the ledger (so a retry of a landed set makes nothing again) and before the rows, the writer makes each: a new patient as the
+   desk's door makes one (the next record number, the name trimmed and folded, gender, birth date of precision day, created by the
+   user; a full snapshot in `patient_changes`; no identifier, telecom or address, which the desk adds later), with the patient of the
+   set's first entry (its survivor) as **mother of** it in `patient_relations`. Refusals: `bad_set` (detail `patients`) for a
+   malformed list, a key not named above, ids not distinct, a gender outside male · female · other · unknown, a birth date not
+   `YYYY-MM-DD` or outside the clinic's today and the 28 days before, or any entry of the set carrying `source_system`/`source_id`; `name_missing`; `wrong_patient` (detail `mother`)
+   when `mother` is not the first entry's patient or she does not exist; `patient_exists` for an id any patient has;
+   `not_found` (detail `department`) / `not_allowed` (detail `manage:patients`): the department is live and the user may register
+   patients there; `patient_unused` when no entry of the set names the newborn. **All or nothing**: `public.write` runs the writer
+   inside a block when the set has `patients` and, when the outcome is not `landed` (refused, warn, busy), raises its own code
+   `OCNB1`, which takes back the records, relations, snapshots and the record-number counter and returns the outcome as it came; any
+   other error still fails the call. A lock wait while making a newborn (the record number another set making one holds to its
+   commit, or the same id made by another set in flight) is `busy` after the 3 s timeout, as in step 4; the same id once made is
+   `patient_exists`. A landed outcome adds `patients: [{id, number}]` in the set's order (stored, so a retry returns
+   it). *Chosen by Claude in the build, awaiting the owner:* the key names; at most eight newborns in one set; a newborn only (born
+   on the clinic's today or in the 28 days before); never in an imported set; the snapshot's reason `born`; the mother's recorded
+   sex is not checked. Not built yet: the FHIR export does not carry "mother of" (noted for the owner).
 4. **Locks**: advisory transaction locks on every patient family in the set plus every claim, in sorted order, with `lock_timeout` 3 s
    (a timeout returns outcome `busy`, which the client retries). It works out each survivor again after locking. Then
    `recorded_at` = the clock, or 1 µs after the latest entry of those families when the clock has stepped back.
@@ -286,7 +307,7 @@ The writer:
    entry's department)`, except that where the pack's actions do not count (off, or not used in that department) a correction of its
    entry is written by an author of the item who still holds a role there, in the target's own department (so no department can be
    picked to dodge `may`); the department and visit belong to the organization; one patient family per set unless the type declares
-   `other_patient`; `replaces` and `refers_to` targets exist in the family and are visible to the writer; the same-resource item rule;
+   `other_patient` or the patient is a newborn this set made (step 3b); `replaces` and `refers_to` targets exist in the family and are visible to the writer; the same-resource item rule;
    registered code systems only.
 6. **Assigns item and version** under the lock. A `replaces` or `changes` whose seen version (from `seen`, default the target's own
    version) is older than the item's current version gives `changed_since_opened` (level refuse; a type's check may name it better).
@@ -310,7 +331,8 @@ The writer:
 
 Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not_signed_in`, `choose_user`, `nested_write`,
 `set_changed`, `unknown_type`, `pack_off`, `bad_shape`, `not_allowed`, `wrong_organization`, `wrong_patient`, `two_patients`,
-`not_found`, `already_replaced`, `wrong_resource`, `unknown_system`, `changed_since_opened`, `empty_set`.
+`not_found`, `already_replaced`, `wrong_resource`, `unknown_system`, `changed_since_opened`, `empty_set`, `bad_set`;
+for a set's newborns (step 3b) also `name_missing`, `patient_exists`, `patient_unused`.
 
 ### 3.10 The reader: `public.read(query)` (the only way out)
 - One VOLATILE function. It logs in the same transaction; if the log insert fails, the read fails. The log (`core.read_log`) keeps one
@@ -1744,6 +1766,13 @@ numbered as on its picture.
   labour has ObGyn's **Partograph** button after Move and Discharge, for a reader who may read the record there, opening the tab at
   her: a tile button gets no read since C7, so its show reads the board's last good answer the pack's hook kept (none until it lands,
   forgotten when a read fails; a small core change, `ctx.read` for buttons too, noted, not asked).
+- **Built 2026-10-09, L2a (the owner's Q10):** the core part only — a set may make the newborns it is about (§3.9 step 3b): each a
+  new record, its mother the patient of the set's first entry as "mother of", its own entries (the cot stay, …) beside hers in the
+  same Done, twins (up to eight) numbered in turn, all or nothing (a refused, warned or busy set leaves no record, relation, snapshot
+  or record number), only by someone holding `manage:patients` in that department, and a retry makes nothing again. The demo kit's
+  `demo.w_born` writes such a set (unused until the birth's demo). *Chosen by Claude in the build, awaiting the owner:* a newborn
+  only (born on the clinic's today or in the 28 days before), never in an imported set, eight at most, the names of the API. The
+  birth card that uses it is L2b/L2c's.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2958,4 +2987,14 @@ types, parked pack calls with per-call Retry, Postgres enums.
   settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2, bedside 12, obgyn 10,
   clinics-core 11, labour 9; typecheck clean but for `src/pictures/bookings.tsx` (another session's); lint 0 errors; `npm run build`
   builds.
+- 2026-10-09: **core, L2a: newborns in a write set** (the owner's Q10 of 2026-10-08; §3.2, §3.9 step 3b, §5.6; lane `beds-labour`):
+  `20260926000003_core_writer.sql` in place (core.writer makes a set's `patients` after the ledger, the family rule lets them sit
+  beside the mother, the landed outcome names them; public.write takes them back with a set that does not land, code `OCNB1`),
+  `rpc.ts` (`NewPatient`, `SetIn.patients`, `Outcome.patients`), `words.ts` (`patient_exists`, `patient_unused`), the demo kit's
+  `demo.w_born` (unused until the birth's demo), the new suite `newborn` (65 checks), and in `concurrency` two sets making newborns
+  at once (the second waits for the record number and is busy, leaving nothing). Run: `db reset`; `gen:shapes --check` and
+  `gen:logins --check` unchanged; the full `db:test` green, 52 suites (among them spine 33, concurrency 22, registry 16, boundary 10,
+  export 50, rebuild 11, demo 98, newborn 65); `db:demo` twice (99 patients). Node: composer 19, chart 16, board 27, demo 8,
+  registries 9, labour 9, bedside 12; typecheck clean; lint 0 errors; `npm run build` builds. A birth date must read `YYYY-MM-DD`
+  (the date cast alone takes `today`).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
