@@ -10,13 +10,14 @@ import type { QueueRow } from '../../db/types'
 import { Button, Kbd } from '../../ui'
 import { useChart } from './context'
 import { barOf, doneLabel, doneNext, ordersOut } from './model/visit'
+import { baseOf } from './model/items'
 
 export function Actions({ next, assignee }: { next: QueueRow | null; assignee: string | null }) {
   const c = useChart(); const { dept, org } = useDepartment(); const ds = useDraftsFor(c.patientId); const drafts = ds.length; const a = c.actions
   const v = c.encounter
   // orders out in this visit, with those the drafts will sign (a medicine sent on is one too)
   const out = useMemo(() => !v || !dept ? 0 : ordersOut(c.r.server.tables['base.orders']?.rows ?? [], v.id,
-    ds.flatMap((d) => draftEntries(d, { patientId: c.patientId, departmentId: dept.id, visitId: v.id, record: c.r, org })).filter((e) => e.type === 'order').length),
+    ds.flatMap((d) => draftEntries(d, { patientId: c.patientId, departmentId: dept.id, visitId: v.id, record: c.r, org })).filter((e) => baseOf(e.type, org?.types) === 'order').length),
   [v, dept, org, ds, c.r, c.patientId])
   if (!dept) return null
   const bar = barOf(c.role, c.encounter, drafts, dept, c.can, a.discharging)

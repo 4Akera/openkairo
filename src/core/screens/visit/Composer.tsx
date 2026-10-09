@@ -54,7 +54,11 @@ export const Composer = forwardRef<ComposerHandle, { r: RecordView; patientId: s
     departmentType: org?.departments.find((x) => x.id === departmentId)?.type, packCards: org?.departments.find((x) => x.id === departmentId)?.pack_cards ?? true,
     problems: [...r.problems.map((p) => ({ id: p.id, name: p.name })), ...drafts.filter((d) => d.function === 'problem' && d.params.action === 'add').map((d) => ({ id: d.id, name: String(d.params.name) }))],
     facts: standingOf(facts.data, org?.types, ymd(new Date().toISOString())), scores: org?.scores ?? [],
-  }), [org, presets, departmentId, r.problems, drafts, can, facts.data])
+    record: { patient: r.patient, values: r.values, medications: r.medications, allergies: r.allergies, allergy_review: r.allergy_review },   // what the chart already shows, for a pack's order card
+    org,   // the clinic's settings, for a pack's line under the /rx and /v cards (C1)
+    // the departments that work for this one: a pack's command that is not an order is offered by works for (C3, /transfuse)
+    servedBy: (org?.allDepartments ?? []).filter((x) => x.id !== departmentId && worksFor(org, x.id, departmentId)).map((x) => x.id),
+  }), [org, presets, departmentId, r.problems, r.patient, r.values, r.medications, r.allergies, r.allergy_review, drafts, can, facts.data])
 
   // what the lists hold once this visit's drafts are signed: warnings check against these
   const allergies: Allergy[] = useMemo(() => [...r.allergies.filter((a) => a.status === 'active' && !drafts.some((d) => d.function === 'allergy' && d.params.action === 'refute' && d.params.allergy_id === a.id)),

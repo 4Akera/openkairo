@@ -60,6 +60,8 @@ export function obsTileLine(row: PresenceRow, now: number): TileWords | null {
   return { words: hours >= 1 ? [{ text: `no obs for ${hours} h`, tone: 'warn' }] : ['no obs yet'] }
 }
 
+/** the board's stays as its read's key: the same stays (and whether each has vitals) read once */
+export const staysKey = (rows: readonly PresenceRow[]) => rows.map((r) => `${r.item}@${r.version}:${r.has_vitals ? 1 : 0}`).sort().join(',')
 /** the board's read (bedside.board): the patients it names, and each stay's latest NEWS2 by the stay's item */
 export interface News2Board { patient_ids: string[]; news2: Record<string, { score: string; version: string; total: number; band: string; at: string }> }
 /** the tile's words: the open stay's latest NEWS2 from the board's read (amber at 5–6, red at 7 or more, in its band's tone, the colour

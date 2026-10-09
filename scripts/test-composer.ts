@@ -11,6 +11,7 @@ import type { Allergy, Medication, Organization, Problem, Template } from '../sr
 import { draftEntries } from '../src/core/db/entries'
 import { PLAIN_SEND, registerSend } from '../src/core/screens/visit/send'
 import { factMissing, isDay } from '../src/core/screens/visit/facts'
+import { arabicSig } from '../src/core/screens/chart/model/arabic'
 
 const ctx: Ctx = {
   departmentId: 'im', now: new Date('2026-09-24T10:00:00Z'),
@@ -286,5 +287,17 @@ test('the / list (owner, 2026-10-07): one column in groups, named in words, narr
   assert.deepEqual(all.filter((x) => x.group === 'Record').map((x) => x.title), ['Vitals', 'Diagnosis', 'Allergy', 'Long note'])
   assert.equal(all.find((x) => x.label === '/rx')!.title, 'Prescription'); assert.equal(all.find((x) => x.label === '/rx')!.detail, '/rx metformin 500 bd 30d for dm', 'one short example')
   assert.deepEqual(suggest('/r', ctx, [], new Set())!.items.map((x) => x.label), ['/rx'], 'narrows as typed')
+})
+test('what the composer writes, the prescription\'s Arabic says no more and no less: nocte, hs and mane their time of day; a bare dose no form', () => {
+  const sig = (line: string) => { const q = p(line)
+    return arabicSig({ dose: q.dose_number != null ? `${q.dose_number}${q.dose_unit ? ` ${q.dose_unit}` : ''}` : null, route: q.route as string | null, frequency: q.frequency as string | null,
+      prn: null, days: q.duration_days as number | null, instructions: q.instructions_text as string | null }) }
+  assert.deepEqual([p('/rx amitriptyline 25 mg nocte 30d').frequency, p('/rx amitriptyline 25 mg nocte 30d').instructions_text], ['OD', 'at night'])
+  assert.equal(sig('/rx amitriptyline 25 mg nocte 30d'), '٢٥ مجم بالفم مرة واحدة يومياً ليلاً لمدة ٣٠ يوماً', 'at night, as the English says')
+  assert.equal(p('/rx omeprazole 20 mg mane').instructions_text, 'in the morning'); assert.match(sig('/rx omeprazole 20 mg mane'), /مرة واحدة يومياً صباحاً/)
+  assert.match(sig('/rx zolpidem 10 mg hs'), /مرة واحدة يومياً ليلاً/)
+  assert.equal(p('/rx amoxicillin suspension 5 tds 7d').dose_unit, null, 'a drug it does not know: a bare 5')
+  assert.equal(sig('/rx amoxicillin suspension 5 tds 7d'), '٣ مرات يومياً لمدة ٧ أيام', 'never "5 tablets" of a suspension')
+  assert.doesNotMatch(sig('/rx ibuprofen 400 mg tds ; do not take with food'), /مع الأكل/, 'an instruction not to: never said as one to')
 })
 console.log(`composer: ${n} groups passed`)

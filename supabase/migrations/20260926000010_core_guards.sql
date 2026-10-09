@@ -74,3 +74,12 @@ select cron.schedule('opencare_outbox', '5 seconds', 'call core.drain_outbox()')
 select cron.schedule('opencare_files', '17 3 * * *', 'select core.sweep_files()');
 
 revoke all on function core.rebuild_check(uuid), core.sweep_files() from public, anon, authenticated;
+
+-- a pack's schema: nothing callable by PUBLIC, now and later. Defined here, before every pack's migration, so a pack may call it from
+-- its own (the per-pack revoke lines stay in 20260926000099_privileges.sql, which runs last)
+create or replace function core.lock_pack(p_key text) returns void language plpgsql as $$
+begin
+  execute format('revoke all on all routines in schema %I from public, anon, authenticated', p_key);
+  execute format('alter default privileges for role %I revoke execute on functions from public', 'pack_' || p_key);
+end $$;
+revoke all on function core.lock_pack(text) from public, anon, authenticated;

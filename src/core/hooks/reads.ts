@@ -97,8 +97,14 @@ export function useToReview(departmentId: string | null = null, enabled = true) 
     queryKey: ['to_review', at, org?.me.id], enabled: enabled && !!at && !!org, refetchInterval: 30_000,
     queryFn: async () => {
       const mine = await table<ReviewRow>('base.review', at!, { for_user: org!.me.id })
+      // an order done with no report (spec §5.5 (c)): its row names the exam, from the order, for the doctor's own reading
+      const unread = mine.rows.filter((r) => r.why === 'no_answer' && r.order_item).map((r) => r.order_item!)
+      // (only a label: where the reader may not read the orders, or the read fails, the row keeps its own line; the list never fails for it)
+      const exams = new Map(unread.length && mayIn(org, 'read:bench', at) ? (await table<OrderRow>('base.orders', at!, { item: unread }, { entries: false })
+        .catch(() => ({ rows: [] as OrderRow[] }))).rows.map((o) => [o.item, o.service_name]) : [])
       return mine.rows.sort((a, b) => Number(b.critical) - Number(a.critical) || b.at.localeCompare(a.at)).map((r) => {
-        const e = mine.entries[r.entry_id]; const c = card(e, org); const p = banner(mine.patients[r.patient_id])
+        const e = mine.entries[r.entry_id]; const c0 = card(e, org); const p = banner(mine.patients[r.patient_id])
+        const c = r.why === 'no_answer' ? { ...c0, display_line: `${exams.get(r.order_item ?? '') ?? c0.display_line} · done, no report asked` } : c0
         return { ...c, patient_id: r.patient_id, patient: { given_name: p.given_name, family_name: p.family_name }, review: r,
           request: { ...(c.request ?? { step: '', status: 'done' as const, status_reason: null, to_department_id: '', to_department_name: null, priority: 'routine' as const, due_at: r.at, reply_line: null, replied_at: null, review_needed_at: null }),
             reply_line: e.line, reply_flag: c.flag, review_needed_at: r.at, review_reason: r.why } }

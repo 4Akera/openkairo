@@ -9,7 +9,7 @@ create temp table first_load as select (select count(*) from core.patients where
   (select count(*) from core.holdings where organization_id = demo.base('clinic')) as holdings,
   (select count(*) from core.users where organization_id = demo.base('clinic')) as users;
 -- include: supabase/demo/load.sql
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 
 -- the shared journey's steps strictly in order, each at a time of its own: GP, Done, admitted, the round's last note, his
 -- medicines for home sent, given, home (spec §5.1 rule 9)
@@ -30,7 +30,7 @@ $$;
 -- today's visits, the two base admissions this morning and Ward nursing's Tahany (admitted with no bed yet) are today's, however early
 -- it loads; the morning's done count as done today
 create function pg_temp.day_is_today() returns setof text language sql as $$
-  select t.ok(count(*) = 28 and bool_and(day = (demo.now() at time zone 'Africa/Cairo')::date), count(*) || ' visits and stays of the day, each on today''s date')
+  select t.ok(count(*) = 63 and bool_and(day = (demo.now() at time zone 'Africa/Cairo')::date), count(*) || ' visits and stays of the day, each on today''s date')
     from base.presence where organization_id = demo.base('clinic') and checked_in_at > demo.now() - interval '1 day'
      and patient_id not in (select id from core.patients where full_name ilike 'walk in%')   -- the app's own (the bed check below)
   union all
@@ -46,7 +46,7 @@ select t.ok(not exists (select 1 from core.entries e, jsonb_array_elements(e.fin
   'no entry of the demo is flagged');
 select t.ok(not exists (select 1 from base.review where organization_id = demo.base('clinic') and why = 'flag'), 'nothing to review for a flag');
 select t.ok(not exists (select 1 from core.stale where organization_id = demo.base('clinic')), 'no pack is stale');
-select t.ok(f.patients = (select count(*) from core.patients where organization_id = demo.base('clinic')) and f.patients = 35, 'the same ' || f.patients || ' patients, once each')
+select t.ok(f.patients = (select count(*) from core.patients where organization_id = demo.base('clinic')) and f.patients = 96, 'the same ' || f.patients || ' patients, once each')
   from first_load f;
 select t.ok(f.entries = (select count(*) from core.entries where organization_id = demo.base('clinic')), 'the same ' || f.entries || ' entries') from first_load f;
 select t.ok((select count(*) from core.erasures where organization_id = demo.base('clinic')) = f.patients, 'the reload erased the first load''s patients through the eraser')
@@ -58,7 +58,7 @@ select t.ok(f.settings = (select count(*) from core.settings where organization_
 \echo '── the demo''s departments are made from starter setups (§5.2), and a reload''s setups add nothing'
 select t.ok((select jsonb_object_agg(d.name, core.setting_at(d.organization_id, 'department.setup', d.id) ->> 'setup') from core.departments d
     where d.organization_id = demo.base('clinic') and d.work <> 'outside')
-  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier"}',
+  = '{"Front desk":"front_desk","General Practice":"clinic","Psychiatry":"clinic","Medical Ward":"ward","Laboratory":"laboratory","Pharmacy":"pharmacy.pharmacy","Main store":"pharmacy.store","Cashier":"billing.cashier","Radiology":"radiology.department","ECG room":"bookings.bench","Vaccination room":"vaccines.room","Diabetes clinic":"chroniccare.clinic","Family medicine":"familycare.medicine","Paediatrics clinic":"paeds.clinic","Children''s ward":"paeds.ward","ObGyn clinic":"obgyn.clinic","Cardiology clinic":"cardio.clinic","Echo room":"cardio.echo_room","Nephrology clinic":"nephrology.clinic","Chest clinic":"lungs.clinic","Haematology clinic":"haemato.clinic","Blood bank":"lis.blood_bank","Oncology clinic":"oncology.clinic","Chemotherapy day unit":"oncology.day_unit","Theatre":"theatre.department","Surgery clinic":"surgical.clinic","Pre-op clinic":"anaesthesia.preop_clinic","Recovery":"anaesthesia.recovery"}',
   'each department records the setup it was made from');
 select t.ok((select count(*) from core.places where organization_id = demo.base('clinic') and department_id = demo.base('ward')
     and id = core.setup_id(demo.base('ward'), 'place', 'bed_' || substr(name, 5))) = 8, 'the ward''s eight beds are the Ward setup''s, ids from their keys');
@@ -67,7 +67,7 @@ select t.ok(not exists (select 1 from core.departments d, jsonb_array_elements(c
 select t.ok(core.department_uses(demo.base('clinic'), demo.id('pharmacy', 'department'), 'pharmacy')
   and (select count(*) from core.settings_at(demo.base('clinic'), 'service') s where s.owner_id = demo.id('pharmacy', 'department')) = 1,
   'the Pharmacy ticks its pack and has its one dispensing service, from its setup');
-select t.ok((select count(distinct full_name) from core.patients where organization_id = demo.base('clinic')) = 35, 'every patient''s name is their own');
+select t.ok((select count(distinct full_name) from core.patients where organization_id = demo.base('clinic')) = 96, 'every patient''s name is their own');
 select t.ok(not exists (select 1 from core.patients p join core.users u on u.organization_id = p.organization_id and u.name ilike '%' || p.full_name || '%'
   where p.organization_id = demo.base('clinic')), 'no patient shares a name with the staff');
 select t.ok(r = '[]'::jsonb, 'rebuild = live after the reload: ' || left(r::text, 300)) from core.rebuild_check() r;
@@ -76,17 +76,19 @@ select t.ok(r = '[]'::jsonb, 'rebuild = live after the reload: ' || left(r::text
 -- (today's minutes are demo.ago's: as they are from 05:00, squeezed into the time since midnight before it)
 select t.ok(min(checked_in_at) = demo.ago(40) and max(checked_in_at) = demo.ago(5),
   'waiting: the longest arrived 40 minutes ago, the latest 5: ' || max(now() - checked_in_at)) from base.presence
- where organization_id = demo.base('clinic') and state = 'waiting';
+ where organization_id = demo.base('clinic') and state = 'waiting' and department_id = demo.base('gp');   -- the base's waiting room (a pack's clinic keeps its own day)
 select t.ok(bool_and(checked_in_at > now() - interval '12 hours'), 'every open visit arrived within the last 12 hours (none lapses to left)') from base.presence
  where organization_id = demo.base('clinic') and kind = 'visit' and state not in ('done', 'left');
 select t.ok(array_agg(distinct state order by state) @> array['back', 'called', 'done', 'pending', 'waiting'], 'the queue has every band: ' || array_agg(distinct state order by state)::text)
   from base.presence where organization_id = demo.base('clinic') and department_id = demo.base('gp');
-select t.ok((select called_at from base.presence where organization_id = demo.base('clinic') and state = 'called') = demo.ago(8), 'in consult for 8 minutes');
-select t.ok(count(*) = 6 and bool_and(checked_in_at between now() - interval '3 days' and now()), count(*) || ' admitted on the ward (one with no bed yet), all in the last three days')
-  from base.presence where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted';
+select t.ok((select called_at from base.presence where organization_id = demo.base('clinic') and state = 'called' and department_id = demo.base('gp')) = demo.ago(8), 'in consult for 8 minutes');
+select t.ok(count(*) = 7 and bool_and(checked_in_at between now() - interval '3 days' and now()), count(*) || ' admitted on the Medical Ward (two with no bed yet), all in the last three days')
+  from base.presence where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.base('ward');
+select t.ok(count(*) = 5 and bool_and(checked_in_at between now() - interval '3 days' and now()), count(*) || ' on the Children''s ward, admitted in the last three days')
+  from base.presence where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.id('paeds', 'ward');
 select t.ok((select (now() at time zone 'Africa/Cairo')::date - day from base.presence where organization_id = demo.base('clinic') and kind = 'stay'
   and patient_id = demo.id('base', 'patient:nadia') and state = 'admitted') = 2, 'Nadia was admitted two days ago (day 3 today)');
-select t.ok(max(e.occurred_at) <= clock_timestamp() and min(e.occurred_at) >= now() - interval '200 days', 'every clinical time within the last 200 days, none ahead')
+select t.ok(max(e.occurred_at) <= clock_timestamp() and min(e.occurred_at) >= now() - interval '11 years', 'every clinical time within the last 11 years (a child''s doses from birth, a chronic patient''s years, a method in place for ten years), none ahead')
   from core.entries e where e.organization_id = demo.base('clinic');
 select t.ok(bool_and(p.birth_date between current_date - interval '90 years' and current_date) and bool_and(p.birth_date is not null), 'birth dates relative to today')
   from core.patients p where p.organization_id = demo.base('clinic');
@@ -106,10 +108,13 @@ select t.ok((select ordered_at from base.orders o where o.organization_id = demo
 select t.ok(array_agg(distinct x.code order by x.code) = array['dnr', 'fall_risk', 'isolation_hbv'], 'alerts: ' || array_agg(distinct x.code order by x.code)::text)
   from core.entries e, jsonb_to_recordset(e.data -> 'concept' -> 'codings') x(code text)
  where e.organization_id = demo.base('clinic') and e.type = 'alert' and e.data ->> 'status' = 'active';
-select t.ok(count(*) = 1, 'one critical result waiting') from base.review where organization_id = demo.base('clinic') and critical;
-select t.ok(count(*) = 1, 'a pregnant patient') from core.entries where organization_id = demo.base('clinic') and type = 'pregnancy' and (data ->> 'pregnant')::boolean;
+select t.ok(count(*) = 3, 'three critical results waiting (the base''s, and two haemoglobins under 7 asking for blood)') from base.review where organization_id = demo.base('clinic') and critical;
+select t.ok(count(*) = 6, 'six pregnant patients (the base''s, ObGyn''s four, and an echo for a murmur at 24 weeks)') from core.entries where organization_id = demo.base('clinic') and type = 'pregnancy' and (data ->> 'pregnant')::boolean;
 select t.ok(count(*) = 1, 'a breastfeeding patient') from core.entries where organization_id = demo.base('clinic') and type = 'breastfeeding' and (data ->> 'breastfeeding')::boolean;
 select t.ok(count(*) = 1, 'a private note (Psychiatry)') from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'note' and e.department_id = demo.base('psychiatry');
+select t.ok(core.setting_at(demo.base('clinic'), 'organization.header', demo.base('clinic')) ->> 'tax_number' = '512-338-907', 'printouts carry the clinic''s header (§3.13)');
+select t.ok(core.setting_at(demo.base('clinic'), 'lis.large', demo.base('lab')) ->> 'labels' = 'printed'
+  and not (core.setting_at(demo.base('clinic'), 'lis.large', demo.base('lab')) ->> 'scan_receive')::boolean, 'the Laboratory prints its sample labels at Collected; its other large-lab switches off');
 
 \echo '── the packs'' fit: values for each patient''s age and sex'
 create temp view aged as select e.*, p.gender, extract(year from age(e.occurred_at::date, p.birth_date)) as years, (e.occurred_at::date - p.birth_date) as days
@@ -122,7 +127,7 @@ select t.ok(bool_and(case when years < 1 then w between 2 and 12 and hr between 
 select t.ok(not exists (select 1 from aged where type = 'vitals' and years < 3 and data ? 'bp'), 'no blood pressure on a baby');
 select t.ok(bool_and((a -> 'range' -> 'low' ->> 'value')::numeric = case when gender = 'female' then 12 else 13.5 end), 'haemoglobin ranges by sex')
   from aged, jsonb_array_elements(data -> 'analytes') a where type = 'result' and a ->> 'key' = 'hb' and data ->> 'status' = 'final';
-select t.ok(bool_and(years >= 18), 'adults'' medicines on adults only') from aged where type = 'medication';
+select t.ok(bool_and(years >= 18 or department_id = demo.id('paeds', 'clinic')), 'adults'' medicines on adults only; a child''s from the Paediatrics clinic') from aged where type = 'medication';
 
 \echo '── logins: a demo person for every built-in role, each with a login'
 select t.ok(not exists (select 1 from core.roles r where r.organization_id is null and core.layer_on(demo.base('clinic'), r.layer)
@@ -199,6 +204,14 @@ select t.ok(w -> 'waiting' @> jsonb_build_array(demo.id('billing', 'order:magdy 
 select t.ok(not (w -> 'waiting') ? demo.id('billing', 'order:hoda lipids')::text and w -> 'patient_ids' = jsonb_build_array(demo.id('billing', 'patient:hoda')), 'Hoda''s lipid profile, paid, does not wait')
   from public.pack_op(jsonb_build_object('op', 'billing.waiting', 'department_id', demo.base('lab'), 'args', jsonb_build_object('orders',
     jsonb_build_array(demo.id('billing', 'order:hoda lipids'))))) w;
+select demo.as(demo.base('doctor'));
+select t.ok(w -> 'waiting' @> jsonb_build_array(demo.id('billing', 'order:magdy cbc'), demo.id('billing', 'order:magdy hba1c')) and jsonb_array_length(w -> 'waiting') = 2,
+  'on Magdy''s chart in General Practice, the word on both tests'' lines (owner, 2026-10-08)')
+  from public.pack_op(jsonb_build_object('op', 'billing.chart', 'department_id', demo.base('gp'), 'args', jsonb_build_object('patient_id', demo.id('billing', 'patient:magdy'),
+    'orders', jsonb_build_array(demo.id('billing', 'order:magdy cbc'), demo.id('billing', 'order:magdy hba1c'))))) w;
+select t.ok(c.open and c.at = (select min(e.occurred_at) from core.entries e where e.organization_id = c.organization_id and e.item = c.item),
+  'Heba, waiting at General Practice and not yet called, owes its visit fee already: charged at check-in (owner, 2026-10-08)')
+  from billing.charges c where c.organization_id = demo.base('clinic') and c.patient_id = demo.id('base', 'patient:heba') and c.kind = 'visit' and c.department_id = demo.base('gp');
 
 \echo '── reloaded with two patients of the app in the beds the demo names (3 and 4): each demo stay takes a free bed'
 do $$
@@ -218,8 +231,9 @@ end $$;
 -- include: supabase/demo/load.sql
 select t.ok(count(*) = 2, 'the app''s two patients are still in Beds 3 and 4') from base.presence where organization_id = demo.base('clinic') and kind = 'stay'
    and state = 'admitted' and place_id in (demo.bed(3), demo.bed(4)) and patient_id in (select id from core.patients where full_name ilike 'walk in%');
-select t.ok(count(*) = 8 and count(distinct place_id) = 7, 'seven in seven beds — the demo''s five and the app''s two — and one admitted with no bed yet') from base.presence
- where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted';
+select t.ok(count(*) = 9 and count(distinct place_id) = 7 and count(*) filter (where place_id is null) = 2,
+  'seven in seven beds — the demo''s five and the app''s two — and Ward nursing''s two admitted with no bed yet') from base.presence
+ where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.base('ward');
 select t.ok(p.place_id is distinct from (select (e.data ->> 'place_id')::uuid from core.entries e where e.organization_id = p.organization_id and e.item = p.item and e.type = 'admitted'),
   'Nadia was moved off her first bed') from base.presence p where p.organization_id = demo.base('clinic') and p.patient_id = demo.id('base', 'patient:nadia') and p.kind = 'stay' and p.state = 'admitted';
 select pg_temp.journey_in_order();
@@ -233,6 +247,6 @@ select t.ok(min(checked_in_at) = demo.ago(40) and min(checked_in_at) >= demo.mid
   from base.presence where organization_id = demo.base('clinic') and state = 'waiting';
 select t.ok(not exists (select 1 from core.entries e, jsonb_array_elements(e.findings) f where e.organization_id = demo.base('clinic') and f ->> 'level' = 'flag'),
   'nothing flagged loaded early');
-select core.drain() as drained;
+select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 select t.ok(r = '[]'::jsonb, 'rebuild = live after the early load: ' || left(r::text, 300)) from core.rebuild_check() r;
 select set_config('demo.now', '', true) is not null as clock_back;

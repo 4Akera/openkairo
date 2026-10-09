@@ -3,17 +3,17 @@
 // always in place; at most two pack buttons; a colour only for a state. Then pharmacy's mark. Pure: no browser, no database.
 // npm run test:board
 import assert from 'node:assert/strict'
-import { PACK_BUTTONS, noBedActions, registerTileButton, registerTileLine, registerTileLoad, staysKey, tileActions, tileButtonDefs, tileLineDefs, tileLineOf, tileLoadDefs, type TileCtx } from '../src/core/screens/ward/tiles'
+import { PACK_BUTTONS, noBedActions, registerTileButton, registerTileLine, tileActions, tileButtonDefs, tileLineDefs, tileLineOf, type TileCtx } from '../src/core/screens/ward/tiles'
 import { benchMarkRow, marksOf, registerRowMark, rowMarkDefs, stateTone, visitMarkRow, type MarkCtx, type MarkDef, type MarkRow } from '../src/core/screens/marks'
 import { collectMark } from '../src/packs/pharmacy/dispensed'
-import type { OrderRow, Organization, PresenceRow } from '../src/core/db/types'
+import type { OrderRow, PresenceRow } from '../src/core/db/types'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PackLine } from '../src/core/screens/ward/Tile'
 import { ListRow } from '../src/core/ui/patient'
 import { readFileSync } from 'node:fs'
-import { anywayCalls, byWord, chargesHere, dueLines, dueTotal, freeRows, goAhead, isStop, packRowOf, reasonReady, registerRowAction, registerSoftCheck, rowActionDefs, rowButtonsOf,
-  rowsKey, softCheckDefs, waitsOf, waitWords, type Anyway, type DueLine, type RowActionDef, type RowCtx, type SoftCheckDef } from '../src/core/screens/rows'
+import { anywayCalls, byWord, chargesHere, chartRowOf, chartWait, dueLines, dueTotal, freeRows, goAhead, isStop, packRowOf, reasonReady, registerRowAction, registerSoftCheck,
+  rowActionDefs, rowButtonsOf, rowsKey, softCheckDefs, waitsOf, waitWords, type Anyway, type DueLine, type RowActionDef, type RowCtx, type SoftCheckDef } from '../src/core/screens/rows'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -247,14 +247,62 @@ test('the wait wiring on the pages (spec §5.4, core change (c)): the bench\'s p
   assert.match(bp, /return !!w && \(free\(r\) \|\| isStop\(w\)\)/, 'a pack\'s form on a waiting order is ready only with a stop')
   assert.match(bp, /disabled=\{held && !x\.notDone && !formOf\(r\)\}/, 'its form stays open (Not given can be chosen); the base\'s grid is greyed until not done')
   assert.match(bp, /x\.notDone \? !!x\.reason\.trim\(\) : free\(r\)/, 'not done works on a waiting order; a result does not')
-  assert.match(bp, /packs\.anyway\(or, \[r\.order\.item\], 'Go ahead'\)/, 'Go ahead anyway… on the order, for whoever may do the work')
+  assert.match(bp, /held && can\('read:bench'\) && packs\.anyway\(or, \[r\.order\.item\], 'Go ahead'\)/,
+    'Go ahead anyway… on the order, for anyone working the bench (read:bench there; owner, 2026-10-08)')
+  assert.doesNotMatch(bp, /mayWork/, 'no longer narrowed to whoever may do the work')
+  const bench = src('src/core/screens/bench/Bench.tsx')
+  assert.match(bench, /const ahead = can\('read:bench'\) && packs\.anyway\(pr, waiting\.map\(\(r\) => r\.order\.item\), 'Go ahead'\)/, 'the bench\'s row: the same')
+  assert.doesNotMatch(bench, /mayWork/)
+  const collect = src('src/packs/lis/Collect.tsx'); const receive = src('src/packs/lis/Receive.tsx')
+  assert.match(collect, /can\('read:bench'\) && packs\.anyway\(pr, hold\.map\(\(r\) => r\.order\.item\), 'Collect'\)/, 'Collect anyway…: anyone working the bench, not only who collects')
+  assert.match(receive, /can\('read:bench'\) && packs\.anyway\(pr, hold\.map\(\(r\) => r\.order\.item\), 'Receive'\)/, 'Receive anyway…: the same')
   const rq = src('src/core/screens/Request.tsx')
   assert.match(rq, /disabled=\{w\.isPending \|\| \(notDone && !reason\.trim\(\)\) \|\| \(!!wait && !notDone\)\}/, 'Release greyed while it waits, unless not done')
   assert.match(rq, /disabled=\{!!wait\} title=\{wait\?\.word\} onClick=\{\(\) => step\('in-progress'\)\}>Start/, 'Start greyed with the word')
   assert.match(rq, /packs\.anyway\(prow, \[row!\.order\.item\], 'Answer'\)/, 'Answer anyway…, for whoever may answer')
   assert.match(rq, /<CancelButton onCancel=\{\(why\) => step\('rejected', why\)\} \/>/, 'Decline (a stop) is never greyed')
-  assert.doesNotMatch(src('src/core/screens/chart/blocks/Orders.tsx'), /useRows|softCheck|useOrderWaits/, 'the chart draws no soft check: (c) is approved for the lists and Request.tsx only')
+  assert.doesNotMatch(src('src/core/screens/chart/blocks/Orders.tsx'), /softCheck|useRowWaits/, 'the chart draws no soft-check card, button or …anyway: only words (c on the chart, owner 2026-10-08; l, §5.7)')
+  assert.match(src('src/core/screens/chart/blocks/Orders.tsx'), /useOrderWords\('chart'/, 'only a pack\'s words on an order\'s line: core change (l), approved for the chart (§5.7)')
   assert.doesNotMatch(src('src/core/screens/useRows.tsx'), /refetchInterval/, 'the packs\' data is read on hints and changes, never on a timer (a list left open logs no reads)')
+})
+test('the doctor\'s chart (owner, 2026-10-08, (c) extended to the order\'s line): one row of the record\'s open orders; nothing open, nothing asked', () => {
+  const os = [order({ item: 'o1' }), order({ item: 'o2', status: 'completed' }), order({ item: 'o3', status: 'on-hold' }), order({ item: 'o4', status: 'revoked' }),
+    order({ item: 'o5', status: 'in-progress' }), order({ item: 'o6', status: 'cancelled' })]
+  const rows = chartRowOf('pt', os)
+  assert.equal(rows.length, 1); assert.equal(rows[0].key, 'chart pt'); assert.deepEqual(rows[0].orders.map((o) => o.item), ['o1', 'o3', 'o5'], 'sent, held, started: open')
+  assert.ok(!('lines' in rows[0]), 'the chart hands no lines: it prices nothing')
+  assert.deepEqual(chartRowOf('pt', os.filter((o) => o.item === 'o2' || o.item === 'o4')), [], 'none open: no row, so no pack is asked')
+  assert.deepEqual(chartRowOf('pt', undefined), [], 'the record not read: nothing')
+})
+test('on the chart, the word follows the hook\'s rules: only where the reader\'s department uses the pack, an open order on the row, a word and a state tone, never a number', () => {
+  const row = chartRowOf('pt', [order({ item: 'o1' }), order({ item: 'o3', status: 'on-hold' })])[0]
+  const chart = (packs: string[]) => rctx(packs, { list: 'chart', dept: { id: 'gp', name: 'General Practice', packs, declared: {} } })
+  const w = waitsOf(softCheckDefs(), row, chart(['probe']), { probe: { due: ['o1', 'o2'] } })
+  assert.deepEqual([...w.keys()], ['o1'], 'an order not on the chart\'s row is never answered')
+  assert.deepEqual(chartWait('o1', 'active', w, new Set()), { word: 'Waiting for payment', tone: 'warn', packs: ['probe'] }, 'the word and its tone')
+  assert.equal(waitsOf(softCheckDefs(), row, chart([]), { probe: { due: ['o1'] } }).size, 0, 'the reader\'s department does not use the pack: no word')
+  assert.equal(chartWait('o1', 'completed', w, new Set()), null, 'answered: no word')
+  assert.equal(chartWait('o1', 'revoked', w, new Set()), null, 'stopped: no word')
+  assert.equal(chartWait('o1', 'active', w, new Set(['o1'])), null, 'gone ahead anyway: no word')
+  assert.equal(chartWait('o3', 'on-hold', w, new Set()), null, 'held by nobody: no word')
+  const more: SoftCheckDef[] = [{ pack: 'cover', waiting: () => [{ order: 'o3', word: 'Pay 120 first' }, { order: 'o1', word: 'Waiting for approval · Misr Insurance', tone: 'warn' }], anyway: () => {} }]
+  const w2 = waitsOf(more, row, chart(['cover']), { cover: {} })
+  assert.equal(chartWait('o3', 'on-hold', w2, new Set()), null, 'a word with a number never reaches the chart')
+  assert.equal(chartWait('o1', 'active', w2, new Set())?.word, 'Waiting for approval · Misr Insurance')
+})
+test('the chart\'s wiring: one live read a chart (the center), its word and tone on the order\'s line and the prescription\'s, never a button, a card or …anyway', () => {
+  const pane = src('src/core/screens/chart/center/EncounterPane.tsx'); const rowsTsx = src('src/core/screens/useRows.tsx')
+  assert.match(pane, /useOrderWaits\(useMemo\(\(\) => chartRowOf\(c\.patientId, orders\), \[c\.patientId, orders\]\)\)/, 'the record\'s open orders, read once for the center')
+  assert.match(pane, /tables: c\.r\.server\.tables, waitOf,/, 'handed to the blocks')
+  assert.match(rowsTsx, /checksOnly \|\| placesOnly \? \[\] : rowActionDefs\(\)/, 'a page that only shows words asks no row action, so none loads or draws')
+  assert.match(rowsTsx, /export function useOrderWaits\(rows: PackRow\[\]\)[^]*usePackData\('chart', rows, null, \{ checksOnly: true \}\)/,
+    'on the chart the waiting word reads soft checks only (no row action is asked), in the reader\'s department, as on a list')
+  const orders = src('src/core/screens/chart/blocks/Orders.tsx'); const rx = src('src/core/screens/chart/blocks/Prescription.tsx')
+  assert.match(orders, /const wait = row \? env\.waitOf\?\.\(row\.item, row\.status\) \?\? null : null/)
+  assert.match(orders, /\{wait && <p className="text-13"><Tag tone=\{wait\.tone \?\? 'warn'\}>\{wait\.word\}<\/Tag><\/p>\}/, 'the word in its tone, alone')
+  assert.match(rx, /const wait = env\.waitOf\?\.\(row\.item, row\.status\) \?\? null/)
+  assert.match(rx, /\{wait && <Tag tone=\{wait\.tone \?\? 'warn'\}>\{wait\.word\}<\/Tag>\}/, 'and on the prescription\'s line, beside where it was sent')
+  for (const f of [orders, rx]) assert.doesNotMatch(f, /anyway|usePackRows|\.buttons\(|\.below\(/, 'no …anyway, no pack button or card')
 })
 test('a pack that charges (core change (d)): asked of the department without naming the pack; only a pack used there counts', () => {
   assert.equal(chargesHere({ packs: ['pharmacy', 'till'], declared: { pharmacy: { charges: false }, till: { charges: true } } }), true)
@@ -262,27 +310,6 @@ test('a pack that charges (core change (d)): asked of the department without nam
   assert.equal(chargesHere({ packs: ['pharmacy'] }), false); assert.equal(chargesHere(null), false)
 })
 test('a list\'s pack data is read once for its patients and orders, whatever their order', () => {
-  const a = [prow([order({ item: 'o1' })]), packRowOf('p2', { patient_id: 'p2', visit_id: null, orders: [order({ item: 'o9', patient_id: 'p2' })] })]
-  assert.equal(rowsKey(a), rowsKey([...a].reverse())); assert.notEqual(rowsKey(a), rowsKey(a.slice(0, 1)))
-})
-test('a pack\'s data for the board (the owner\'s C1): one load a pack, handed to its line and its buttons; none yet is undefined', () => {
-  const load = async () => ({ n: 3 })
-  assert.equal(registerTileLoad('reader', load), true)
-  quiet(() => { assert.equal(registerTileLoad('base', load), false, 'the base\'s'); assert.equal(registerTileLoad('reader', load), false, 'one load a pack')
-    assert.equal(registerTileLoad('other', 'x' as never), false, 'a function') })
-  assert.deepEqual(tileLoadDefs().map((d) => d.pack), ['reader'])
-  const said = (d: unknown) => ({ words: d && typeof d === 'object' ? `read ${(d as { n: number }).n}` : 'none yet' })
-  const lines = [{ pack: 'reader', line: (_r: PresenceRow, _c: TileCtx, d?: unknown) => said(d) }]
-  assert.deepEqual(tileLineOf(lines, stay(), ctx(['reader']), { reader: { n: 3 } }), [{ pack: 'reader', words: [{ text: 'read 3' }] }])
-  assert.deepEqual(tileLineOf(lines, stay(), ctx(['reader'])), [{ pack: 'reader', words: [{ text: 'none yet' }] }], 'its load has not answered: the row alone')
-  assert.deepEqual(tileLineOf(lines, stay(), ctx(['reader']), { other: { n: 9 } }), [{ pack: 'reader', words: [{ text: 'none yet' }] }], 'never another pack\'s')
-  const seen: unknown[] = []
-  const bs = [{ pack: 'reader', key: 'reader:Look', label: 'Look', show: (_r: PresenceRow, _c: TileCtx, d?: unknown) => { seen.push(d); return !!d }, onClick: () => {} }]
-  assert.deepEqual(labels(tileActions(bs, free, taken(['reader']), true, { reader: 1 })), ['Move', 'Discharge', 'Look']); assert.deepEqual(seen, [1])
-  assert.deepEqual(labels(noBedActions(bs, taken(['reader']), true)), [], 'show gets undefined: hidden here')
-  const a = [stay({ item: 's2', version: 3 }), stay({ item: 's1', version: 1, has_vitals: true })]
-  assert.equal(staysKey(a), staysKey([...a].reverse())); assert.equal(staysKey(a), 's1@1:1,s2@3:0'); assert.notEqual(staysKey(a), staysKey(a.slice(0, 1)))
-  const org = { organization: { id: 'o1' } } as Organization
-  assert.deepEqual(tileLineOf([{ pack: 'reader', line: (_r, c) => ({ words: c.org?.organization.id ?? 'no org' }) }], stay(), ctx(['reader'], { org })), [{ pack: 'reader', words: [{ text: 'o1' }] }])
+  const a = [prow([order({ item: 'o1' })]), packRowOf('p2', { patient_id: 'p2', visit_id: null, orders: [order({ item: 'o9', patient_id: 'p2' })] })]; assert.equal(rowsKey(a), rowsKey([...a].reverse())); assert.notEqual(rowsKey(a), rowsKey(a.slice(0, 1)))
 })
 console.log(`board: ${n} groups passed`)

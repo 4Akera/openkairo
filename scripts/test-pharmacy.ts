@@ -66,7 +66,7 @@ test('the store: what is low at the other places (out first), and the boxes back
 // ── the pharmacy's own prices (spec §5.4, owner 2026-10-08): per box, per strip; its lines handed on the Dispensing row ──
 const PP = (over: Partial<PricedProduct>): PricedProduct => ({ id: 'aug', brand: 'Augmentin 1 g', generic: 'Amoxicillin + clavulanic acid', atc: 'J01CR02', form: 'tablet', pack_size: 14,
   price_box: 145, strip_size: 7, price_strip: 75, ...over })
-test('prices: counted in the product\'s own units — whole boxes, then strips for the rest, else a box more; one box where it cannot be counted', () => {
+test('prices: counted in the product\'s own units — whole boxes, then strips for the rest, else a box more; one box where it cannot be counted (a syrup, an amount not known: owner, 2026-10-08)', () => {
   assert.equal(inStrips(PP({})), true); assert.equal(inStrips(PP({ price_strip: undefined })), false, 'a strip with no price is not sold'); assert.equal(inStrips(PP({ strip_size: 14 })), false, 'a strip the size of the box')
   assert.deepEqual(countIn(PP({}), 14), { boxes: 1, strips: 0 }); assert.deepEqual(countIn(PP({}), 21), { boxes: 1, strips: 1 })
   assert.deepEqual(countIn(PP({}), 6), { boxes: 0, strips: 1 }, 'six tablets: a strip'); assert.deepEqual(countIn(PP({}), 10), { boxes: 1, strips: 0 }, 'strips that would fill a box are a box')
@@ -75,7 +75,7 @@ test('prices: counted in the product\'s own units — whole boxes, then strips f
   assert.deepEqual(countIn(PP({}), null), { boxes: 1, strips: 0 }, 'an amount not known: one box'); assert.deepEqual(countIn(PP({}), Number.NaN), { boxes: 1, strips: 0 })
   assert.deepEqual(countIn(PP({ form: undefined, pack_size: 30 }), 60), { boxes: 2, strips: 0 }, 'no form, a box of 30: counted')
 })
-test('prices: the lines handed — a name, a quantity, an amount (plain numbers), the order; free without a box price', () => {
+test('prices: the lines handed — a name ("· box", "· strip": owner, 2026-10-08), a quantity, an amount (plain numbers), the order; free without a box price', () => {
   assert.deepEqual(linesFor(PP({}), 21, 'o1'), [{ name: 'Augmentin 1 g · box', quantity: 1, amount: 145, order: 'o1' }, { name: 'Augmentin 1 g · strip', quantity: 1, amount: 75, order: 'o1' }])
   assert.deepEqual(linesFor(PP({ price_box: undefined }), 14), [], 'no price on the box: free, no line')
   assert.deepEqual(linesFor(PP({ brand: 'Panadol syrup', form: 'syrup', pack_size: 1, price_box: 32.5, strip_size: undefined, price_strip: undefined }), 30),

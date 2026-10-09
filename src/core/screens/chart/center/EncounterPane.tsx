@@ -5,6 +5,8 @@
 import { useMemo, type RefObject } from 'react'
 import { useDepartment } from '../../../hooks/organization'
 import { Composer, type ComposerHandle } from '../../visit/Composer'
+import { chartRowOf } from '../../rows'
+import { useOrderWaits } from '../../useRows'
 import { BlockContext, type BlockEnv } from '../blocks/env'
 import { useChart } from '../context'
 import { Notices } from '../Notices'
@@ -17,8 +19,11 @@ import { WholeRecord } from './WholeRecord'
 
 export function EncounterPane({ composer }: { composer: RefObject<ComposerHandle | null> }) {
   const c = useChart(); const { org } = useDepartment(); const at = c.at
-  const env = useMemo<BlockEnv>(() => ({ org, me: c.me, departmentId: c.departmentId, can: c.can, tables: c.r.server.tables,
-    startOpen: at.scope === 'entry' ? [at.id] : undefined, onOpen: (id) => c.open({ scope: 'entry', id }) }), [org, c, at])
+  // the packs' words on the record's open orders (spec §5.4: "Waiting for payment" on an order's line), read once a chart, live
+  const orders = c.r.server.tables['base.orders']?.rows
+  const waitOf = useOrderWaits(useMemo(() => chartRowOf(c.patientId, orders), [c.patientId, orders]))
+  const env = useMemo<BlockEnv>(() => ({ org, me: c.me, departmentId: c.departmentId, can: c.can, tables: c.r.server.tables, waitOf,
+    startOpen: at.scope === 'entry' ? [at.id] : undefined, onOpen: (id) => c.open({ scope: 'entry', id }) }), [org, c, at, waitOf])
   return <BlockContext.Provider value={env}><div className="grid grid-cols-1 content-start gap-3">
     <Notices />
     <Questions />

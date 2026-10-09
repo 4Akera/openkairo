@@ -2,11 +2,12 @@
 // clinic's one list (pharmacy.product), per box, and per strip where it is sold in strips (strip_size, price_strip); no Keep stock needed.
 // Shown only where a pack the department uses declares that it charges (chargesHere, core change (d)), never naming that pack; never in
 // an entry. What is given is counted in the product's own units — whole boxes, then strips for the rest where it is sold in strips, else
-// one box more — and is one box where it cannot be counted in them (a syrup, a cream, an amount not known). Its lines (a name, a
-// quantity, an amount: plain numbers, no currency word; the order they belong to) are handed on the Dispensing row (core change (b)) for
-// a row action to read: what the order comes to so far — each dispense already given, counted apart (a part, then the rest), and what is
-// to give now — so whatever charges hands on only what it does not hold yet, and a rest given later is charged too. Pure (npm run
-// test:pharmacy).
+// one box more — and is one box where it cannot be counted in them (a syrup, a cream, an amount not known: owner, 2026-10-08). Its
+// lines are named by the brand and its unit, "Augmentin 1 g · box", "· strip" (owner, 2026-10-08; a product of one unit, its brand
+// alone), each with a quantity and an amount (plain numbers, no currency word) and the order they belong to, handed on the Dispensing
+// row (core change (b)) for a row action to read: what the order comes to so far — each dispense already given, counted apart (a part,
+// then the rest), and what is to give now — so whatever charges hands on only what it does not hold yet, and a rest given later is
+// charged too. Pure (npm run test:pharmacy).
 import type { Organization } from '@core/db/types'
 import type { SettingData } from '@core/db/shapes.generated'
 import { dueTotal, type DueLine } from '@core/screens/rows'
