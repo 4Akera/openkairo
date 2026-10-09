@@ -82,7 +82,7 @@ begin
                    from core.pack_entries(p_org, array[dd.item]) y where y.item = dd.item and y.type = 'casualty.disposition')
       select min(v.occurred_at) into v_dec_at from v where v.item_version > coalesce((select max(w.item_version) from v w where w.moved), -1);
       v_dec := jsonb_strip_nulls(jsonb_build_object('to', dd.data ->> 'to', 'department_id', dd.data ->> 'department_id',
-        'facility', dd.data ->> 'facility', 'police_report', dd.data ->> 'police_report', 'at', coalesce(v_dec_at, dd.occurred_at), 'entry', dd.id));
+        'facility', dd.data ->> 'facility', 'why', dd.data ->> 'why', 'police_report', dd.data ->> 'police_report', 'at', coalesce(v_dec_at, dd.occurred_at), 'entry', dd.id));
     end if;
     select (x.data -> 'casualty' -> 'police' ->> 'case')::boolean into v_police from core.pack_kind(p_org, (s ->> 'patient_id')::uuid, 'casualty.triage', '{"current":true}'::jsonb) x
      where x.visit_id = (s ->> 'item')::uuid and x.data -> 'casualty' ? 'police' order by x.occurred_at desc, x.recorded_at desc, x.id desc limit 1;

@@ -3,7 +3,7 @@
 // else other; never emd, which is a stay that comes from the ER) and is kept by the triage that follows. One Done of the triage card
 // writes the base's vitals (when typed), the pack's triage (the level's words and its coding on the scale, what brings them, the
 // pack's own fields), the base's urgent to match the level (1–2 urgent, 3–5 not) and the base's moved to the place chosen; the moves
-// are chained, urgent on the stay's latest entry and moved on the urgent. Pure: npm run test:casualty.
+// are chained, urgent on the stay's latest entry and moved on the urgent. A police case, when answered, and why. Pure: npm run test:casualty.
 import { draftEntries, move, newId, oneSet } from '@core/db/entries'
 import type { EntryIn, SetIn } from '@core/db/rpc'
 import type { EntryData } from '@core/db/shapes.generated'
@@ -20,6 +20,8 @@ export type Complaint = 'chest_pain' | 'breath' | 'injury_road' | 'fall' | 'abdo
 export const COMPLAINTS: [Complaint, string][] = [['chest_pain', 'Chest pain'], ['breath', 'Short of breath'], ['injury_road', 'Injury · road accident'], ['fall', 'Fall'],
   ['abdominal_pain', 'Abdominal pain'], ['fever', 'Fever'], ['poisoning', 'Poisoning'], ['sting_bite', 'Scorpion or snake'], ['burn', 'Burn'], ['fits', 'Fits'],
   ['weakness_one_side', 'Weakness one side'], ['bleeding_pregnancy', 'Bleeding in pregnancy'], ['wound', 'Cut or wound']]
+export type PoliceWhy = 'road_accident' | 'assault' | 'burn' | 'poisoning' | 'fall' | 'other'
+export const POLICE_WHY: [PoliceWhy, string][] = [['road_accident', 'Road accident'], ['assault', 'Assault'], ['burn', 'Burn'], ['poisoning', 'Poisoning'], ['fall', 'Fall'], ['other', 'Other']]
 /** the most words a less urgent level's reason may take */
 export const WHY_MAX = 200
 
@@ -33,6 +35,7 @@ export interface TriageDraft {
   vitals?: Record<string, unknown> | null   // the parsed /v params
   suggested?: Suggestion | null; why?: string
   place?: string | null                     // a place id, or null for the chairs
+  police?: { case: boolean; why?: PoliceWhy } | null   // a police case: unanswered, not written
 }
 // the empties go: undefined, null, '' and []
 const clean = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length))) as T
@@ -48,7 +51,8 @@ export function triageData(d: TriageDraft): EntryData['casualty.triage'] {
     casualty: clean<EntryData['casualty.triage']['casualty']>({ scale: d.scale, scale_version: SCALES[d.scale].version, level: d.level, arrival: d.arrival ?? undefined,
       arrival_ref: d.arrival === 'ambulance' ? trimmed(d.arrival_ref) : undefined, complaint: d.complaint ?? undefined, danger: d.danger.length ? [...d.danger] : undefined,
       suggested: d.suggested ? { level: d.suggested.level, signs: [...d.suggested.signs] } : undefined,
-      why: needsWhy(d.suggested, d.level) ? trimmed(d.why)?.slice(0, WHY_MAX) : undefined }),
+      why: needsWhy(d.suggested, d.level) ? trimmed(d.why)?.slice(0, WHY_MAX) : undefined,
+      police: d.police ? { case: d.police.case, ...(d.police.case && d.police.why ? { why: d.police.why } : {}) } : undefined }),
   })
 }
 

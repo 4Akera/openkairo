@@ -1,5 +1,5 @@
 // The triage card (spec/openCare.md §5.6): under the patient's row, inline (never over the list). How they came, what brings them,
-// the danger signs, the vitals typed as /v words (the base's vitals, ACVPU and air or oxygen among them), the five levels of the
+// the danger signs, a police case and why, the vitals typed as /v words (the base's vitals, ACVPU and air or oxygen among them), the five levels of the
 // clinic's scale each with its time to the doctor, the suggestion from the signs (ATS/NEWS2 thresholds: higher only, none under 16 —
 // the nurse decides; a less urgent level asks why), then the place: a free resus bay first for a level 1 or 2. One Done writes the
 // vitals, the triage, the base's urgent to match the level and the move to the place. A warning comes back with Sign anyway.
@@ -17,7 +17,7 @@ import { words as findingWords } from '@core/db/words'
 import { Button, Card, Chip, Field, Input, Kbd, TONE, cn, errorText, hm, ymd } from '@core/ui'
 import { LEVELS, LEVEL_WORDS, levelWord, scaleOf, timeWords, toneOf, type Level } from './scale'
 import { BASIS, DANGER, needsWhy, shows, signWords, suggest, type Danger } from './suggest'
-import { ARRIVALS, COMPLAINTS, WHY_MAX, arrivalOf, placeChoices, triageSet, vitalsOf, type Arrival, type Complaint, type TriageDraft } from './triage'
+import { ARRIVALS, COMPLAINTS, POLICE_WHY, WHY_MAX, arrivalOf, placeChoices, triageSet, vitalsOf, type Arrival, type Complaint, type PoliceWhy, type TriageDraft } from './triage'
 import { dur, type StayFacts } from './board'
 
 export interface TriageCardProps {
@@ -35,6 +35,9 @@ export function TriageCard({ dept, row, identity, opening, facts, arrival: carri
   const [ref, setRefNow] = useState(arrivalRef ?? ''); const [complaint, setComplaintNow] = useState<Complaint | null>(null)
   const [text, setTextNow] = useState(row.reason ?? ''); const [danger, setDangerNow] = useState<Danger[]>([]); const [line, setLineNow] = useState('')
   const [level, setLevelNow] = useState<Level | null>(null); const [why, setWhyNow] = useState('')
+  // the police case: preset from the latest triage that answered it (shown, not written again: that answer and its why stand); written
+  // only when answered on this card
+  const [police, setPoliceNow] = useState<{ case: boolean; why?: PoliceWhy } | null>(facts?.police === undefined ? null : { case: facts.police })
   const [chosenPlace, setPlaceNow] = useState<string | null | undefined>(undefined)   // undefined: not chosen, the level's default
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null)
   // a warning holds the very set it was given for: Sign anyway resends that set with its codes added to those confirmed before
@@ -43,6 +46,8 @@ export function TriageCard({ dept, row, identity, opening, facts, arrival: carri
   const edit = <T,>(set: (x: T) => void) => (x: T) => { setWarn(null); set(x) }
   const setArrival = edit(setArrivalNow); const setRef = edit(setRefNow); const setComplaint = edit(setComplaintNow); const setText = edit(setTextNow)
   const setDanger = edit(setDangerNow); const setLine = edit(setLineNow); const setLevel = edit(setLevelNow); const setWhy = edit(setWhyNow); const setPlace = edit(setPlaceNow)
+  const [policeAnswered, setAnswered] = useState(false)
+  const setPolice = edit((x: { case: boolean; why?: PoliceWhy } | null) => { setAnswered(true); setPoliceNow(x) })
   const scale = scaleOf(org); const [now] = useState(() => Date.now())   // when the card opened
   const v = vitalsOf(line)
   const age = identity?.birth_date ? ageIn(identity.birth_date, ymd(new Date(now).toISOString()), 'years') : null
@@ -69,7 +74,7 @@ export function TriageCard({ dept, row, identity, opening, facts, arrival: carri
   }
   function sign() {
     if (level === null) return
-    const draft: TriageDraft = { scale, level, arrival, arrival_ref: ref, complaint, words: text, danger, vitals: v.params, suggested: sug, why, place }
+    const draft: TriageDraft = { scale, level, arrival, arrival_ref: ref, complaint, words: text, danger, vitals: v.params, suggested: sug, why, place, police: policeAnswered ? police : null }
     void send(triageSet(draft, row, dept.id))
   }
   const toggle = (d: Danger) => setDanger(danger.includes(d) ? danger.filter((x) => x !== d) : [...danger, d])
@@ -89,6 +94,11 @@ export function TriageCard({ dept, row, identity, opening, facts, arrival: carri
       <Chip key={k} on={complaint === k} onClick={() => setComplaint(complaint === k ? null : k)}>{l}</Chip>)}</span>
       <Input value={text} onChange={(e) => setText(e.target.value)} aria-label="What brings them, in words" placeholder="In the nurse's words" /></div></Group>
     <Group label="Danger signs"><span className="flex flex-wrap gap-1.5">{DANGER.map((d) => <Chip key={d.key} variant="check" on={danger.includes(d.key)} onClick={() => toggle(d.key)}>{d.label}</Chip>)}</span></Group>
+    <Group label="Police case"><span className="flex flex-wrap items-center gap-1.5">
+      <Chip on={police?.case === false} onClick={() => setPolice(police?.case === false ? null : { case: false })}>No</Chip>
+      <Chip on={police?.case === true} onClick={() => setPolice(police?.case === true ? null : { case: true })}>Yes</Chip>
+      {police?.case && <span role="group" aria-label="Why a police case" className="ms-2 flex flex-wrap gap-1.5">{POLICE_WHY.map(([k, l]) =>
+        <Chip key={k} on={police.why === k} onClick={() => setPolice({ case: true, ...(police.why === k ? {} : { why: k }) })}>{l}</Chip>)}</span>}</span></Group>
     <Field label="Vitals" error={v.error ?? undefined} hint={!v.error && v.params ? vitalsWords(v.params) : 'As on /v: 96/60 124 36.8 spo2 92 rr 28 a air'}>
       <Input value={line} onChange={(e) => setLine(e.target.value)} placeholder="/v 120/80 88 37 spo2 98 rr 16 a air" tone={v.error ? 'danger' : 'default'} /></Field>
     <Group label={`Level · ${scale === 'ats' ? 'Australasian' : 'Manchester'} scale`}><div className="grid gap-1.5">

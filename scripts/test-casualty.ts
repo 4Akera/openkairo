@@ -1,7 +1,8 @@
 // Emergency's client, pure (spec/openCare.md §5.6): the two scales and their times, the suggestion at each edge of its table
 // (ATS/NEWS2 thresholds: higher only, none under 16), the triage's data and its one Done (the vitals, the triage, urgent, the move),
 // Arrived and the admit sources, the tile's words from the board's read, the Patients tab's order and counts, the banner's level and
-// the refusals' words. No browser, no database.   npm run test:casualty
+// the refusals' words; Where to: the codes of each leaving (never hosp), the departments an admission may go to, the decision and the
+// leaving's one Done, the ER's times, the tile's words as decided, the police case. No browser, no database.   npm run test:casualty
 import assert from 'node:assert/strict'
 import { setClinicTimeZone } from '../src/core/ui/time'
 import { LEVELS, SCALES, levelWord, targetOf, timeWords, toneOf } from '../src/packs/casualty/scale'
@@ -14,7 +15,8 @@ import { ownOf } from '../src/core/screens/chart/sections'
 import { tileLineOf, type TileCtx } from '../src/core/screens/ward/tiles'
 import { parseVitals } from '../src/core/screens/visit/vitals'
 import { E, ctx as chartCtx, presence, record, table } from './chart-fixtures'
-import type { Identity, Place, PresenceRow } from '../src/core/db/types'
+import type { Department, Identity, Organization, Place, PresenceRow } from '../src/core/db/types'
+import { DISPOSITION_OF, TOS, bedsOf, choicesFor, decideSet, destinations, hintOf, kindOf, leaveSet, policeNotice, timesLine, timesOf, type Decided } from '../src/packs/casualty/where'
 
 setClinicTimeZone('Africa/Cairo')
 let n = 0
@@ -123,22 +125,22 @@ const tri = (level: 1 | 2 | 3 | 4 | 5, m: number, seen?: number) => ({ triage: {
 const B = (stays: Board['stays']): Board => ({ patient_ids: ['pt'], stays })
 test('tileWords: in the ER, not triaged, the level and its wait, seen', () => {
   assert.equal(dur(12), '12 min'); assert.equal(dur(89), '89 min'); assert.equal(dur(90), '1 h 30'); assert.equal(dur(103), '1 h 43'); assert.equal(dur(125), '2 h 05')
-  assert.deepEqual(tileWords(row('a', 42), undefined, NOW), { words: ['in the ER 42 min'] }, 'no data yet: the row alone')
-  assert.deepEqual(tileWords(row('a', 14), B({}), NOW), { words: [{ text: 'not triaged · 14 min', tone: 'warn' }] })
-  assert.deepEqual(tileWords(row('a', 15), B({ a: {} }), NOW), { words: [{ text: 'not triaged · 15 min', tone: 'danger' }] })
-  assert.deepEqual(tileWords(row('a', 16, { place_id: 'resus2' }), B({ a: tri(2, 12) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, { text: 'no doctor · 12 min', tone: 'danger' }] })
-  assert.deepEqual(tileWords(row('a', 16, { place_id: 'resus2' }), B({ a: tri(2, 9) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, 'no doctor · 9 min'] })
-  assert.deepEqual(tileWords(row('a', 16, { place_id: 'r2' }), B({ a: tri(2, 10) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, 'no doctor · 10 min'] }, 'at its ten minutes: not past yet')
-  assert.deepEqual(tileWords(row('a', 16, { place_id: 'r2' }), B({ a: tri(2, 11) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, { text: 'no doctor · 11 min', tone: 'danger' }] }, 'past them')
-  assert.deepEqual(tileWords(row('a', 80), B({ a: tri(4, 72) }), NOW), { words: ['4 · Standard', { text: 'waiting 72 min', tone: 'danger' }] })
-  assert.deepEqual(tileWords(row('a', 40), B({ a: tri(5, 35) }), NOW), { words: ['5 · Non-urgent', 'waiting 35 min'] })
-  assert.deepEqual(tileWords(row('a', 1, { place_id: 'r1' }), B({ a: tri(1, 0) }), NOW), { words: [{ text: '1 · Immediate', tone: 'danger' }, { text: 'no doctor · 0 min', tone: 'danger' }] })
-  assert.deepEqual(tileWords(row('a', 200), B({ a: tri(3, 150, 103) }), NOW), { words: [{ text: '3 · Urgent', tone: 'warn' }, 'seen 1 h 43 ago'] })
-  assert.equal(tileWords(row('a', 5, { kind: 'visit', state: 'with' }), B({}), NOW), null, 'a visit: none')
-  for (const junk of [null, 'x', 7, { stays: null }, { stays: [] }]) assert.deepEqual(tileWords(row('a', 42), junk, NOW), { words: ['in the ER 42 min'] }, JSON.stringify(junk))
+  assert.deepEqual(tileWords(row('a', 42), {}, undefined, NOW), { words: ['in the ER 42 min'] }, 'no data yet: the row alone')
+  assert.deepEqual(tileWords(row('a', 14), {}, B({}), NOW), { words: [{ text: 'not triaged · 14 min', tone: 'warn' }] })
+  assert.deepEqual(tileWords(row('a', 15), {}, B({ a: {} }), NOW), { words: [{ text: 'not triaged · 15 min', tone: 'danger' }] })
+  assert.deepEqual(tileWords(row('a', 16, { place_id: 'resus2' }), {}, B({ a: tri(2, 12) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, { text: 'no doctor · 12 min', tone: 'danger' }] })
+  assert.deepEqual(tileWords(row('a', 16, { place_id: 'resus2' }), {}, B({ a: tri(2, 9) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, 'no doctor · 9 min'] })
+  assert.deepEqual(tileWords(row('a', 16, { place_id: 'r2' }), {}, B({ a: tri(2, 10) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, 'no doctor · 10 min'] }, 'at its ten minutes: not past yet')
+  assert.deepEqual(tileWords(row('a', 16, { place_id: 'r2' }), {}, B({ a: tri(2, 11) }), NOW), { words: [{ text: '2 · Very urgent', tone: 'danger' }, { text: 'no doctor · 11 min', tone: 'danger' }] }, 'past them')
+  assert.deepEqual(tileWords(row('a', 80), {}, B({ a: tri(4, 72) }), NOW), { words: ['4 · Standard', { text: 'waiting 72 min', tone: 'danger' }] })
+  assert.deepEqual(tileWords(row('a', 40), {}, B({ a: tri(5, 35) }), NOW), { words: ['5 · Non-urgent', 'waiting 35 min'] })
+  assert.deepEqual(tileWords(row('a', 1, { place_id: 'r1' }), {}, B({ a: tri(1, 0) }), NOW), { words: [{ text: '1 · Immediate', tone: 'danger' }, { text: 'no doctor · 0 min', tone: 'danger' }] })
+  assert.deepEqual(tileWords(row('a', 200), {}, B({ a: tri(3, 150, 103) }), NOW), { words: [{ text: '3 · Urgent', tone: 'warn' }, 'seen 1 h 43 ago'] })
+  assert.equal(tileWords(row('a', 5, { kind: 'visit', state: 'with' }), {}, B({}), NOW), null, 'a visit: none')
+  for (const junk of [null, 'x', 7, { stays: null }, { stays: [] }]) assert.deepEqual(tileWords(row('a', 42), {}, junk, NOW), { words: ['in the ER 42 min'] }, JSON.stringify(junk))
   assert.deepEqual(boardOf({ stays: { a: { triage: { level: 9, scale: 'ats', at: ago(1) } }, b: { triage: { level: 2, scale: 'esi', at: ago(1) } } } })?.stays, { a: {}, b: {} }, 'a triage without a real level or scale is dropped')
   const tile: TileCtx = { dept: { id: 'er', packs: ['casualty'] }, place: null, identity: null, day: 1, can: () => true }
-  const lines = [{ pack: 'casualty', line: (r: PresenceRow, _c: TileCtx, d?: unknown) => tileWords(r, d, NOW) }]
+  const lines = [{ pack: 'casualty', line: (r: PresenceRow, c: TileCtx, d?: unknown) => tileWords(r, c, d, NOW) }]
   assert.deepEqual(tileLineOf(lines, row('a', 80), tile, { casualty: B({ a: tri(4, 72) }) }), [{ pack: 'casualty', words: [{ text: '4 · Standard' }, { text: 'waiting 72 min', tone: 'danger' }] }])
   assert.deepEqual(tileLineOf(lines, row('a', 6), tile), [{ pack: 'casualty', words: [{ text: 'in the ER 6 min' }] }], 'before the board answers')
 })
@@ -147,8 +149,8 @@ test('the list\'s order and its counted views', () => {
   const b = B({ h: tri(4, 72), k: tri(2, 12), x: tri(4, 20), y: tri(1, 2, 1) })
   assert.deepEqual(order(rows, b, NOW).map((r) => r.item), ['o', 'n', 'y', 'k', 'h', 'x'], 'not triaged first (longest arrived first), then 1 → 5, then the longest since triage')
   assert.deepEqual(order(rows, null, NOW).map((r) => r.item), ['h', 'y', 'x', 'o', 'k', 'n'], 'no board: by arrival')
-  assert.deepEqual(views(rows, b, NOW), { all: 6, untriaged: 2, untriagedLong: 1, past: 2 }, 'k past its 10 min, h past its hour; y seen')
-  assert.deepEqual(views(rows, null, NOW), { all: 6, untriaged: 0, untriagedLong: 0, past: 0 })
+  assert.deepEqual(views(rows, b, NOW), { all: 6, untriaged: 2, untriagedLong: 1, past: 2, toLeave: 0 }, 'k past its 10 min, h past its hour; y seen')
+  assert.deepEqual(views(rows, null, NOW), { all: 6, untriaged: 0, untriagedLong: 0, past: 0, toLeave: 0 })
 })
 test('the banner\'s word: the open stay\'s latest level here', () => {
   const cx = { ...chartCtx, departmentId: 'er' }; const identity = { gender: 'male', birth_date: '1992-01-01' } as Identity
@@ -165,6 +167,101 @@ test('the banner\'s word: the open stay\'s latest level here', () => {
 test('the refusals in words', () => {
   registerWords(REFUSALS)
   assert.equal(words('triage_mismatch'), 'The level and its code differ — choose the level again')
-  assert.equal(words('not_in_stay'), 'Triage is written for a patient in this department')
+  assert.equal(words('not_in_stay'), 'Written only for a patient still in this department')
+  assert.equal(words('unknown_destination'), 'Choose where the patient goes: another department of beds here'); assert.equal(words('facility_missing'), 'Say which facility')
+  assert.equal(words('wrong_target'), 'That cannot correct this entry', 'the core\'s')
+})
+
+test('DISPOSITION_OF: FHIR\'s codes for each leaving, never hosp', () => {
+  assert.deepEqual(TOS.map((t) => DISPOSITION_OF[t]), ['home', 'oth', 'oth', 'oth', 'oth', 'other-hcf', 'oth', 'aadvice', 'exp'])
+  assert.ok(!Object.values(DISPOSITION_OF).includes('hosp' as never), 'hosp is hospice')
+})
+test('kindOf: the starter setup\'s last word, after a dot or at the start', () => {
+  for (const s of ['ward', 'x.ward', null, 'clinic']) assert.equal(kindOf(s), 'ward', String(s))
+  assert.equal(kindOf('x.icu'), 'icu'); assert.equal(kindOf('icu'), 'icu'); assert.equal(kindOf('x.ccu'), 'ccu'); assert.equal(kindOf('x.picu'), 'ward')
+})
+const DEP = (id: string, name: string, work: Department['work'] = 'stays', setup: string | null = null) => ({ id, name, work, setup })
+const DEPS = [DEP('er', 'Emergency', 'stays', 'casualty.er'), DEP('wm', 'Medical Ward', 'stays', 'ward'), DEP('desk', 'Front desk', 'desk'), DEP('lab', 'Lab', 'bench'),
+  DEP('ws', 'Another Ward'), DEP('er2', 'Emergency 2'), DEP('dia', 'Dialysis'), DEP('imp', 'Inpatients')]
+const CLASS: Record<string, string | null> = { er: 'EMER', er2: 'EMER', dia: 'AMB', imp: 'IMP', ws: null }
+test('destinations and choicesFor: departments of beds here, never the ER itself, never EMER or AMB', () => {
+  const beds = bedsOf({ departments: [{ id: 'wm', free: [{ id: 'b1', name: 'Bed 1' }, { id: 'b2', name: 'Bed 2' }, { id: 7 }] }, { nope: 1 }] })
+  const ds = destinations(DEPS, 'er', beds, (id) => CLASS[id])
+  assert.deepEqual(ds.map((d) => d.id), ['ws', 'imp', 'wm'], 'by name; desk, bench, er, er2 (EMER) and dialysis (AMB) left out; IMP, null and undefined kept')
+  assert.deepEqual(ds.find((d) => d.id === 'wm')?.free, [{ id: 'b1', name: 'Bed 1' }, { id: 'b2', name: 'Bed 2' }]); assert.deepEqual(ds[0].free, [], 'not read: none')
+  assert.equal(bedsOf('x'), null); assert.equal(bedsOf({ departments: {} }), null)
+  assert.deepEqual(choicesFor(ds).map((c) => c.to), ['home', 'ward', 'operating_room', 'other_facility', 'left_unseen', 'against_advice', 'died'], 'no ICU, no CCU')
+  assert.equal(hintOf('ward', ds), 'Another Ward no free bed · Inpatients no free bed · Medical Ward 2 free')
+  const icu = destinations([...DEPS, DEP('icu', 'ICU', 'stays', 'x.icu')], 'er', bedsOf({ departments: [{ id: 'icu', free: [{ id: 'i5', name: 'ICU 5' }] }] }), (id) => CLASS[id])
+  assert.deepEqual(choicesFor(icu).map((c) => c.to).slice(0, 4), ['home', 'ward', 'icu', 'operating_room']); assert.equal(hintOf('icu', icu), 'ICU 1 free')
+  assert.equal(hintOf('operating_room', icu), 'then a ward')
+})
+const STAY2 = { item: 'st1', patient_id: 'pt', latest_entry: 'e9', reason: 'short of breath' }
+const DEC: Decided = { to: 'ward', department_id: 'wm', at: ago(40), entry: 'd1' }
+const name = (id: string) => DEPS.find((d) => d.id === id)?.name ?? 'a ward'
+test('decideSet: one decision in the stay; with one standing, it changes it', () => {
+  const [e, ...rest] = decideSet({ to: 'ward', department_id: 'wm', place_id: 'b1', note: 'x' }, STAY2, 'er')
+  assert.equal(rest.length, 0); assert.equal(e.type, 'casualty.disposition'); assert.equal(e.visit_id, 'st1'); assert.equal(e.department_id, 'er')
+  assert.deepEqual(e.data, { to: 'ward', department_id: 'wm' }); assert.equal(e.refers_to, undefined)
+  const [c] = decideSet({ to: 'home', department_id: 'wm', police_report: ' 2214/2026 ' }, STAY2, 'er', DEC)
+  assert.deepEqual([c.refers_to, c.relation, c.data], ['d1', 'changes', { to: 'home', police_report: '2214/2026' }], 'no department for home')
+})
+test('leaveSet for an admission: the decision, discharged, the next stay about this one, the ER\'s note in it', () => {
+  const es = leaveSet({ to: 'ward', department_id: 'wm', place_id: null, note: ' nebulisers every four hours ' }, STAY2, 'er', name)
+  assert.deepEqual(es.map((e) => e.type), ['casualty.disposition', 'discharged', 'admitted', 'note'])
+  const [, d, a, n] = es
+  assert.deepEqual([d.data, d.refers_to, d.relation, d.visit_id], [{ disposition: 'oth', note: 'to Medical Ward' }, 'e9', 'changes', 'st1'])
+  assert.deepEqual([a.visit_id, a.department_id, a.refers_to, a.relation], [a.id, 'er', 'st1', 'about'])
+  assert.deepEqual(a.data, { department_id: 'wm', admit_source: 'emd', reason: 'short of breath' }, 'the ward chooses: no place; the stay\'s reason')
+  assert.deepEqual([n.visit_id, n.department_id, n.data], [a.id, 'er', { kind: 'emergency', text: 'nebulisers every four hours' }])
+  const bed = leaveSet({ to: 'ward', department_id: 'wm', place_id: 'b2', reason: 'COPD' }, STAY2, 'er', name, DEC)
+  assert.deepEqual(bed.map((e) => e.type), ['discharged', 'admitted'], 'the same decision standing: none; no note written: none')
+  assert.deepEqual(bed[1].data, { department_id: 'wm', place_id: 'b2', admit_source: 'emd', reason: 'COPD' })
+  const pol = leaveSet({ to: 'ward', department_id: 'wm', police_report: '2214/2026' }, STAY2, 'er', name, DEC)
+  assert.deepEqual([pol[0].type, pol[0].refers_to, pol[0].relation], ['casualty.disposition', 'd1', 'changes'], 'a new report number changes it')
+  assert.equal(leaveSet({ to: 'operating_room', department_id: 'wm' }, STAY2, 'er', name)[1].data.note, 'to the operating room, then Medical Ward')
+  // another facility decided with why: the card presets why from the board, so a new report number keeps it; a why typed anew changes it
+  const FAC: Decided = { to: 'other_facility', facility: 'Al Salam Hospital', why: 'needs cath lab', at: ago(30), entry: 'd3' }
+  const kept = leaveSet({ to: 'other_facility', facility: 'Al Salam Hospital', why: 'needs cath lab', police_report: '2214/2026' }, STAY2, 'er', name, FAC)
+  assert.deepEqual([kept[0].refers_to, kept[0].data], ['d3', { to: 'other_facility', facility: 'Al Salam Hospital', why: 'needs cath lab', police_report: '2214/2026' }])
+  assert.deepEqual(leaveSet({ to: 'other_facility', facility: 'Al Salam Hospital', why: 'needs cath lab' }, STAY2, 'er', name, FAC).map((e) => e.type), ['discharged'])
+  assert.equal(leaveSet({ to: 'other_facility', facility: 'Al Salam Hospital', why: 'no bed here' }, STAY2, 'er', name, FAC)[0].type, 'casualty.disposition', 'a new why changes it')
+})
+test('leaveSet: home, another facility, left before being seen, against advice, died', () => {
+  const t = (l: Parameters<typeof leaveSet>[0]) => leaveSet(l, STAY2, 'er', name).map((e) => [e.type, (e.data as { disposition?: string }).disposition ?? null])
+  assert.deepEqual(t({ to: 'home' }), [['casualty.disposition', null], ['discharged', 'home']])
+  const f = leaveSet({ to: 'other_facility', facility: ' Al Salam Hospital ', why: 'cath lab', signed_by: 'x' }, STAY2, 'er', name)
+  assert.deepEqual([f[0].data, f[1].data], [{ to: 'other_facility', facility: 'Al Salam Hospital', why: 'cath lab' }, { disposition: 'other-hcf', note: 'to Al Salam Hospital' }])
+  assert.deepEqual(leaveSet({ to: 'left_unseen' }, STAY2, 'er', name)[1].data, { disposition: 'oth', note: 'left before being seen' })
+  const aa = leaveSet({ to: 'against_advice', signed_by: 'his brother Ahmed', why: 'the risks' }, STAY2, 'er', name)
+  assert.deepEqual([aa[0].data, aa[1].data], [{ to: 'against_advice', why: 'the risks', signed_by: 'his brother Ahmed' }, { disposition: 'aadvice', note: 'left against advice' }])
+  const died = leaveSet({ to: 'died', died_at: ago(20), cause: 'cardiac arrest' }, STAY2, 'er', name)
+  assert.deepEqual(died.map((e) => e.type), ['casualty.disposition', 'died', 'discharged'])
+  assert.deepEqual([died[0].data, died[1].occurred_at, died[1].data, died[1].visit_id, died[2].data], [{ to: 'died', brought_in_dead: false }, ago(20), { cause: { text: 'cardiac arrest' } }, 'st1', { disposition: 'exp' }])
+})
+test('timesOf and timesLine: worked out, never stored', () => {
+  assert.equal(timesLine(timesOf(row('a', 125), { seen_at: ago(103), decided: DEC }, NOW)), 'door to doctor 22 min · in the ER 2 h 05 · boarding 40 min')
+  assert.equal(timesLine(timesOf(row('a', 42), undefined, NOW)), 'no doctor yet · in the ER 42 min')
+  assert.deepEqual(timesOf(row('a', 290), { seen_at: ago(280), decided: { to: 'home', at: ago(15), entry: 'd' } }, NOW), { doorToDoctor: 10, inEr: 290, boarding: null }, 'home: no boarding')
+})
+const ORG = { departments: DEPS } as unknown as Organization
+test('tileWords as decided, with a police case; To leave', () => {
+  const at = (f: Board['stays'][string]) => tileWords(row('a', 200), { org: ORG }, B({ a: { ...tri(3, 150, 103), ...f } }), NOW)?.words
+  assert.deepEqual(at({ decided: { to: 'home', at: ago(15), entry: 'd' } }), [{ text: '3 · Urgent', tone: 'warn' }, 'seen 1 h 43 ago', { text: 'for home', tone: 'ok' }])
+  assert.deepEqual(at({ decided: DEC }), [{ text: '3 · Urgent', tone: 'warn' }, 'seen 1 h 43 ago', 'for Medical Ward', 'boarding 40 min'])
+  assert.deepEqual(at({ decided: { to: 'other_facility', facility: 'Al Salam Hospital', at: ago(5), entry: 'd' } })?.slice(2), ['to Al Salam Hospital'])
+  assert.deepEqual(at({ decided: { to: 'operating_room', department_id: 'wm', at: ago(5), entry: 'd' } })?.slice(2), ['for the operating room', 'boarding 5 min'])
+  assert.deepEqual(at({ police: true })?.slice(2), ['police case']); assert.deepEqual(at({ police: false })?.slice(2), [])
+  assert.deepEqual(boardOf({ stays: { a: { decided: { to: 'nowhere', at: ago(1), entry: 'd' }, police: 'yes' }, b: { decided: { ...DEC, facility: 7 } }, c: { decided: { ...DEC, why: 'needs cath lab' } } } })?.stays,
+    { a: {}, b: { decided: DEC }, c: { decided: { ...DEC, why: 'needs cath lab' } } }, 'read defensively; why carried')
+  const rows = [row('a', 80), row('b', 60), row('c', 30)]
+  assert.equal(views(rows, B({ a: { decided: DEC }, b: { police: true } }), NOW).toLeave, 1)
+})
+test('the police case: on the triage when answered, and the notice with no report number yet, never a stop', () => {
+  assert.deepEqual(triageData(D({ police: { case: true, why: 'assault' } })).casualty.police, { case: true, why: 'assault' })
+  assert.deepEqual(triageData(D({ police: { case: false, why: 'fall' } })).casualty.police, { case: false }, 'no why for no')
+  assert.equal('police' in triageData(D({ police: null })).casualty, false, 'unanswered: not written')
+  assert.equal(policeNotice(true, ''), 'Police case · no report number yet — add it here, or later, before they leave'); assert.equal(policeNotice(true, '  '), policeNotice(true))
+  assert.equal(policeNotice(true, '2214/2026'), null); assert.equal(policeNotice(false), null); assert.equal(policeNotice(undefined, ''), null)
 })
 console.log(`casualty: ${n} groups passed`)

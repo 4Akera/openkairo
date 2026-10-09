@@ -1596,12 +1596,46 @@ numbered as on its picture.
   queue, naming no patient): for the departments the client names, each checked as the decision's check does, its places not
   retired or closed that no admitted stay holds, in order. **The police case**: the triage's `casualty.police` (case, and why: road
   accident, assault, burn, poisoning, fall, other); the report number lives on the decision, never a stop. **The board's read** adds
-  each stay's standing decision (where to, department, facility, report number, its entry, and when: the first version since where
+  each stay's standing decision (where to, department, facility and why, report number, its entry, and when: the first version since where
   to last changed, so a report number added does not restart boarding) and the police case of the latest
   triage that answered it. The ER's times (door to doctor, in the ER, boarding) are worked out on screen, never stored. Demo: Salwa
   Hamed (71, COPD, level 3 though 2 was suggested, why written; seen by Dr. Tamer after 22 minutes; decided for the Medical Ward 40
   minutes ago: boarding), Mostafa Saeed (9, a scorpion sting, observed; decided for home), Karim a police case (a road accident, no
   report number yet). No pass, discharge or death in the demo.
+- *Built 2026-10-09, E3b (chosen by Claude at the owner's request, awaiting the owner; the pass is the owner's Q3)*: Where to, the
+  client (`src/packs/casualty`). **The Where to card** opens under the patient's row on the Patients tab (inline, never an overlay),
+  from the row's **Where to** button or the board tile's second pack button (`?tab=casualty.patients&stay=…&card=where`), for whoever
+  holds `write:discharged` and `write:casualty.disposition` (the ER's doctors; Died also needs `write:died`); one card open at a time.
+  Its head: "Where to · from Emergency", the ER's times worked out from what is written ("door to doctor 22 min · in the ER 2 h 05 ·
+  boarding 40 min", or "no doctor yet · …"; boarding for an admission decided and not yet gone) and, for a police case with no report
+  number, "Police case · no report number yet — add it here, or later, before they leave" in amber, never a stop. The choices in the
+  picture's order (Home, Admit to a ward with each ward's free beds "Medical Ward 3 free", ICU and CCU only when the clinic has one,
+  Operating room "then a ward", Another facility, Left before being seen, Left against advice, Died), preset from the standing
+  decision. Where an admission may go: every live department of stays here but this one whose encounters are not EMER or AMB (none
+  set counts as a ward), by name; an ICU or a CCU is told by the starter setup it was made from (a key ending in `icu` or `ccu`, after
+  a dot or alone: `kindOf`), every other is a ward; the operating room lists them all. An admission's panel: the department's chips
+  ("· 2 free"), its free beds' chips (`casualty.beds`) and "the ward chooses" (the default: no bed, the ward's no-bed list), the
+  reason (preset from the stay's) and "For the ward" (the ER's note, kind `emergency`, written in the new stay). Another facility:
+  where (required) and why; against advice: who signed and what was explained; died: in the ER or brought in dead, now or minutes ago
+  (no clock typed; in the ER never before they came in, brought in dead up to 720; the time worked out as Sign is pressed), the cause
+  in words. The police report number field shows for a police case or a decision that has one.
+  **Decided** ("Decided · for Medical Ward", "· for home", "· to <facility>"; not for the three that leave at once) writes the decision
+  alone, changing the standing one; **Sign** ("Sign · admit to Medical Ward", "Sign · home now", "Sign · to the operating room, then …",
+  "Sign · left before being seen", "Sign · died", ⌘↵) writes the leaving in one Done: the decision when none stands or it differs
+  (where to, department, facility and why, report number), the base's `died` at its time for a death, the base's `discharged` (FHIR's codes as above,
+  never `hosp`, its note "to Medical Ward", "left against advice"), and for an admission the next department's `admitted` about the
+  ER stay (admit source `emd`, the bed chosen or none) and the ER's note in it. "That bed is taken" reads the beds again; a decision changed meanwhile
+  (`wrong_target`) reads the board again and asks to choose again; a warning comes back with Sign anyway. A card opened before the
+  board's first read waits for it, then never mounts again (what was typed stays). The board's decided also carries why (another
+  facility), so the card presets it and a changed decision keeps it. **The triage card** asks Police case: No · Yes (preset from the board's read; written only when answered on the card, so a retriage leaves the earlier answer and its why standing)
+  and, when yes, why: road accident, assault, burn, poisoning, fall, other. **The tile's words** gain, after the level and time, "for
+  home" (green), "for Medical Ward · boarding 40 min", "for the operating room", "to <facility>" and "police case"; the Patients tab's
+  rows say the same and its views gain **To leave** (decided, still here). **The record** draws the decision as its line ("Where to:
+  admit to Medical Ward · police report 2214/2026") with why, who signed and its note. The refusals `unknown_destination`,
+  `facility_missing`, `not_leaving` and `too_many` in words; `not_in_stay` now reads "Written only for a patient still in this
+  department" (the triage's and the decision's). For the owner: the picture opens Where to from the base's Discharge, which
+  has no door for a pack's card, so the ER's Where to is the pack's own button and the base's Discharge stays the base's chooser; "Under:
+  Dr. Ali Hassan / the ward's on-call" needs who works in the ward (administrators only read that): the ward assigns its own doctor.
 
 ---
 
@@ -2241,4 +2275,8 @@ types, parked pack calls with per-call Retry, Postgres enums.
   `demo` 92); db:demo twice (40 patients, 352 entries); node tests unchanged (casualty 10 groups); lint 0 errors; tsc stops only on
   `src/pictures/bookings.tsx`; vite build ok. No browser pass (no client change: E2b's client ignores the board's new fields until
   E3b; E3b's words.ts names `not_leaving`).
+- 2026-10-09: **Emergency, piece E3b: Where to on screen** (§5.6; lane `beds-er`): `src/packs/casualty` (`where.ts`, pure: the
+  choices, the codes of each leaving, the destinations and `kindOf`, the decision's and the leaving's sets, the ER's times, the police
+  notice; `WhereTo.tsx`, `Disposition.tsx`; the board's decided and police in the tile's and the rows' words, To leave; the triage
+  card's police case; the tile's second button Where to), `scripts/test-casualty.ts` (19 groups); migration 18's board read carries the decision's why (the pack's own op, no shape change).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
