@@ -125,7 +125,7 @@ end $$;
 
 -- ── the ward: two admitted this morning from the clinic; Psychiatry: a private note ──
 do $$
-declare v uuid; s uuid; o uuid;
+declare v uuid; s uuid; o uuid; m1 uuid := gen_random_uuid(); m2 uuid := gen_random_uuid(); m3 uuid := gen_random_uuid();
 begin
   perform demo.patient(pg_temp.pid('ibrahim'), array['Ibrahim', 'Samir'], 'Nassar', 'male', demo.born(71, 99), '+201066615548');
   v := demo.arrive('breathless, worse for three days', 240);
@@ -136,8 +136,14 @@ begin
   s := demo.admit(v, 1, 200, 'COPD exacerbation');
   perform demo.w(demo.base('doctor'), jsonb_build_array(
     demo.e('note', demo.base('ward'), s, demo.ago(180), demo.note('history_physical', 'hx: smoker for forty years, two admissions last winter\nex: wheeze both sides\nplan: prednisolone, salbutamol, oxygen to 92%')),
-    demo.e('medication', demo.base('ward'), s, demo.ago(178), demo.med('Prednisolone', 'H02AB06', 40, 'mg', 'OD', '{"duration_days":5}')),
-    demo.e('medication', demo.base('ward'), s, demo.ago(178), demo.med('Salbutamol', 'R03AC02', 100, 'mcg', 'QID', '{"duration_days":5}'))));
+    demo.e('medication', demo.base('ward'), s, demo.ago(178), demo.med('Prednisolone', 'H02AB06', 40, 'mg', 'OD', '{"duration_days":5}'), m1),
+    demo.e('medication', demo.base('ward'), s, demo.ago(178), demo.med('Salbutamol', 'R03AC02', 100, 'mcg', 'QID', '{"duration_days":5}'), m2)));
+  -- the ward gives the admission doses (the base's given)
+  perform demo.w(demo.base('nurse'), jsonb_build_array(
+    demo.e('given', demo.base('ward'), s, demo.ago(170), jsonb_build_object('medication', m1, 'drug', demo.concept('atc', 'H02AB06', 'Prednisolone'), 'dose', demo.q(40, 'mg', 'mg'),
+      'route', 'oral', 'status', 'completed')),
+    demo.e('given', demo.base('ward'), s, demo.ago(170), jsonb_build_object('medication', m2, 'drug', demo.concept('atc', 'R03AC02', 'Salbutamol'), 'dose', demo.q(100, 'mcg', 'ug'),
+      'route', 'oral', 'status', 'completed'))));
   perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('vitals', demo.base('ward'), s, demo.ago(60), demo.vitals(138, 84, 96, 37.4, 93, 20))));
 
   -- confused with a urine infection, 82: a fall risk on the ward
@@ -153,8 +159,11 @@ begin
       'period', jsonb_build_object('start', demo.ago(150)), 'note', 'confused; bed low, call bell in reach')),
     demo.e('vitals', demo.base('ward'), s, demo.ago(148), demo.vitals(110, 66, 96, 37.9, 96, 20))));
   perform demo.w(demo.base('doctor'), jsonb_build_array(
-    demo.e('medication', demo.base('ward'), s, demo.ago(145), demo.med('Ceftriaxone', 'J01DD04', 1000, 'mg', 'OD', '{"duration_days":5}') || '{"dosage":{"dose":{"value":"1","unit":"g","ucum":"g"},"timing":{"code":"OD"},"route":"intravenous"}}'),
+    demo.e('medication', demo.base('ward'), s, demo.ago(145), demo.med('Ceftriaxone', 'J01DD04', 1000, 'mg', 'OD', '{"duration_days":5}') || '{"dosage":{"dose":{"value":"1","unit":"g","ucum":"g"},"timing":{"code":"OD"},"route":"intravenous"}}', m3),
     demo.lab_order('cbc', demo.base('ward'), s, demo.ago(145), o)));
+  -- the ward gives the admission dose (the base's given)
+  perform demo.w(demo.base('nurse'), jsonb_build_array(demo.e('given', demo.base('ward'), s, demo.ago(138), jsonb_build_object('medication', m3,
+    'drug', demo.concept('atc', 'J01DD04', 'Ceftriaxone'), 'dose', demo.q(1, 'g', 'g'), 'route', 'intravenous', 'status', 'completed'))));
   perform demo.lab(o, demo.ago(140), demo.cbc(true, 11.9, 13.4, 288));
 
   perform demo.patient(pg_temp.pid('tarek'), array['Tarek', 'Adel'], 'Soliman', 'male', demo.born(36, 210), '+201555407718');

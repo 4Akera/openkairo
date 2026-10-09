@@ -48,7 +48,7 @@ select t.ok((select jsonb_agg(i order by n) from jsonb_array_elements(a.items) w
 
 \echo '── its starter setup: a ward with Ward nursing ticked'
 select t.ok(s.work = 'stays' and s.packs = array['bedside'] and jsonb_array_length(s.places) = 8 and s.settings -> 'department.encounter_class' ->> 'class' = 'IMP'
-  and s.screens = '{"screens":["base.beds"],"opens":"base.beds"}'::jsonb, 'bedside.ward: stays, ticks bedside, eight beds, inpatient, the bed board') from core.setups s where s.key = 'bedside.ward';
+  and s.screens = '{"screens":["base.beds","bedside.round"],"opens":"base.beds"}'::jsonb, 'bedside.ward: stays, ticks bedside, eight beds, inpatient, the bed board and the Drug round') from core.setups s where s.key = 'bedside.ward';
 select public.setup(jsonb_build_object('setup', 'bedside.ward', 'department_id', :'new', 'name', 'Surgical Ward', 'apply', true)) is not null as made;
 select t.ok(core.department_uses(:'org', :'new', 'bedside') and (select count(*) from core.places p where p.department_id = :'new' and p.retired_at is null) = 8
   and core.setting_at(:'org', 'department.encounter_class', :'new') ->> 'class' = 'IMP' and core.setting_at(:'org', 'department.setup', :'new') ->> 'setup' = 'bedside.ward',

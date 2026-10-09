@@ -7,15 +7,16 @@ import { mayIn } from '@core/db/views'
 import { useLive } from '@core/hooks/live'
 import { useDepartment } from '@core/hooks/organization'
 import { useStays } from '@core/hooks/reads'
-import { staysKey, type News2Board } from './news2'
+import type { BoardRead } from './doses'
+import { staysKey } from './news2'
 
-export function useBoardRead(dept: { id: string }): News2Board | null | undefined {
+export function useBoardRead(dept: { id: string }): BoardRead | null | undefined {
   const { org } = useDepartment()
   const rows = useStays(dept.id).data?.rows
   const may = mayIn(org, 'read:record', dept.id)
   useLive(org && may ? `organization:${org.organization.id}` : null, [['bedside.board']])
   const q = useQuery({ queryKey: ['bedside.board', dept.id, staysKey(rows ?? [])], enabled: !!org && may && !!rows?.length,
-    queryFn: () => packOp<News2Board>('bedside.board', dept.id, {}, 'TREAT'), placeholderData: keepPreviousData, retry: false })
+    queryFn: () => packOp<BoardRead>('bedside.board', dept.id, {}, 'TREAT'), placeholderData: keepPreviousData, retry: false })
   // a read that failed leaves the words to the row alone
   return q.isError ? undefined : q.data
 }

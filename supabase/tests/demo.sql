@@ -181,6 +181,45 @@ select t.ok(exists (select 1 from base.values x where x.organization_id = demo.b
 select t.ok(count(*) = 1 and bool_and(p.place_id is null and not p.has_vitals), 'Tahany is admitted with no bed yet and no obs') from base.presence p
  where p.organization_id = demo.base('clinic') and p.patient_id = demo.id('bedside', 'patient:tahany') and p.kind = 'stay' and p.state = 'admitted';
 
+\echo '── Ward nursing''s drug round (§5.6, piece 3): Nour''s doses, one late, one not given; a first dose waiting; a medicine with no times; one not prescribed in the stay; the base''s admission doses'
+select t.ok(core.setting_at(demo.base('clinic'), 'department.screens', demo.base('ward')) = '{"screens":["base.beds","bedside.round"],"opens":"base.beds"}'::jsonb,
+  'the Medical Ward''s line: Beds and the Drug round');
+select t.ok(count(*) >= 15 and bool_and(e.author_id = demo.id('bedside', 'nurse')) and bool_and(e.patient_id in (demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim'))),
+  count(*) || ' doses on the round, all by Nour, all on Samira or Abdelmoneim')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'bedside.dose';
+select t.ok(count(*) = 1 and bool_and(e.patient_id = demo.id('bedside', 'patient:abdelmoneim') and e.data -> 'bedside' ->> 'not_given' = 'vomiting' and e.data ->> 'reason' = 'Vomiting'
+  and (e.data -> 'bedside' ->> 'due')::timestamptz = demo.midnight() - interval '1 day' + interval '8 hours'),
+  'one dose not given: Abdelmoneim''s, yesterday at 08:00, vomiting')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'bedside.dose' and e.data ->> 'status' = 'not-done';
+create function pg_temp.stay_of(p_patient uuid) returns text language sql stable as $$
+  select x.item::text from base.presence x where x.organization_id = demo.base('clinic') and x.patient_id = p_patient and x.kind = 'stay' and x.state = 'admitted' limit 1
+$$;
+select demo.as(demo.id('bedside', 'nurse'));
+create temp table ward_board as select public.pack_op(jsonb_build_object('op', 'bedside.board', 'department_id', demo.base('ward'), 'purpose', 'TREAT',
+  'args', jsonb_build_object('now', demo.now()))) b;
+create temp table ward_round as select public.pack_op(jsonb_build_object('op', 'bedside.round', 'department_id', demo.base('ward'), 'purpose', 'TREAT',
+  'args', jsonb_build_object('now', demo.now()))) r;
+select t.ok(coalesce((b -> 'doses' -> pg_temp.stay_of(demo.id('bedside', 'patient:samira')) ->> 'late')::int, 0) = 1
+  and coalesce((b -> 'doses' -> pg_temp.stay_of(demo.id('bedside', 'patient:abdelmoneim')) ->> 'late')::int, 0) = 0
+  and coalesce((b -> 'doses' -> pg_temp.stay_of(demo.id('bedside', 'patient:tahany')) ->> 'unset')::int, 0) = 1
+  and coalesce((b -> 'doses' -> pg_temp.stay_of(demo.id('bedside', 'patient:tahany')) ->> 'late')::int, 0) = 0
+  and coalesce((b -> 'doses' -> pg_temp.stay_of(pg_temp.pid('ibrahim')) ->> 'late')::int, 0) = 0
+  and coalesce((b -> 'doses' -> pg_temp.stay_of(pg_temp.pid('fathiya')) ->> 'late')::int, 0) = 0
+  and (select coalesce(sum((v ->> 'late')::int), 0) from jsonb_each(b -> 'doses') d(k, v)) = 1,
+  'the board: Samira 1 late, Abdelmoneim none, Tahany times not set, the base''s ward patients none late, no other dose late on the ward: ' || (b -> 'doses')::text) from ward_board;
+select t.ok(exists (select 1 from jsonb_array_elements(r -> 'stays') s, jsonb_array_elements(s -> 'medicines') m, jsonb_array_elements(m -> 'slots') x
+    where m ->> 'medication' = demo.id('bedside', 'med:tahany ceftriaxone')::text and (x ->> 'first')::boolean and x ->> 'state' = 'due')
+  and exists (select 1 from jsonb_array_elements(r -> 'stays') s, jsonb_array_elements(s -> 'medicines') m
+    where m ->> 'medication' = demo.id('bedside', 'med:tahany insulin')::text and (m ->> 'unset')::boolean)
+  and exists (select 1 from jsonb_array_elements(r -> 'stays') s, jsonb_array_elements(s -> 'medicines') m
+    where s ->> 'patient_id' = demo.id('base', 'patient:nadia')::text and m -> 'drug' ->> 'text' = 'Metformin' and (m ->> 'elsewhere')::boolean and m -> 'slots' = '[]'::jsonb),
+  'the round: Tahany''s ceftriaxone a first dose due, her insulin times not set, Nadia''s metformin not prescribed in her stay') from ward_round;
+select t.ok((select count(*) from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'given' and e.patient_id = pg_temp.pid('ibrahim')
+    and e.data ->> 'medication' in (select m.item::text from core.entries m where m.organization_id = e.organization_id and m.type = 'medication' and m.patient_id = e.patient_id)) = 2
+  and (select count(*) from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'given' and e.patient_id = pg_temp.pid('fathiya')
+    and e.data ->> 'medication' in (select m.item::text from core.entries m where m.organization_id = e.organization_id and m.type = 'medication' and m.patient_id = e.patient_id)) = 1,
+  'the base''s admission doses: Ibrahim 2, Fathiya 1');
+
 \echo '── billing''s demo and the clinic''s choices between its packs (§5.4): the Cashier and its person, Pay first at the Laboratory, the Pharmacy taking its own payment; one paid, one waiting, one sent from the Pharmacy'
 select t.ok(core.setting_at(demo.base('clinic'), 'billing.desk', demo.id('billing', 'cashier')) ->> 'takes' = 'everyone'
   and exists (select 1 from core.live_holdings(demo.base('clinic')) h where h.user_id = demo.id('billing', 'cashier person') and h.department_id = demo.id('billing', 'cashier')),
@@ -247,6 +286,10 @@ select t.ok(min(checked_in_at) = demo.ago(40) and min(checked_in_at) >= demo.mid
   from base.presence where organization_id = demo.base('clinic') and state = 'waiting';
 select t.ok(not exists (select 1 from core.entries e, jsonb_array_elements(e.findings) f where e.organization_id = demo.base('clinic') and f ->> 'level' = 'flag'),
   'nothing flagged loaded early');
+select demo.as(demo.id('bedside', 'nurse'));
+select t.ok(coalesce((b -> 'doses' -> pg_temp.stay_of(demo.id('bedside', 'patient:samira')) ->> 'late')::int, 0) = 1
+  and (select coalesce(sum((v ->> 'late')::int), 0) from jsonb_each(b -> 'doses') d(k, v)) = 1, 'loaded just after midnight: Samira''s one late dose, the only one on the ward: ' || (b -> 'doses')::text)
+  from (select public.pack_op(jsonb_build_object('op', 'bedside.board', 'department_id', demo.base('ward'), 'purpose', 'TREAT', 'args', jsonb_build_object('now', demo.now()))) b) x;
 select core.drain(100000) as drained;  -- the whole queue: a full demo load passes 500 rows
 select t.ok(r = '[]'::jsonb, 'rebuild = live after the early load: ' || left(r::text, 300)) from core.rebuild_check() r;
 select set_config('demo.now', '', true) is not null as clock_back;

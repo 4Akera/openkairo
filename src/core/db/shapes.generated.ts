@@ -220,6 +220,23 @@ export interface BackToWaiting {
   reason?: 'not_here' | 'sent_out' | 'other'
   text?: string
 }
+/** bedside.dose v1 (bedside) */
+export interface BedsideDose {
+  bedside?: {
+    due?: Datetime
+    not_given?: 'refused' | 'fasting' | 'vomiting' | 'not_in_stock' | 'held' | 'away'
+  }
+  dose?: Quantity
+  drug?: Concept
+  expiry?: string
+  lot?: string
+  medication: string
+  note?: string
+  reason?: string
+  route?: string
+  site?: string
+  status: 'completed' | 'not-done'
+}
 /** breastfeeding v1 (base) */
 export interface Breastfeeding {
   breastfeeding: boolean
@@ -1003,6 +1020,15 @@ export interface AnaesthesiaStopListSetting {
     what: string
   }[]
 }
+/** setting bedside.round (bedside; owner department) */
+export interface BedsideRoundSetting {
+  late_after: number
+  night?: string
+  times: {
+    at: string
+    timing: 'OD' | 'BD' | 'q12h' | 'TDS' | 'q8h' | 'QDS' | 'q6h' | 'q4h'
+  }[]
+}
 /** setting billing.desk (billing; owner department) */
 export interface BillingDeskSetting {
   float?: string
@@ -1493,6 +1519,7 @@ export interface EntryData {
   'assigned': Assigned
   'away': Away
   'back_to_waiting': BackToWaiting
+  'bedside.dose': BedsideDose
   'breastfeeding': Breastfeeding
   'called': Called
   'checked_in': CheckedIn
@@ -1548,6 +1575,7 @@ export interface EntryData {
 /** each setting's data, by its key */
 export interface SettingData {
   'anaesthesia.stop_list': AnaesthesiaStopListSetting
+  'bedside.round': BedsideRoundSetting
   'billing.desk': BillingDeskSetting
   'billing.pay_first': BillingPayFirstSetting
   'billing.price': BillingPriceSetting

@@ -2,13 +2,19 @@
 // obs: where a department uses the pack, the base's /v also writes NEWS2 (obs.tsx, the owner's C3) — the vitals' own air or oxygen and
 // ACVPU are its two answers (Q5). The banner says the stay's latest NEWS2, the record panel has its section with the stay's trend, and
 // each tile says its stay's latest NEWS2, read once per board through the pack's own op (C1, by the tile line's read), or that a stay has
-// no obs yet.
-// No type, table, setting, action or role of its own.
+// no obs yet. Its drug round (piece 3): the Drug round tab (DrugRound.tsx: Due now, Late, As needed, Given this round), each dose the base's
+// given as Ward nursing's own dose naming the time it is for; on each tile "1 dose late" and "times not set" from the same board read,
+// and a Give button that opens the round on that stay.
+// Its own: the dose type (bedside.dose), its action, the ward's dose times (bedside.round), the round's screen and ops. No table or role.
+import { registerWords } from '@core/db/words'
+import { registerScreen } from '@core/screens/registry'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerSection } from '@core/screens/chart/sections'
-import { registerTileLine } from '@core/screens/ward/tiles'
+import { registerTileButton, registerTileLine } from '@core/screens/ward/tiles'
 import { useBoardRead } from './boardRead'
-import { NEWS2_FIT, news2Chip, news2Rows, news2Summary, news2Words, tileWords } from './news2'
+import { wardTile } from './doses'
+import { NEWS2_FIT, news2Chip, news2Rows, news2Summary, news2Words } from './news2'
+import { Round } from './DrugRound'
 import { News2 } from './Section'
 import './obs'
 
@@ -17,6 +23,15 @@ registerBannerWords({ key: 'bedside.news2', types: ['score'], words: news2Words 
 // its section: for adults; data only when a NEWS2 is there (score is also the base's GCS)
 registerSection({ key: 'bedside.news2', title: 'NEWS2', types: ['score'], fit: NEWS2_FIT, has: (x) => news2Rows(x.own, x.rec, x.ctx.org).length > 0,
   word: news2Chip, summary: news2Summary, Body: News2 })
-// its words on each tile: the stay's latest NEWS2 from the board's read (once per board: boardRead.ts); else a stay with no obs yet
-registerTileLine('bedside', (row, ctx) => tileWords(row, ctx, ctx.read, Date.now()), useBoardRead)
+// the Drug round tab (declared bedside.round, beside Beds)
+registerScreen('bedside.round', Round)
+// its words on each tile from the board's read (once per board: boardRead.ts): the stay's latest NEWS2, else no obs yet; then its doses
+registerTileLine('bedside', (row, ctx) => wardTile(row, ctx, Date.now()), useBoardRead)
+// Give on every admitted stay: the Drug round on that stay only
+registerTileButton('bedside', { label: 'Give', show: (row, ctx) => row.kind === 'stay' && row.state === 'admitted' && ctx.can('write:bedside.dose'),
+  path: (row) => `/?tab=bedside.round&stay=${row.item}` })
+// the refusals' words: the ward's times, a dose, the sheet's day and stay
+registerWords({ wrong_count: 'That timing takes another number of times a day', not_every: 'Every n hours takes times n hours apart',
+  not_a_medicine: 'That medicine is not on this patient\'s list', reason_on_given: 'A dose given has no reason for not giving',
+  unknown_day: 'Today, yesterday or the whole stay', unknown_stay: 'Not a stay of this ward' })
 export const key = 'bedside'

@@ -1698,6 +1698,45 @@ numbered as on its picture.
   (a low total holding a single 3 reads plain; RCP's urgent response for it shows only under the cards). RR and SpO₂ are typed by name
   on the ward, since the picture's `/v 105/68 104 22 38.4 spo2 94` does not parse under `/v`'s order (P T Wt SpO₂). U/h was added as
   approved; insulin and heparin rates may need [iU]/h when the ICU's pack comes.
+- **Built, piece 3a (Ward nursing: the drug round; 2026-10-09)**: no core or base change. The Medical Ward's line is Beds · Drug round
+  (`bedside.round`, read:record). The round's views: Due now (a medicine first prescribed in this stay starts with "first dose now" at
+  the top), Late, As needed, Given this round; under Due now, folded, "Times not set · ask the doctor" and "On the list, not prescribed
+  in this stay · ask the doctor" (listed, never dropped, counted in no view). ↵ or Give writes the base's given as Ward nursing's dose
+  (`bedside.dose`, base type given, which names the time it is for in `data.bedside.due`) in one key when the prescription names its
+  dose, else the dose's card asks for it; the card holds the dose, the route, the site of an injection and a note. Not given (N) takes
+  one of six coded reasons (`data.bedside.not_given`; the base's `reason` holds the words), and Given this round offers Give now after
+  it (on an outranked refusal only for a medicine with no times, so a time already given is never offered twice). Beside Give, the last dose given (amber within half the timing's interval, as needed 4 h): a fact, never a stop. The ward's dose
+  times are a department setting (`bedside.round`, on the department's card: the picture's seven timings, a dose late 60 minutes after
+  its time, at night 22:00). One reading on the server, `bedside.stay_doses`, works out each stay's times and what was given for the
+  round (`bedside.round`, every minute and after each write), the treatment sheet (`bedside.sheet`) and the board (`bedside.board`, its
+  `doses`): R1 the ward's times; R2 the stay's medicines (prescribed, on the list, a version written in this stay; any other current
+  prescription listed as not prescribed here); R3 the composer's and HL7's timing codes; R4 each day's ward times within an active
+  version, a course counted in doses from its first here (OD 7 days 7 doses, TDS 5 days 15), a once-a-day medicine "at night" at the
+  night time; R5 a first dose when signed, standing for its own ward times up to the greater of twice the late time and the cover
+  (three quarters of the interval, once a day half a day), stat and once that dose alone, none at night; R6 times not set; R7 a dose
+  takes the time it names (a dose given before a refusal, then the first; the one outranked is extra, never matched by nearness), else
+  the nearest free time within half the interval; R8 given, not given, upcoming, due (from an hour before), late (within a day), missed
+  (and every unrecorded time of a medicine no longer active: a stopped medicine is never due or late); R9 the round's time, the latest ward time whose
+  hour has come. Each tile says "1 dose late" (red) and "times not set" (amber) after its NEWS2 word, from the board's read (C7), and
+  every admitted stay has Give, which opens the round on that stay with a chip to show every bed again. Demo: Dr. Ali Hassan's
+  medicines for Samira, Abdelmoneim and Tahany; Nour has given every dose but Samira's latest paracetamol (late) and Abdelmoneim's
+  amoxicillin + clavulanic acid yesterday at 08:00 (not given, vomiting); Tahany's ceftriaxone waits as a first dose and her insulin
+  has no times; the base's day gives its ward patients' admission doses (three plain base given entries). *Chosen by Claude in the
+  build, awaiting the owner*: the round and the sheet read with the base's read:record (no read action of their own); a dose due from
+  an hour before its time; the night time for a once-a-day medicine "at night"; the first dose's cover; counting a course in doses; a
+  plain given counting for the nearest time within half the interval; a dose given outranking a refusal of the same time; the
+  medicines not prescribed in this stay listed with no Give; the six reasons; the round reading every minute; the screen's file is
+  `DrugRound.tsx` (the views' pure file is `round.ts`, and the two names differ only in case).
+- **Questions for the owner (the drug round)**: (5) a current prescription not written in this stay (a clinic's, later an ER's) is
+  listed with no times and no Give until a doctor continues it in the stay: should it be timed and given as written? (6) the tiles
+  turn "late" only at the board's next read (never on a timer); should the board refresh every minute? (7) the ward's times are read
+  as they stand, so a change redraws past days; (8) not given is coded but exported as words (a coded export needs a code system), and
+  the base's given exports no site (a base mapping fix); (10) the demo's base ward patients get their admission doses from the base's
+  own day; (11) time-critical medicines with a shorter late time, and the rest of the double-dose guard, are piece 4's; (14) a very
+  long stay's sheet reads at most 2000 doses and 2000 versions; (15) the round reads every minute and each read is logged (merged per
+  user and patient for 10 minutes): about 6 rows an hour per admitted patient per open screen; (16) the first dose's cover (q6h 4.5 h,
+  TDS 6 h, BD 9 h, once a day 12 h): should a ward choose it, or a medicine? (17) a course counts doses from the first in this stay;
+  (18) the demo has two Samiras and three Abdelmoneims after the merge: rename Ward nursing's two?
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2888,4 +2927,10 @@ types, parked pack calls with per-call Retry, Postgres enums.
   setups 11, registries 9, pharmacy 10, lis 12, billing 19, bedside 12; lint 0 errors; `vite build` builds (tsc stops only on
   `src/pictures/bookings.tsx`, another session's). Seen in the browser (`spec/shots/2026-10-09/beds-1-2/`): the board's NEWS2 words,
   `/v` asking air or oxygen and ACVPU, NEWS2 3 low signed, the board updated.
+- 2026-10-09: **Ward nursing, piece 3a: the drug round** (§5.6; lane `beds`; no core or base change): migration 17 edited in place
+  (`bedside.dose`, `write:bedside.dose`, `bedside.round` setting and screen, `bedside.stay_doses`, the ops `bedside.round` and
+  `bedside.sheet`, `bedside.board`'s doses), the base demo's three admission doses, Ward nursing's demo (medicines and rounds),
+  `src/packs/bedside` (schedule.ts, doses.ts, round.ts, DrugRound.tsx, DoseCard.tsx; the tile's words and Give). New suite
+  `drug_round` 110 checks; `bedside` 55, `demo` 91, `registry` 16, `boundary` 10, `pack_contract` 35, `export` 50, `rebuild` 11 (the
+  full run: the lead's, at the lane's end); `db:demo` twice (96 patients, 952 entries); node `test:drug-round` 7 groups, bedside 12, registries 9, demo 8, board 27, setups 11, screens 11; typecheck clean; lint 0 errors.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
