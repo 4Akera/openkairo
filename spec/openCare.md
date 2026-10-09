@@ -1717,6 +1717,25 @@ numbered as on its picture.
   Doctor, with the schedule); a base Nurse or Doctor there reads it. Seed: the clinic turns the pack on, the unit at position 12,
   Rasha Mounir (nurse) and Dr. Walid Hamza (doctor). D1b adds the session (the pack's type on the base's procedure), who is due under
   the board, the board's read and the demo's patients.
+- **Built 2026-10-09, D1b: Dialysis's session (chosen by Claude at the owner's request, awaiting the owner)**: a session is a short
+  stay in a chair. Start is the base's `admitted` into the chair (admit source outp, reason Haemodialysis) with the session begun, one
+  set; End (D2) is the session completed with the base's `discharged`, one set. The session is the pack's own type
+  `haemodialysis.session` on the base's `procedure` (so the procedure's check, the record's line rules, privacy and FHIR apply: a
+  Procedure in its Encounter): in progress, completed, stopped, or not done (missed), its fields under `haemodialysis` (the clinic's
+  day, the shift, the scheduled chair and slot, the hours, why it was missed, and D2's fields declared now). Its check: the pack's
+  concept; on, done or stopped it sits in a stay of this unit, admitted for a new session (or opened in the same set; a correction or
+  change of one may follow the discharge), one session a stay (a crossed-out one aside); missed it sits in no stay; one session a
+  patient a day (a crossed-out one aside). Lines: "Dialysis · on · 4 h", "Dialysis · done · 2.6 L
+  off", "Dialysis missed · Did not come". Action `write:haemodialysis.session`, everyday (the base's Doctors and Nurses where the unit
+  uses the pack). Who is due now (`haemodialysis.due`, read:queue, the clinics' C5 rows under the board): today's slots less the
+  sessions moved away, plus those moved here, for the shift on now and every earlier one today and the next within the hour (before
+  the first shift, the first); left out whoever has a session today (on, done or missed) or a stay here now; each row with the
+  patient's isolation (the base's active isolation alerts, HBV or HCV), their last session's day and the department they are
+  admitted in elsewhere. The board's read (`haemodialysis.board`, read:record, purpose TREAT, read-logged): each stay here, its
+  session, the stay's latest blood pressure (each as it stands now: a crossed-out one is passed over), the patient's isolation.
+  Demo: six of the pack's own patients: Said, Nadia and Mohamed (HCV, in the HCV chair) on dialysis, Hassan (who missed a session a
+  week ago, on one of his days: on a Friday the Saturday six days back) and Shaimaa due, Magdy (HBV) in the HBV chair on the
+  other days; each of the five had a session on their last pattern day; on a Friday the five come a day early by one-off moves.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -2911,4 +2930,8 @@ types, parked pack calls with per-call Retry, Postgres enums.
   standing schedule's two tables, `haemodialysis.plan` and `haemodialysis.week`, the unit's nurse and doctor), its seed (Rasha Mounir,
   Dr. Walid Hamza), suite `haemodialysis` 58 checks, `demo` 84 (`registry` 16, `boundary` 10); `test:demo` with the unit's two people; shapes and logins
   regenerated.
+- 2026-10-09: **Dialysis, piece D1b** (§5.6; lane `beds-dialysis`): migration 21 gains the session (`haemodialysis.session` on the
+  base's procedure, its line and check, `write:haemodialysis.session`), `haemodialysis.due` and `haemodialysis.board`; the demo's six
+  patients (`supabase/demo/haemodialysis.sql`); suite `haemodialysis` 108 checks, `demo` 95 (`registry` 16, `boundary` 10); shapes
+  regenerated (HaemodialysisSession).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

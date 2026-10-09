@@ -72,11 +72,27 @@ create function haemodialysis.shifts(p_org uuid, p_department uuid) returns text
   select coalesce(nullif(array(select jsonb_array_elements_text(core.setting_at(p_org, 'haemodialysis.unit', p_department) -> 'shifts')), '{}'),
     array['07:00', '11:30', '16:00'])
 $$;
+-- how far who is due reaches: the shift on now and every earlier one, and the next when it starts within the hour (before the first:
+-- the first)
+create function haemodialysis.upto(p_shifts text[], p_now time) returns int language plpgsql immutable set search_path = '' as $$
+declare v_cur int := 0;
+begin
+  for i in 1 .. coalesce(cardinality(p_shifts), 0) loop
+    if p_shifts[i]::time <= p_now then v_cur := i; end if;
+  end loop;
+  if v_cur < cardinality(p_shifts) and p_shifts[v_cur + 1]::time - p_now <= interval '60 minutes' then return v_cur + 1; end if;
+  return greatest(v_cur, 1);
+end $$;
 -- a patient's isolation for the chairs (hbv, hcv), from the base's current active isolation alerts, as the reader may see them
 create function haemodialysis.isolation(p_org uuid, p_patient uuid) returns text[] language sql stable security definer set search_path = '' as $$
   select coalesce(array_agg(distinct substr(c, 23) order by substr(c, 23)), '{}')
     from core.pack_kind(p_org, p_patient, 'alert', '{"current":true,"data":{"status":"active"},"codes":["local.alert:isolation_hbv","local.alert:isolation_hcv"]}'::jsonb) x,
          unnest(x.codes) c where c in ('local.alert:isolation_hbv', 'local.alert:isolation_hcv')
+$$;
+-- the day of a patient's last session before today (on, done or stopped), as the reader may see it
+create function haemodialysis.last_on(p_org uuid, p_patient uuid) returns date language sql stable security definer set search_path = '' as $$
+  select max((x.data -> 'haemodialysis' ->> 'on')::date) from core.pack_kind(p_org, p_patient, 'haemodialysis.session', '{"current":true}'::jsonb) x
+   where x.data ->> 'status' in ('in-progress', 'completed', 'stopped') and (x.data -> 'haemodialysis' ->> 'on')::date < (now() at time zone haemodialysis.tz(p_org))::date
 $$;
 -- a live place of this unit (a chair), or refused
 create function haemodialysis.chair_here(p_org uuid, p_department uuid, p_place uuid) returns void language plpgsql stable security definer set search_path = '' as $$
@@ -95,6 +111,55 @@ create function haemodialysis.taken(p_org uuid, p_department uuid, p_place uuid,
                    and m.to_on = p_on and m.shift = p_shift and m.undone_at is null)
 $$;
 
+-- a session in words: "Dialysis · on · 4 h", "Dialysis · done · 2.6 L off" (the fluid taken off in mL, or in L when it says so),
+-- "Dialysis missed · Did not come"
+create function haemodialysis.session_line(e jsonb) returns text language sql stable security definer set search_path = '' as $$
+  select case e -> 'data' ->> 'status'
+    when 'not-done' then 'Dialysis missed' || coalesce(' · ' || nullif(e -> 'data' ->> 'reason', ''), '')
+    when 'in-progress' then 'Dialysis · on' || coalesce(' · ' || (e -> 'data' -> 'haemodialysis' ->> 'hours') || ' h', '')
+    when 'stopped' then 'Dialysis · stopped early' || coalesce(' · ' || nullif(e -> 'data' ->> 'reason', ''), '')
+    else 'Dialysis · done' || coalesce(' · ' || to_char((e -> 'data' -> 'haemodialysis' -> 'removed' ->> 'value')::numeric
+        / case when coalesce(e -> 'data' -> 'haemodialysis' -> 'removed' ->> 'ucum', e -> 'data' -> 'haemodialysis' -> 'removed' ->> 'unit') = 'L' then 1 else 1000 end, 'FM990.0') || ' L off', '')
+      || coalesce(' · ' || nullif(e -> 'data' ->> 'outcome', ''), '') end
+$$;
+
+-- a session is a dialysis in this unit (its concept the pack's); on, done or stopped it sits in a stay admitted here (or opened here in
+-- the same set), one session a stay; not done (missed) it sits in no stay; one session a patient a day (a crossed-out one aside)
+create function haemodialysis.session_check(p_entry jsonb, p_set jsonb) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_org uuid := (p_entry ->> 'organization_id')::uuid; v_visit uuid := (p_entry ->> 'visit_id')::uuid; d jsonb := p_entry -> 'data';
+        v_item uuid := coalesce((p_entry ->> 'item')::uuid, (p_entry ->> 'id')::uuid); v_stay jsonb;
+        v_new boolean := p_entry ->> 'replaces' is null and p_entry ->> 'relation' is distinct from 'changes';
+begin
+  if not coalesce(d -> 'concept' -> 'codings' @> '[{"system":"local.procedure","code":"haemodialysis"}]'::jsonb, false) then
+    return jsonb_build_array(jsonb_build_object('code', 'not_a_session', 'level', 'refuse'));
+  end if;
+  if d ->> 'status' = 'not-done' then
+    if v_visit is not null then return jsonb_build_array(jsonb_build_object('code', 'session_missed_in_stay', 'level', 'refuse')); end if;
+  else
+    if v_visit is null then return jsonb_build_array(jsonb_build_object('code', 'session_not_in_stay', 'level', 'refuse')); end if;
+    select r into v_stay from core.pack_rows(v_org, 'base.presence', jsonb_build_object('where', jsonb_build_object('item', v_visit))) r limit 1;
+    if v_stay is not null then
+      -- a new session needs the stay still admitted; a correction or a change of one (End, a late signature) may follow the discharge
+      if not (v_stay ->> 'kind' = 'stay' and (v_stay ->> 'department_id')::uuid = (p_entry ->> 'department_id')::uuid and (not v_new or v_stay ->> 'state' = 'admitted')) then
+        return jsonb_build_array(jsonb_build_object('code', 'session_not_in_stay', 'level', 'refuse'));
+      end if;
+    elsif not exists (select 1 from jsonb_array_elements(p_set) x where (x ->> 'id')::uuid = v_visit and core.base_of(x ->> 'type') = 'admitted'
+                        and coalesce((x -> 'data' ->> 'department_id')::uuid, (x ->> 'department_id')::uuid) = (p_entry ->> 'department_id')::uuid) then
+      return jsonb_build_array(jsonb_build_object('code', 'session_not_in_stay', 'level', 'refuse'));
+    end if;
+    -- the stay's sessions as they stand now (a crossed-out one drops)
+    if v_new and exists (select 1 from core.pack_kind(v_org, (p_entry ->> 'patient_id')::uuid, 'haemodialysis.session', '{"current":true}'::jsonb) x
+                          where x.visit_id = v_visit and x.item <> v_item) then
+      return jsonb_build_array(jsonb_build_object('code', 'session_exists', 'level', 'refuse'));
+    end if;
+  end if;
+  if v_new and exists (select 1 from core.pack_kind(v_org, (p_entry ->> 'patient_id')::uuid, 'haemodialysis.session',
+       jsonb_build_object('current', true, 'data', jsonb_build_object('haemodialysis', jsonb_build_object('on', d -> 'haemodialysis' ->> 'on')))) x where x.item <> v_item) then
+    return jsonb_build_array(jsonb_build_object('code', 'session_on_day', 'level', 'refuse'));
+  end if;
+  return '[]';
+end $$;
+
 -- the unit's shifts start in order (their numbers are their places in the list), and a shift still in use is not cut from the list: a
 -- slot live today or later, or a session moved to today or later, on a shift past the new list's end would fall off the schedule
 create function haemodialysis.unit_check(p_where jsonb, p_data jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
@@ -109,6 +174,45 @@ create function haemodialysis.unit_check(p_where jsonb, p_data jsonb) returns js
                    and m.to_on >= w.today and m.undone_at is null)
     then jsonb_build_array(jsonb_build_object('code', 'shift_in_use', 'level', 'refuse', 'field', 'shifts')) else '[]'::jsonb end
 $$;
+
+-- who is due now (the clinics' C5 rows under the board, spec §5.6). Read here, never ids from the client; each patient named is read-logged
+create function haemodialysis.due(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare v_tz text := haemodialysis.tz(p_org); v_today date := (now() at time zone haemodialysis.tz(p_org))::date;
+        v_now time := (now() at time zone haemodialysis.tz(p_org))::time; v_shifts text[] := haemodialysis.shifts(p_org, p_department);
+        v_upto int; v_cur int := 0; v_hours numeric := coalesce((core.setting_at(p_org, 'haemodialysis.unit', p_department) ->> 'hours')::numeric, 4);
+        r record; s jsonb; v_here uuid[] := '{}'; v_rows jsonb := '[]'; v_ids uuid[] := '{}'; v_else text;
+begin
+  v_upto := haemodialysis.upto(v_shifts, v_now);
+  for i in 1 .. cardinality(v_shifts) loop
+    if v_shifts[i]::time <= v_now then v_cur := i; end if;
+  end loop;
+  for s in select x from core.pack_rows(p_org, 'base.presence', jsonb_build_object('where', jsonb_build_object('department_id', p_department, 'state', 'admitted'))) x loop
+    v_here := v_here || (s ->> 'patient_id')::uuid;
+  end loop;
+  for r in
+    select sl.id slot_id, null::uuid move_id, sl.patient_id, sl.shift, sl.place_id from haemodialysis.slots sl
+     where sl.organization_id = p_org and sl.department_id = p_department and sl.starts_on <= v_today and (sl.ends_on is null or sl.ends_on >= v_today)
+       and haemodialysis.on_day(sl.days, v_today)
+       and not exists (select 1 from haemodialysis.moves m where m.organization_id = p_org and m.slot_id = sl.id and m.from_on = v_today and m.undone_at is null)
+    union all
+    select m.slot_id, m.id, m.patient_id, m.shift, m.place_id from haemodialysis.moves m
+     where m.organization_id = p_org and m.department_id = p_department and m.to_on = v_today and m.undone_at is null
+  loop
+    continue when r.shift > v_upto or r.patient_id = any (v_here);
+    continue when exists (select 1 from core.pack_kind(p_org, r.patient_id, 'haemodialysis.session',
+      jsonb_build_object('current', true, 'data', jsonb_build_object('haemodialysis', jsonb_build_object('on', v_today)))));
+    select dp ->> 'name' into v_else from core.pack_rows(p_org, 'base.presence', jsonb_build_object('patient', r.patient_id,
+        'where', jsonb_build_object('kind', 'stay', 'state', 'admitted'))) x, lateral (select core.pack_department(p_org, (x ->> 'department_id')::uuid) dp) y
+     where (x ->> 'department_id')::uuid <> p_department limit 1;
+    v_ids := v_ids || r.patient_id;
+    v_rows := v_rows || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('patient_id', r.patient_id, 'slot_id', r.slot_id, 'move_id', r.move_id,
+      'on', v_today, 'shift', r.shift, 'starts', v_shifts[r.shift], 'starts_at', case when v_shifts[r.shift] is not null then (v_today + v_shifts[r.shift]::time) at time zone v_tz end,
+      'place_id', r.place_id, 'hours', v_hours, 'isolation', to_jsonb(haemodialysis.isolation(p_org, r.patient_id)),
+      'last_on', haemodialysis.last_on(p_org, r.patient_id), 'elsewhere', v_else)));
+    v_else := null;
+  end loop;
+  return jsonb_build_object('on', v_today, 'shift', v_cur, 'patient_ids', to_jsonb(v_ids), 'rows', v_rows);
+end $$;
 
 -- the week for the Schedule tab: the slots live on any of its six days (Saturday … Thursday, from the Saturday of p_args.from, else
 -- today's), the sessions moved from or to those days or to the Friday after (a session may be moved to a Friday, which is in no
@@ -232,10 +336,77 @@ begin
   perform core.hint('organization:' || p_org);
   return jsonb_build_object('id', v_id, 'patient_ids', jsonb_build_array(v_pt));
 end $$;
+
+-- the board's words (the owner's C1): each stay admitted here, its session, the stay's latest blood pressure, the patient's isolation,
+-- as the reader may see them (a hidden entry comes back with no author and is passed over). This unit's stays only, read here; each
+-- patient named is read-logged by the door
+create function haemodialysis.board(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare s jsonb; n record; b record; v_ids uuid[] := '{}'; v_out jsonb := '{}'; v_session jsonb; v_bp jsonb;
+begin
+  for s in select r from core.pack_rows(p_org, 'base.presence', jsonb_build_object('where', jsonb_build_object('department_id', p_department, 'state', 'admitted'))) r loop
+    v_ids := v_ids || (s ->> 'patient_id')::uuid;
+    v_session := null; v_bp := null;
+    -- the stay's session and blood pressures as they stand now: each item's latest version, a crossed-out one dropped (read from the day
+    -- before the stay began, so a long record is not read whole)
+    select x.item, x.data into n from core.pack_kind(p_org, (s ->> 'patient_id')::uuid, 'haemodialysis.session',
+        jsonb_build_object('current', true, 'from', (s ->> 'checked_in_at')::timestamptz - interval '1 day')) x
+     where x.visit_id = (s ->> 'item')::uuid and x.author_id is not null order by x.recorded_at desc, x.id desc limit 1;
+    if found then
+      v_session := jsonb_strip_nulls(jsonb_build_object('item', n.item, 'status', n.data ->> 'status', 'on', n.data -> 'haemodialysis' ->> 'on',
+        'shift', (n.data -> 'haemodialysis' ->> 'shift')::int, 'hours', (n.data -> 'haemodialysis' ->> 'hours')::numeric, 'started', n.data -> 'performed' ->> 'value'));
+    end if;
+    select x.data, x.occurred_at into b from core.pack_kind(p_org, (s ->> 'patient_id')::uuid, 'vitals',
+        jsonb_build_object('current', true, 'from', (s ->> 'checked_in_at')::timestamptz - interval '1 day')) x
+     where x.visit_id = (s ->> 'item')::uuid and x.author_id is not null and x.data ? 'bp' order by x.occurred_at desc, x.recorded_at desc limit 1;
+    if found then
+      v_bp := jsonb_build_object('sys', (b.data -> 'bp' -> 'sys' ->> 'value')::numeric, 'dia', (b.data -> 'bp' -> 'dia' ->> 'value')::numeric, 'at', b.occurred_at);
+    end if;
+    v_out := v_out || jsonb_build_object(s ->> 'item', jsonb_strip_nulls(jsonb_build_object('session', v_session, 'bp', v_bp,
+      'isolation', to_jsonb(haemodialysis.isolation(p_org, (s ->> 'patient_id')::uuid)))));
+  end loop;
+  return jsonb_build_object('patient_ids', to_jsonb(v_ids), 'stays', v_out);
+end $$;
 reset role;
 
+-- a session is started, ended or marked missed by whoever works there (everyday: the base's Doctors and Nurses where the unit uses
+-- the pack, and every role built on them)
+select core.declare_action('write:haemodialysis.session', 'haemodialysis', 'department', '{"en":"Start, end or mark missed a dialysis session","ar":"تسجيل جلسة الغسيل الكلوي"}', everyday => true);
 -- the schedule is changed by the unit's own nurse and doctor (not everyday: a base Nurse or Doctor working there reads it)
 select core.declare_action('write:haemodialysis.schedule', 'haemodialysis', 'department', '{"en":"Change the dialysis schedule","ar":"تعديل جدول الغسيل الكلوي"}');
+
+-- the session: the pack's own type on the base's procedure (so the procedure's check, record line rules, privacy and FHIR apply: a
+-- Procedure in its Encounter), its own fields under haemodialysis; D2's fields are declared now so the shape does not change later
+select core.declare_type('haemodialysis.session', 1, 'haemodialysis', $j${"type":"object","additionalProperties":false,"required":["concept","status","haemodialysis"],
+  "properties":{
+    "concept":{"$ref":"#/$defs/concept"},
+    "status":{"enum":["in-progress","completed","stopped","not-done"]},
+    "performed":{"$ref":"#/$defs/partial_date"},
+    "outcome":{"type":"string"},"reason":{"type":"string"},"note":{"type":"string"},
+    "haemodialysis":{"type":"object","additionalProperties":false,"required":["on"],"properties":{
+      "on":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+      "shift":{"type":"integer","minimum":1,"maximum":4},
+      "chair":{"type":"string","format":"uuid"},
+      "slot":{"type":"string","format":"uuid"},
+      "hours":{"type":"number","minimum":0.5,"maximum":8},
+      "missed":{"enum":["not_came","unwell","admitted","travelling","refused","other"]},
+      "prescription":{"type":"object","additionalProperties":false,"properties":{
+        "hours":{"type":"number","minimum":0.5,"maximum":8},
+        "blood_flow":{"$ref":"#/$defs/quantity"},"dialysate_flow":{"$ref":"#/$defs/quantity"},
+        "dialyser":{"type":"string","maxLength":40},
+        "bath":{"type":"object","additionalProperties":false,"properties":{"k":{"type":"number","minimum":0,"maximum":5},
+          "ca":{"type":"number","minimum":0,"maximum":3},"hco3":{"type":"number","minimum":20,"maximum":40}}},
+        "heparin":{"type":"object","additionalProperties":false,"properties":{"bolus":{"$ref":"#/$defs/quantity"},"rate":{"$ref":"#/$defs/quantity"},"none":{"type":"boolean"}}},
+        "dry_weight":{"$ref":"#/$defs/quantity"},
+        "access":{"type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"enum":["fistula","graft","catheter"]},"site":{"type":"string","maxLength":60}}},
+        "note":{"type":"string","maxLength":300}}},
+      "target":{"$ref":"#/$defs/quantity"},
+      "access":{"type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"enum":["fistula","graft","catheter"]},
+        "site":{"type":"string","maxLength":60},"ok":{"type":"boolean"},"note":{"type":"string","maxLength":200}}},
+      "removed":{"$ref":"#/$defs/quantity"},
+      "needles":{"type":"string","maxLength":200},
+      "ended":{"$ref":"#/$defs/datetime"}}}}}$j$::jsonb,
+  'haemodialysis.session_line(jsonb)', array['Procedure'], base_type => 'procedure',
+  checks => array['haemodialysis.session_check(jsonb,jsonb)']::regprocedure[], labels => '{"en":"Dialysis session","ar":"جلسة غسيل كلوي"}');
 
 -- the unit: its shifts, a session's hours, the chairs kept for HBV and HCV (by name, as on the board)
 select core.declare_setting('haemodialysis.unit', 'haemodialysis', 'department',
@@ -265,8 +436,10 @@ grant select, delete on haemodialysis.slots, haemodialysis.moves to core_eraser;
 select core.declare_store('haemodialysis.slots', 'haemodialysis');
 select core.declare_store('haemodialysis.moves', 'haemodialysis');
 
+select core.declare_op('haemodialysis.due', 'haemodialysis', 'haemodialysis.due(uuid,uuid,uuid,jsonb)', 'read:queue', patients => true);
 select core.declare_op('haemodialysis.week', 'haemodialysis', 'haemodialysis.week(uuid,uuid,uuid,jsonb)', 'read:queue', patients => true);
 select core.declare_op('haemodialysis.plan', 'haemodialysis', 'haemodialysis.plan(uuid,uuid,uuid,jsonb)', 'write:haemodialysis.schedule', patients => true);
+select core.declare_op('haemodialysis.board', 'haemodialysis', 'haemodialysis.board(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
 
 -- the starter setup: eight chairs (an HCV chair and an HBV chair among them), three shifts, outpatient stays, the board and the Schedule
 select core.declare_setup('haemodialysis.unit', 'haemodialysis', 'stays', '{"en":"Dialysis unit","ar":"وحدة الغسيل الكلوي"}', packs => array['haemodialysis'],

@@ -4,8 +4,11 @@
 -- standing schedule as the pack's own table, written through its door: a slot a patient, a chair a pattern and shift (a standing slot
 -- or a session moved there holds it), a patient once a day, a session moved one-off (or an extra one), undone only into a free chair,
 -- a slot ended (its sessions moved off later days with it; one never used blocks nothing); a shift in use stays in the unit's setting;
--- the week the Schedule tab reads (the Friday after it holds the sessions moved there); Erase removes a patient's rows; off, the door
--- is shut.
+-- the week the Schedule tab reads (the Friday after it holds the sessions moved there); who is due now, from the schedule, with each
+-- patient's isolation; the session, the pack's own type on the base's procedure: started into a chair with the base's admitted in one
+-- set, one a stay and one a patient a day, missed in no stay, ended with the base's discharged and corrected after it; the board's read
+-- (the session, the last blood pressure, the isolation; a crossed-out one passed over), read-logged; the session as a Procedure in its Encounter; Erase removes a patient's rows; off, the
+-- doors are shut.
 \set org   '00000000-0000-0000-0000-0000000000a1'
 \set im    '00000000-0000-0000-0000-0000000000d1'
 \set desk  '00000000-0000-0000-0000-0000000000d4'
@@ -20,7 +23,9 @@
 \set h1    '00000000-0000-0000-0000-00000000e811'
 \set h2    '00000000-0000-0000-0000-00000000e812'
 \set h3    '00000000-0000-0000-0000-00000000e813'
+\set h4    '00000000-0000-0000-0000-00000000e814'
 \set v1    '00000000-0000-0000-0000-00000000e821'
+\set v2    '00000000-0000-0000-0000-00000000e822'
 \set m1    '00000000-0000-0000-0000-00000000e831'
 \set ow    '11111111-0000-0000-0000-0000000000b9'
 \set dr    '11111111-0000-0000-0000-0000000000b1'
@@ -70,7 +75,17 @@ select (min(d) filter (where haemodialysis.on_day(:'days', d::date)))::date as p
 select t.ok(l.role_block = 'd4' and l.is_pack and l.labels ->> 'en' = 'Dialysis', 'haemodialysis reads "Dialysis", its role ids in block d4') from core.layers l where l.key = 'haemodialysis';
 select t.ok(not has_schema_privilege('authenticated', 'haemodialysis', 'USAGE'), 'the API cannot reach its schema');
 
-\echo '── (c) the schedule''s action: not everyday'
+\echo '── (b) the session: the pack''s own type on the base''s procedure, in the record, its line and its check'
+select t.ok(y.layer = 'haemodialysis' and y.base_type = 'procedure' and y.resources = array['Procedure'] and y.in_record and not y.may_be_private
+  and y.line = 'haemodialysis.session_line(jsonb)'::regprocedure and y.checks = array['haemodialysis.session_check(jsonb,jsonb)'::regprocedure],
+  'haemodialysis.session v1: a procedure, a Procedure, in the record, never private; its line and its check') from core.types y where y.key = 'haemodialysis.session' and y.version = 1;
+select t.ok(haemodialysis.session_line('{"data":{"status":"completed","haemodialysis":{"on":"2026-10-09","removed":{"value":"2600","unit":"mL","ucum":"mL"}}}}') = 'Dialysis · done · 2.6 L off'
+  and haemodialysis.session_line('{"data":{"status":"completed","haemodialysis":{"on":"2026-10-09","removed":{"value":"2.6","unit":"L","ucum":"L"}}}}') = 'Dialysis · done · 2.6 L off',
+  'the fluid taken off reads in litres, written in mL or in L');
+
+\echo '── (c) the session''s action: everyday; the schedule''s: not'
+select t.ok(a.layer = 'haemodialysis' and a.everyday and a.scope = 'department', 'write:haemodialysis.session: the department''s, everyday')
+  from core.actions a where a.key = 'write:haemodialysis.session';
 select t.ok(a.layer = 'haemodialysis' and not a.everyday and a.scope = 'department', 'write:haemodialysis.schedule: the department''s, not everyday')
   from core.actions a where a.key = 'write:haemodialysis.schedule';
 
@@ -83,6 +98,7 @@ select t.ok(r.key = 'haemodialysis.doctor' and r.built_on = '00000000-0000-0000-
   'Dialysis doctor: built on Doctor; changes the schedule') from core.roles r where r.id = '00000000-0000-0000-0000-00000000d402';
 select t.ok(core.gives(:'org', '00000000-0000-0000-0000-00000000d401', 'write:haemodialysis.schedule', :'hd')
   and not core.gives(:'org', '00000000-0000-0000-0000-00000000c003', 'write:haemodialysis.schedule', :'hd'), 'the base''s Nurse there does not change the schedule');
+select t.ok(core.gives(:'org', '00000000-0000-0000-0000-00000000d401', 'write:haemodialysis.session', :'hd'), 'the Dialysis nurse writes the session (the Nurse''s everyday)');
 
 \echo '── (e) the unit''s setting, on the department''s card'
 select t.ok(k.layer = 'haemodialysis' and k.owner_kind = 'department' and k.form = 'department' and not k.many and k.check_fn = 'haemodialysis.unit_check(jsonb,jsonb)'::regprocedure,
@@ -100,10 +116,11 @@ select t.ok(s.work = 'stays' and s.packs = array['haemodialysis'] and jsonb_arra
   and s.screens = '{"screens":["base.beds","haemodialysis.schedule"],"opens":"base.beds"}', 'haemodialysis.unit: eight chairs, AMB, three shifts, the board then the Schedule')
   from core.setups s where s.key = 'haemodialysis.unit';
 
-\echo '── (h) the ops: the week (read:queue), the plan (the schedule''s action), each naming its patients'
-select t.ok(count(*) = 2 and bool_and(o.patients) and bool_and(o.layer = 'haemodialysis')
-  and min(o.action) filter (where o.key = 'haemodialysis.week') = 'read:queue' and min(o.action) filter (where o.key = 'haemodialysis.plan') = 'write:haemodialysis.schedule',
-  'week and plan') from core.ops o where o.key in ('haemodialysis.week', 'haemodialysis.plan');
+\echo '── (h) the ops: who is due and the week (read:queue), the plan (the schedule''s action), the board (read:record), each naming its patients'
+select t.ok(count(*) = 4 and bool_and(o.patients) and bool_and(o.layer = 'haemodialysis')
+  and min(o.action) filter (where o.key = 'haemodialysis.due') = 'read:queue' and min(o.action) filter (where o.key = 'haemodialysis.week') = 'read:queue'
+  and min(o.action) filter (where o.key = 'haemodialysis.plan') = 'write:haemodialysis.schedule' and min(o.action) filter (where o.key = 'haemodialysis.board') = 'read:record',
+  'due, week, plan and board') from core.ops o where o.key in ('haemodialysis.due', 'haemodialysis.week', 'haemodialysis.plan', 'haemodialysis.board');
 
 \echo '── (i) the two tables are stores: Erase removes their rows'
 select t.ok(count(*) = 2 and bool_and(s.clear is null), 'haemodialysis.slots and haemodialysis.moves, clear null')
@@ -117,6 +134,11 @@ select t.ok(core.department_uses(:'org', :'hd', 'haemodialysis') and (select cou
 \echo '── (k) the patterns: Sat · Mon · Wed and Sun · Tue · Thu; a Friday is neither'
 select t.ok(haemodialysis.on_day('sat_mon_wed', '2026-10-10') and not haemodialysis.on_day('sat_mon_wed', '2026-10-11') and haemodialysis.on_day('sun_tue_thu', '2026-10-11')
   and not haemodialysis.on_day('sat_mon_wed', '2026-10-09') and not haemodialysis.on_day('sun_tue_thu', '2026-10-09'), 'Saturday, Sunday, and a Friday in neither');
+\echo '── (k) how far who is due reaches: the shift on now and every earlier one, the next within the hour; before the first, the first'
+select t.ok(haemodialysis.upto(array['07:00', '11:30', '16:00'], '06:00') = 1 and haemodialysis.upto(array['07:00', '11:30', '16:00'], '10:29') = 1
+  and haemodialysis.upto(array['07:00', '11:30', '16:00'], '10:30') = 2 and haemodialysis.upto(array['07:00', '11:30', '16:00'], '12:00') = 2
+  and haemodialysis.upto(array['07:00', '11:30', '16:00'], '15:00') = 3 and haemodialysis.upto(array['07:00', '11:30', '16:00'], '23:00') = 3
+  and haemodialysis.upto(array['00:00'], '12:00') = 1, '06:00 → 1, 10:29 → 1, 10:30 → 2, 12:00 → 2, 15:00 → 3, 23:00 → 3; one shift: 1');
 
 \echo '── (l) the setting''s check: shifts in order, each a clock time'
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'haemodialysis.unit', 'owner_id', %L, 'data', '{"shifts":["11:30","07:00"],"hours":4}'::jsonb))$q$, :'hd'), 'shifts_out_of_order');
@@ -181,6 +203,150 @@ select t.ok(exists (select 1 from jsonb_array_elements(r -> 'slots') s where s -
 select t.ok(exists (select 1 from jsonb_array_elements(r -> 'moves') x where x ->> 'id' = :'mv2' and x ->> 'to_on' = :'today' and x ->> 'place_id' = :'c7'
                    and x ->> 'reason' = 'extra after a missed one' and not x ? 'from_on') and r -> 'patient_ids' ? :'p2',
   'Mona''s extra session is in it (a Friday''s too)') from w;
+
+-- the session's concept, a session's data, who is due now and the board's read (as the reader signed in)
+create function pg_temp.hd() returns jsonb language sql immutable as $$
+  select '{"text":"Haemodialysis","codings":[{"system":"local.procedure","code":"haemodialysis","display":"Haemodialysis"}]}'::jsonb
+$$;
+create function pg_temp.session(p_status text, p_hd jsonb, p_more jsonb default '{}') returns jsonb language sql stable as $$
+  select jsonb_build_object('concept', pg_temp.hd(), 'status', p_status, 'performed', jsonb_build_object('value', now(), 'precision', 'minute'), 'haemodialysis', p_hd) || p_more
+$$;
+create function pg_temp.due(p_dept uuid) returns jsonb language sql as $$
+  select public.pack_op(jsonb_build_object('op', 'haemodialysis.due', 'department_id', p_dept, 'args', '{}'::jsonb))
+$$;
+create function pg_temp.board(p_dept uuid) returns jsonb language sql as $$
+  select public.pack_op(jsonb_build_object('op', 'haemodialysis.board', 'department_id', p_dept, 'args', '{}'::jsonb, 'purpose', 'TREAT'))
+$$;
+-- who is missed in (w): Ahmed on his own day; on a Friday (no pattern's day) Karim, after an extra session moved to today
+select case when :dow = 5 then :'p3' else :'pt' end as mp, case when :dow = 5 then :'c8' else :'c1' end as mc \gset
+
+\echo '── (q) Mona''s HCV isolation: the base''s alert, active'
+select t.as(:'dr');
+select t.landed(t.w(t.e('alert', :'p2', :'hd', '{"concept":{"text":"Isolation · HCV","codings":[{"system":"local.alert","code":"isolation_hcv","display":"Isolation · HCV"}]},"status":"active"}')),
+  'Dr Ali records Mona''s HCV isolation');
+
+\echo '── (r) who is due now: Mona''s extra session in the HCV chair, and Ahmed''s slot (none on a Friday)'
+select t.as(:'hn');
+create temp table r as select pg_temp.due(:'hd') r;
+select t.ok(jsonb_array_length(r -> 'rows') = case when :dow = 5 then 1 else 2 end and (r ->> 'on')::date = :'today'::date and (r ->> 'shift')::int = 1,
+  'due today: ' || jsonb_array_length(r -> 'rows') || ' rows, shift 1 on') from r;
+select t.ok(x ->> 'move_id' = :'mv2' and x ->> 'place_id' = :'c7' and (x ->> 'shift')::int = 1 and (x ->> 'hours')::numeric = 4 and x -> 'isolation' = '["hcv"]'
+  and x ->> 'starts' = '00:00' and x ? 'starts_at' and not x ? 'slot_id' and not x ? 'last_on' and not x ? 'elsewhere', 'Mona: moved here for today, the HCV chair, HCV, shift 1 at 00:00')
+  from r, jsonb_array_elements(r -> 'rows') x where x ->> 'patient_id' = :'p2';
+select t.ok(case when :dow = 5 then not exists (select 1 from jsonb_array_elements(r -> 'rows') x where x ->> 'patient_id' = :'pt')
+  else exists (select 1 from jsonb_array_elements(r -> 'rows') x where x ->> 'patient_id' = :'pt' and x ->> 'slot_id' = :'sl1' and x ->> 'place_id' = :'c1'
+    and x -> 'isolation' = '[]' and not x ? 'move_id') end and r -> 'patient_ids' ? :'p2',
+  case when :dow = 5 then 'a Friday: Ahmed''s slot is not today''s' else 'Ahmed: his slot, Chair 1, no isolation' end) from r;
+
+\echo '── (s) who may read it: whoever reads the queue there'
+select t.as(:'dr');
+select t.ok(jsonb_typeof(pg_temp.due(:'hd') -> 'rows') = 'array', 'Dr Ali (a Doctor there) reads who is due');
+select t.as(:'rc');
+select t.refuses(format($q$select pg_temp.due(%L)$q$, :'hd'), 'not_allowed');
+
+\echo '── (t) Start: the base''s admitted into the chair and the session begun, one set'
+select t.as(:'hn');
+select t.landed(t.w(jsonb_build_array(
+  t.e('admitted', :'p2', :'hd', jsonb_build_object('department_id', :'hd', 'admit_source', 'outp', 'place_id', :'c7', 'reason', 'Haemodialysis'), :'s1', :'s1'),
+  t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4)), :'h1', :'s1'))),
+  'Rasha starts Mona''s session in the HCV chair');
+select t.ok(r ->> 'kind' = 'stay' and r ->> 'state' = 'admitted' and r ->> 'place_id' = :'c7' and r ->> 'department_id' = :'hd', 'a stay in the HCV chair, admitted')
+  from t.rows('base.presence', :'hd', jsonb_build_object('item', :'s1')) r;
+select t.ok(t.entry(t.record(:'p2', :'hd'), :'h1') ->> 'line' = 'Dialysis · on · 4 h', 'its line: Dialysis · on · 4 h');
+
+\echo '── (u) started, she is no longer due'
+select t.ok(not exists (select 1 from jsonb_array_elements(pg_temp.due(:'hd') -> 'rows') x where x ->> 'patient_id' = :'p2'), 'Mona is not due now');
+
+\echo '── (v) the session''s check'
+select t.refused(t.w(t.e('haemodialysis.session', :'p3', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c2', 'hours', 4)))),
+  'session_not_in_stay', 'on dialysis in no stay');
+select t.as(:'dr');
+select t.landed(t.w(t.e('admitted', :'pt', :'ward', '{"admit_source":"emd","reason":"pneumonia"}', :'s2', :'s2')), 'Dr Ali admits Ahmed to the ward (no bed yet)');
+select t.as(:'hn');
+select t.refused(t.w(t.e('haemodialysis.session', :'pt', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c1', 'hours', 4)), null, :'s2')),
+  'session_not_in_stay', 'a stay on the ward is not one here');
+select t.refused(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4)), null, :'s1')),
+  'session_exists', 'a second session in the stay');
+select t.refused(t.w(t.e('haemodialysis.session', :'p2', :'hd', jsonb_build_object('concept', '{"text":"Haemodialysis"}'::jsonb, 'status', 'in-progress',
+  'haemodialysis', jsonb_build_object('on', :'today')), null, :'s1')), 'not_a_session', 'a procedure that is not the pack''s');
+select t.refused(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('not-done', jsonb_build_object('on', :'today', 'missed', 'not_came'), '{"reason":"Did not come"}'), null, :'s1')),
+  'session_missed_in_stay', 'missed, in a stay');
+select t.refused(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('not-done', jsonb_build_object('on', :'today', 'missed', 'not_came'), '{"reason":"Did not come"}'))),
+  'session_on_day', 'a second session for Mona today');
+select t.as(:'rc');
+select t.refused(t.w(t.e('haemodialysis.session', :'p3', :'hd', pg_temp.session('not-done', jsonb_build_object('on', :'today', 'missed', 'not_came'), '{"reason":"Did not come"}'))),
+  'not_allowed', 'Reception does not write the session');
+
+\echo '── (w) Missed: not done, in no stay, "Did not come"; no longer due'
+select t.as(:'hn');
+select r ->> 'id' is not null as extra from (select pg_temp.plan(:'hd', jsonb_build_object('do', 'move', 'patient_id', :'p3', 'to_on', :'today', 'shift', 1, 'place_id', :'c8',
+  'reason', 'extra this week')) r) x where :dow = 5;
+select t.ok(exists (select 1 from jsonb_array_elements(pg_temp.due(:'hd') -> 'rows') x where x ->> 'patient_id' = :'mp' and x ->> 'place_id' = :'mc'), 'due before: the one missed');
+select t.landed(t.w(t.e('haemodialysis.session', :'mp', :'hd', jsonb_build_object('concept', pg_temp.hd(), 'status', 'not-done', 'reason', 'Did not come',
+  'performed', jsonb_build_object('value', :'today', 'precision', 'day'), 'haemodialysis', jsonb_strip_nulls(jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'mc',
+  'slot', case when :dow <> 5 then :'sl1' end, 'missed', 'not_came'))), :'h2')), 'missed: did not come');
+select t.ok(t.entry(t.record(:'mp', :'hd'), :'h2') ->> 'line' = 'Dialysis missed · Did not come', 'its line: Dialysis missed · Did not come');
+select t.ok(not exists (select 1 from jsonb_array_elements(pg_temp.due(:'hd') -> 'rows') x where x ->> 'patient_id' = :'mp'), 'and no longer due');
+
+\echo '── (x) the blood pressure in the chair'
+select t.landed(t.w(t.e('vitals', :'p2', :'hd', '{"bp":{"sys":{"value":"132","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"80","unit":"mmHg","ucum":"mm[Hg]"}}}', :'v1', :'s1')),
+  'Rasha records BP 132/80');
+
+\echo '── (y) the board''s read: the session, the last blood pressure, the isolation; read-logged for treatment'
+select t.as(:'dr');
+select t.ok(b -> 'stays' -> :'s1' -> 'session' ->> 'status' = 'in-progress' and (b -> 'stays' -> :'s1' -> 'session' ->> 'hours')::numeric = 4
+  and b -> 'stays' -> :'s1' -> 'session' ->> 'started' is not null and b -> 'stays' -> :'s1' -> 'session' ->> 'item' = :'h1'
+  and (b -> 'stays' -> :'s1' -> 'bp' ->> 'sys')::numeric = 132 and (b -> 'stays' -> :'s1' -> 'bp' ->> 'dia')::numeric = 80
+  and b -> 'stays' -> :'s1' -> 'isolation' = '["hcv"]' and b -> 'patient_ids' ? :'p2' and not (b -> 'stays' ? :'s2'),
+  'Mona''s stay: on, 4 h, BP 132/80, HCV; the ward''s stay is not this board''s') from (select pg_temp.board(:'hd') b) x;
+reset role;
+select t.ok(exists (select 1 from core.read_log l where l.patient_id = :'p2' and l.purpose = 'TREAT' and l.what -> 'ops' ? 'haemodialysis.board'),
+  'the read is logged for Mona, for treatment, naming the op');
+set role authenticated;
+select t.refuses(format($q$select pg_temp.board(%L)$q$, :'ward'), 'not_used_here');
+select t.as(:'rc');
+select t.refuses(format($q$select pg_temp.board(%L)$q$, :'hd'), 'not_allowed');
+
+\echo '── (y) crossed out: a struck blood pressure or session is no longer the board''s; the stay may then take a new session'
+savepoint struck;
+select t.as(:'hn');
+select t.landed(t.w(t.e('vitals', :'p2', :'hd', '{"bp":{"sys":{"value":"78","unit":"mmHg","ucum":"mm[Hg]"},"dia":{"value":"40","unit":"mmHg","ucum":"mm[Hg]"}}}', :'v2', :'s1')),
+  'a BP of 78/40 in the chair');
+select t.as(:'dr');
+select t.ok((b -> 'stays' -> :'s1' -> 'bp' ->> 'sys')::numeric = 78, 'the board: BP 78/40') from (select pg_temp.board(:'hd') b) x;
+select t.as(:'hn');
+select t.landed(t.w(t.e('crossed_out', :'p2', :'hd', '{"reason":"wrong_patient"}', null, :'s1', null, null, t.latest(:'v2'))), 'the 78/40 crossed out: another patient''s');
+select t.as(:'dr');
+select t.ok((b -> 'stays' -> :'s1' -> 'bp' ->> 'sys')::numeric = 132 and (b -> 'stays' -> :'s1' -> 'bp' ->> 'dia')::numeric = 80, 'the board: back to BP 132/80')
+  from (select pg_temp.board(:'hd') b) x;
+select t.as(:'hn');
+select t.landed(t.w(t.e('crossed_out', :'p2', :'hd', '{"reason":"wrong_patient"}', null, :'s1', null, null, t.latest(:'h1'))), 'the session crossed out');
+select t.as(:'dr');
+select t.ok(b -> 'stays' ? :'s1' and not (b -> 'stays' -> :'s1' ? 'session'), 'the board: the stay has no session') from (select pg_temp.board(:'hd') b) x;
+select t.as(:'hn');
+select t.landed(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4)), :'h4', :'s1')),
+  'a new session in the stay (the struck one no longer counts)');
+select t.as(:'dr');
+select t.ok(b -> 'stays' -> :'s1' -> 'session' ->> 'item' = :'h4' and b -> 'stays' -> :'s1' -> 'session' ->> 'status' = 'in-progress', 'the board: the new session')
+  from (select pg_temp.board(:'hd') b) x;
+rollback to savepoint struck;
+
+\echo '── (z) End: the session completed and the base''s discharged, one set'
+select t.as(:'hn');
+select t.landed(t.w(jsonb_build_array(
+  t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('completed', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4,
+    'removed', jsonb_build_object('value', '2600', 'unit', 'mL', 'ucum', 'mL'), 'ended', now())), :'h3', :'s1', t.latest(:'h1'), 'changes'),
+  t.move('discharged', :'s1', :'hd', '{"disposition":"home"}'))), 'Rasha ends Mona''s session: completed, 2.6 L off, discharged');
+select t.ok(r ->> 'state' = 'discharged', 'the stay is discharged') from t.rows('base.presence', :'hd', jsonb_build_object('item', :'s1')) r;
+select t.ok(t.entry(t.record(:'p2', :'hd'), :'h3') ->> 'line' = 'Dialysis · done · 2.6 L off', 'its line: Dialysis · done · 2.6 L off');
+-- after the discharge: the ended session may still be corrected (a late note); no new session goes into the closed stay
+savepoint late;
+select t.landed(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('completed', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4,
+    'removed', jsonb_build_object('value', '2600', 'unit', 'mL', 'ucum', 'mL'), 'ended', now()), '{"note":"Cramps in the last half hour"}'), null, :'s1', null, null, t.latest(:'h1'))),
+  'a late note on Mona''s ended session, after the discharge');
+rollback to savepoint late;
+select t.refused(t.w(t.e('haemodialysis.session', :'p2', :'hd', pg_temp.session('in-progress', jsonb_build_object('on', :'today', 'shift', 1, 'chair', :'c7', 'hours', 4)), null, :'s1')),
+  'session_not_in_stay', 'a new session in the discharged stay');
 
 \echo '── (aa) a session moved and undone; a slot ended; a slot never used blocks nothing'
 select t.as(:'hn');
@@ -248,6 +414,18 @@ select t.ok(pg_temp.plan(:'hd', jsonb_build_object('do', 'add', 'patient_id', :'
 select t.as(:'ow');
 select t.refuses(format($q$select public.write_setting(jsonb_build_object('key', 'haemodialysis.unit', 'owner_id', %L, 'data', '{"shifts":["00:00"],"hours":4}'::jsonb))$q$, :'hd'), 'shift_in_use');
 
+\echo '── (bb) the export: the session a Procedure (its latest version, completed) in its Encounter, an outpatient one'
+set role authenticated;
+select t.as(:'dr');
+create temp table bundle as select public.read(jsonb_build_object('shape', 'fhir', 'patient_id', :'p2', 'department_id', :'hd')) b;
+reset role;
+create temp table res as select e -> 'resource' r from bundle, jsonb_array_elements(b -> 'entry') e;
+select t.ok(count(*) = 1 and bool_and(r ->> 'status' = 'completed' and r -> 'code' -> 'coding' @> '[{"code":"haemodialysis"}]' and r -> 'encounter' ->> 'reference' = 'Encounter/' || :'s1'),
+  'the Procedure: completed, haemodialysis, in its Encounter') from res where r ->> 'resourceType' = 'Procedure' and r ->> 'id' = :'h1';
+select t.ok(count(*) = 1 and bool_and(r -> 'class' ->> 'code' = 'AMB'), 'the Encounter: outpatient (AMB)') from res where r ->> 'resourceType' = 'Encounter' and r ->> 'id' = :'s1';
+select t.ok(not exists (select 1 from res, unnest(core.fhir_problems(r)) q where r ->> 'resourceType' <> 'Bundle'), 'no resource has a problem');
+set role authenticated;
+
 \echo '── (cc) Erase reaches the schedule: Ahmed''s slots and moves are gone'
 select t.as(:'ow');
 select t.ok((public.erase_patient(jsonb_build_object('patient_id', :'pt', 'reason', 'test')) ->> 'erased')::boolean, 'Ahmed erased');
@@ -262,3 +440,6 @@ select public.write_setting(jsonb_build_object('key', 'organization.packs_used',
 set role authenticated;
 select t.as(:'hn');
 select t.refuses(format($q$select pg_temp.week(%L, '{}')$q$, :'hd'), 'pack_off');
+select t.refuses(format($q$select pg_temp.due(%L)$q$, :'hd'), 'pack_off');
+select t.refused(t.w(t.e('haemodialysis.session', :'p4', :'hd', pg_temp.session('not-done', jsonb_build_object('on', :'today', 'missed', 'not_came'), '{"reason":"Did not come"}'))),
+  'pack_off', 'off: no session is written');

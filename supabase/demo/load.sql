@@ -46,6 +46,7 @@
 -- include: supabase/seeds/bedside.sql
 -- include: supabase/demo/bedside.sql
 -- include: supabase/seeds/haemodialysis.sql
+-- include: supabase/demo/haemodialysis.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql

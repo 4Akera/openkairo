@@ -319,6 +319,55 @@ export interface HaematoWeek {
   used_suggestion?: boolean
   was?: number
 }
+/** haemodialysis.session v1 (haemodialysis) */
+export interface HaemodialysisSession {
+  concept: Concept
+  haemodialysis: {
+    access?: {
+      kind: 'fistula' | 'graft' | 'catheter'
+      note?: string
+      ok?: boolean
+      site?: string
+    }
+    chair?: string
+    ended?: Datetime
+    hours?: number
+    missed?: 'not_came' | 'unwell' | 'admitted' | 'travelling' | 'refused' | 'other'
+    needles?: string
+    on: string
+    prescription?: {
+      access?: {
+        kind: 'fistula' | 'graft' | 'catheter'
+        site?: string
+      }
+      bath?: {
+        ca?: number
+        hco3?: number
+        k?: number
+      }
+      blood_flow?: Quantity
+      dialysate_flow?: Quantity
+      dialyser?: string
+      dry_weight?: Quantity
+      heparin?: {
+        bolus?: Quantity
+        none?: boolean
+        rate?: Quantity
+      }
+      hours?: number
+      note?: string
+    }
+    removed?: Quantity
+    shift?: number
+    slot?: string
+    target?: Quantity
+  }
+  note?: string
+  outcome?: string
+  performed?: PartialDate
+  reason?: string
+  status: 'in-progress' | 'completed' | 'stopped' | 'not-done'
+}
 /** here v1 (base) */
 export interface Here {
   note?: string
@@ -1512,6 +1561,7 @@ export interface EntryData {
   'haemato.plan': HaematoPlan
   'haemato.programme': HaematoProgramme
   'haemato.week': HaematoWeek
+  'haemodialysis.session': HaemodialysisSession
   'here': Here
   'left': Left
   'lis.blood': LisBlood
