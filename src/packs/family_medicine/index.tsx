@@ -14,7 +14,9 @@ import { ChecksSection, FamilySection, checkStates, fileSeen } from './Section'
 import { FamilyStep, afterStep, showStep } from './Step'
 
 registerCommand({ name: 'checks', pack: PACK, groupTitle: 'Family medicine', title: 'Checks due', label: 'The checks due by age and sex: the due ones ordered',
-  example: '/checks', action: 'write:order', writes: ['order'], parse: (rest, ctx) => parseChecks(rest, ctx), note: (items, ctx) => <ChecksNote items={items} ctx={ctx} /> })
+  example: '/checks', action: 'write:order', writes: ['order'], parse: (rest, ctx) => parseChecks(rest, ctx), note: (items, ctx) => <ChecksNote items={items} ctx={ctx} />,
+  // the command alone is the whole of it: what is due now, the due ones a service here does drafted
+  empty: (ctx) => { const r = parseChecks('', ctx); return r && 'ok' in r ? r.ok : [] } })
 registerSection({ key: 'family_medicine.file', title: 'Family', types: [], fit: ANYONE, Body: FamilySection,
   word: (x) => { const f = fileSeen(x.identity.id); return f ? { word: String(f.members.length) } : null } })
 registerSection({ key: 'family_medicine.checks', title: 'Checks', types: [], fit: ANYONE, Body: ChecksSection,

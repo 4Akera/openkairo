@@ -1659,8 +1659,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   file at an address; or not now). The setup `family_medicine.medicine` (Family medicine: its queue and Families). Demo: Dr. Hazem Ouda
   (family@demo.com); file 1182 — Ayman Abdelrahman, his wife Basma Hegazy (in consult; sugar and cervical screening due), his mother
   Zeinab Hamouda (diabetes, HbA1c late; waiting), Yassin (6, waiting) and Malak (14 months). The clinic's choices
-  (`seeds/clinic_packs.sql`): Family medicine ticks chronic care and the immunisation pack after its own (its line by default: the queue,
-  Families, the immunisation list); the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/family_medicine.sql`, `npm run
+  (`seeds/clinic_packs.sql`): Family medicine ticks chronic care and the immunisation pack after its own, and its line is the queue, Families
+  and the immunisation list; the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/family_medicine.sql`, `npm run
   test:family_medicine`. *Not as drawn, and why:* the key is `family_medicine` (the core's word "family" — a patient's family name, the
   chart's families of types — would read as naming the pack); Book (bookings') and the Gynaecology section (ObGyn's) are left out; the
   file number is not a banner word (it would need the pack's read on every chart); the queue's per-pack marks (Q50) wait for the core door
