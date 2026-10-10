@@ -60,7 +60,3 @@ src/packs/            one folder per pack
 ## Tests
 
 64 SQL suites (about 3,000 checks) including the permanent ones — rebuild equals live, boundary, canary, concurrency, registry, FHIR, tenancy, pack contract — and one TypeScript script per pack and per core area. Typecheck, lint (no errors) and build are clean.
-
-## Open
-
-Open design questions are listed in the spec: §5.6 (ward nursing and the beds) and §5.8 (the clinics: the chemotherapy cycle ending at the drug round, A6/A4 paper, printing many patients at once). Deferred: MEOWS, dialysis monthly bloods, drug-round safety checks, insurance.
