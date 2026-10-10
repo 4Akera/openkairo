@@ -258,6 +258,22 @@ begin
   return r;
 end $$;
 create or replace function demo.w(p_user uuid, p_entries jsonb) returns jsonb language sql as $$ select demo.landed(demo.send(p_user, p_entries), p_entries) $$;
+-- one set that makes the newborns it is about (a newborn's record in the birth's own Done, the owner's Q10), as the user named: a newborn
+-- a load before made is erased first (the eraser's door, as the owner), so a reload makes it again; a refusal or a flag stops the load
+create or replace function demo.w_born(p_user uuid, p_entries jsonb, p_patients jsonb) returns jsonb language plpgsql as $$
+declare x jsonb;
+begin
+  for x in select y from jsonb_array_elements(p_patients) y loop
+    perform demo.mine((x ->> 'id')::uuid, true);
+    if exists (select 1 from core.patients where organization_id = demo.base('clinic') and id = (x ->> 'id')::uuid) then
+      perform demo.as(demo.base('owner'));
+      perform public.erase_patient(jsonb_build_object('patient_id', x ->> 'id', 'reason', 'demo reload'));
+    end if;
+  end loop;
+  perform demo.as(p_user);
+  return demo.landed(public.write(jsonb_build_object('set_id', gen_random_uuid(), 'entries', p_entries, 'patients', p_patients,
+    'confirmed', '["allergy_clash","allergy_caution","duplicate_medication","duplicate_class","already_on_list"]'::jsonb)), p_entries);
+end $$;
 -- a set whose first entry takes a ward bed (admitted, moved): the bed named, else the next free by position, as the writer finds
 -- them (a patient admitted in the app since keeps theirs, so a reload never stops on bed_taken); never p_not. Returns the bed
 create or replace function demo.w_bed(p_user uuid, p_entries jsonb, p_bed int, p_not uuid default null) returns uuid language plpgsql as $$

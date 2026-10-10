@@ -4,7 +4,8 @@
 -- holds the Cashier's role and has billing's Today on the Pharmacy's line, to count and close their own drawer. Written through the
 -- doors as the owner; run again, it adds only what is missing. Skipped while either pack is off. Emergency uses Ward nursing too, after
 -- its own pack, so Emergency's words lead each tile's line and its two buttons are the tile's (skipped while either is off). The ICU
--- and the CCU use Ward nursing too, after Critical care in their pack order. Its day is supabase/demo/clinic_packs.sql.
+-- and the CCU use Ward nursing too, after Critical care in their pack order. The Labour ward uses Ward nursing too, after ObGyn in its
+-- pack order. Its day is supabase/demo/clinic_packs.sql.
 
 select demo.layer('clinic_packs');
 
@@ -78,4 +79,12 @@ declare c uuid := demo.base('clinic'); er uuid := demo.id('casualty', 'departmen
 begin
   if not (core.packs_used(c) @> array['casualty', 'bedside']) then return; end if;
   perform demo.tick(er, 'bedside');
+end $$;
+
+-- the Labour ward uses Ward nursing too (its drug round, obs and handover, later), after ObGyn in its pack order, so the tile's two
+-- buttons are ObGyn's while a woman is in labour. Skipped while either pack is off.
+do $$
+begin
+  if not (core.packs_used(demo.base('clinic')) @> array['obgyn', 'bedside']) then return; end if;
+  perform demo.tick(demo.id('obgyn', 'labour ward'), 'bedside');
 end $$;

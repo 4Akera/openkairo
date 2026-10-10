@@ -15,7 +15,7 @@ export class Refusal extends Error {
 }
 
 export interface Finding { code: string; level: 'refuse' | 'warn' | 'flag' | 'info'; detail?: string; entries?: string[]; confirmed?: boolean; late?: boolean }
-export interface Outcome { set_id: string; outcome: 'landed' | 'refused' | 'warn' | 'busy'; entries?: { id: string; item: string; item_version: number }[]; findings: Finding[]; repeat?: boolean; recorded_at?: string }
+export interface Outcome { set_id: string; outcome: 'landed' | 'refused' | 'warn' | 'busy'; entries?: { id: string; item: string; item_version: number }[]; findings: Finding[]; repeat?: boolean; recorded_at?: string; patients?: { id: string; number: number }[] }
 /** a set the writer refused, or sent back with warnings to confirm (inline cards) */
 export class WriteRefused extends Refusal { constructor(public outcome: Outcome) { const f = outcome.findings[0]; super(f?.code ?? outcome.outcome, f?.detail) } }
 export class WriteWarned extends Error { constructor(public outcome: Outcome) { super(outcome.findings.map((f) => `${words(f.code)}${f.detail ? `: ${f.detail}` : ''}`).join(' · ')) } }
@@ -39,7 +39,10 @@ interface EntryHead { id: string; type_version?: number; patient_id: string; dep
 export type EntryIn<K extends keyof EntryData = keyof EntryData> = EntryHead & EntryBody<K>
 /** one entry of a type a builder takes as a parameter (move('called', …)); assignable to EntryIn once the type is known */
 export type EntryOf<K extends keyof EntryData> = EntryHead & { type: K; data: EntryData[K] }
-export interface SetIn { set_id: string; made_at?: string; entries: EntryIn[]; confirmed?: string[]; seen?: Record<string, number> }
+/** a newborn a set makes (the owner's Q10, 2026-10-08): a new record, its mother the patient of the set's first entry, named by an
+ *  entry of the same set; made only when the whole set lands */
+export interface NewPatient { id: string; mother: string; full_name: string; gender: 'male' | 'female' | 'other' | 'unknown'; birth_date: string; department_id: string }
+export interface SetIn { set_id: string; made_at?: string; entries: EntryIn[]; confirmed?: string[]; seen?: Record<string, number>; patients?: NewPatient[] }
 /** one Done through the one door in: landed, or a refusal (WriteRefused), warnings to confirm (WriteWarned), or busy (retried here) */
 export async function write(set: SetIn): Promise<Outcome> {
   const body = { ...set, made_at: set.made_at ?? new Date().toISOString(), entries: set.entries.map((e) => Object.fromEntries(Object.entries(e).filter(([, v]) => v !== undefined && v !== null))) }

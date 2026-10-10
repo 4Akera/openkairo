@@ -108,7 +108,9 @@ entries. Everything that happens is an entry, including "made private", "called"
 - `gender`: male · female · other · unknown. Birth date with precision and an `estimated` flag. An unknown patient has `anonymous`.
 - Identifiers `(system key, value, verified)`. The system's check function validates the value (§7.3). The record number is an
   integer from `next_number(organization, 'record_number')`, exported as an identifier in the organization's MR system.
-- Relations: mother of, guardian of, not the same person as; each with who recorded it and when.
+- Relations: mother of, guardian of, not the same person as; each with who recorded it and when. *Built 2026-10-09 (owner,
+  2026-10-08, Q10):* a newborn's record may be made inside a set, its mother the set's first patient, written as mother of (§3.9
+  step 3b).
 - **Identity changes are insert-only** (`core.patient_changes` holds each full snapshot); `core.patients` is the current state built from
   them. Death is not a patient field: it comes from the base's `died` entry.
 - **Merge.** `merged_into` points to the survivor. The merged family counts as one patient everywhere: reads take the family, the
@@ -271,13 +273,32 @@ select core.retire_score    ('gcs', '1974');           -- new entries may no lon
   every row it owns that depends on those items.
 
 ### 3.9 The writer: `public.write(set)` (the only way in)
-The client sends `{set_id, made_at, entries[], confirmed[], seen{item: version}}`; each entry is `{id, type, type_version?, patient_id,
+The client sends `{set_id, made_at, entries[], confirmed[], seen{item: version}, patients[]?}`; each entry is `{id, type, type_version?, patient_id,
 department_id, visit_id?, occurred_at?, precision?, until?, data, replaces?, refers_to?, relation?, source_system?, source_id?}`.
 The writer:
 1. **Refuses nested calls** (a transaction-local flag) and asserts READ COMMITTED.
 2. Takes **identity from the JWT** (the login, the session's chosen user, its organization and kind). Never from parameters or GUCs.
 3. **Checks the set ledger** (`core.sets`). The same `set_id` with the same hash (md5 of the entries) returns the stored outcome without
-   running checks again; with a different hash it is refused `set_changed`.
+   running checks again; with a different hash it is refused `set_changed`. A set with `patients` hashes them with its entries.
+3b. **Newborns** (*built 2026-10-09; owner, 2026-10-08, Q10: "the baby's record made inside the birth's own Done, twins included"*).
+   A set may name the newborns it is about: `patients: [{id, mother, full_name, gender, birth_date, department_id}]`. Right after
+   the ledger (so a retry of a landed set makes nothing again) and before the rows, the writer makes each: a new patient as the
+   desk's door makes one (the next record number, the name trimmed and folded, gender, birth date of precision day, created by the
+   user; a full snapshot in `patient_changes`; no identifier, telecom or address, which the desk adds later), with the patient of the
+   set's first entry (its survivor) as **mother of** it in `patient_relations`. Refusals: `bad_set` (detail `patients`) for a
+   malformed list, a key not named above, ids not distinct, a gender outside male · female · other · unknown, a birth date not
+   `YYYY-MM-DD` or outside the clinic's today and the 28 days before, or any entry of the set carrying `source_system`/`source_id`; `name_missing`; `wrong_patient` (detail `mother`)
+   when `mother` is not the first entry's patient or she does not exist; `patient_exists` for an id any patient has;
+   `not_found` (detail `department`) / `not_allowed` (detail `manage:patients`): the department is live and the user may register
+   patients there; `patient_unused` when no entry of the set names the newborn. **All or nothing**: `public.write` runs the writer
+   inside a block when the set has `patients` and, when the outcome is not `landed` (refused, warn, busy), raises its own code
+   `OCNB1`, which takes back the records, relations, snapshots and the record-number counter and returns the outcome as it came; any
+   other error still fails the call. A lock wait while making a newborn (the record number another set making one holds to its
+   commit, or the same id made by another set in flight) is `busy` after the 3 s timeout, as in step 4; the same id once made is
+   `patient_exists`. A landed outcome adds `patients: [{id, number}]` in the set's order (stored, so a retry returns
+   it). *Chosen by Claude in the build, awaiting the owner:* the key names; at most eight newborns in one set; a newborn only (born
+   on the clinic's today or in the 28 days before); never in an imported set; the snapshot's reason `born`; the mother's recorded
+   sex is not checked. Not built yet: the FHIR export does not carry "mother of" (noted for the owner).
 4. **Locks**: advisory transaction locks on every patient family in the set plus every claim, in sorted order, with `lock_timeout` 3 s
    (a timeout returns outcome `busy`, which the client retries). It works out each survivor again after locking. Then
    `recorded_at` = the clock, or 1 µs after the latest entry of those families when the clock has stepped back.
@@ -286,7 +307,7 @@ The writer:
    entry's department)`, except that where the pack's actions do not count (off, or not used in that department) a correction of its
    entry is written by an author of the item who still holds a role there, in the target's own department (so no department can be
    picked to dodge `may`); the department and visit belong to the organization; one patient family per set unless the type declares
-   `other_patient`; `replaces` and `refers_to` targets exist in the family and are visible to the writer; the same-resource item rule;
+   `other_patient` or the patient is a newborn this set made (step 3b); `replaces` and `refers_to` targets exist in the family and are visible to the writer; the same-resource item rule;
    registered code systems only.
 6. **Assigns item and version** under the lock. A `replaces` or `changes` whose seen version (from `seen`, default the target's own
    version) is older than the item's current version gives `changed_since_opened` (level refuse; a type's check may name it better).
@@ -310,7 +331,8 @@ The writer:
 
 Outcomes: `landed` · `refused` · `warn` · `busy`. Generic refusal codes: `not_signed_in`, `choose_user`, `nested_write`,
 `set_changed`, `unknown_type`, `pack_off`, `bad_shape`, `not_allowed`, `wrong_organization`, `wrong_patient`, `two_patients`,
-`not_found`, `already_replaced`, `wrong_resource`, `unknown_system`, `changed_since_opened`, `empty_set`.
+`not_found`, `already_replaced`, `wrong_resource`, `unknown_system`, `changed_since_opened`, `empty_set`, `bad_set`;
+for a set's newborns (step 3b) also `name_missing`, `patient_exists`, `patient_unused`.
 
 ### 3.10 The reader: `public.read(query)` (the only way out)
 - One VOLATILE function. It logs in the same transaction; if the log insert fails, the read fails. The log (`core.read_log`) keeps one
@@ -2139,6 +2161,105 @@ numbered as on its picture.
   cramps · BP 88/54", both red. The banner's word, where the department uses the pack: the open stay here with its session on, "off
   1.4 of 2.8 L", or "on dialysis" before Before. Noted, not built: the base's Discharge alone (a patient leaving mid-session) leaves the
   session on, End is the way; the unit's drugs are not worked out as due from their timing.
+- **Built 2026-10-09 (ObGyn's labour ward, piece L1; chosen by Claude in the build, awaiting the owner):** the pack is the clinics'
+  build's (migration 27, unchanged: block d3, the Obstetrician d301 on the Doctor, the Midwife d302 on the Nurse); the labour ward's
+  migration 37 adds to the same layer (no second declare_pack, no new role; `core.lock_pack('obgyn')` at its end). A **labour
+  examination** is the pack's own type `obgyn.labour_exam` (an Observation of its own, not private: cervix 0–10 cm in halves, the head
+  in fifths above the brim, position, liquor I C M B A, moulding, caput, contractions in 10 min and their length, G and P as said (each
+  kept in the line when said alone), a note that is not empty; at least one), written with `/ve` and `/ctx` under `write:obgyn.labour_exam` (everyday: the Doctor and the Nurse, so the
+  Obstetrician and the Midwife, where a department uses ObGyn). The **baby's heart** is the base's observation with LOINC 55283-6 (the
+  owner's B1) and `/fhr`, not a vitals key (vitals are the patient's own signs; a new key would be a base change); the mother's pulse,
+  BP and temperature are the base's vitals. G and P ride on the exam (the base has no G/P): on the tile and the Labour tab only, the
+  banner's G and P being the clinic's, from the antenatal booking (rule 3). The **partograph** is the WHO's modified one (Q9, as
+  drawn, awaiting the owner): active labour from the department's setting `obgyn.partograph` (4 cm, or 5 cm: the same lines started at
+  5 cm, not the Labour Care Guide), the alert line at 1 cm an hour, the action line 4 hours to its right; past a line, and a heart rate
+  under 110 or over 160, are notices, never a stop. It is ObGyn's screen `obgyn.labour` (the Labour tab beside the board), not the
+  chart's center as drawn: a pack's view there would be a core door. The starter setup `obgyn.labour_ward`: Delivery 1–4, Post 1–4
+  and Cot 1–6 (14 places labelled bed, six cots for twins), inpatient, the board and the Labour tab. The Midwife gains
+  `write:admitted` and `write:discharged` (she admits a woman in labour; the base's Nurse cannot). The board's words come from the
+  pack's op `obgyn.board` (each admitted stay's exams with a cervix or G and P, the baby's latest heart rate by when it was taken, the
+  pregnancy standing;
+  the owner's C1, read once per board through C7's hook). Demo: the Labour ward (Ward nursing ticked after ObGyn), its midwife Hanan
+  Fouad and the clinic's two obstetricians; Salma (6 cm, past the alert line), Doaa (4 cm, an hour into active labour) and Nesma
+  (8 cm, previous caesarean, urgent, the baby's heart 100) in Delivery 1–3. The client (piece L1b, `src/packs/obgyn/labour/`, one
+  `import './labour'` in the clinics' `index.tsx`): `/ve 6 3/5 oa clear m+ caput ctx 3/10 40s g2 p1` (any order; the cervix in half
+  centimetres, `full`; each finding said once; P under G; "3 10" is 3 in 10; no length with no contraction) and `/ctx 3/10 40s`
+  draft one labour examination on its card (Cervix, Head, Position, Liquor, Moulding, Caput, Contractions, G and P; the chosen chip
+  clears; the cervix kept in halves; what cannot be, said under the fields in `/ve`'s words), its line the server's words; `/fhr 142`
+  drafts the base's observation "Fetal heart rate: 142 bpm", and under 110 or over 160 a red notice under the card ("tell the doctor now. Only
+  a notice."); no empty `/ve` card and no observation card of the labour ward's (the clinics' contraception card draws only for its own
+  code). Each tile of a woman in labour (an exam or a pregnancy standing) says "G2 P1 · 39+2 w · 6 cm · 4 h", "latent" before active
+  labour, "fully dilated" at 10, then "past alert line" (amber) or "past action line" (red), and "FHR 100 at HH:MM" (red) when the
+  baby's latest heart rate is off — from `obgyn.board` (the owner's C1, read once per board through C7's hook); nothing before the
+  read lands. The banner's words (`obgyn.labour`): past a line, "FHR n" off; never G and P. The **Labour tab** (piece L1c,
+  `obgyn.labour`): the women in labour as chips in bed order ("Delivery 1 · Salma Ahmed", the chosen one kept in the link `?stay=`),
+  "Open the chart"; one line about her (name, age, G and P from her exam, the weeks, the bed, "active labour since HH:MM"); past a
+  line a notice ("Past the alert line: 4 → 6 cm in 3 h 55 min. Tell the doctor; the action line is at HH:MM. Only a notice — the
+  doctor decides.", amber; past the action line red; the time between the first and the latest exam to the minute, since rounded to
+  the hour "4 → 5 cm in 1 h" would read as on the line); the partograph as drawn (× the cervix, ○ the head on the fifths' scale from
+  every exam that palpated it, with or without a cervix, the alert line
+  from where active labour began, the action line 4 hours to its right, the clock every 2 hours as HH:MM since active labour need not
+  start on the hour), or "Latent phase: 3 cm at HH:MM — the partograph starts at 4 cm"; the grid by time under it (a column per minute
+  something was written, the last 12: the baby's heart rate, liquor I C M B A, moulding; contractions in 10 min and lasting; the
+  mother's pulse, BP, temperature; a heart rate under 110 or over 160 in red with ↓ or ↑; a row with nothing left out but the heart
+  rate); nothing typed there (the composer's `/ve`, `/ctx`, `/fhr`, `/v` in her chart); the tab reads again on the clinic's hints and
+  her record's, as the tile and the chart do; a failed read of her record leaves the chips to choose another. Each tile of a woman in
+  labour has ObGyn's **Partograph** button after Move and Discharge, for a reader who may read the record there, opening the tab at
+  her: a tile button gets no read since C7, so its show reads the board's last good answer the pack's hook kept (none until it lands,
+  forgotten when a read fails; a small core change, `ctx.read` for buttons too, noted, not asked). **L2b, the birth (server):** the
+  birth is the pack's own type `obgyn.birth` (a Procedure, not private: how — normal, vacuum, forceps, vaginal breech, caesarean —,
+  the perineum (intact, 1st–4th degree; never with a caesarean), episiotomy, repaired, the placenta, the blood loss in mL, who
+  delivered, and each baby: its record, born at, sex, grams 300–6500, breathing at birth; its check refuses a perineum, episiotomy or
+  repair after a caesarean, an episiotomy on an intact perineum, a blood loss not in mL or below 0, a baby that is not a patient, is
+  the mother or is listed twice, and a deliverer who is not a user; its line "Birth · normal · girl 3100 g · perineum: 2nd degree,
+  repaired · placenta complete · blood loss 350 mL"; FHIR a Procedure "Delivery, normal" recorded by whoever signed it (as the
+  base's Procedure) and performed by them only when they also delivered, its line the outcome — someone else who delivered is kept
+  in the birth, not exported, since the bundle's people are the entries' authors).
+  It is written in the mother's stay under `write:obgyn.birth` (by department, not everyday: the Midwife and the Obstetrician hold
+  it) in **one Done with each baby's record** (the owner's Q10, built in L2a): the mother's birth, her oxytocin (the base's given:
+  10 units IM after a vaginal birth, 5 units slow IV at a caesarean) and her pregnancy's end (a version of the standing one, ended,
+  delivered); then each baby's stay (admitted, born here, in a cot or none), its weight (the base's vitals), **Apgar** at 1 and 5
+  minutes (a declared score `obgyn.apgar`, Apgar 1953, alias `apgar`: colour, heart rate, grimace, activity, breathing, 0–2 each;
+  0–3 low, 4–6 moderately abnormal, 7–10 reassuring; the server adds it up) and its doses (the base's given, text-only drugs, none
+  in the demo's ATC subset: vitamin K 1 mg IM, 0.5 mg under 1500 g; eye ointment; hepatitis B 0.5 mL IM). A baby's entries never
+  refer to the mother's. A blood loss of 500 mL or more after a vaginal birth, 1000 after a caesarean, is a PPH notice (the card's,
+  L2c), never a stop or a flag. The board's read grows: the stay's birth (when, how, the blood loss, each baby's sex and weight) and
+  a baby's stay (admitted as born here, or with Apgar in it: its Apgar scores, none when left out, weight and doses given).
+  **Midwives and obstetricians hold `manage:patients` wherever they hold the role** (the birth's Done makes the records; a core
+  action counts in every department of the holding, whether or not it uses ObGyn: in the demo the Labour ward and the ObGyn clinic —
+  Dr. Nermeen Fathy, Dr. Ahmed Zaki, Samah Lotfy — and everywhere for a clinic-wide holding), **so they can register, merge and edit
+  patients there too — awaiting the owner**, who approved the baby's record (Q10), not those. Demo: Heba (a normal birth this morning, signed by Hanan Fouad; Post 1, her girl 3.1 kg in Cot 1,
+  Apgar 8 · 9, vitamin K and eye ointment) and Marwa (a caesarean yesterday by Dr. Nermeen Fathy, blood loss 700 mL; Post 2, her boy
+  3.35 kg in Cot 2, hepatitis B given too). *Chosen by Claude in the build, awaiting the owner:* the birth's fields and words, the
+  oxytocin and vitamin K doses, Apgar's table and words, the PPH thresholds' words. **L2c, the birth (client):** the **birth card**
+  on the Labour tab (an inline card under her line; Birth in the tab's actions, or the tile's **Birth** button beside Partograph while
+  she is in labour, `?birth=1`): born at (now by default; a time still to come today is last night's, said "yesterday"), delivered by (me, or the stay's doctor), how, the perineum with
+  episiotomy and repaired (gone, and cleared, at a caesarean; an episiotomy with no tear is said under it, as the check refuses it),
+  the third stage (oxytocin on, its words following how: "10 units IM" or "5 units slow IV"; the placenta; the blood loss, and at 500
+  mL or more after a vaginal birth, 1000 after a caesarean, "PPH: 600 mL … Tell the doctor now. Only a notice." in red), and each
+  baby (sex, grams, Apgar at 1 and 5 minutes as the five signs' chips in the table's words with the server's total and band, asked
+  once all five are chosen, breathing at birth, vitamin K "1 mg IM" or "0.5 mg IM" under 1500 g, eye ointment, hepatitis B in the
+  first 24 h off, the ward's free cots by name or "No cot here"); "Another baby (twins)" adds a baby of its own, up to four. **Sign
+  the birth** (⌘↵) writes the one set itself through the core's door (`write`, with the babies' `patients` and the pregnancy's
+  `seen`): the composer's Sign writes one patient's drafts, and the picture's place under the banner would be a core door (a pack's
+  action in the banner, a set of several patients from the chart), so it is on ObGyn's own tab — noted for the owner. Sign waits
+  while an Apgar is being added up; what blocks it is said under its field. Warnings are listed in words with **Sign anyway** (the
+  same set id and entries, the warnings confirmed: never a stop of the card's own); a refusal is said and the draft kept (a changed
+  draft is a new set). Signed: "Signed: Baby of Salma Ahmed Abdelrahman, #10421", and she leaves the women in labour. Only for whoever
+  holds `write:obgyn.birth` and `manage:patients` there (else "not for your role"). After birth the tile says the mother's "born
+  06:40 · normal", or "CS day 1" / "day 2 after birth", each baby "girl 3.1 kg", and PPH in red when over; a baby's tile "3.1 kg ·
+  Apgar 8 · 9 · vitamin K given · hepatitis B due" (vitamin K due, or hepatitis B late after 24 hours of the stay, in amber; the doses
+  found by their drug words, as the card writes them); her Partograph and Birth go. The banner after a birth in the open stay: "PPH n
+  mL" in red when over, nothing else. *Chosen by Claude in the build, awaiting the owner:* the card's fields and words, the tile's
+  words, the cots offered (the free places named "Cot …"; every free place when no cot is free, offered but never chosen for the
+  baby).
+- **Built 2026-10-09, L2a (the owner's Q10):** the core part only — a set may make the newborns it is about (§3.9 step 3b): each a
+  new record, its mother the patient of the set's first entry as "mother of", its own entries (the cot stay, …) beside hers in the
+  same Done, twins (up to eight) numbered in turn, all or nothing (a refused, warned or busy set leaves no record, relation, snapshot
+  or record number), only by someone holding `manage:patients` in that department, and a retry makes nothing again. The demo kit's
+  `demo.w_born` writes such a set (unused until the birth's demo). *Chosen by Claude in the build, awaiting the owner:* a newborn
+  only (born on the clinic's today or in the 28 days before), never in an imported set, eight at most, the names of the API. The
+  birth card that uses it is L2b/L2c's.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -3390,10 +3511,25 @@ types, parked pack calls with per-call Retry, Postgres enums.
   useIcu, words, index). As run: `db:test` every suite green (`intensive_ccu` 33 ok, `demo` 102 ok), the gen:shapes and gen:logins
   checks clean; `db:demo` twice (38 patients, 18 open visits and stays, 442 entries); `test:intensive` 7, 8 and 8 groups, and the other
   fifteen node suites green; lint no error; typecheck and build clean but for `src/pictures/bookings.tsx` (another session's).
+- 2026-10-09: **ObGyn's labour ward, piece L1a** (§5.6; lane `beds-labour`): migration 37 (`obgyn.labour_exam`, `obgyn.partograph`,
+  the Labour tab's key, `obgyn.board`, the Midwife's admitting actions, the starter setup `obgyn.labour_ward`), the seed's and the
+  day's lines appended (the Labour ward, Hanan Fouad; Salma, Doaa, Nesma), clinic_packs, the demo suite's labour ward block, the new
+  suite `labour` (53 checks; `obgyn` 28, `demo` 98, `registry` 16, `boundary` 10; the full run is the lane's end's); shapes and
+  logins regenerated; the demo loads twice (99 patients); node: composer 19, chart 24 + 16, screens 11, sections 19, banner 13,
+  settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 + 2, bedside 12, obgyn 10,
+  clinics-core 11; lint 0 errors; `vite build` builds. No client file yet.
 - 2026-10-09: **Dialysis, piece D1a** (§5.6; lane `beds-dialysis`): migration 21 (the pack, the unit's setup and setting, the
   standing schedule's two tables, `haemodialysis.plan` and `haemodialysis.week`, the unit's nurse and doctor), its seed (Rasha Mounir,
   Dr. Walid Hamza), suite `haemodialysis` 58 checks, `demo` 84 (`registry` 16, `boundary` 10); `test:demo` with the unit's two people; shapes and logins
   regenerated.
+- 2026-10-09: **ObGyn's labour ward, piece L1b** (§5.6; lane `beds-labour`): the client of the composer and the board —
+  `src/packs/obgyn/labour/` (codes, exam, partograph, board: pure; boardRead, ExamCard, commands, index), `/ve`, `/ctx`, `/fhr` and
+  the exam's card, the tile's and the banner's words, the one import line in the clinics' `index.tsx`; new node test `test:labour`
+  (8 groups). No SQL changed: `db reset`, labour 53 ok and demo 98 ok, shapes and logins unchanged, the demo loads twice (99
+  patients). Node: composer 19, chart 24 + 16, screens 11, sections 19, banner 13, settings 12, board 27, scores 7, demo 8, setups 11,
+  registries 9, pharmacy 10, lis 19, billing 22 + 2, bedside 12, obgyn 10, clinics-core 11, labour 8; typecheck clean but for
+  `src/pictures/bookings.tsx` (another session's); lint 0 errors; `vite build` builds. A weeks-and-days from an LMP only when it is a
+  whole date.
 - 2026-10-09: **Ward nursing, piece 3a: the drug round** (§5.6; lane `beds`; no core or base change): migration 17 edited in place
   (`bedside.dose`, `write:bedside.dose`, `bedside.round` setting and screen, `bedside.stay_doses`, the ops `bedside.round` and
   `bedside.sheet`, `bedside.board`'s doses), the base demo's three admission doses, Ward nursing's demo (medicines and rounds),
@@ -3404,6 +3540,15 @@ types, parked pack calls with per-call Retry, Postgres enums.
   core or base change): `src/packs/bedside` (twin.ts, Sheet.tsx, rx.tsx; firstCover and firstDoseWords, the chart's words, byDay).
   Node `test:drug-round` 12 groups (the shared case through the twin, the first dose's cover, matching, the banner and the sheet's
   words, the /rx note), bedside 12, banner 13, sections 19, composer 19, chart 24 + 16, registries 9; typecheck clean; lint 0 errors.
+- 2026-10-09: **ObGyn's labour ward, piece L1c** (§5.6; lane `beds-labour`): the Labour tab and the tile's Partograph button —
+  `src/packs/obgyn/labour/` grid.ts (pure: the grid, the women in bed order, the notice), useLabour.ts (the tab's reads), Chart.tsx
+  (the partograph), LabourGrid.tsx (the grid; not `Grid.tsx`, which a case-insensitive disk takes for `grid.ts`), Labour.tsx, and in
+  index.tsx `registerScreen('obgyn.labour')` and the Partograph button (board.ts `partographButton`, the test registers the same);
+  `test:labour` 9 groups (group 8 the tab, the button in group 6). No SQL changed: `db reset`, `gen:shapes --check` and `gen:logins`
+  unchanged, SQL suites labour 53 and demo 98 ok, `db:demo` loads twice (99 patients). Node: composer 19, chart 16, screens 11, sections 19, banner 13,
+  settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2, bedside 12, obgyn 10,
+  clinics-core 11, labour 9; typecheck clean but for `src/pictures/bookings.tsx` (another session's); lint 0 errors; `npm run build`
+  builds.
 - 2026-10-09: **Dialysis, piece D1b** (§5.6; lane `beds-dialysis`): migration 21 gains the session (`haemodialysis.session` on the
   base's procedure, its line and check, `write:haemodialysis.session`), `haemodialysis.due` and `haemodialysis.board`; the demo's six
   patients (`supabase/demo/haemodialysis.sql`); suite `haemodialysis` 108 checks, `demo` 95 (`registry` 16, `boundary` 10); shapes
@@ -3414,6 +3559,16 @@ types, parked pack calls with per-call Retry, Postgres enums.
 - 2026-10-09: **Dialysis, piece D1d** (§5.6; lane `beds-dialysis`): the pack's client, part 2 (`src/packs/haemodialysis`: week,
   Schedule, PlanCards, hooks' useWeek and usePlan, the screen registered): the Schedule tab (the week by shift, Add a patient, move one
   session, take it off a day, end a slot, undo a move); `test:haemodialysis` 8 groups; no server change; no core file.
+- 2026-10-09: **core, L2a: newborns in a write set** (the owner's Q10 of 2026-10-08; §3.2, §3.9 step 3b, §5.6; lane `beds-labour`):
+  `20260926000003_core_writer.sql` in place (core.writer makes a set's `patients` after the ledger, the family rule lets them sit
+  beside the mother, the landed outcome names them; public.write takes them back with a set that does not land, code `OCNB1`),
+  `rpc.ts` (`NewPatient`, `SetIn.patients`, `Outcome.patients`), `words.ts` (`patient_exists`, `patient_unused`), the demo kit's
+  `demo.w_born` (unused until the birth's demo), the new suite `newborn` (65 checks), and in `concurrency` two sets making newborns
+  at once (the second waits for the record number and is busy, leaving nothing). Run: `db reset`; `gen:shapes --check` and
+  `gen:logins --check` unchanged; the full `db:test` green, 52 suites (among them spine 33, concurrency 22, registry 16, boundary 10,
+  export 50, rebuild 11, demo 98, newborn 65); `db:demo` twice (99 patients). Node: composer 19, chart 16, board 27, demo 8,
+  registries 9, labour 9, bedside 12; typecheck clean; lint 0 errors; `npm run build` builds. A birth date must read `YYYY-MM-DD`
+  (the date cast alone takes `today`).
 - 2026-10-09: **Dialysis, piece D2a** (§5.6; lane `beds-dialysis`): migration 21 gains the standing prescription
   (`haemodialysis.prescription`, its line and check, `write:haemodialysis.prescription` on the Dialysis doctor), the reading
   (`haemodialysis.reading` on the base's vitals, its line and check, `write:haemodialysis.reading`), the Session screen, the board's fluid
@@ -3426,8 +3581,33 @@ types, parked pack calls with per-call Retry, Postgres enums.
   Session tab (Before and the fluid to take off, the prescription and its editor, the readings grid and card); `test:haemodialysis` 15
   groups (the session's in `scripts/test-haemodialysis-session.ts`); no server change; no core file. The screen's file is
   `SessionTab.tsx`, since `Session.tsx` and the pure `session.ts` collide on a case-insensitive disk.
+- 2026-10-09: **ObGyn's labour ward, piece L2b: the birth, server** (§5.6; lane `beds-labour`): migration 37 in place (`obgyn.birth`
+  with its line, check and FHIR; `obgyn.board` grown with the stay's birth and a baby's Apgar, weight and doses; `obgyn.apgar`
+  declared; `write:obgyn.birth`, and `manage:patients` for the Midwife and the Obstetrician wherever they hold the role, a core action, awaiting the owner), the day's two births
+  (Heba, Marwa) and their babies through `demo.w_born`, the demo suite's labour ward block (seven stays, the births, relations, cots,
+  Apgar, oxytocin, doses, the board), the `labour` suite's (n)–(t) (the birth's Done, twins, six refusals leaving no record, FHIR,
+  the board, a twin with no Apgar still a baby's stay); the check also refuses an episiotomy or repair at a caesarean, an episiotomy
+  on an intact perineum, a blood loss below 0, and a baby that is the mother or listed twice; FHIR's recorder is the signer, the
+  performer only when they also delivered; shapes regenerated (one type), logins unchanged. Run: `db reset`; `gen:shapes --check`
+  and `gen:logins --check` pass; SQL suites (this piece's and the demo's; the full run is the lane's end) labour 94, obgyn 28,
+  newborn 65, demo 107 ok; `db:demo` twice (103 patients). Node: composer 19, chart 16, screens 11, sections 19, banner 13,
+  settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2, bedside 12, obgyn 10,
+  clinics-core 11, labour 9; typecheck clean; lint 0 errors; `npm run build` and `npx vite build` build. MEOWS (L2d, L2e) waits for
+  the owner's next round.
 - 2026-10-09: **Dialysis, piece D2c** (§5.6; lane `beds-dialysis`): the pack's client, the session part 2 (`src/packs/haemodialysis`:
   event, drugs, end, banner, EventCard, DrugsCard, EndCard; SessionTab, board's event words, useSession's drugs read, the tile's End
   button and the banner word registered): events as the base's note and given, the unit's drugs as the base's given, End with the
   base's Discharge; `test:haemodialysis` 20 groups (the end's in `scripts/test-haemodialysis-end.ts`); no server change; no core file.
+- 2026-10-09: **ObGyn's labour ward, piece L2c: the birth, client** (§5.6; lane `beds-labour`): `src/packs/obgyn/labour/` apgar.ts,
+  birth.ts and after.ts (pure: Apgar's signs, the birth card's model and its one set, the tile's words after birth and a baby's),
+  BirthCard.tsx and BabyCard.tsx (the card, writing its own set: the set id kept until the draft changes, Sign anyway on warnings),
+  board.ts (the stay's birth and a baby's data, in labour only before them, the Birth button, the banner's PPH), codes.ts (`BIRTH`),
+  index.tsx (the Birth button, the banner reads the birth), Labour.tsx (Birth, `?birth=1`, the signed line), useLabour.ts (her
+  standing pregnancy, the free cots); new node test `test:birth` (6 groups). No SQL changed. A set built by birth.ts for Salma (a
+  normal birth with twins into Cot 3 and 4, and a caesarean with one baby) lands as Hanan Fouad with no finding (written and rolled
+  back by hand). Run: `supabase db reset`; `gen:shapes --check` and `gen:logins --check` pass; `db:test` every suite green (53, demo
+  107, labour 94, newborn 65, obgyn 28 among them); `db:demo` twice (103 patients). Node: composer 19, chart 24 + 16, screens 11,
+  sections 19, banner 13, settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 + 2,
+  bedside 12, obgyn 10, clinics-core 11, labour 9, birth 6; typecheck clean; lint 0 errors; `npm run build` and `npx vite build`
+  build. The browser pass waits for the lead.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

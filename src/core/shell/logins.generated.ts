@@ -85,6 +85,11 @@ export const DEMO_GROUPS: DemoGroup[] = [
     { email: 'walid@demo.com', name: 'Dr. Walid Hamza', role: 'Dialysis doctor' },
     { email: 'rasha@demo.com', name: 'Rasha Mounir', role: 'Dialysis nurse' },
   ] },
+  { department: 'Labour ward', departmentId: '2282d5b7-07ce-5915-84c4-d634b873f9c3', people: [
+    { email: 'hanan@demo.com', name: 'Hanan Fouad', role: 'Midwife' },
+    { email: 'zaki@demo.com', name: 'Dr. Ahmed Zaki', role: 'Obstetrician' },
+    { email: 'obgyn@demo.com', name: 'Dr. Nermeen Fathy', role: 'Obstetrician' },
+  ] },
   { department: 'Cardiology clinic', departmentId: 'ed61e81d-35ff-5ebd-aab9-65bc3fe69f83', people: [
     { email: 'cardio@demo.com', name: 'Dr. Wael Ghoneim', role: 'Cardiologist' },
   ] },

@@ -687,6 +687,40 @@ export interface ObgynAnc {
     text?: string
   }
 }
+/** obgyn.birth v1 (obgyn) */
+export interface ObgynBirth {
+  babies: {
+    born_at: Datetime
+    breathing?: 'cried' | 'rubbed' | 'bag_mask'
+    grams?: number
+    patient: Reference
+    sex: 'female' | 'male' | 'unknown'
+  }[]
+  blood_loss?: Quantity
+  delivered_by?: Reference
+  episiotomy?: boolean
+  mode: 'normal' | 'vacuum' | 'forceps' | 'breech' | 'caesarean'
+  note?: string
+  perineum?: 'intact' | 'first' | 'second' | 'third' | 'fourth'
+  placenta?: 'complete' | 'incomplete'
+  repaired?: boolean
+}
+/** obgyn.labour_exam v1 (obgyn) */
+export interface ObgynLabourExam {
+  caput?: 'none' | '+' | '++'
+  cervix?: number
+  contractions?: {
+    per_10: number
+    seconds?: number
+  }
+  descent?: number
+  gravida?: number
+  liquor?: 'intact' | 'clear' | 'meconium' | 'blood' | 'absent'
+  moulding?: '0' | '+' | '++' | '+++'
+  note?: string
+  para?: number
+  position?: 'oa' | 'loa' | 'roa' | 'lot' | 'rot' | 'op' | 'lop' | 'rop' | 'breech'
+}
 /** obgyn.periods v1 (obgyn) */
 export interface ObgynPeriods {
   code: Concept
@@ -1475,6 +1509,10 @@ export interface ObgynNoticesSetting {
   efw_low: number
   protein: '+' | '++' | '+++'
 }
+/** setting obgyn.partograph (obgyn; owner department) */
+export interface ObgynPartographSetting {
+  active_from: 4 | 5
+}
 /** setting obgyn.schedule (obgyn; owner organization) */
 export interface ObgynScheduleSetting {
   rows: {
@@ -1786,6 +1824,8 @@ export interface EntryData {
   'not_private': NotPrivate
   'note': Note
   'obgyn.anc': ObgynAnc
+  'obgyn.birth': ObgynBirth
+  'obgyn.labour_exam': ObgynLabourExam
   'obgyn.periods': ObgynPeriods
   'obgyn.postnatal': ObgynPostnatal
   'observation': Observation
@@ -1850,6 +1890,7 @@ export interface SettingData {
   'nephrology.renal_list': NephrologyRenalListSetting
   'obgyn.gynaecology': ObgynGynaecologySetting
   'obgyn.notices': ObgynNoticesSetting
+  'obgyn.partograph': ObgynPartographSetting
   'obgyn.schedule': ObgynScheduleSetting
   'obgyn.visits': ObgynVisitsSetting
   'oncology.regimens': OncologyRegimensSetting
