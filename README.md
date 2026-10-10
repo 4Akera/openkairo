@@ -63,4 +63,4 @@ src/packs/            one folder per pack
 
 ## Open
 
-Questions for the owner are in the spec: §5.6 (ward nursing and the beds), §5.8 (the clinics: the chemotherapy cycle ending at the drug round, A6/A4 paper, printing many patients at once). Deferred: MEOWS, dialysis monthly bloods, drug-round safety checks, insurance.
+Open design questions are listed in the spec: §5.6 (ward nursing and the beds) and §5.8 (the clinics: the chemotherapy cycle ending at the drug round, A6/A4 paper, printing many patients at once). Deferred: MEOWS, dialysis monthly bloods, drug-round safety checks, insurance.
