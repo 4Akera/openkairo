@@ -1,13 +1,17 @@
 // Under /op's card (spec/openCare.md §5.8, Q41; the picture #surg-clinic): the operation with its usual time, the side big, the chips
 // that rewrite the line (side, priority, surgeon, the anaesthetic wanted, day case or admitted), what the record says before an
 // operation (blood thinners, SGLT2 inhibitors, metformin, BMI: shown for the pre-op clinic to weigh, never a stop) and the risks to tell
-// (the Theatre's list for this operation). The signed consent form is a scan in the patient's Documents; printing the form waits for printing.
+// (the Theatre's list for this operation). Print the form prints the consent form for the patient to sign (built 2026-10-10:
+// printout.tsx); the signed form is a scan in the patient's Documents.
 import { compose } from '@core/hooks/composer'
 import { useDepartment } from '@core/hooks/organization'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
 import { Chip, Tag } from '@core/ui'
 import { operationsOf } from './model'
 import { knowOperations, opLine, opWords, type OpSaid } from './line'
+import { PrintConsent } from './PrintOps'
+import type { ConsentForm } from './printout'
+import { ageSex } from '@core/screens/bench/shared'
 
 const Say = ({ k, children }: { k: string; children: React.ReactNode }) => <span className="flex flex-wrap items-center gap-1.5 text-13"><span className="w-36 shrink-0 text-12 text-faint">{k}</span>{children}</span>
 /** blood thinners and the medicines a pre-op weighs, by ATC: antiplatelets, warfarin, the DOACs, heparins, SGLT2 inhibitors, metformin */
@@ -25,6 +29,13 @@ export function recordFlags(r: Ctx['record']): { word: string; tone: 'warn' | 'n
   if (b) out.push({ word: `BMI ${b}`, tone: b >= 35 ? 'warn' : 'neutral' })
   return out
 }
+
+/** the consent form as /op's card has it: the operation, the side, the surgeon, the anaesthetic wanted, the risks told */
+type Banner = NonNullable<Ctx['record']>['patient']
+const consentOf = (pt: Banner, operation: string, said: OpSaid, risks: string[], code: string): ConsentForm => ({
+  name: [pt.given_name, pt.middle_name, pt.family_name].filter(Boolean).join(' '), record: pt.record_number,
+  age_sex: ageSex(pt), operation, side: said.side, surgeon: said.surgeon,
+  technique: said.technique, risks, at: new Date().toISOString(), thing: `#${pt.record_number} · ${[code, said.side].filter(Boolean).join(' ')}` })
 
 export function OpNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
   const { org } = useDepartment()
@@ -65,7 +76,8 @@ export function OpNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
     {(op?.risks?.length ?? 0) > 0 && <span className="grid gap-1.5 rounded-lg border border-line bg-surface p-2.5">
       <span className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Consent · the risks told (this operation's list)</span>
       <span className="flex flex-wrap gap-1.5">{op!.risks!.map((r) => <Chip key={r} on variant="check" onClick={() => undefined}>{r}</Chip>)}</span>
-      <span className="flex flex-wrap items-center gap-2"><span dir="rtl" lang="ar" className="text-13 text-fg">إقرار بالموافقة على العملية: {svc.name}</span><Tag tone="warn" className="ms-auto">signed paper not scanned yet</Tag></span>
+      <span className="flex flex-wrap items-center gap-2">{ctx.record?.patient && <PrintConsent patientId={ctx.record.patient.id} form={consentOf(ctx.record.patient, svc.name, said, op!.risks!, svc.code)} />}
+        <span dir="rtl" lang="ar" className="text-13 text-fg">إقرار بالموافقة على العملية: {svc.name}</span><Tag tone="warn" className="ms-auto">signed paper not scanned yet</Tag></span>
       <span className="text-12 text-faint">The patient signs the form; it is scanned into their Documents, and from then the theatre list says “consent”. The anaesthetic's risks are the pre-op clinic's.</span></span>}
   </span>
 }

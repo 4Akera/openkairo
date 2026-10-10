@@ -10,6 +10,8 @@ import type { ServerEntry } from '@core/db/types'
 import type { SectionBody } from '@core/screens/chart/sections'
 import type { CardEditorProps } from '@core/screens/visit/commands'
 import { Chip, Empty, Input, Textarea, shortDate } from '@core/ui'
+import { ageSex } from '@core/screens/bench/shared'
+import { PrintConsent } from './PrintConsent'
 import { OPEN, isOperation, minutesBetween, noteLine, noteText, templateFor, templatesOf, type OpNote, type OrderLike } from './model'
 
 const Row = ({ k, children }: { k: string; children: React.ReactNode }) => <p className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-0.5 text-13"><span className="text-12 text-faint">{k}</span><span className="text-fg">{children}</span></p>
@@ -86,7 +88,9 @@ export function SurgerySection({ p, own }: SectionBody) {
       return <div key={e.id}><Row k="Today"><button type="button" onClick={() => p.open(e.id)} className="rounded-sm text-start hover:underline focus-ring">{n.operation}</button>{n.times?.from ? ` · knife ${n.times.from}, closed ${n.times.to}` : ''}</Row>
         {n.anaesthetist && <Row k="Anaesthetic">{[n.technique, n.anaesthetist].filter(Boolean).join(' · ')}</Row>}
         {n.specimen && <Row k="Sent">{n.specimen}</Row>}{n.implants && <Row k="Implants">{n.implants}</Row>}</div> })}
-    {planned.map((o) => <Row key={o.item} k="Planned">{o.service_name}{o.step_key ? ` · ${STEP[o.step_key] ?? o.step_key}` : ' · to schedule'} · decided {shortDate(o.ordered_at)}</Row>)}
+    {planned.map((o) => <Row key={o.item} k="Planned"><span className="flex flex-wrap items-center gap-x-2">{o.service_name}{o.step_key ? ` · ${STEP[o.step_key] ?? o.step_key}` : ' · to schedule'} · decided {shortDate(o.ordered_at)}
+      <PrintConsent op={o.item} operation={o.service_name ?? 'Operation'} code={o.service_code} departmentId={p.departmentId}
+        patient={{ id: p.patientId, name: p.r.identity.full_name, record: p.r.patient.record_number, age_sex: ageSex(p.r.patient) }} /></span></Row>)}
     {!planned.length && !todays.length && <Row k="Planned">none yet</Row>}
     {before.slice(0, 5).map((e) => <Row key={e.id} k={shortDate(e.occurred_at)}>{e.line}</Row>)}
   </div>

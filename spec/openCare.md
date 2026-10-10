@@ -436,7 +436,9 @@ row in `core.audit` (an AuditEvent).
   copy printed again at another computer is not marked; the receipt's copies are billing's own (§5.4), known at every desk and after a
   reload. A receipt's copy is recorded as it prints: after the read is logged and before it is drawn (a dialog cancelled still counts
   one: the browser does not say).
-- The printouts: the specimen labels (§5.3), the receipt and the refund slip (§5.4), the prescription on A5 (§4.6, the chart).
+- The printouts: the specimen labels (§5.3), the receipt and the refund slip (§5.4), the prescription on A5 (§4.6, the chart); the
+  clinics' (§5.8, 2026-10-10): the child's vaccination card, the Chronic care list, the action plan, the INR table, the operating list, the
+  consent form and the patient's sheet before an operation, each on A5.
   Tests: `npm run test:print` (the encoder, the papers and the print-only rule, a print's lifecycle, a pack's copy recorded only after
   the log and never when busy, the reprint at the server's time, several things each on its own, the page's part — the element off
   screen in the light theme at the paper's width, the stylesheet, all taken away after the dialog — the P key with an Arabic keyboard,
@@ -2623,9 +2625,15 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (`vaccines.vaccinator`, built on Nurse: also checks a walk-in in, registers a child, finishes the visit). Demo: the Vaccination room,
   Rokaya Ghoneim (vaccines@demo.com); Farida Bassem (13 months, OPV 5 and MMR 1 overdue, here), Talia Nassef (2 months, here), Layan
   Hegab (18 months and five weeks, to call), Seif Yehia (4 months, never here: the walk-in). Tests: `supabase/tests/vaccines.sql`,
-  `npm run test:vaccines`. *Not as drawn:* the child's card printout (printing is not on this branch) and the booking of the next visit
-  (bookings') are left out; the room's marks on other departments' queues ("9-month vaccines due") wait for a mark that reads a pack's
-  data (a core door, asked below).
+  `npm run test:vaccines`. *Not as drawn:* the booking of the next visit
+  (bookings') is left out; the room's marks on other departments' queues ("9-month vaccines due") wait for a mark that reads a pack's
+  data (a core door, asked below). *The child's card printout, built 2026-10-10 on the core's printing (§3.13):* `vaccines.card`, Print the
+  child's card in the Vaccines section (P too; the print logged like a read, a later copy marked Reprint): in Arabic, the clinic's header
+  and the department, the child's name, birth date and record number, one row a day given named by the schedule's age of its national doses
+  (else the child's age that day) with the vaccines' Arabic names and numbers and the date (* copied from the MOHP card), then what is due
+  now or the next visit worked out (`src/packs/vaccines/printout.tsx`; `npm run test:print`). *Chosen by Claude at the owner's request:*
+  the core's A5 sheet (the picture says A6, a paper the core does not have — asked below); the button in the chart's section, not on the
+  room's screen as drawn; the vaccines' Arabic names are the pack's own words.
 - *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chroniccare`, migration 24, role block e1 unused; pictures #chronic-visit,
   #chronic-list): the clinic's conditions, targets and checks as one setting `chroniccare.conditions` (its declared default the drawn table: diabetes,
   hypertension, CKD, heart failure, asthma, COPD; a condition's codes are the register, ICD-10 by its start; a target a measure, a sign
@@ -2645,7 +2653,10 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   ACR due), Fawzia Darwish (81; her own target BP < 150/90, falls), Wafaa Abdelmoneim (diabetes and asthma; inhaler technique due).
   Tests: `supabase/tests/chroniccare.sql`, `npm run test:chroniccare`. *Not as drawn, and why:* the key is `chroniccare` (the core says
   "chronic" of a problem term, which the no-pack-names rule reads as naming the pack); the list's Next visit and "none booked first" are
-  bookings' and Print the list is printing's, both left out; the flu vaccine check is the immunisation pack's data, which this pack may
+  bookings', left out; Print the list is built 2026-10-10 (`chroniccare.list`, the tab's Print the list and P: the
+  view and condition as shown, a line a patient on the core's A5 sheet; each patient on the paper logged like a read first through the
+  reader's shape `printed`, one call a patient, nothing printed if any cannot be logged — *chosen by Claude at the owner's request*, since a
+  core print logs one patient: asked below); the flu vaccine check is the immunisation pack's data, which this pack may
   not read; a referral for the eyes is the doctor's /order (the review records "referred"); the review's card is registered for the base's
   observation where the department ticks chronic care; the chart banner counts checks without the facts page (feet and eyes reviewed show
   in the section, the chip and the list); the queue's "3 due" mark waits for the core door asked below.
@@ -2673,6 +2684,15 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
 - *Asked by the lane, for the owner:* a row mark that reads a pack's own data (as row actions do, with a load) — today a mark sees only
   the row (patient, visit, orders), so "9-month vaccines due", "3 due", "2 checks due" (and paediatrics' "weight z −2.3", ObGyn's
   "32 w · BP 142/92") cannot be drawn on the queue without it.
+- *The clinics' printouts, built 2026-10-10 (the loose ends) on the core's printing (§3.13), each registered by its pack under its own key
+  and printed by a person (a button, P where a screen has one), logged like a read, a later copy marked Reprint:* the child's vaccination
+  card (`vaccines.card`), the Chronic care list (`chroniccare.list`), the chest action plan (`lungs.plan`), her INR table (`haemato.table`),
+  the operating list (`theatre.list`), the consent form (`theatre.consent` under /op, `surgical.consent` from the Surgery section) and the
+  patient's sheet before the operation (`anaesthesia.sheet`); `scripts/test-print-clinics.ts` (run by `npm run test:print`). *Asked, for
+  the owner, each a core change not made:* (1) papers the core does not have — the child's card is drawn on A6, and an operating list or a
+  consent form is usually A4; all print on A5 until the core adds them; (2) a printout naming many patients (the Chronic care list, the
+  operating list): a core print logs one patient, so each list logs its patients itself, one `printed` read a patient, before printing —
+  or should the core's print job take several patients and log them in one call?
 - *Built 2026-10-08 (lane L2, `clinics-mother-child`), Paediatrics* (key `paeds` — "paediatrics" is a word in core, so the key that collides with none, as the plan says —, migration 26, role block e3): the WHO tables as a
   reference list (`paeds.who_growth`, L, M and S by age in months or length in cm; the demo loads birth to 2 years, marked
   a demo sample) and the server's sums on them (`paeds.measure`: z-scores by the LMS method with the WHO's restricted way past ±3,
@@ -2780,15 +2800,17 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   Chest section: smoking, the GOLD group with CAT, mMRC and the flares (ACT for asthma), the flares of the year, the last spirometry, the
   inhalers, the technique (amber when wrong), the eosinophils, flu and pneumococcal, the plan. Starter setup `lungs.clinic` (Chest
   clinic); Chest physician (`e601`, on Doctor). Demo: Abdelhamid Mansy (COPD, GOLD E), Nermeen Saleh (asthma, ACT 17); Dr. Dalia Mostafa
-  (chest@demo.com). Tests: `supabase/tests/lungs.sql`, `npm run test:lungs`. *Differences:* the plan is shown, not printed
-  (printing is not in core-v3); no printout is attached (no uploads).
+  (chest@demo.com). Tests: `supabase/tests/lungs.sql`, `npm run test:lungs`. *Differences:* no printout is attached (no uploads). *The action plan prints, built 2026-10-10:* `lungs.plan`, Print the plan beside
+  the plan in the Chest section (the print logged like a read, a later copy marked Reprint): in Arabic on the core's A5 sheet, the
+  patient, the plan's date, the three zones each framed and the inhalers by name (*chosen by Claude at the owner's request:* the zones'
+  Arabic titles كل يوم، لو التعب زاد، طوارئ and a heavier frame the worse the zone, so it reads in black and white).
 - *Built 2026-10-08 (lane `clinics-medicine`), haematology and the Blood bank* (`haemato`, migration 31, role block e7; the Blood bank on
   `lis`, migration 32). Haematology's own types: `haemato.plan` (the INR clinic's reason, target, medicine, tablet), `haemato.week`
   (the seven days' doses, what changed, the next INR) and `haemato.programme` (every how many weeks, the Hb before, what the red cells
   need), each written with its own everyday action. `/inr` writes today's INR as the base's result with no order (6301-6, against her target)
   and the week: the card reads her week and the clinic's dosing table (`haemato.inr`, with the targets by reason) and offers its
   suggestion as *Use · 32.5 mg* (spread a half tablet at a time; shown, never applied), the next INR, and under it her medicines that change
-  the INR and her table in Arabic (shown; it prints when printing comes). `/inrplan`, `/programme`. Sections Transfusions (group and screen,
+  the INR and her table in Arabic (shown, and printed: Print, built 2026-10-10). `/inrplan`, `/programme`. Sections Transfusions (group and screen,
   reactions, the programme, the last four with the Hb before and mL/kg, the units by number, ferritin, chelation at mg/kg, its checks, the
   next due) and Anticoagulation (reason, target, medicine, time in range by Rosendaal, the INRs in their band, the week now, the last change).
   The Blood bank (`lis.blood_bank`): red cells, platelets, plasma and cryoprecipitate, each walked through received, grouped, crossmatched on
@@ -2802,7 +2824,11 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   before, at 15 minutes and at the end, Stop with the reaction) draws on the ward too (`cardFor` by works for, `clinics-core-ready-2`).
   *Differences:* the Blood bank's
   steps are the base bench's buttons and its issue is the base's result (the units' numbers as text), not a unit-by-unit screen of its own;
-  her table and the action plan print when printing comes. Demo: Mariam Tawfik
+  her table prints since 2026-10-10 (`haemato.table`: Print under /inr's card as drawn, the week as the card has it, and Print her table in
+  the Anticoagulation section, the week now; in Arabic on the core's A5 sheet — her name, the week from Saturday in tablets, the week's
+  total, the medicine, the time and the next INR, the clinic's two lines of advice, today's INR against her target; *chosen by Claude at
+  the owner's request:* the INR and target in the corner and the total under the days). The pack has no action plan of its own: the
+  action plan this sentence named is the chest clinic's (lungs, above), printed there. Demo: Mariam Tawfik
   (thalassaemia programme), Ensaf Rizk (INR clinic), Dr. Ola Kandil (haematology@demo.com); the Blood bank's Nabila Farag and Soad Mahrous
   (two units on the ward, the second stopped for hives), Mahmoud Fekry (bloodbank@demo.com). Tests: `supabase/tests/haemato.sql`,
   `npm run test:haemato`, `npm run test:lis`.
@@ -2867,8 +2893,14 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   pack's name (rule: no pack names another). Demo: the Theatre, Iman Zidan (theatre@demo.com); Ghada Sharaf (operating, Sign out to say),
   Amr Nassar (under a spinal), Aya Shehata (To schedule, urgent), Ziad Hafez (an emergency); the clinic's choices (`seeds/clinic_packs.sql`):
   the Theatre ticks the surgical and anaesthesia packs, the Anaesthetic record on its line, the surgeon and anaesthetist hold their roles there, the
-  Laboratory offers histopathology. Tests: `supabase/tests/theatre.sql`, `npm run test:theatre`. *Differences:* printing the list and the
-  consent form waits for printing (not in core-v3); the pre-op clinic's booking is the bookings pack's; the operating list's Pre-op
+  Laboratory offers histopathology. Tests: `supabase/tests/theatre.sql`, `npm run test:theatre`. *Printing, built 2026-10-10:* Print the list on the
+  operating list (`theatre.list`, P too: the day, the emergencies not yet in a room, each room shown with its session and its cases in their
+  order — time, patient, operation and side, surgeon and anaesthetist, ASA, where it stands; each patient on the paper logged like a read
+  first, one call of the reader's `printed` a patient, as the Chronic care list) and Print the form under /op's card (`theatre.consent`:
+  in Arabic, the operation, the side written out big, the surgeon, the anaesthetic wanted, the risks told as the Theatre's settings word
+  them, the declaration, lines to sign for the patient or guardian, the doctor, a witness, the date; the signed paper scanned into
+  Documents as before). *Chosen by Claude at the owner's request:* both on the core's A5 sheet (the core has no A4: asked below), the
+  declaration's Arabic words. *Differences:* the pre-op clinic's booking is the bookings pack's; the operating list's Pre-op
   column reads the pre-op about the operation (`/preop` is about it since C6, 2026-10-09), else the anaesthetic record's ASA; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
   anaesthesia out of the theatre pack).
 - *Built 2026-10-08 (lane `clinics-theatre`), surgery* (`surgical`, migration 34, role block e9): the operation note `surgical.opnote`
@@ -2882,8 +2914,10 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   and blood loss from the anaesthetic record and the specimen and implants from Sign out, read by shape). Operations are told from other
   orders by their service's steps (it moves through "operating"). Demo: the Surgery clinic, Dr. Hesham Abdelaal (surgery@demo.com); Reda
   Abdelhady in consult (the decision to operate typed live: `/op lichtenstein right`), Kamal Fouda (a haemorrhoidectomy on To schedule);
-  the templates and two post-op presets. Tests: `supabase/tests/surgical.sql`, `npm run test:surgical`. *Differences:* the consent form's
-  print waits for printing.
+  the templates and two post-op presets. Tests: `supabase/tests/surgical.sql`, `npm run test:surgical`. *Differences:* none left of printing: the consent form prints under /op's card (theatre's) and, since 2026-10-10,
+  from the Surgery section's planned operation too (`surgical.consent`, Print the form: the order's side, surgeon, anaesthetic and
+  risks read from the order itself by their shape; the same words on the core's A5 sheet, drawn by this pack's own component since no
+  pack names another — *chosen by Claude at the owner's request*, to print the form again on the ward or when the paper is lost).
 - *Built 2026-10-08 (lane `clinics-theatre`), anaesthesia* (`anaesthesia`, migration 36, role block eb): the pre-op `anaesthesia.preop`
   (history, airway, ASA I–VI and E, plan, Fit or Not yet, the medicines to stop, the risks told); RCRI (Lee 1999), STOP-BANG (Chung
   2008) and Aldrete (1995) declared through `core.declare_score` (aliases `rcri`, `stopbang`, `aldrete`); the anaesthetic record as one
@@ -2902,7 +2936,10 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   /score card; Record: the anaesthetic record). Demo: the Pre-op clinic and Recovery, Dr. Sherine Rashad (anaesthesia@demo.com) and Rehab Seif
   (recovery@demo.com); Hamed Sakr (pre-op today, Hb 9.8), Marwa Shalaby (Bay 2, Aldrete 6), Yara Abdelsalam (7, Bay 3, Aldrete 7 → 9).
   Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
-  ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet waits for printing;
+  ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet is built 2026-10-10 (`anaesthesia.sheet`, Print the patient's sheet under /preop's card:
+  in Arabic on the core's A5 sheet, the patient, the operation, the anaesthetic planned, what to take, leave out and stop — from the lines
+  as the anaesthetist left them, so the sheet shown under the card now follows an edited line too — fasting, one instruction a line, and
+  the anaesthetist; *chosen by Claude at the owner's request*);
   recovery's ward nursing tick waits for the beds lane; Recovery's line reads through its own read (C7, 2026-10-09), so the bays'
   words come as each Aldrete or pain lands; `/preop` is about the operation (C6); EtCO₂, the agent and FiO₂ stay the pack's own on each
   column, as drawn: FiO₂ moves to the base's key at integration if the beds lane's FiO₂ and O₂ flow rows land.

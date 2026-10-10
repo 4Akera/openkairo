@@ -10,6 +10,8 @@ import type { Identity, TableRead } from '@core/db/types'
 import { useDepartment } from '@core/hooks/organization'
 import type { ScreenProps } from '@core/screens/registry'
 import { Card, Chip, Empty, Input, ScreenFrame, Spinner, cn, errorText, shortDate, ymd, type ScreenView } from '@core/ui'
+import { PrintList } from './PrintList'
+import type { ListSheet } from './printout'
 import { MEASURES, careOf, conditionsOf, offWords, summaryOf, targetWords, type CareSummary, type ConditionState, type Done, type OwnTarget, type ProblemIn, type Value } from './model'
 
 type View = 'off' | 'due' | 'all'
@@ -63,7 +65,15 @@ export function ChronicList({ dept }: ScreenProps) {
   const views: ScreenView<View>[] = [{ id: 'off', label: 'Off target', count: inCond.filter((r) => r.sum.offTarget.length).length, needs: 'warn' },
     { id: 'due', label: 'Checks overdue', count: inCond.filter((r) => r.sum.due.length).length, needs: 'warn' }, { id: 'all', label: 'All', count: inCond.length }]
   const age = (i: Identity | null) => { if (!i?.birth_date) return ''; const y = Math.floor((now - Date.parse(i.birth_date)) / (365.25 * 86_400_000)); return `${y} ${i.gender === 'male' ? 'M' : i.gender === 'female' ? 'F' : ''}` }
+  // Print the list (built 2026-10-10): the rows as this view shows them, each patient on it logged like a read
+  const sheet = (): ListSheet => ({ department: dept.name, view: views.find((v) => v.id === view)!.label, condition: cs.conditions.find((c) => c.key === cond)?.name ?? null,
+    at: new Date().toISOString(), rows: shown.map((r) => ({ number: r.identity?.number ?? null, name: name(r.identity), age: age(r.identity).trim(),
+      conditions: r.state.map((s) => s.condition.name.toLowerCase()).join(' · '),
+      off: r.sum.offTarget.map((m) => offWords(m) + (m.target && 'own' in m.target && m.target.own ? ` · own target ${targetWords(m.target)}` : '')).join(' · '),
+      due: r.sum.due.map((c) => c.check.name.toLowerCase() + (c.months != null && c.months > 12 ? ` (${c.months} months)` : c.last ? '' : ' (never)')).join(' · '),
+      last: r.last ? (ymd(r.last) === ymd(new Date().toISOString()) ? 'today' : shortDate(r.last)) : '—' })) })
   return <ScreenFrame views={views} view={view} onView={setView}
+    action={shown.length > 0 && <PrintList sheet={sheet} patients={shown.map((r) => r.id)} departmentId={dept.id} />}
     filters={<div className="flex flex-wrap gap-1.5"><Chip on={!cond} onClick={() => setCond(null)}>Any condition {rows.length}</Chip>
       {cs.conditions.map((c) => <Chip key={c.key} on={cond === c.key} onClick={() => setCond(cond === c.key ? null : c.key)}>{c.name} {rows.filter((r) => r.state.some((s) => s.condition.key === c.key)).length}</Chip>)}</div>}
     search={<Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Record number or name" aria-label="Find a patient" className="w-full sm:w-56" />}>

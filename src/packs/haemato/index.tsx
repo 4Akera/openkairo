@@ -11,8 +11,12 @@ import { Anticoagulation, Transfusions } from './Sections'
 import { latest, programmeOf, resultText, shortGroup, unitsOf } from './blood'
 import { planOf, INR } from './weeks'
 import { sideOf } from './inr'
+import { registerPrintout } from '@core/print/registry'
+import { InrTableSheet, TABLE_KEY, type InrTable } from './printout'
 
 registerCommands((items, ctx) => <InrNote items={items} ctx={ctx} />)
+// her INR table in Arabic, printed under /inr and from the Anticoagulation section (built 2026-10-10)
+registerPrintout<InrTable>(TABLE_KEY, { paper: 'a5', Component: InrTableSheet })
 registerCard({ function: 'result', pack: 'haemato', Editor: InrCard,
   line: (q) => { const a = (q.analytes as { value?: { value: string }; method?: string }[] | undefined)?.[0]; return /inr/i.test(String((q.code as { text?: string } | undefined)?.text ?? '')) ? `INR ${a?.value?.value ?? '?'} · ${a?.method ?? ''}` : String((q.code as { text?: string } | undefined)?.text ?? 'Result') } })
 registerCard({ function: 'haemato.week', pack: 'haemato', Editor: WeekCard, line: (q) => weekLine(q as unknown as WeekParams) })

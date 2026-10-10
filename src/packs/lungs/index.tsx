@@ -11,8 +11,12 @@ import { SpiroCard, ObsCard } from './Cards'
 import { Chest } from './Chest'
 import { GOLD_WORD, hasAsthma, hasCopd, lastSpiro, scoresOf, termOf } from './airways'
 import { isSpiro } from './spiro'
+import { registerPrintout } from '@core/print/registry'
+import { PLAN_KEY, PlanSheetView, type PlanSheet } from './printout'
 
 registerCommands()
+// the action plan, printed in Arabic from the Chest section (built 2026-10-10)
+registerPrintout<PlanSheet>(PLAN_KEY, { paper: 'a5', Component: PlanSheetView })
 const analytes = (q: Record<string, unknown>) => (q.analytes as { key: string; value?: { value: string } }[] | undefined) ?? []
 registerCard({ function: 'result', pack: 'lungs', Editor: (props) => isSpiro(props.q) ? <SpiroCard {...props} /> : null,
   line: (q) => { if (!isSpiro(q)) return String((q.code as { text?: string } | undefined)?.text ?? 'Result')

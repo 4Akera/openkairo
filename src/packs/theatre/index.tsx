@@ -8,8 +8,13 @@ import { TheatreList } from './List'
 import { OpNote } from './OpNote'
 import { parseOp } from './line'
 import { CheckView } from './CheckView'
+import { registerPrintout } from '@core/print/registry'
+import { CONSENT_KEY, ConsentSheet, LIST_KEY, OpListSheetView, type ConsentForm, type OpListSheet } from './printout'
 
 registerScreen('theatre.list', TheatreList)
+// the operating list and the consent form, printed (built 2026-10-10)
+registerPrintout<OpListSheet>(LIST_KEY, { paper: 'a5', Component: OpListSheetView })
+registerPrintout<ConsentForm>(CONSENT_KEY, { paper: 'a5', Component: ConsentSheet })
 registerCommand({ name: 'op', pack: 'theatre', orders: true, groupTitle: 'Theatre', title: 'Operation', label: 'An operation — to the Theatre',
   example: '/op lichtenstein right · /op lap chole urgent admitted', action: 'write:order', writes: ['order'],
   parse: (rest, ctx) => parseOp(rest, ctx), note: (items, ctx) => <OpNote items={items} ctx={ctx} /> })

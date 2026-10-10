@@ -5,6 +5,8 @@ import type { SectionBody } from '@core/screens/chart/sections'
 import { Empty, shortDate, ymd } from '@core/ui'
 import { byAge, dosesOf, scheduleOf, statusOf, type RowState } from './schedule'
 import { pregnantOf } from './words'
+import { vaxCardOf } from './printout'
+import { PrintCard } from './PrintCard'
 
 function StateWords({ s, open }: { s: RowState; open: (item: string) => void }) {
   return <span className="grid">
@@ -28,6 +30,9 @@ export function VaccinesSection({ p, own }: SectionBody) {
   const states = statusOf(sched.rows, dosesOf(entries), birth, ymd(new Date().toISOString()), pregnantOf(p.facts))
   const national = byAge(states.filter((s) => s.row.national)); const optional = states.filter((s) => !s.row.national)
   const series = [...new Set(optional.map((s) => s.row.vaccine))]
+  // the child's card, printed from here (Q26 b): what this section shows, in Arabic
+  const card = vaxCardOf(sched, dosesOf(entries), { name: p.r.identity.full_name, birth, record: p.r.patient.record_number },
+    org?.allDepartments.find((d) => d.id === p.departmentId)?.name ?? '', ymd(new Date().toISOString()), pregnantOf(p.facts))
   return <div className="grid gap-2 text-13">
     {sched.source && <p className="text-end text-12 text-faint">{sched.source}{sched.version ? `, ${sched.version}` : ''} schedule</p>}
     <table className="w-full"><thead><tr className="text-11 uppercase tracking-[0.08em] text-faint"><th className="w-14 py-1 text-start font-medium">Age</th><th className="py-1 text-start font-medium">National</th><th /></tr></thead>
@@ -44,5 +49,6 @@ export function VaccinesSection({ p, own }: SectionBody) {
           {dueNow && <span className="text-accent">{given.length ? ' · ' : ''}{dueNow.row.dose > 1 && given.length ? `${dueNow.row.name.toLowerCase()} ${dueNow.row.dose === rows.length ? 'booster' : `dose ${dueNow.row.dose}`} due now` : 'offer now'}</span>}
           {!given.length && !dueNow && <span className="text-muted">{rows[0].row.age} · not given</span>}
         </span></li> })}</ul></>}
+    <PrintCard card={card} patientId={p.patientId} departmentId={p.departmentId} />
   </div>
 }

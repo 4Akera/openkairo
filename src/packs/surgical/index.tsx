@@ -8,8 +8,12 @@ import { surgeryWords, templatesOf, type OrderLike } from './model'
 import { parseOpnote } from './line'
 import { OpNoteCard, SurgerySection, opNoteCardLine, opsOf } from './Parts'
 import { saw, seen } from './seen'
+import { registerPrintout } from '@core/print/registry'
+import { CONSENT_KEY, ConsentPaper, type Consent } from './printout'
 
 const TYPES = ['surgical.opnote']
+// the consent form, printed again from the Surgery section for a planned operation (built 2026-10-10)
+registerPrintout<Consent>(CONSENT_KEY, { paper: 'a5', Component: ConsentPaper })
 const ordersIn = (rec: { tables: { 'base.orders'?: { rows: unknown[] } } }) => (rec.tables['base.orders']?.rows ?? []) as OrderLike[]
 registerSection({ key: 'surgical.operations', title: 'Surgery', types: TYPES, fit: ANYONE, Body: SurgerySection,
   has: (x) => x.own.shown.length > 0 || opsOf(ordersIn(x.rec), x.ctx.org?.services ?? []).length > 0,

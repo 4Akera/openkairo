@@ -18,8 +18,12 @@ import { useRecoveryRead } from './recoveryRead'
 import { sawOps } from './seen'
 import { preopAction } from './rowAction'
 import { PreopView, RecordView } from './Views'
+import { registerPrintout } from '@core/print/registry'
+import { PreopSheetView, SHEET_KEY, type PreopSheet } from './printout'
 
 const TYPES = ['anaesthesia.preop', 'anaesthesia.record']
+// the patient's sheet before the operation, printed under /preop's card (built 2026-10-10)
+registerPrintout<PreopSheet>(SHEET_KEY, { paper: 'a5', Component: PreopSheetView })
 type OrderRow = Parameters<typeof operationsIn>[0][number]
 registerSection({ key: 'anaesthesia.anaesthesia', title: 'Anaesthesia', types: TYPES, fit: ANYONE, Body: AnaesthesiaSection,
   has: (x) => x.own.shown.length > 0,

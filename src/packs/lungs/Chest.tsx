@@ -1,13 +1,14 @@
 // The Chest section (spec/openCare.md §5.1 rule 2, §5.8; the picture #chest-spiro): the smoking, the GOLD group with CAT, mMRC and the
 // flares (for asthma, ACT and the reversibility instead), the flares of the last year, the last spirometry, the inhalers and the technique,
-// the eosinophils, the immunisations, the action plan in Arabic. Read-only; a row opens its entry. The plan prints later (printing is not in
-// openCare yet).
+// the eosinophils, the immunisations, the action plan in Arabic. Read-only; a row opens its entry. The plan prints in Arabic for the
+// patient (Print the plan, built 2026-10-10: printout.tsx).
 import type { ReactNode } from 'react'
 import type { SectionBody } from '@core/screens/chart/sections'
 import { medicinesOf, problemsOf } from '@core/screens/chart/model/record'
 import { Tag, cn, shortDate } from '@core/ui'
 import { GOLD_WORD, eosinophils, flaresOf, givenOf, hasAsthma, inhalersOf, lastSpiro, latestOf, planOf, scoresOf, techniqueOk, valueText } from './airways'
 import { ratio, spiroOf } from './spiro'
+import { PrintPlan } from './PrintPlan'
 
 const Faint = ({ children }: { children: ReactNode }) => <span className="text-12 text-faint">{children}</span>
 const Row = ({ k, children, tone }: { k: string; children: ReactNode; tone?: 'warn' }) => <div className="flex items-baseline gap-2 py-0.5 text-13">
@@ -16,7 +17,7 @@ const Label = ({ children }: { children: ReactNode }) => <p className="pt-2 text
 
 export function Chest({ p, own }: SectionBody) {
   const s = scoresOf(own.shown); const asthma = hasAsthma(problemsOf(p.rec, p.ctx).active); const flares = flaresOf(own.shown, new Date())
-  const smoke = latestOf(own.shown, '72166-2'); const tech = latestOf(own.shown, 'inhaler_technique'); const plan = planOf(latestOf(own.shown, 'action_plan'))
+  const smoke = latestOf(own.shown, '72166-2'); const tech = latestOf(own.shown, 'inhaler_technique'); const planEntry = latestOf(own.shown, 'action_plan'); const plan = planOf(planEntry)
   const sp = lastSpiro(own.shown); const spr = sp ? spiroOf(sp.data) : null; const b = spr && (spr.post.fev1 != null ? spr.post : spr.pre)
   const pct = (sp?.data?.analytes as { key: string; value?: { value: string } }[] | undefined)?.find((a) => a.key === 'fev1_pct')?.value?.value
   const eos = eosinophils(p.rec.tables['base.values']?.rows ?? []); const inh = inhalersOf(medicinesOf(p.rec, p.ctx).current)
@@ -37,7 +38,10 @@ export function Chest({ p, own }: SectionBody) {
     <Row k="Technique" tone={tech && !techniqueOk(tech) ? 'warn' : undefined}>{tech ? <>{shortDate(tech.occurred_at)} · {valueText(tech)}</> : <span className="text-muted">not checked: /technique</span>}</Row>
     {eos && <Row k="Eosinophils">{eos.value} /µL <Faint>{shortDate(eos.at)}</Faint></Row>}
     <Row k="Immunisations">{flu ? `flu ${shortDate(flu.occurred_at)} ✓` : <span className="text-warn">flu not this season</span>} · pneumococcal {pneumo ? `${shortDate(pneumo.occurred_at)} ✓` : <span className="text-warn">never · due</span>}</Row>
-    <Label>The action plan · Arabic</Label>
+    <div className="flex items-center gap-2"><Label>The action plan · Arabic</Label>
+      {plan.length > 0 && planEntry && <span className="ms-auto pt-1"><PrintPlan patientId={p.patientId} departmentId={p.departmentId} sheet={{ name: p.r.identity.full_name, record: p.r.patient.record_number,
+        at: planEntry.occurred_at, zones: plan.map(([zone, , text]) => ({ zone, text })), thing: `#${p.r.patient.record_number} · ${planEntry.occurred_at.slice(0, 10)}`,
+        inhalers: inh.map((m) => `${m.drug_name}${m.dose_number != null ? ` ${m.dose_number} ${m.dose_unit ?? ''}` : ''} ${m.frequency ?? ''}${m.prn ? ' when needed' : ''}`.replace(/\s+/g, ' ').trim()) }} /></span>}</div>
     {plan.length ? plan.map(([w, tone, ar]) => <p key={w} className="flex items-start gap-2 py-0.5"><Tag tone={tone} className="mt-0.5 w-20 shrink-0 justify-center">{w}</Tag>
       <span dir="rtl" lang="ar" className="text-13 text-fg">{ar}</span></p>) : <p className="text-13 text-muted">none yet: /plan</p>}
   </div>

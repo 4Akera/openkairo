@@ -2,13 +2,16 @@
 // ward, the evening before). What matters from the history, the airway (Mallampati, mouth opening, thyromental, neck), ASA (a class the
 // anaesthetist chooses, not a score), RCRI and STOP-BANG as typed on the lines before (/score rcri, /score stopbang: the base's scores,
 // the server adds them up), the patient's medicines against the clinic's list of what to stop (shown, never a stop; the anaesthetist
-// changes any line), the plan, Fit or Not yet, the anaesthetic's risks told. The printed sheet waits for printing; its Arabic is shown.
+// changes any line), the plan, Fit or Not yet, the anaesthetic's risks told. The patient's sheet in Arabic, from the lines as they stand,
+// is shown and printed (Print the patient's sheet, built 2026-10-10: printout.tsx).
 import { useEffect } from 'react'
 import { useDepartment } from '@core/hooks/organization'
 import { useDraftsFor } from '@core/hooks/drafts'
 import type { CardEditorProps } from '@core/screens/visit/commands'
 import { Chip, Input, Tag, cn } from '@core/ui'
 import { ASA, HISTORY, PLANS, RISKS, arabicSheet, stopLines, stopRulesOf, type Plan, type StopLine } from './model'
+import { sentences, sheetThing, stopOf } from './printout'
+import { PrintSheet } from './PrintSheet'
 
 const Label = ({ children }: { children: React.ReactNode }) => <span className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">{children}</span>
 const Box = ({ title, children }: { title: string; children: React.ReactNode }) => <div className="grid gap-1.5 rounded-lg border border-line bg-surface p-2.5"><Label>{title}</Label>{children}</div>
@@ -29,6 +32,8 @@ export function PreopCard({ q, set, ctx }: CardEditorProps) {
   const h = (q.history ?? {}) as Record<string, string>; const a = (q.airway ?? {}) as Record<string, unknown>
   const stop = (q.stop ?? []) as { medicine: string; what: string; rule?: string }[]
   const plan = q.plan as Plan | undefined; const risks = plan ? RISKS[plan] : []
+  // the patient's sheet: from the lines as the anaesthetist left them
+  const sheet = arabicSheet(stopOf(stop)); const patient = ctx.record?.patient
   const small = 'h-7 text-13'
   const scoreBox = (title: string, d: typeof rcri, hint: string) => { const r = (d?.params.result ?? null) as { total: number | null; band: { labels?: Record<string, string>; tone?: string | null } | null } | null
     return <Box title={title}>{d && r ? <p className="flex items-baseline gap-2"><b className={cn('text-18 font-semibold tnum', r.band?.tone === 'warn' || r.band?.tone === 'danger' ? 'text-warn' : 'text-fg')}>{r.total ?? '…'}</b>
@@ -52,7 +57,11 @@ export function PreopCard({ q, set, ctx }: CardEditorProps) {
             <td className="py-1 pe-2"><Input value={s.what} onChange={(e) => set({ stop: stop.map((x, j) => j === i ? { ...x, what: e.target.value } : x) })} className={cn('h-7 text-13', warn && 'font-medium text-warn')} /></td>
             <td className="py-1 text-12 text-muted">{s.rule}</td></tr> })}</tbody></table> : <p className="text-muted">No current medicines.</p>}
       <p className="text-12 text-faint">The list is the clinic's (Settings → Packs → Anaesthesia). The dates are written when the case is scheduled. Shown only; the anaesthetist changes any line.</p>
-      {stop.length > 0 && <p className="grid gap-0.5"><span className="text-12 text-muted">For the patient, in Arabic (printing comes with the printing piece):</span><span dir="rtl" lang="ar" className="text-13 text-fg">{arabicSheet(lines)}</span></p>}</Box>
+      {stop.length > 0 && <div className="grid gap-0.5"><p className="flex flex-wrap items-center gap-2"><span className="text-12 text-muted">For the patient, in Arabic:</span>
+        {patient && <span className="ms-auto"><PrintSheet patientId={patient.id} sheet={{ name: [patient.given_name, patient.middle_name, patient.family_name].filter(Boolean).join(' '), record: patient.record_number,
+          operation: q.operation ? String(q.operation) : null, lines: sentences(sheet), plan: plan ?? null, anaesthetist: org?.me.name ?? null, at: new Date().toISOString(),
+          thing: sheetThing(patient.record_number, `${String(q.op ?? '')} ${sheet}`) }} /></span>}</p>
+        <span dir="rtl" lang="ar" className="text-13 text-fg">{sheet}</span></div>}</Box>
     <Pick k="Plan">{PLANS.map(([k, l]) => <Chip key={k} on={plan === k} onClick={() => set({ plan: k, consent: RISKS[k] })}>{l}</Chip>)}
       <Input aria-label="Plan note" value={String(q.plan_note ?? '')} onChange={(e) => set({ plan_note: e.target.value })} placeholder="heavy bupivacaine 0.5 % 3 mL · LMA if it fails" className={`${small} w-72`} /></Pick>
     <Pick k="Verdict">{([['fit', 'Fit'], ['not_yet', 'Not yet']] as const).map(([k, l]) => <Chip key={k} on={q.verdict === k} onClick={() => set({ verdict: k })}>{l}</Chip>)}

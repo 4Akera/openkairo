@@ -1,6 +1,6 @@
 // Haematology's cards under the line (spec/openCare.md §5.8; the picture #haem-inr): today's INR against her target; the week — missed
 // doses, food, bleeding, the clinic's table and its suggestion (Use takes it; nothing is applied by itself), the new week day by day, the
-// next INR, her table in Arabic (it prints when printing comes); the plan's and the programme's fields.
+// next INR, her table in Arabic (Print, built 2026-10-10: printout.tsx); the plan's and the programme's fields.
 import { useEffect, type ReactNode } from 'react'
 import type { CardEditorProps } from '@core/screens/visit/commands'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
@@ -14,6 +14,8 @@ import type { Organization } from '@core/db/types'
 import { DAYS, DAYS_AR, changed, interactionsOf, rowFor, sideOf, spread, suggest, tabletsAr, tabletsEn, total, type Row } from './inr'
 import { planOf, weeksOf } from './weeks'
 import { weekLine, type WeekParams } from './commands'
+import { PrintTable } from './PrintTable'
+import { tableThing } from './printout'
 
 const K = ({ children }: { children: ReactNode }) => <span className="w-28 shrink-0 text-12 text-faint">{children}</span>
 function Pick({ k, of, on, set, hint }: { k: string; of: string[]; on: string | undefined; set: (v: string) => void; hint?: ReactNode }) {
@@ -65,10 +67,15 @@ export function WeekCard({ q, set, ctx }: CardEditorProps) {
 export function InrNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
   const w = items.find((p) => p.function === 'haemato.week')?.params as WeekParams | undefined; const plan = planOf(useMine(ctx.record?.patient?.id))
   const acts = interactionsOf(ctx.record?.medications ?? []); if (!w) return null
+  const inr = Number(((items.find((p) => p.function === 'result')?.params.analytes as { value?: { value?: string } }[] | undefined)?.[0]?.value?.value) ?? w.inr ?? NaN)
+  const patient = ctx.record?.patient
   return <span className="grid gap-1.5">
     <span className="flex flex-wrap items-center gap-1.5"><span className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Her medicines and INR</span>
       {acts.length ? acts.map((x) => <Tag key={x.med.id} tone="info">{x.effect}: {x.med.drug_name} ({x.why})</Tag>) : <span className="text-muted">nothing on her list changes the INR</span>}</span>
-    {total(w.days) > 0 && <span className="grid gap-1"><span className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Her table, in Arabic · it prints when printing comes</span>
+    {total(w.days) > 0 && <span className="grid gap-1"><span className="flex items-center gap-2"><span className="text-11 font-semibold uppercase tracking-[0.06em] text-faint">Her table, in Arabic</span>
+        {patient && <span className="ms-auto"><PrintTable patientId={patient.id} table={{ name: [patient.given_name, patient.middle_name, patient.family_name].filter(Boolean).join(' '), record: patient.record_number,
+          medicine: plan?.medicine ?? 'warfarin', tablet_mg: plan?.tablet_mg ?? 5, days: w.days, next_inr: w.next_inr ?? null, inr: Number.isFinite(inr) ? inr : null, target: plan?.target ?? null,
+          thing: tableThing(patient.record_number, w.days, w.next_inr) }} /></span>}</span>
       <span dir="rtl" className="grid grid-cols-7 overflow-hidden rounded-md ring-1 ring-line">{DAYS_AR.map((d, i) => <span key={d} className="grid border-s border-line text-center first:border-s-0">
         <span lang="ar" className="bg-sunken py-1 text-12">{d}</span><span lang="ar" className="py-1 text-13 text-fg">{tabletsAr(w.days[i], plan?.tablet_mg ?? 5)}</span></span>)}</span>
       <span dir="rtl" lang="ar" className="text-13 text-fg">وارفارين {plan?.tablet_mg ?? 5} مجم · مرة واحدة يومياً الساعة ٦ مساءً{w.next_inr ? ` · تحليل السيولة القادم: ${w.next_inr}` : ''}</span>

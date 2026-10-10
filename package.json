@@ -24,7 +24,7 @@
     "test:pharmacy": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-pharmacy.ts",
     "test:lis": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-lis.ts",
     "test:billing": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing.ts && npx --yes tsx --tsconfig tsconfig.app.json scripts/test-billing-print.ts",
-    "test:print": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-print.ts",
+    "test:print": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-print.ts && npx --yes tsx --tsconfig tsconfig.app.json scripts/test-print-clinics.ts",
     "test:bookings": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-bookings.ts",
     "test:radiology": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-radiology.ts",
     "test:paeds": "npx --yes tsx --tsconfig tsconfig.app.json scripts/test-paeds.ts",

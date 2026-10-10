@@ -9,6 +9,8 @@ import type { ValueRow } from '@core/db/types'
 import { chelationOf, latest, programmeOf, resultText, sessionsOf, unitsOf } from './blood'
 import { DAYS, changed, timeInRange, total } from './inr'
 import { planOf, weeksOf, INR } from './weeks'
+import { PrintTable } from './PrintTable'
+import { tableThing } from './printout'
 
 const Faint = ({ children }: { children: ReactNode }) => <span className="text-12 text-faint">{children}</span>
 const Row = ({ k, children, tone }: { k: string; children: ReactNode; tone?: 'ok' | 'warn' }) => <div className="flex items-baseline gap-2 py-0.5 text-13">
@@ -62,7 +64,9 @@ export function Anticoagulation({ p, own }: SectionBody) {
     <Row k="In range" tone={ttr == null ? undefined : ttr >= 65 ? 'ok' : 'warn'}>{ttr == null ? 'too few INRs yet' : <>{ttr} % of the last 6 months <Faint>Rosendaal, from the INRs</Faint></>}</Row>
     {inrs.length > 1 && <LineChart height={130} band={{ low: plan.target.low, high: plan.target.high }} label={`INR, the last 6 months, target ${plan.target.low} to ${plan.target.high}`}
       points={inrs.map((v) => ({ at: v.at, value: v.value, flag: v.value < plan.target.low ? 'low' as const : v.value > plan.target.high ? 'high' as const : undefined, entryId: v.entry_id }))} onPoint={p.open} />}
-    {week && <><Label>The week now · mg</Label><table className="w-full text-13 tnum"><thead><tr>{DAYS.map((d) => <th key={d} className="py-1 text-start text-11 font-medium uppercase tracking-[0.06em] text-faint">{d}</th>)}</tr></thead>
+    {week && <><div className="flex items-center gap-2"><Label>The week now · mg</Label><span className="ms-auto pt-1"><PrintTable label="Print her table" patientId={p.patientId} departmentId={p.departmentId}
+      table={{ name: p.r.identity.full_name, record: p.r.patient.record_number, medicine: plan.medicine ?? 'warfarin', tablet_mg: plan.tablet_mg ?? 5, days: week.days,
+        next_inr: week.next_inr ?? null, inr: week.inr ?? null, target: plan.target, thing: tableThing(p.r.patient.record_number, week.days, week.next_inr) }} /></span></div><table className="w-full text-13 tnum"><thead><tr>{DAYS.map((d) => <th key={d} className="py-1 text-start text-11 font-medium uppercase tracking-[0.06em] text-faint">{d}</th>)}</tr></thead>
       <tbody><tr>{week.days.map((d, i) => <td key={i} className="py-1">{d}</td>)}</tr></tbody></table></>}
     {last && <Row k="Last change">{shortDate(last.at)}{last.inr != null ? ` · INR ${last.inr}` : ''} · {total(weeks[weeks.indexOf(last) + 1].days)} → {total(last.days)} mg a week
       {changed(weeks[weeks.indexOf(last) + 1].days, last.days) && <Faint> · {changed(weeks[weeks.indexOf(last) + 1].days, last.days)}</Faint>}</Row>}

@@ -51,7 +51,7 @@ export function ObsCard({ q, set }: CardEditorProps) {
     const put = (w: string, v: string) => set({ value: { text: ZONES.map(([z]) => `${z}: ${z === w ? v : zone(z)}`).join('\n') } })
     return <div className="grid gap-1.5">{ZONES.map(([w, tone]) => <label key={w} className="flex items-start gap-2"><Tag tone={tone} className="mt-1 w-20 shrink-0 justify-center">{w}</Tag>
       <Textarea dir="rtl" lang="ar" minRows={2} value={zone(w)} onChange={(e) => put(w, e.target.value)} /></label>)}
-      <Faint>Her or his own plan, in Arabic. Printing comes with the printing piece (not in openCare yet).</Faint></div> }
+      <Faint>Her or his own plan, in Arabic. Once signed, Print the plan in the Chest section prints it for the patient.</Faint></div> }
   if (!kind) return null
   return <label className="flex items-center gap-2 text-13"><Faint>{kind === 'flare' ? 'Treated with' : 'Technique'}</Faint>
     <Input dense value={text} onChange={(e) => set({ value: { text: e.target.value } })} />{kind === 'flare' && <><Faint>Where</Faint>

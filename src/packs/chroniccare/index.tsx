@@ -12,6 +12,8 @@ import { parseReview, parseTarget } from './line'
 import { ReviewCard, ReviewNote, reviewCardLine } from './Review'
 import { ChronicSection } from './Section'
 import { ChronicList } from './List'
+import { registerPrintout } from '@core/print/registry'
+import { ChronicListSheet, LIST_KEY, type ListSheet } from './printout'
 import { bannerWords, chipWord, summaryLine } from './words'
 
 registerCommand({ name: 'review', pack: PACK, groupTitle: 'Chronic care', title: 'Yearly review', label: 'The yearly review of a condition: feet, eyes and the tests due',
@@ -24,4 +26,6 @@ registerSection({ key: 'chroniccare.care', title: 'Chronic care', types: [TARGET
   has: (x) => chipWord(x) !== null, word: (x) => chipWord(x), summary: (x) => summaryLine(x) })
 registerBannerWords({ key: 'chroniccare.care', types: [TARGET_TYPE], words: (x) => bannerWords({ ...x, facts: undefined }) })
 registerScreen('chroniccare.list', ChronicList)
+// Print the list, from the Chronic care tab (built 2026-10-10)
+registerPrintout<ListSheet>(LIST_KEY, { paper: 'a5', Component: ChronicListSheet })
 export const key = PACK

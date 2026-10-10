@@ -21,6 +21,8 @@ import { Button, Card, Chip, Empty, Kbd, ScreenFrame, Spinner, Tag, cn, errorTex
 import { STEP_TONE, STEP_WORD, byPosition, dayWords, freeSessions, freeWords, nextOf, priorityWord, roomsOf, operationsOf, toSchedule, waiting, SIDE_WORD, type Part, type StepKey } from './model'
 import { aboutOf, useAbout, useTable, type CaseRow, type CheckRow, type SlotRow } from './data'
 import { Checklist } from './Checklist'
+import { PrintOpList } from './PrintOps'
+import type { OpListSheet } from './printout'
 
 const Side = ({ s }: { s: string }) => <span className="rounded-sm bg-accent-soft px-1 text-11 font-semibold uppercase tracking-wide text-accent">{s}</span>
 const td = 'px-2 py-2'
@@ -105,7 +107,15 @@ export function TheatreList({ dept }: ScreenProps) {
   const free = !scheduling ? [] : scheduling.r.order.priority === 'stat'
     ? rooms.map((r) => ({ day: today, weekday: wd, room: r.name, from: nowHm, free: 0, starts: new Date().toISOString() }))
     : freeSessions(sessions, usual(scheduling), booked, null)
-  return <ScreenFrame filters={<span className="flex flex-wrap gap-1.5">{[null, ...rooms.map((r) => r.name)].map((r) => <Chip key={r ?? 'all'} shape="pill" on={room === r} onClick={() => setRoom(r)}>{r ?? 'All rooms'}</Chip>)}</span>}
+  // Print the list (built 2026-10-10): the day as shown — the emergencies, then each room shown with its cases in their order
+  const listed = [...(emergencies.length ? [{ name: 'Emergency · not yet in a room', sub: '', list: emergencies }] : []),
+    ...shownRooms.map((r) => { const s = sessions.find((x) => x.room === r.name && x.weekday === wd); return { name: r.name, sub: [r.specialty, s ? `${s.from}–${s.to}` : 'no session'].filter(Boolean).join(' · '), list: onDay(r.name) } })]
+  const sheet = (): OpListSheet => ({ theatre: dept.name, day: dayWords(day), at: new Date().toISOString(), rooms: listed.map((r) => ({ name: r.name, sub: r.sub,
+    cases: r.list.map((x) => { const st = step(x); return { time: x.slot?.starts ? hm(x.slot.starts) : '—', patient: `${x.r.patient.given_name} ${x.r.patient.family_name}`, age_sex: ageSex(x.r.patient),
+      operation: `${x.r.order.priority === 'stat' ? 'EMERGENCY · ' : ''}${x.c?.name ?? x.r.service_name ?? ''}`, side: SIDE_WORD(x.c?.side), surgeon: x.c?.surgeon ?? '—', anaesthetist: x.about.anaesthetist ?? '',
+      asa: x.about.asa ?? '—', stands: st ? STEP_WORD[st] : 'waiting' } }) })) })
+  return <ScreenFrame action={listed.some((r) => r.list.length) && <PrintOpList sheet={sheet} patients={listed.flatMap((r) => r.list.map((x) => x.r.patient.id))} departmentId={dept.id} />}
+    filters={<span className="flex flex-wrap gap-1.5">{[null, ...rooms.map((r) => r.name)].map((r) => <Chip key={r ?? 'all'} shape="pill" on={room === r} onClick={() => setRoom(r)}>{r ?? 'All rooms'}</Chip>)}</span>}
     date={<span className="flex items-center gap-2 text-14"><Button size="sm" variant="ghost" onClick={() => setOffset((n) => n - 1)}>←</Button>
       <b className="font-semibold text-fg">{dayWords(day)}{offset === 0 ? ' · today' : ''}</b><Button size="sm" variant="ghost" onClick={() => setOffset((n) => n + 1)}>→</Button></span>}
     notice={err && <p className="text-14 text-danger">{err}</p>}>
