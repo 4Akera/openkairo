@@ -68,3 +68,25 @@ select t.ok(jsonb_array_length(d -> 'stays' -> pg_temp.admitted(demo.id('bedside
   and jsonb_array_length(d -> 'stays' -> pg_temp.admitted(demo.id('bedside', 'patient:tahany'))::text -> 'measures') = 2
   and (d -> 'stays' -> pg_temp.admitted(demo.id('bedside', 'patient:tahany'))::text -> 'chart' ->> 'target')::int = 1000,
   'Samira: 10 measures; Tahany: 2, with the aim 1000') from fluids;
+
+-- W3a · the handover in the demo: the Medical Ward's line ends with Handover, after Obs due; the last shift's handover for Samira and
+-- Abdelmoneim by Nour, before the load; Abdelmoneim's fall-risk alert; the op as Nour. Not which shift: the load's hour decides it.
+select set_config('request.jwt.claim.sub', '', false);
+select t.ok(core.setting_at(demo.base('clinic'), 'department.screens', demo.base('ward')) -> 'screens' ->> -1 = 'bedside.handover'
+  and core.setting_at(demo.base('clinic'), 'department.screens', demo.base('ward')) -> 'screens' ? 'bedside.obs', 'the Medical Ward''s line: Handover last, Obs due kept');
+select t.ok(count(*) = 2 and count(distinct e.patient_id) = 2 and bool_and(e.author_id = demo.id('bedside', 'nurse') and e.occurred_at < demo.now() and e.data ->> 'heading' like 'Handover %'
+  and e.visit_id = pg_temp.admitted(e.patient_id)), 'two handovers, Samira''s and Abdelmoneim''s, each in the admitted stay, by Nour, before the load')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'note' and e.data ->> 'kind' = 'handover'
+   and e.patient_id in (demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim'));
+select t.ok(count(*) = 1 and bool_and(e.data -> 'concept' ->> 'text' = 'Fall risk' and e.data ->> 'status' = 'active'), 'Abdelmoneim: one active alert, Fall risk')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = demo.id('bedside', 'patient:abdelmoneim') and e.type = 'alert';
+select demo.as(demo.id('bedside', 'nurse'));
+create temp table ho as select public.pack_op(jsonb_build_object('op', 'bedside.handover', 'department_id', demo.base('ward'), 'args', '{}'::jsonb, 'purpose', 'TREAT')) d;
+create function pg_temp.ho_of(p_patient uuid) returns jsonb language sql as $$
+  select d -> 'stays' -> p.item::text from ho, base.presence p where p.organization_id = demo.base('clinic') and p.patient_id = p_patient and p.kind = 'stay' and p.state = 'admitted'
+$$;
+select t.ok(pg_temp.ho_of(demo.id('bedside', 'patient:samira')) -> 'last' ->> 'text' like 'This shift: febrile%', 'as Nour: Samira''s last handover, "This shift: febrile …"');
+select t.ok(s -> 'alerts' = '["Fall risk"]'::jsonb and s ? 'last', 'Abdelmoneim: Fall risk, and his last handover') from (select pg_temp.ho_of(demo.id('bedside', 'patient:abdelmoneim')) s) x;
+select t.ok(s = '{"alerts":[]}'::jsonb, 'Tahany: no handover yet, no alert') from (select pg_temp.ho_of(demo.id('bedside', 'patient:tahany')) s) x;
+select t.ok(d -> 'patient_ids' @> jsonb_build_array(demo.id('bedside', 'patient:tahany'), demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim')),
+  'the three are named for the read log') from ho;

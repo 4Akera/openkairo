@@ -1777,6 +1777,36 @@ numbered as on its picture.
   capped at 2 000 rows for the patient (unordered past the cap): a long stay with hourly vitals can reach that in about ten days, and
   the day's sums or the previous urine may then miss rows the board's op still counts. A read of the stay's measures through a pack op,
   as the board's, would lift it: should it?
+- **Built, W3a (Ward nursing: handover; 2026-10-09; lane beds-ward2)**: a **Handover** tab (`bedside.handover`, for whoever may read
+  the record) at the end of the starter setup's Screens line, after Obs due (the Medical Ward: Beds · Obs due · Handover; after the
+  drug round merges, Beds · Drug round · Obs due · Handover). One row per stay admitted here, the beds by position, then the stays with
+  no bed by admission: the bed, the name (it opens the stay), "F 63 · day 3 · <the admission's reason>", and the facts nobody types —
+  the board tile's own words (NEWS2, obs due, the balance; the drug round's late doses once it merges, through the one `wardLine`
+  function the board and the tab share), each active alert of the patient in amber in the base's words ("Fall risk"), and "2 orders
+  out" from the stay's presence row; then what the last shift handed over in this stay, faint ("No handover yet in this stay"); then
+  two boxes, "What happened this shift" and "For the next shift". The toolbar has two views, All beds and To hand over (the rows not
+  handed over this shift), the shift from the ward's Shifts setting ("08–14 → 14–20 · handover at 14:00") and **Sign the handover · n**
+  (⌘↵). Sign writes each bed with words as the base's note, kind `handover`, heading "Handover 08–14 → 14–20", its text "At handover:
+  <the facts as they stood>" / "This shift: …" / "For the next shift: …", in the stay, one set per patient in bed order ("Signing 2 of
+  3…"); a bed that fails is named and keeps its words, the others are signed; beds with both boxes empty are skipped. The note reads in
+  the stay's day and in Since yesterday like any other note. A handover belongs to the shift it ends with a 30-minute grace (13:55,
+  14:00 and 14:05 are 08–14's; the header reads 08–14 → 14–20 until 14:30). The op `bedside.handover` gives the tab each stay's active
+  alerts and its latest current handover note (when, by whom, its words; a crossed-out one passes to the one before), naming each
+  patient for the read log (TREAT); it never reads the clock, and answers nothing where the department's line has no Handover (its
+  own line, else the default line of a stays department that uses the pack, as Obs due). The tab reads when the stays change, on the
+  clinic's hints and after its own Sign, never on a timer. Words typed and not signed survive switching tabs, not a reload, and never
+  go to the browser's storage. The demo: Samira's and Abdelmoneim's last handover by Nour Adel ten minutes before this shift began,
+  Abdelmoneim's fall-risk alert, Tahany none. Where W3a differs from plan piece 11 and the picture: no abnormal latest result ("K 3.3")
+  and no order's name ("chest X-ray today") among the facts, only the number of orders out; no "My beds" view; the late doses come with
+  the drug round's merge; the Handover tab comes after Obs due, so the starter setup's line no longer follows the default line's order
+  (a pack's tabs by key) and a ward made from it has its line written. Until the op answers, a row says the last handover is not read
+  yet (never "No handover yet") and To hand over shows no count. *Chosen by Claude, awaiting the owner*: (1) each bed's handover is the base's note, kind handover, in its
+  stay, one set per patient (plan Q11); (2) the facts at handover are copied into the note when it is signed, words, not links; (3) a
+  row's facts are the tile's own words, each active alert and the orders out — should an abnormal latest result and an order's name
+  come, which needs choosing which results matter to a ward?; (4) no "My beds" view: no ward screen gives a nurse her beds yet; (5) a
+  handover belongs to the shift it ends with a 30-minute grace — is 30 minutes right?; (6) words typed and not signed stay while the
+  app is open, never in the browser's storage; (7) the handover is words only: should the incoming nurse acknowledge it ("received
+  by")?; (8) beds with both boxes empty are not signed.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -3000,4 +3030,18 @@ types, parked pack calls with per-call Retry, Postgres enums.
   is dated in the note; the current shift is marked with the word "now" and the accent tint; the 2 000-row read of the record's values
   is item (19). Browser pass by the lead
   (`spec/shots/2026-10-09/ward2-w2/`).
+- 2026-10-09: **Ward nursing W3a, handover** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` gains the screen
+  `bedside.handover` at the end of the starter setup's line, `bedside.handover_here` (the line's own, else the default line of a stays
+  department using the pack, as `obs_here`) and the op `bedside.handover`; `src/packs/bedside/` `handover.ts` (the shift now with its
+  30-minute grace, handed over this shift, the row's facts, the note, the rows), `HandoverTab.tsx` (the tab; `Handover.tsx` would clash
+  with `handover.ts` on a case-insensitive disk), `wardline.ts` (W2's `useWardRead` and `withWardWords` moved out of `ward2.ts`, which
+  re-exports them, and `wardLine`, the tile's one line as a function) and `ward2.ts` (the screen); W3's demo block appended to
+  `supabase/demo/bedside.sql` (Samira's and Abdelmoneim's last handover, his fall-risk alert; the notes' words name only what the
+  record holds before they were signed, at any load time); until the op answers, a row says its last handover is not read yet;
+  suites `bedside_ward2_handover` (31), `bedside_ward2_demo` (23) and `demo` (84), with `bedside_ward2` (46; its two setup checks now
+  say the line holds Obs due, since Handover after Obs due is no longer the default line's order and the setup writes the line),
+  `bedside_ward2_fluids` (66), `bedside` (55), `registry` (16), `boundary` (10) and `pack_contract` (35) green; `db:demo` twice; node
+  `test:handover` 6 groups and the brief's other node runs green; typecheck clean; lint 0 errors; build green; shapes and logins
+  unchanged. `index.tsx` is untouched: its
+  tile line becomes `wardLine` at the merge with the drug round. Browser pass by the lead (`spec/shots/2026-10-09/ward2-w3a/`).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

@@ -6,7 +6,9 @@
 -- migration of its own beside 17 so that two lanes of the pack merge apart; it runs after 17, so it may extend the starter setup 17
 -- declares. W2: the fluid balance. In and out are the base's observations (LOINC 9103-3, 9187-6, 9257-7; mL); a fluid chart is started
 -- per stay (bedside.fluid_chart, with the day's target); the ward's shifts (bedside.shifts) give the chart's columns and the fluid day;
--- the op bedside.fluids gives the board each charted stay's measures. Proposed by Claude, awaiting the owner.
+-- the op bedside.fluids gives the board each charted stay's measures. W3a: the handover. A Handover tab beside the board; each bed's
+-- handover is the base's note, kind handover, in its stay; the op bedside.handover gives the tab each stay's alerts and its last handover.
+-- Proposed by Claude, awaiting the owner.
 
 set client_min_messages = warning;
 
@@ -172,5 +174,47 @@ select core.declare_type('bedside.fluid_chart', 1, 'bedside', $j${"type":"object
     "no_target":{"const":true},"note":{"type":"string"}}}$j$::jsonb,
   'bedside.fluid_chart_line(jsonb)', labels => '{"en":"Fluid chart","ar":"جدول السوائل"}');
 select core.declare_op('bedside.fluids', 'bedside', 'bedside.fluids(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
+
+-- ── W3a · the handover (plan Q11, proposed by Claude, awaiting the owner: the base's note, kind handover): its tab beside the board,
+-- for whoever may read the record ──
+select core.declare_screen('bedside.handover', 'bedside', 'stays', '{"en":"Handover","ar":"التسليم"}', 'read:record');
+-- the starter setup's Screens line gains it at its end, after Obs due; it still opens on the board
+select core.declare_setup(s.key, s.layer, s.work, s.labels, s.packs, jsonb_set(s.screens, '{screens}', (s.screens -> 'screens') || '["bedside.handover"]'::jsonb),
+    s.places, s.services, s.presets, s.settings, s.help)
+  from core.setups s where s.key = 'bedside.ward' and s.screens is not null and not ((s.screens -> 'screens') ? 'bedside.handover');
+
+set role pack_bedside;
+-- whether the department's Screens line holds the Handover tab: the line set there, else its default line (read 'me' builds it from the
+-- screens of its work and of the packs it uses), which holds the tab on a stays department that uses the pack (as obs_here for Obs due)
+create function bedside.handover_here(p_org uuid, p_department uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce(core.setting_at(p_org, 'department.screens', p_department) -> 'screens' @> '["bedside.handover"]'::jsonb,
+    core.department_uses(p_org, p_department, 'bedside') and core.pack_department(p_org, p_department) ->> 'work' = 'stays', false)
+$$;
+-- handover: each stay admitted here, with what the ward's own read does not give: the patient's active alerts, in the base's words, and
+-- this stay's latest handover note (when, by whom, its words), as the reader may see them. Only where the department's line holds the
+-- Handover tab. This department's stays only, read here, never ids from the client; each patient is named for the read log. The shift
+-- is the client's: the server never reads the clock
+create function bedside.handover(p_org uuid, p_department uuid, p_user uuid, p_args jsonb) returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare s jsonb; v_ids uuid[] := '{}'; v_out jsonb := '{}'; v_alerts jsonb; v_last jsonb;
+begin
+  if not bedside.handover_here(p_org, p_department) then
+    return '{"patient_ids":[],"stays":{}}'::jsonb;
+  end if;
+  for s in select r from core.pack_rows(p_org, 'base.presence', jsonb_build_object('where', jsonb_build_object('department_id', p_department, 'state', 'admitted'))) r loop
+    v_ids := v_ids || (s ->> 'patient_id')::uuid;
+    select coalesce(jsonb_agg(x.data -> 'concept' ->> 'text' order by x.occurred_at, x.id), '[]') into v_alerts
+      from core.pack_kind(p_org, (s ->> 'patient_id')::uuid, 'alert', '{"current":true,"data":{"status":"active"}}'::jsonb) x
+     where nullif(x.data -> 'concept' ->> 'text', '') is not null;
+    v_last := null;
+    select jsonb_strip_nulls(jsonb_build_object('at', x.occurred_at, 'by', x.author_id, 'heading', x.data ->> 'heading', 'text', x.data ->> 'text')) into v_last
+      from core.pack_kind(p_org, (s ->> 'patient_id')::uuid, 'note', '{"current":true,"data":{"kind":"handover"}}'::jsonb) x
+     where x.visit_id = (s ->> 'item')::uuid
+     order by x.occurred_at desc, x.recorded_at desc, x.id desc limit 1;
+    v_out := v_out || jsonb_build_object(s ->> 'item', jsonb_strip_nulls(jsonb_build_object('alerts', v_alerts, 'last', v_last)));
+  end loop;
+  return jsonb_build_object('patient_ids', to_jsonb(v_ids), 'stays', v_out);
+end $$;
+reset role;
+select core.declare_op('bedside.handover', 'bedside', 'bedside.handover(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
 
 select core.lock_pack('bedside');

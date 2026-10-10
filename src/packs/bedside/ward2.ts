@@ -5,28 +5,23 @@
 // W2: /in, /out and /fluids (fluids.ts), the Fluid balance section and the banner's balance (balance.ts, FluidBalance.tsx), and the fluids
 // beside obs due in the tile's one read (useWardRead, wardread.ts); one type (the fluid chart), one setting (the shifts) and one op
 // (bedside.fluids) of its own.
-import { createElement, useState } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { packOp } from '@core/db/rpc'
-import type { Organization, PresenceRow } from '@core/db/types'
-import { mayIn } from '@core/db/views'
+// W3a: the Handover tab (HandoverTab.tsx, handover.ts; one screen, one op); the tile's read and line live in wardline.ts.
+import { createElement } from 'react'
+import type { Organization } from '@core/db/types'
 import { useDepartment } from '@core/hooks/organization'
-import { useStays } from '@core/hooks/reads'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerScreen } from '@core/screens/registry'
 import { registerCommand } from '@core/screens/visit/commands'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
-import type { TileCtx, TileWords } from '@core/screens/ward/tiles'
-import { fluidChip, fluidHas, fluidNotes, fluidSummary, fluidWords, wardHere, withBalanceWord, type FluidsRead } from './balance'
-import { useBoardRead } from './boardRead'
+import { fluidChip, fluidHas, fluidNotes, fluidSummary, fluidWords, wardHere } from './balance'
 import { FluidBalance, FluidNote } from './FluidBalance'
 import { CHART_TYPE, parseChart, parseIn, parseOut } from './fluids'
-import { staysKey } from './news2'
+import { HandoverTab } from './HandoverTab'
 import { ObsDueTab } from './ObsDueTab'
-import { withDueWord, type ObsDueRead } from './obsdue'
 import { rulesIn, setRulesHook, type Rules } from './response'
-import { makeWardMerge, type WardRead } from './wardread'
+
+export { useWardRead, withWardWords } from './wardline'
 
 // the Obs due tab beside the board (bedside.obs)
 registerScreen('bedside.obs', ObsDueTab)
@@ -53,23 +48,5 @@ registerSection({ key: 'bedside.fluids', title: 'Fluid balance', types: [CHART_T
   word: (x) => fluidChip(x), summary: (x) => fluidSummary(x), Body: FluidBalance })
 registerBannerWords({ key: 'bedside.fluids', types: [CHART_TYPE], words: (x) => fluidWords(x) })
 
-/** the tile line's read: bedside.board's (boardRead.ts), bedside.obs_due's and bedside.fluids', side by side, read for treatment, once per
- *  board, again when the stays change and on the clinic's hints (their keys under bedside.board's, so the same hints reach them), never on
- *  a timer; obs due under obs, the charted stays' fluids under fluids. Each extra read may fail alone, or the line have no Obs due: the
- *  NEWS2 words stand. The same object while nothing changes (makeWardMerge) */
-export function useWardRead(dept: { id: string }): WardRead | null | undefined {
-  const board = useBoardRead(dept)
-  const { org } = useDepartment()
-  const rows = useStays(dept.id).data?.rows
-  const may = mayIn(org, 'read:record', dept.id) && obsHere(org, dept.id); const key = staysKey(rows ?? []); const on = !!org && may && !!rows?.length
-  const o = useQuery({ queryKey: ['bedside.board', dept.id, key, 'obs_due'], enabled: on,
-    queryFn: () => packOp<ObsDueRead>('bedside.obs_due', dept.id, {}, 'TREAT'), placeholderData: keepPreviousData, retry: false })
-  // from: 25 h back, worked out when the read runs, never in the key (a key with the clock in it reads again on every render)
-  const f = useQuery({ queryKey: ['bedside.board', dept.id, key, 'fluids'], enabled: on, placeholderData: keepPreviousData, retry: false,
-    queryFn: () => packOp<FluidsRead>('bedside.fluids', dept.id, { from: new Date(Date.now() - 25 * 3_600_000).toISOString() }, 'TREAT') })
-  const [merge] = useState(makeWardMerge)
-  return merge(board, o.isError ? undefined : o.data, f.isError ? undefined : f.data)
-}
-/** the tile's line: piece 1's words, obs due right after NEWS2, the balance last */
-export const withWardWords = (w: TileWords | null | undefined, row: PresenceRow, ctx: TileCtx, data: unknown, now: number) =>
-  withBalanceWord(withDueWord(w, row, ctx, data, now), row, ctx, data, now)
+// the Handover tab beside the board (bedside.handover)
+registerScreen('bedside.handover', HandoverTab)

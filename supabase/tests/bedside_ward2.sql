@@ -40,11 +40,11 @@ select t.ok(bedside.rcp_response() = '{"zero":{"every":720},"low":{"every":240,"
 \echo '── its tab beside the board, on the starter setup''s line'
 select t.ok(s.layer = 'bedside' and s.work = 'stays' and s.action = 'read:record' and s.replaces = '{}' and s.labels ->> 'en' = 'Obs due',
   'bedside.obs: "Obs due", a stays screen for whoever may read the record, replacing nothing') from core.screens s where s.key = 'bedside.obs';
-select t.ok(s.screens -> 'screens' ->> 0 = 'base.beds' and s.screens -> 'screens' ->> -1 = 'bedside.obs' and s.screens ->> 'opens' = 'base.beds',
-  'bedside.ward''s line: the board first, Obs due last, opening on the board') from core.setups s where s.key = 'bedside.ward';
+select t.ok(s.screens -> 'screens' ->> 0 = 'base.beds' and (s.screens -> 'screens') ? 'bedside.obs' and s.screens ->> 'opens' = 'base.beds',
+  'bedside.ward''s line: the board first, Obs due on it, opening on the board') from core.setups s where s.key = 'bedside.ward';
 select public.setup(jsonb_build_object('setup', 'bedside.ward', 'department_id', :'new', 'name', 'Short Stay Ward', 'apply', true)) is not null as made;
-select t.ok(core.setting_at(:'org', 'department.screens', :'new') is null and bedside.obs_here(:'org', :'new') and bedside.obs_here(:'org', :'ward') and not bedside.obs_here(:'org', :'im'),
-  'a ward made from it keeps the default line, which holds Obs due (the setup''s line is the same); the ward''s own line holds it; a clinic''s does not');
+select t.ok(bedside.obs_here(:'org', :'new') and bedside.obs_here(:'org', :'ward') and not bedside.obs_here(:'org', :'im'),
+  'a ward made from it holds Obs due on its line (the setup''s, or the default where that is the same); the ward''s own line holds it; a clinic''s does not');
 select t.ok(o.layer = 'bedside' and o.action = 'read:record' and o.patients, 'bedside.obs_due: Ward nursing''s op, for whoever may read the record, naming its patients')
   from core.ops o where o.key = 'bedside.obs_due';
 
