@@ -84,7 +84,7 @@ test('a pack writes in its own namespace and only through the kit: ids are demo.
   assert.deepEqual(clinic, ['supabase/seeds/clinic_packs.sql', 'supabase/demo/clinic_packs.sql'], 'the clinic\'s seed, then its day')
   for (const f of clinic) {
     assert.ok(order.indexOf(f) < order.indexOf(journeyFiles[0]), `${f} before the journey`)
-    assert.ok(named(f).length >= 1 && named(f).every((l) => packsBefore(f).includes(l)), `${f} names the ids of packs loaded before it: ${named(f)}`)
+    assert.ok(named(f).length >= 1 && named(f).every((l) => l === 'clinic_packs' || packsBefore(f).includes(l)), `${f} names the ids of packs loaded before it (and its own: the clinic's sessions): ${named(f)}`)
     assert.doesNotMatch(read(f), /\binsert\s+into\b|\bupdate\s+core\.|\bdelete\s+from\b/i, `${f} writes through the doors`)
   }
   // the base's journey steps name the journey's patient and no pack's ids (a pack's step is in its own file)

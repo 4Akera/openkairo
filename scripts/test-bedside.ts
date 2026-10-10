@@ -11,7 +11,8 @@ import { parse, type Ctx, type Parsed } from '../src/core/screens/visit/parse'
 import { commandNamed, commandsFor } from '../src/core/screens/visit/commands'
 import { keyOf, type ScoreParams, type ScoreResult } from '../src/core/screens/visit/score'
 import { ownOf, type SectionInput } from '../src/core/screens/chart/sections'
-import { tileLineOf, type TileCtx } from '../src/core/screens/ward/tiles'
+import { tileActions, tileLineOf, type ButtonDef, type TileCtx } from '../src/core/screens/ward/tiles'
+import { giveButton, obsButton } from '../src/packs/bedside/buttons'
 import { E, ctx as chartCtx, org, presence, record, table } from './chart-fixtures'
 import type { Identity, Organization, PresenceRow, ScoreItem, ScoreTable, ServerEntry } from '../src/core/db/types'
 
@@ -100,6 +101,11 @@ test('again: a change on the vitals card derives NEWS2 anew; what NEWS2\'s card 
   assert.deepEqual(v.again!([ps[1]], LINE, ctx), [], 'the vitals removed: no NEWS2')
   assert.deepEqual(v.again!([withParams(ps[0], { respiratory_rate: undefined }), ps[1]], LINE, ctx).length, 1, 'a sign cleared: no NEWS2')
   assert.deepEqual(news2From([ps[0]], ctx, { said: [], prev: [] }).map((x) => x.function), ['score'])
+  const now = new Date('2026-10-10T10:00:00')
+  const child = { ...ctx, now, record: { patient: { sex: 'female', born_on: '2020-03-01' } } as unknown as Ctx['record'] }
+  assert.deepEqual(news2From([ps[0]], child, { said: [], prev: [] }), [], 'a child of 6 on the children\'s ward: the vitals alone, no NEWS2')
+  const adult = { ...ctx, now, record: { patient: { sex: 'female', born_on: '2010-10-10' } } as unknown as Ctx['record'] }
+  assert.equal(news2From([ps[0]], adult, { said: [], prev: [] }).length, 1, '16 today: NEWS2')
 })
 test('a role without write:score, or no NEWS2 declared: the vitals go alone, and say why', () => {
   const nurse = { ...ctx, can: (a: string) => a !== 'write:score' }
@@ -226,5 +232,19 @@ test('the tile: the stay\'s latest NEWS2 from the board\'s read, in its band\'s 
   assert.deepEqual(tileLineOf(lines, seen, tile(['bedside']), { other: board(6, 'medium') }), [], 'never another pack\'s read')
   const a = [presence('s2', { version: 3 }), presence('s1', { version: 1, has_vitals: true })]
   assert.equal(staysKey(a), staysKey([...a].reverse())); assert.equal(staysKey(a), 's1@1:1,s2@3:0', 'the board\'s read again when a stay changes'); assert.notEqual(staysKey(a), staysKey(a.slice(0, 1)))
+})
+test('Give and Obs on an admitted stay, for whoever may write each; another pack first in the order keeps its own two', () => {
+  const defs: ButtonDef[] = [{ ...giveButton, pack: 'bedside', key: 'bedside:Give' }, { ...obsButton, pack: 'bedside', key: 'bedside:Obs' },
+    { pack: 'anaesthesia', key: 'anaesthesia:Aldrete', label: 'Aldrete', path: () => '/' }, { pack: 'anaesthesia', key: 'anaesthesia:Record', label: 'Record', path: () => '/' }]
+  const row = { kind: 'stay', state: 'admitted', item: 's1', patient_id: 'p1' } as PresenceRow
+  const at = (packs: string[], may: string[] = ['write:bedside.dose', 'write:vitals'], r = row) => tileActions(defs, { closed: false },
+    { row: r, ctx: { dept: { id: 'd', packs }, place: null, identity: null, day: 1, can: (a) => may.includes(a) } }, true).filter((a) => !a.base).map((a) => a.label)
+  assert.deepEqual(at(['bedside', 'paeds']), ['Give', 'Obs'], 'the children\'s ward (paediatrics brings none)')
+  assert.deepEqual(at(['oncology', 'bedside']), ['Give', 'Obs'], 'the day unit: oncology brings none, so the ward pack\'s')
+  assert.deepEqual(at(['anaesthesia', 'bedside']), ['Aldrete', 'Record'], 'Recovery: anaesthesia first keeps its two')
+  assert.deepEqual(at(['bedside'], ['write:vitals']), ['Obs'], 'no Give for whoever may not give doses')
+  assert.deepEqual(at(['bedside'], [], row), [], 'neither for a reader')
+  assert.deepEqual(at(['bedside'], undefined, { ...row, state: 'discharged' } as PresenceRow), [], 'not on a stay that has ended')
+  assert.equal(obsButton.path!(row, {} as TileCtx), '/visit/s1', 'Obs opens the stay\'s chart')
 })
 console.log(`bedside: ${n} groups passed`)

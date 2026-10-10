@@ -16,7 +16,7 @@ import type { RequestQueueRow, TableRead, ValueRow } from '@core/db/types'
 import type { ScreenProps } from '@core/screens/registry'
 import { ageSex } from '@core/screens/bench/shared'
 import { Button, Card, Empty, Input, Kbd, ScreenFrame, Spinner, Tag, cn, errorText } from '@core/ui'
-import { ROWS, carried, columns, perKg } from './model'
+import { ROWS, carried, columns, oxygenOf, perKg } from './model'
 
 type Stamp = 'in' | 'start' | 'knife' | 'end' | 'out'
 const STAMPS: [Stamp, string][] = [['in', 'In the room'], ['start', 'Anaesthesia start'], ['knife', 'Knife to skin'], ['end', 'End of the operation'], ['out', 'Anaesthesia end']]
@@ -64,9 +64,11 @@ function Grid({ dept, r, onClose }: { dept: ScreenProps['dept']; r: RequestQueue
       const base = { patient_id: r.patient.id, department_id: dept.id }
       const es: EntryIn[] = []
       cols.forEach((t, i) => { const c = d.cells[i] ?? {}; const bp = (c.bp ?? '').match(/^(\d{2,3})\/(\d{2,3})$/)
-        const an = { ...(c.etco2 ? { etco2: Number(c.etco2) } : {}), ...(carried(d.cells, 'agent_pct', i).typed ? { agent: 'sevoflurane', agent_pct: Number(c.agent_pct) } : {}), ...(c.fio2 ? { fio2: Number(c.fio2) } : {}) }
+        // FiO₂ is the base's (its oxygen.fio2 key, beds' Q5), EtCO₂ and the agent the pack's own
+        const an = { ...(c.etco2 ? { etco2: Number(c.etco2) } : {}), ...(carried(d.cells, 'agent_pct', i).typed ? { agent: 'sevoflurane', agent_pct: Number(c.agent_pct) } : {}) }
+        const o2 = oxygenOf(c.fio2)
         const data = { ...(c.hr ? { hr: qty(c.hr, 'bpm', '/min') } : {}), ...(bp ? { bp: { sys: qty(bp[1], 'mmHg', 'mm[Hg]')!, dia: qty(bp[2], 'mmHg', 'mm[Hg]')! } } : {}),
-          ...(c.spo2 ? { spo2: qty(c.spo2, '%', '%') } : {}), ...(c.temp ? { temp: qty(c.temp, '°C', 'Cel') } : {}), ...(Object.keys(an).length ? { anaesthesia: an } : {}) }
+          ...(c.spo2 ? { spo2: qty(c.spo2, '%', '%') } : {}), ...(c.temp ? { temp: qty(c.temp, '°C', 'Cel') } : {}), ...(o2 ? { oxygen: o2 } : {}), ...(Object.keys(an).length ? { anaesthesia: an } : {}) }
         if (Object.keys(data).length) es.push({ ...base, id: newId(), type: 'anaesthesia.column', occurred_at: atToday(t), data } as unknown as EntryIn) })
       for (const g of d.drugs) for (const [i, v] of Object.entries(g.doses)) if (v.trim()) { const atc = ATC[g.name.toLowerCase()]
         es.push({ ...base, id: newId(), type: 'given', occurred_at: atToday(cols[Number(i)]), data: { drug: { text: g.name, codings: atc ? [{ system: 'atc', code: atc[0], display: g.name }] : [] },

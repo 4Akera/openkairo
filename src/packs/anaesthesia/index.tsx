@@ -1,13 +1,14 @@
 // The anaesthesia pack's client (spec/openCare.md §5.8; the pictures #anaes-preop, #anaes-record, and Recovery's): the Anaesthesia
 // section; /preop and its card (the airway, ASA, the scores typed before it, the medicines to stop, the plan, Fit or Not yet); the
 // anaesthetic record, a tab of the operating department's; Recovery's line on each bay and its two buttons (Aldrete: the /score card in the patient's chart;
-// Record: the patient's anaesthetic record). RCRI, STOP-BANG and Aldrete are the base's /score with the pack's declared tables.
+// Record: the patient's anaesthetic record); /back, Recovery's leaving (back to the ward as the stay passing on, or home). RCRI,
+// STOP-BANG and Aldrete are the base's /score with the pack's declared tables.
 import { compose } from '@core/hooks/composer'
 import { registerRenderer } from '@core/renderers'
 import { registerScreen } from '@core/screens/registry'
 import { registerRowAction } from '@core/screens/rows'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
-import { registerCard, registerCommand } from '@core/screens/visit/commands'
+import { registerCard, registerCommand, registerDraftSave } from '@core/screens/visit/commands'
 import { registerTileButton, registerTileLine } from '@core/screens/ward/tiles'
 import { AnaesthesiaSection, operationsIn } from './Section'
 import { PreopCard } from './Preop'
@@ -20,6 +21,9 @@ import { preopAction } from './rowAction'
 import { PreopView, RecordView } from './Views'
 import { registerPrintout } from '@core/print/registry'
 import { PreopSheetView, SHEET_KEY, type PreopSheet } from './printout'
+import { BACK, backLine, parseBack, type BackParams } from './back'
+import { BackCard } from './BackCard'
+import { saveBack } from './backsave'
 
 const TYPES = ['anaesthesia.preop', 'anaesthesia.record']
 // the patient's sheet before the operation, printed under /preop's card (built 2026-10-10)
@@ -43,6 +47,11 @@ registerTileLine('anaesthesia', (row, ctx) => recoveryLine(row, ctx), useRecover
 // Aldrete opens the patient's chart with the /score card on the line (the base's score; the server adds it up)
 registerTileButton('anaesthesia', { label: 'Aldrete', path: (row) => { for (const ms of [500, 1200, 2500]) setTimeout(() => compose({ text: '/score aldrete ' }), ms); return `/visit/${row.item}` } })
 registerTileButton('anaesthesia', { label: 'Record', path: (row) => `/patient/${row.patient_id}` })
+// Recovery's leaving: back to the ward as the stay passing on (beds Q3) or home, one Done in the bay's stay (back.ts; 2026-10-10)
+registerCommand({ name: 'back', pack: 'anaesthesia', groupTitle: 'Anaesthesia', title: 'Back to the ward', label: 'Recovery’s stay passes back to the ward, or home: one Done',
+  example: '/back · /back home · /back medical', action: 'write:discharged', writes: [BACK], parse: (rest, ctx) => parseBack(rest, ctx), empty: (ctx) => { const r = parseBack('', ctx); return r && 'ok' in r ? r.ok : [] } })
+registerCard({ function: BACK, pack: 'anaesthesia', Editor: BackCard, line: (q) => backLine(q as Partial<BackParams>) })
+registerDraftSave({ function: BACK, pack: 'anaesthesia', save: saveBack })
 // the pre-op and the anaesthetic record in the record, in the clinic's words (not the ids they are about)
 registerRenderer('anaesthesia.preop', { Full: PreopView })
 registerRenderer('anaesthesia.record', { Full: RecordView })
