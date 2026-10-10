@@ -161,8 +161,8 @@ select t.ok((select state from base.presence where organization_id = demo.base('
 
 \echo '── Ward nursing''s own patients (§5.6): NEWS2 with the obs on the Medical Ward'
 select t.ok(core.department_uses(demo.base('clinic'), demo.base('ward'), 'bedside'), 'the Medical Ward uses Ward nursing');
-select t.ok(count(*) = 9 and bool_and(e.patient_id in (demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim'))),
-  count(*) || ' NEWS2 entries, all on Ward nursing''s own patients (Samira and Abdelmoneim)')
+select t.ok(count(*) = 10 and bool_and(e.patient_id in (demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim'), demo.id('bedside', 'patient:tahany'))),
+  count(*) || ' NEWS2 entries, all on Ward nursing''s own patients (Samira, Abdelmoneim and Tahany)')
   from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'score' and e.data ->> 'score' like 'bedside.%';
 select t.ok(array_agg((e.data ->> 'total')::int order by e.occurred_at) = array[2, 2, 3, 4, 6] and bool_and(e.data ->> 'score' = 'bedside.news2'),
   'Samira''s NEWS2 on scale 1: ' || array_agg(e.data ->> 'total' order by e.occurred_at)::text)
@@ -173,7 +173,7 @@ select t.ok(array_agg((e.data ->> 'total')::int order by e.occurred_at) = array[
 select t.ok(not exists (select 1 from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'score' and e.data ->> 'score' like 'bedside.%'
   and not exists (select 1 from core.entries v where v.organization_id = e.organization_id and v.set_id = e.set_id and v.type = 'vitals')),
   'every NEWS2 is signed with the vitals in the same set');
-select t.ok(count(*) = 9 and bool_and(e.data -> 'inputs' ->> 'consciousness' = v.data ->> 'consciousness' and e.data -> 'inputs' ->> 'oxygen' = v.data -> 'oxygen' ->> 'on'),
+select t.ok(count(*) = 10 and bool_and(e.data -> 'inputs' ->> 'consciousness' = v.data ->> 'consciousness' and e.data -> 'inputs' ->> 'oxygen' = v.data -> 'oxygen' ->> 'on'),
   'every NEWS2''s two answers are its vitals'' own: ' || count(*) || ' sets')
   from core.entries e join core.entries v on v.organization_id = e.organization_id and v.set_id = e.set_id and v.type = 'vitals'
  where e.organization_id = demo.base('clinic') and e.type = 'score' and e.data ->> 'score' like 'bedside.%';
@@ -182,12 +182,12 @@ select t.ok(count(*) = 4 and bool_and(v.data -> 'oxygen' -> 'flow' ->> 'ucum' = 
   from core.entries v where v.organization_id = demo.base('clinic') and v.type = 'vitals' and v.patient_id = demo.id('bedside', 'patient:abdelmoneim');
 select t.ok(exists (select 1 from base.values x where x.organization_id = demo.base('clinic') and x.patient_id = demo.id('bedside', 'patient:abdelmoneim')
   and x.key = 'oxygen.flow' and x.code = 'loinc:3151-8'), 'his flow is in the values, LOINC 3151-8');
-select t.ok(count(*) = 1 and bool_and(p.place_id is null and not p.has_vitals), 'Tahany is admitted with no bed yet and no obs') from base.presence p
+select t.ok(count(*) = 1 and bool_and(p.place_id is null and p.has_vitals), 'Tahany is admitted with no bed yet; her first obs are in (W1)') from base.presence p
  where p.organization_id = demo.base('clinic') and p.patient_id = demo.id('bedside', 'patient:tahany') and p.kind = 'stay' and p.state = 'admitted';
 
 \echo '── Ward nursing''s drug round (§5.6, piece 3): Nour''s doses, one late, one not given; a first dose waiting; a medicine with no times; one not prescribed in the stay; the base''s admission doses'
-select t.ok(core.setting_at(demo.base('clinic'), 'department.screens', demo.base('ward')) = '{"screens":["base.beds","bedside.round"],"opens":"base.beds"}'::jsonb,
-  'the Medical Ward''s line: Beds and the Drug round');
+select t.ok(core.setting_at(demo.base('clinic'), 'department.screens', demo.base('ward')) = '{"screens":["base.beds","bedside.round","bedside.obs","bedside.handover"],"opens":"base.beds"}'::jsonb,
+  'the Medical Ward''s line: Beds, the Drug round, Obs due and Handover');
 select t.ok(count(*) >= 15 and bool_and(e.author_id = demo.id('bedside', 'nurse')) and bool_and(e.patient_id in (demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim'))),
   count(*) || ' doses on the round, all by Nour, all on Samira or Abdelmoneim')
   from core.entries e where e.organization_id = demo.base('clinic') and e.type = 'bedside.dose';

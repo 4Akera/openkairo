@@ -61,7 +61,7 @@ select t.ok(s.work = 'stays' and s.action = 'read:record' and s.replaces = '{}',
 select t.ok(count(*) = 2 and bool_and(o.action = 'read:record' and o.patients), 'bedside.round and bedside.sheet: read:record, naming patients')
   from core.ops o where o.key in ('bedside.round', 'bedside.sheet');
 select t.ok(o.patients, 'bedside.board names patients') from core.ops o where o.key = 'bedside.board';
-select t.ok(s.screens = '{"screens":["base.beds","bedside.round"],"opens":"base.beds"}'::jsonb, 'bedside.ward: Beds and the Drug round, opening on Beds')
+select t.ok(s.screens = '{"screens":["base.beds","bedside.round","bedside.obs","bedside.handover"],"opens":"base.beds"}'::jsonb, 'bedside.ward: Beds, the Drug round, Obs due and Handover, opening on Beds')
   from core.setups s where s.key = 'bedside.ward';
 select t.ok(bedside.round_of(:'org', :'ward') = jsonb_build_object('times', k.shape #> '{properties,times,default}', 'late_after', (k.shape #>> '{properties,late_after,default}')::int,
   'night', k.shape #>> '{properties,night,default}'), 'unset, the round''s times are the setting''s own defaults') from core.setting_keys k where k.key = 'bedside.round';

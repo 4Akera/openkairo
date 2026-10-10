@@ -2260,6 +2260,150 @@ numbered as on its picture.
   `demo.w_born` writes such a set (unused until the birth's demo). *Chosen by Claude in the build, awaiting the owner:* a newborn
   only (born on the clinic's today or in the 28 days before), never in an imported set, eight at most, the names of the API. The
   birth card that uses it is L2b/L2c's.
+- **Built, W1 (Ward nursing: obs due and the ward's NEWS2 response; 2026-10-09; lane beds-ward2)**: a department setting,
+  `bedside.response` ("NEWS2 · the response", on the department's card), gives each of five levels how often the obs are due and whom
+  to tell, with RCP 2017's response as its defaults: NEWS2 0 every 12 hours; 1–4 every 4 hours, the nurse in charge; a 3 in any one
+  sign hourly, the doctor caring for the patient; 5–6 hourly, the doctor now; 7 or more every 30 minutes, the doctor now, think of ICU.
+  A level a ward saves replaces RCP's whole (an empty Tell stays empty). The op `bedside.obs_due` reads each admitted stay's latest
+  NEWS2 (as `bedside.board` reads it), its level by the server's own points (the band first, then a 3 in one sign, then 0), the
+  ward's rule, and when the next obs are due (the NEWS2's time plus the rule's interval); the client decides "overdue" from that and
+  the clock. The board's tile says "obs due 15:06" (or "tomorrow 01:30") or "obs overdue 20 min" in amber right after "NEWS2 n"; the
+  new tab **Obs due** (`bedside.obs`, at the end of the starter setup's Screens line) lists every stay here, the most overdue first,
+  then those with no NEWS2 yet, with an Overdue view and its count; a row opens the stay. Under the cards, `/v`'s response line now
+  comes from the ward's setting and ends with "next obs due HH:MM". All of it only where the department's Screens line holds Obs due
+  (the line set there, else its default; an ICU or ER that ticks the pack for NEWS2 alone sets its own line and keeps piece 1's
+  words), and only for 16 and over (NEWS2's own rule; a child's row says "NEWS2 is for 16 and over"). The demo's Tahany has her first
+  obs 80 minutes before the load: NEWS2 4 with a 3 in systolic (88), hourly, so her tile reads "NEWS2 4 · obs overdue 20 min";
+  Samira's 6 is due 10 minutes after the load, Abdelmoneim's 3 (scale 2) two hours after it. In migration `…38_bedside_ward2.sql`,
+  apart from 17, so the parallel beds lane (pieces 3 and 4) merges without conflict there. Where W1 differs from plan piece 4: no
+  setting `bedside.obs_score` (NEWS2 is the pack's only obs score; it comes back when a second is declared); no derived table fed by a
+  listener (an op reads on demand: nothing to keep in step, the same answer, the server still decides the level); no banner word (the
+  banner's words come from the record, which lacks the ward's rule); no inline obs card in the tab (a row opens the chart, where `/v`
+  writes the set); no tile button Obs yet (piece 3's Give is one of the two a tile allows). The tile's words come from the board's
+  one read through the core's tile read (C7): `bedside.board`'s answer with `bedside.obs_due`'s beside it, read again when the stays
+  change and on the clinic's hints, never on a timer. *Chosen by Claude, awaiting the owner*: (1) NEWS2 1–4 defaults to 4 hours, the
+  shorter end of RCP's 4–6; 7 or more to a 30-minute clock where RCP says continuous monitoring; each ward can change both. (2) The
+  level order: the band first, so a 7 holding a 3 is treated as 7 or more. (3) Only a full set with NEWS2 restarts the clock; a
+  partial `/v` does not. (4) "Tell" is words only: nobody is paged or messaged. (5) Nothing stops a ward from making 7 or more slower
+  than 1–4: should the setting refuse that? (6) A doctor's own frequency for one patient, ceilings of care and end of life are not read
+  yet: the ward's rule applies to everyone. (7) The demo's Tahany now has her first obs; piece 1's "no obs for 1 h" is no longer in the
+  demo (any new admission still shows it). (8) The board has no clock of its own: the tile's "obs overdue N min" changes at its next
+  re-read (a change of the stays, a hint, a reload); the Obs due tab's minutes tick by themselves, its read is never on a timer (C1).
+  (9) The due word and the ward's response line only where the department's line holds Obs due. (10)–(14) plan piece 4's
+  `bedside.obs_score`, derived table, banner word, inline obs card and tile button Obs, dropped or deferred as above. (15) The clock
+  starts at the ward stay: a NEWS2 taken in the ER before the stay was passed on (Q3) is not counted, so the ward shows "no obs yet"
+  and, an hour on, amber; reading the previous stay's NEWS2 would need to know the stay it came from. (16) The response line names the
+  ward's "Tell" words, not a person (`#ward-obs` reads "Tell Dr. Ali Hassan now"). (17) A child's tile and row get no due word, and a child's `/v` line keeps piece 1's words with no due time.
+- **Built, W2 (Ward nursing: fluid balance; 2026-10-09; lane beds-ward2)**: in and out are the base's own observations with the LOINC
+  codes and the mL already approved (B1): `/in 250 iv ns` writes 9103-3 "Fluid intake total Measured" with the route (iv, oral, tube)
+  in `method`; `/out urine 300` writes 9187-6 "Urine output"; `/out drain 50` (or tube, vomit, stool) writes 9257-7 "Fluid output total
+  Measured" with the kind in `method`; the words left over go in `note`. Any amount from 0 mL up lands, with one decimal (urine 0, an
+  infant's 2.5, a 6 500 mL drain): a measure is a fact; only a missing number or route asks what to type, and so do a second number
+  (`/in ns 0.9 500 iv` is never 0.9 mL) and litres (`/in 1 L iv`: "Type the amount in mL"). A fluid chart, the pack's own
+  type `bedside.fluid_chart` (write action `write:bedside.fluid_chart`, everyday, for the doctor and the nurse), is started per stay by
+  `/fluids`, given the day's balance aim by `/fluids target -1000` (cleared by `/fluids target none`) and stopped by `/fluids stop` (or
+  `off`, `end`: a bare "off" never clears the aim); the aim is whole mL, at most five digits; each line is a new entry and the latest in the stay holds; the aim carries forward until a stop, and is always signed ("balance aim
+  −1 000 mL a day", never "target 1000"). The ward's shifts, a new department setting `bedside.shifts` ("Shifts", 08:00 14:00 20:00 by
+  default), are the chart's columns, and the earliest starts the fluid day; a measure counts in the shift it closes (the urine at 14:00
+  is in 08–14, the bag emptied at 08:00 closes the night). The record panel's **Fluid balance** section (the stay open now, on a ward: the stay's own department's line holds Obs due, and its
+  shifts make the day, whoever reads) shows the
+  chart's head (since when, the aim, the weight), today by shift (in by route, out by kind, in − out, urine mL/kg/h) and yesterday's
+  totals; its chip says the balance ("+390 mL", "nothing measured", "stopped") and its Summary line "balance +390 mL since 08:00 · no
+  balance aim". The banner says "balance +390 since 08:00" at rank 3, so NEWS2, a late dose and "times not set" come first. The tile
+  ends with "balance +390 mL" (or "nothing measured since 08:00") after NEWS2 and the due word, while a chart is on. Urine mL/kg/h is
+  worked out each time, never stored: the measure's mL over the hours since the patient's previous measured urine (within 24 h, any
+  stay, the ICU's hourly urine 9188-4 included) over the latest weight in kg; "low" below 0.5 (1.0 under 12 years), in words with a
+  glyph, never a stop. The op `bedside.fluids` gives the board each charted stay's measures, only where the department's line holds
+  Obs due (W1's rule); the client groups them into the day. The demo: Samira's chart since yesterday 08:30 (Dr. Ali Hassan, no aim),
+  68 kg, in 2 300 and out 1 050 yesterday, today in 700 and out 310 (+390) with her last urine 60 mL (0.4 mL/kg/h, low); Tahany's
+  chart since her arrival with an aim of +1 000 mL, IV 500 and urine 200 (+300); Abdelmoneim none. Where W2 differs from plan piece 7
+  and the picture: in and out are the base's observations, not a ward type (one fluid record with the ICU); IV bags are not yet
+  counted hour by hour from the drug round (beds pieces 3–4); no "Start fluid chart" button in an Obs card and no tile button (`/fluids`
+  does it; a tile allows two buttons); an unmeasured vomit is not taken (a number is asked for); the chart's start and aim are not in
+  the FHIR export (the measures are). *Chosen by Claude, awaiting the owner*: (1) in and out as the base's observations (B1), not a ward
+  type; (2) every output other than urine as LOINC's 9257-7 with the kind in words (more exact codes would be base data); (3) a measure
+  counts in the shift it closes, the fluid day starts at the earliest shift; (4) urine mL/kg/h since the previous measured urine,
+  "low" below 0.5 from 12 years and 1.0 under 12 — are these the thresholds, and should "low" apply only to catheter measures, since an
+  unmeasured void makes the rate read falsely low?; (5) a measure's time is when it is signed (a past time typed on the line would need
+  the composer to carry a draft's own time, a core change); (6) IV bags from the drug round after the merge; until then `/in`; (7) the
+  fluid chart is the pack's own entry, started, re-aimed and stopped by `/fluids`, by a doctor or a nurse — should only a doctor set
+  the aim?; (8) measures land with or without a chart, which decides only where the balance is spoken and the aim; (9) the aim is words
+  beside the day's balance, always signed, never compared or coloured; (10) the balance only where the line holds Obs due — the tile, and the section, chip, Summary line and banner by the stay's own
+  department, so an ICU or ER stay gets none; (11) no Start
+  button in an Obs card, no tile button; (12) no unmeasured vomit or incontinence count; (13) the chart not in the FHIR export yet;
+  (14) the shifts a new Ward nursing setting, for W3's handover and the drug round's day too; (15) the board's balance changes at its
+  next re-read; (16) any amount from 0 mL with one decimal, "check the number" above 5 000 mL, "a count?" for vomit or stool under
+  10 mL; (17) the banner's balance at rank 3, behind +n on a busy record, the chip always showing it; (18) where a department ticks both
+  Ward nursing and the chronic care pack, `/in` and `/out` drafts draw in that pack's observation card — should those departments get
+  Ward nursing's line instead?; (19) the section and the note under `/in` and `/out` read the record's values, which the core reads
+  capped at 2 000 rows for the patient (unordered past the cap): a long stay with hourly vitals can reach that in about ten days, and
+  the day's sums or the previous urine may then miss rows the board's op still counts. A read of the stay's measures through a pack op,
+  as the board's, would lift it: should it?
+- **Built, W3a (Ward nursing: handover; 2026-10-09; lane beds-ward2)**: a **Handover** tab (`bedside.handover`, for whoever may read
+  the record) at the end of the starter setup's Screens line, after Obs due (the Medical Ward: Beds · Obs due · Handover; after the
+  drug round merges, Beds · Drug round · Obs due · Handover). One row per stay admitted here, the beds by position, then the stays with
+  no bed by admission: the bed, the name (it opens the stay), "F 63 · day 3 · <the admission's reason>", and the facts nobody types —
+  the board tile's own words (NEWS2, obs due, the balance; the drug round's late doses once it merges, through the one `wardLine`
+  function the board and the tab share), each active alert of the patient in amber in the base's words ("Fall risk"), and "2 orders
+  out" from the stay's presence row; then what the last shift handed over in this stay, faint ("No handover yet in this stay"); then
+  two boxes, "What happened this shift" and "For the next shift". The toolbar has two views, All beds and To hand over (the rows not
+  handed over this shift), the shift from the ward's Shifts setting ("08–14 → 14–20 · handover at 14:00") and **Sign the handover · n**
+  (⌘↵). Sign writes each bed with words as the base's note, kind `handover`, heading "Handover 08–14 → 14–20", its text "At handover:
+  <the facts as they stood>" / "This shift: …" / "For the next shift: …", in the stay, one set per patient in bed order ("Signing 2 of
+  3…"); a bed that fails is named and keeps its words, the others are signed; beds with both boxes empty are skipped. The note reads in
+  the stay's day and in Since yesterday like any other note. A handover belongs to the shift it ends with a 30-minute grace (13:55,
+  14:00 and 14:05 are 08–14's; the header reads 08–14 → 14–20 until 14:30). The op `bedside.handover` gives the tab each stay's active
+  alerts and its latest current handover note (when, by whom, its words; a crossed-out one passes to the one before), naming each
+  patient for the read log (TREAT); it never reads the clock, and answers nothing where the department's line has no Handover (its
+  own line, else the default line of a stays department that uses the pack, as Obs due). The tab reads when the stays change, on the
+  clinic's hints and after its own Sign, never on a timer. Words typed and not signed survive switching tabs, not a reload, and never
+  go to the browser's storage. The demo: Samira's and Abdelmoneim's last handover by Nour Adel ten minutes before this shift began,
+  Abdelmoneim's fall-risk alert, Tahany none. Where W3a differs from plan piece 11 and the picture: no abnormal latest result ("K 3.3")
+  and no order's name ("chest X-ray today") among the facts, only the number of orders out; no "My beds" view; the late doses come with
+  the drug round's merge; the Handover tab comes after Obs due, so the starter setup's line no longer follows the default line's order
+  (a pack's tabs by key) and a ward made from it has its line written. Until the op answers, a row says the last handover is not read
+  yet (never "No handover yet") and To hand over shows no count. *Chosen by Claude, awaiting the owner*: (1) each bed's handover is the base's note, kind handover, in its
+  stay, one set per patient (plan Q11); (2) the facts at handover are copied into the note when it is signed, words, not links; (3) a
+  row's facts are the tile's own words, each active alert and the orders out — should an abnormal latest result and an order's name
+  come, which needs choosing which results matter to a ward?; (4) no "My beds" view: no ward screen gives a nurse her beds yet; (5) a
+  handover belongs to the shift it ends with a 30-minute grace — is 30 minutes right?; (6) words typed and not signed stay while the
+  app is open, never in the browser's storage; (7) the handover is words only: should the incoming nurse acknowledge it ("received
+  by")?; (8) beds with both boxes empty are not signed.
+- **Built, W3b (Ward nursing: going home; 2026-10-09; lane beds-ward2)**: `/home` (under Ward nursing in the / list, for whoever may
+  discharge: the Doctor) opens the **Going home** card under the line, drafted from the stay: To (Home · Another facility · Left
+  against advice · Other; `/home facility`, `/home lama`, `/home other` start on one; `/home died` or `hospice` says that is the base's
+  Discharge → Died or Hospice); Diagnoses this stay (the problem list's names, editable); What was done; Medicines for home — each
+  active medicine on the list as it stood when /home was typed, with Continue · Stop (a reason, optional) · Change (the new dose as /rx
+  reads it; it stays "to decide" until a new dose is read, and typing a different dose undoes the one read), the patient's own
+  (reported) starting on Continue and those prescribed in this stay undecided ("3 to decide" in amber, a fact, never a stop), a course
+  prescribed here showing its days left ("7 days · 5 days left", counted from the list item's start on the clinic's calendar), then
+  new medicines as /rx reads them with the catalog's allergy and duplicate words beside each; Follow-up; For the patient, right-to-left, filled from the ward's Arabic phrases as chips. Enter adds it as a draft ("Going home · Home · 3 kept ·
+  1 stopped · 1 changed"); Sign saves the composer's other drafts first, then Going home through the core's own draft save (k) as one
+  set: the letter (the base's note, kind `discharge`: "Diagnoses: … / What was done: … / Medicines for home: continue … · stop … (reason) ·
+  changed … · new … · not decided: … / Follow-up: … / For the patient: …"; a ward course kept reads "continue … (1 g · BD · oral · 7
+  days; 5 days left)"), each ward medicine kept signed again in this visit for its days left only (a repeat, so the prescription
+  printout lists it and never gives the whole course again; a medicine whose data is not at hand is not signed again, as it would lose
+  its dose), each stop and change (the base's medication, changing the list item), each new one (sent as /rx sends from this ward when `send` is typed: the card resolves the service once), and, while the stay is admitted, the
+  base's `discharged` with the chosen disposition — the bed is free at once. If Discharge is pressed instead, its own set closes the stay
+  first and the letter and the medicines then land in the closed stay. A writer's warning (an allergy, a duplicate) is never confirmed
+  for the doctor: Going home is not signed, says why, and the draft stays. A new department setting, `bedside.home_words` ("Going home ·
+  words for the patient": a small table of Name and Arabic on the department's card, at most 20, each under 400 characters), holds five
+  Egyptian Arabic defaults: Come back if, Medicines, Follow-up, Rest and food, Sugar (the long-acting insulin goes on, the meal dose is
+  the doctor's call, back under 70 or over 300). No printout of the letter yet (Q12). The demo: Abdelmoneim's problem, COPD with acute
+  exacerbation (J44.1), and his own two inhalers (reported) by Dr. Ali Hassan; until the drug round merges, its three ward medicines
+  for him are written in W3's demo block with the round's ids (marked MERGE). Where W3b differs from plan piece 12 and the picture:
+  Going home opens with /home, not from the Discharge button (the chooser is the core's); printing waits. *Chosen by Claude, awaiting
+  the owner*: (9) /home in the stay, not the Discharge button — should the Discharge button offer Going home where the department uses
+  Ward nursing (a small core change)?; (10) for whoever may discharge (the Doctor), a nurse does not see /home; (11) Home, Another
+  facility, Left against advice, Other; a death and hospice stay with the base's Discharge; (12) the letter is plain text in the record,
+  the chart's "Discharge summary" (plan Q12); its printout waits for the print facility and your go; (13) the medicines Continue, Stop
+  or Change, new ones as /rx reads them (a change keeps the medicine's name as written, its ATC code and its route when none is typed);
+  the patient's own start on Continue, the stay's undecided; a ward medicine kept is signed again in this visit for the days left of
+  its course, the patient's own kept are written nowhere but the letter names them; new and changed ones sent as /rx sends from this
+  ward; (14) a warning stops Going home with its words — should the card let the doctor confirm a warning in place?; (15) Sign saves
+  Going home as one set after the composer's other drafts; Discharge first, the letter and the medicines go into the closed stay; (16)
+  the card's medicines are the list when /home was typed; (17) five phrases in Egyptian Arabic, addressed in the masculine, each ward
+  editing its own — should each phrase carry both forms?; (18) follow-up is words; Going home does not book.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -3556,6 +3700,19 @@ types, parked pack calls with per-call Retry, Postgres enums.
 - 2026-10-09: **Dialysis, piece D1c** (§5.6; lane `beds-dialysis`): the pack's client, part 1 (`src/packs/haemodialysis`: days, unit,
   due, board, words, hooks, index): who is due under the board with Start and Missed (the clinics' C5) and the tile's words (C7's
   read); `test:haemodialysis` 7 groups; `test:board`, `test:clinics-core`, `test:bedside` and `test:oncology` unchanged; no core file.
+- 2026-10-09: **Ward nursing W1, obs due** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` (the setting
+  `bedside.response`, the screen `bedside.obs` at the end of `bedside.ward`'s line, the op `bedside.obs_due` with `rcp_response`,
+  `response_rules`, `level` and `obs_here`); `src/packs/bedside/` `response.ts`, `obsdue.ts`, `ObsDueTab.tsx` (the tab; `ObsDue.tsx`
+  would clash with `obsdue.ts` on a case-insensitive disk), `ward2.ts` (the tab, the rules hook, `useWardRead`: the tile line's read,
+  `bedside.board`'s with `bedside.obs_due`'s beside it under `obs`), a few lines in `index.tsx`, `line.ts`, `obs.tsx`; Tahany's first
+  obs in `supabase/demo/bedside.sql`; suites `bedside_ward2` (46: a new stay's clock starts afresh, a clinic that ticks the pack gets
+  no Obs due) and `bedside_ward2_demo` (7), `bedside` (55) and `demo` (84) with one and three checks changed, all green (the lane ran
+  this piece's suites, the demo's and those whose files it touched; the full `db:test` is the lead's, at the lane's end); node
+  `test:ward2` (10 groups), bedside 12, board 27, settings 12, composer 19, chart 16, screens 11, sections 19, banner 13, scores 7,
+  demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2; typecheck clean; lint 0 errors (71 warnings, none in these files);
+  `npm run build` builds; shapes regenerated (`BedsideResponseSetting`), logins unchanged. Reviewed: a child's `/v` gets piece 1's
+  words with no due time; the tab says nothing of a stay's NEWS2 until its read has answered; a time due just before midnight never
+  reads "tomorrow". Browser pass by the lead (`spec/shots/2026-10-09/ward2-w1/`).
 - 2026-10-09: **Dialysis, piece D1d** (§5.6; lane `beds-dialysis`): the pack's client, part 2 (`src/packs/haemodialysis`: week,
   Schedule, PlanCards, hooks' useWeek and usePlan, the screen registered): the Schedule tab (the week by shift, Add a patient, move one
   session, take it off a day, end a slot, undo a move); `test:haemodialysis` 8 groups; no server change; no core file.
@@ -3594,6 +3751,26 @@ types, parked pack calls with per-call Retry, Postgres enums.
   settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 2, bedside 12, obgyn 10,
   clinics-core 11, labour 9; typecheck clean; lint 0 errors; `npm run build` and `npx vite build` build. MEOWS (L2d, L2e) waits for
   the owner's next round.
+- 2026-10-09: **Ward nursing W2, fluid balance** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` gains the
+  setting `bedside.shifts`, the type `bedside.fluid_chart` with `write:bedside.fluid_chart` and its line, and the op `bedside.fluids`;
+  `src/packs/bedside/` `fluids.ts` (/in, /out, /fluids), `balance.ts` (shifts, the fluid day, the table, urine mL/kg/h, the words),
+  `wardread.ts` (the tile's one read merged, keeping its identity), `FluidBalance.tsx` (the section and the note; `Fluids.tsx` would
+  clash with `fluids.ts` on a case-insensitive disk), `ward2.ts` (the three commands, the section, the banner word, the fluids read
+  beside obs due, `withWardWords`) and two lines of `index.tsx`; Samira's and Tahany's charts and measures appended to
+  `supabase/demo/bedside.sql`; suites `bedside_ward2_fluids` (66) and `bedside_ward2_demo` (16) green, with `bedside_ward2`, `bedside`,
+  `demo` (84), `registry` (16), `boundary` (10) and `pack_contract` (35) (the full `db:test` is the lead's); node `test:fluids` (fluids 7 groups, balance 9),
+  ward2 10, bedside 12, board 27, settings 12, composer 19, chart 24 and 16, screens 11, sections 19, banner 13, scores 7, demo 8,
+  setups 11, registries 9, pharmacy 10, lis 19, billing 22 and 2; typecheck clean; lint 0 errors in these files; shapes regenerated
+  (`BedsideFluidChart`, `BedsideShiftsSetting`), logins unchanged. A fluid measure cannot be made private (the base's observation is
+  never private), so the suite pins that refusal. W1's `bedside.obs_here` now tests the Screens line by containment (`@>`), the same
+  answer: `registry`'s data-key scan read its `? 'bedside.obs'` as a data key no shape declares. After review: a bare `/fluids off`
+  stops the chart (it cleared the aim); a second number or litres on `/in`/`/out` asks again (it went into the note); the aim is at most
+  five digits in the shape, the line, the op and the client (a longer one overflowed the op's `::int` for the whole ward); the section,
+  chip, Summary line and banner only on a stay whose department holds Obs due, grouped by that ward's shifts; a method with no row of
+  its own reads as Other; the rate shows two decimals where one would reach the threshold, and amounts keep one decimal; an old weight
+  is dated in the note; the current shift is marked with the word "now" and the accent tint; the 2 000-row read of the record's values
+  is item (19). Browser pass by the lead
+  (`spec/shots/2026-10-09/ward2-w2/`).
 - 2026-10-09: **Dialysis, piece D2c** (§5.6; lane `beds-dialysis`): the pack's client, the session part 2 (`src/packs/haemodialysis`:
   event, drugs, end, banner, EventCard, DrugsCard, EndCard; SessionTab, board's event words, useSession's drugs read, the tile's End
   button and the banner word registered): events as the base's note and given, the unit's drugs as the base's given, End with the
@@ -3610,4 +3787,34 @@ types, parked pack calls with per-call Retry, Postgres enums.
   sections 19, banner 13, settings 12, board 27, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 + 2,
   bedside 12, obgyn 10, clinics-core 11, labour 9, birth 6; typecheck clean; lint 0 errors; `npm run build` and `npx vite build`
   build. The browser pass waits for the lead.
+- 2026-10-09: **Ward nursing W3a, handover** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` gains the screen
+  `bedside.handover` at the end of the starter setup's line, `bedside.handover_here` (the line's own, else the default line of a stays
+  department using the pack, as `obs_here`) and the op `bedside.handover`; `src/packs/bedside/` `handover.ts` (the shift now with its
+  30-minute grace, handed over this shift, the row's facts, the note, the rows), `HandoverTab.tsx` (the tab; `Handover.tsx` would clash
+  with `handover.ts` on a case-insensitive disk), `wardline.ts` (W2's `useWardRead` and `withWardWords` moved out of `ward2.ts`, which
+  re-exports them, and `wardLine`, the tile's one line as a function) and `ward2.ts` (the screen); W3's demo block appended to
+  `supabase/demo/bedside.sql` (Samira's and Abdelmoneim's last handover, his fall-risk alert; the notes' words name only what the
+  record holds before they were signed, at any load time); until the op answers, a row says its last handover is not read yet;
+  suites `bedside_ward2_handover` (31), `bedside_ward2_demo` (23) and `demo` (84), with `bedside_ward2` (46; its two setup checks now
+  say the line holds Obs due, since Handover after Obs due is no longer the default line's order and the setup writes the line),
+  `bedside_ward2_fluids` (66), `bedside` (55), `registry` (16), `boundary` (10) and `pack_contract` (35) green; `db:demo` twice; node
+  `test:handover` 6 groups and the brief's other node runs green; typecheck clean; lint 0 errors; build green; shapes and logins
+  unchanged. `index.tsx` is untouched: its
+  tile line becomes `wardLine` at the merge with the drug round. Browser pass by the lead (`spec/shots/2026-10-09/ward2-w3a/`).
+- 2026-10-09: **Ward nursing W3b, going home** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` gains the
+  setting `bedside.home_words` (five Egyptian Arabic phrases); `src/packs/bedside/` `home.ts` (/home, the card's data drafted from the
+  stay, the line, the letter, the one set through the core's `draftEntries` and `move`, the phrases), `homesave.ts` (the draft's save:
+  the stay read, one set written, a warning never confirmed), `GoingHome.tsx` (the card and the draft's block) and `ward2.ts` (/home,
+  its card, its save, its block); Abdelmoneim's problem and his two reported inhalers in W3's demo block, with the drug round's three
+  ward medicines for him (its ids, marked MERGE). After review: Change stays "to decide" until its new dose is read (never "changed"
+  with nothing written), a ward course kept is signed again for its days left only, a change keeps the medicine's name, ATC code and
+  route, a medicine whose data is not at hand is not signed again, and the card's words keep a PRN medicine's schedule and a dose
+  given in words. Suites `bedside_ward2_home` (20: the going-home set lands with nothing to confirm, a ward medicine kept as a repeat,
+  the letter and a stop land in a stay Discharge closed first, a second discharge is `visit_closed`) and `bedside_ward2_demo` (26);
+  the full `db:test` green: 55 suites, 2 185 checks (`bedside_ward2_handover` 31, `bedside_ward2` 46, `bedside_ward2_fluids` 66,
+  `bedside` 55, `demo` 84, `registry` 16, `boundary` 10, `pack_contract` 35); `db:demo` twice (941 entries); node `test:home` 7 groups,
+  handover 6, ward2 10, fluids 7 and balance 9, bedside 12, board 27, settings 12, composer 19, chart 24 and 16, screens 11, sections
+  19, banner 13, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 and 2, bookings 13; typecheck clean; lint
+  0 errors; build green; shapes regenerated (`BedsideHomeWordsSetting`), logins unchanged. Browser pass by the lead
+  (`spec/shots/2026-10-09/ward2-w3b/`).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.

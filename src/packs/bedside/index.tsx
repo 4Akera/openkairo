@@ -7,12 +7,13 @@
 // and a Give button that opens the round on that stay. 3b: the Treatment sheet in the record panel (Sheet.tsx, from the pack's op), the
 // banner's "1 dose late" (worked out in the client by the server's rule, twin.ts) and the note under /rx (rx.tsx).
 // Its own: the dose type (bedside.dose), its action, the ward's dose times (bedside.round), the round's screen and ops. No table or role.
+// Obs due, the ward's NEWS2 response and the Obs due tab are ward2.ts's (one setting, one screen, one op); no type, table, action or role
+// of its own.
 import { registerWords } from '@core/db/words'
 import { registerScreen } from '@core/screens/registry'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerSection } from '@core/screens/chart/sections'
 import { registerTileButton, registerTileLine } from '@core/screens/ward/tiles'
-import { useBoardRead } from './boardRead'
 import { DOSE, doseBannerWords, sheetChip, sheetSummary, wardTile } from './doses'
 import { NEWS2_FIT, news2Chip, news2Rows, news2Summary, news2Words } from './news2'
 import { Round } from './DrugRound'
@@ -20,6 +21,7 @@ import { News2 } from './Section'
 import { Sheet } from './Sheet'
 import './obs'
 import './rx'
+import { useWardRead, withWardWords } from './ward2'
 
 // the banner's word, only where the department uses the pack: the open stay's latest NEWS2, amber at 5–6, red at 7 or more
 registerBannerWords({ key: 'bedside.news2', types: ['score'], words: news2Words })
@@ -33,8 +35,9 @@ registerSection({ key: 'bedside.sheet', title: 'Treatment sheet', types: ['given
   word: (x) => sheetChip(x), summary: (x) => sheetSummary(x), Body: Sheet })
 // the Drug round tab (declared bedside.round, beside Beds)
 registerScreen('bedside.round', Round)
-// its words on each tile from the board's read (once per board: boardRead.ts): the stay's latest NEWS2, else no obs yet; then its doses
-registerTileLine('bedside', (row, ctx) => wardTile(row, ctx, Date.now()), useBoardRead)
+// its words on each tile from the board's read (once per board: boardRead.ts, with ward2.ts's obs due and fluids beside it): the stay's
+// latest NEWS2, else no obs yet; when its obs are due right after NEWS2; then its doses; the balance last (wardline.ts's wardLine)
+registerTileLine('bedside', (row, ctx) => withWardWords(wardTile(row, ctx, Date.now()), row, ctx, ctx.read, Date.now()), useWardRead)
 // Give on every admitted stay: the Drug round on that stay only
 registerTileButton('bedside', { label: 'Give', show: (row, ctx) => row.kind === 'stay' && row.state === 'admitted' && ctx.can('write:bedside.dose'),
   path: (row) => `/?tab=bedside.round&stay=${row.item}` })

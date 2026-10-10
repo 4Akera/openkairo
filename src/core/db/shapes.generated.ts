@@ -237,6 +237,17 @@ export interface BedsideDose {
   site?: string
   status: 'completed' | 'not-done'
 }
+/** bedside.fluid_chart v1 (bedside) */
+export interface BedsideFluidChart {
+  no_target?: true
+  note?: string
+  status: 'active' | 'stopped'
+  target?: {
+    ucum: 'mL'
+    unit?: 'mL'
+    value: string
+  }
+}
 /** breastfeeding v1 (base) */
 export interface Breastfeeding {
   breastfeeding: boolean
@@ -1242,6 +1253,36 @@ export interface AnaesthesiaStopListSetting {
     what: string
   }[]
 }
+/** setting bedside.home_words (bedside; owner department) */
+export interface BedsideHomeWordsSetting {
+  phrases: {
+    ar: string
+    label: string
+  }[]
+}
+/** setting bedside.response (bedside; owner department) */
+export interface BedsideResponseSetting {
+  high: {
+    every: number
+    tell?: string
+  }
+  low: {
+    every: number
+    tell?: string
+  }
+  medium: {
+    every: number
+    tell?: string
+  }
+  single: {
+    every: number
+    tell?: string
+  }
+  zero: {
+    every: number
+    tell?: string
+  }
+}
 /** setting bedside.round (bedside; owner department) */
 export interface BedsideRoundSetting {
   late_after: number
@@ -1250,6 +1291,10 @@ export interface BedsideRoundSetting {
     at: string
     timing: 'OD' | 'BD' | 'q12h' | 'TDS' | 'q8h' | 'QDS' | 'q6h' | 'q4h'
   }[]
+}
+/** setting bedside.shifts (bedside; owner department) */
+export interface BedsideShiftsSetting {
+  starts: string
 }
 /** setting billing.desk (billing; owner department) */
 export interface BillingDeskSetting {
@@ -1792,6 +1837,7 @@ export interface EntryData {
   'away': Away
   'back_to_waiting': BackToWaiting
   'bedside.dose': BedsideDose
+  'bedside.fluid_chart': BedsideFluidChart
   'breastfeeding': Breastfeeding
   'called': Called
   'casualty.disposition': CasualtyDisposition
@@ -1858,7 +1904,10 @@ export interface EntryData {
 /** each setting's data, by its key */
 export interface SettingData {
   'anaesthesia.stop_list': AnaesthesiaStopListSetting
+  'bedside.home_words': BedsideHomeWordsSetting
+  'bedside.response': BedsideResponseSetting
   'bedside.round': BedsideRoundSetting
+  'bedside.shifts': BedsideShiftsSetting
   'billing.desk': BillingDeskSetting
   'billing.pay_first': BillingPayFirstSetting
   'billing.price': BillingPriceSetting

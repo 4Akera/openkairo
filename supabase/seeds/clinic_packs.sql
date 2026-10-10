@@ -88,3 +88,20 @@ begin
   if not (core.packs_used(demo.base('clinic')) @> array['obgyn', 'bedside']) then return; end if;
   perform demo.tick(demo.id('obgyn', 'labour ward'), 'bedside');
 end $$;
+
+-- the ICU, the CCU, Emergency and the Labour ward tick Ward nursing for its words and its round, not for the ward's due times: each keeps
+-- the line it has by default, the base's screens of its work and its packs' (as read 'me' builds it), without Obs due, which its setup
+-- does not list (Ward nursing's W1: obs_here reads the line, else the default). Written once, where no line is set yet.
+do $$
+declare c uuid := demo.base('clinic'); d core.departments; v jsonb;
+begin
+  for d in select * from core.departments x where x.organization_id = c and x.id in (demo.id('intensive', 'icu'), demo.id('intensive', 'ccu'),
+             demo.id('casualty', 'department'), demo.id('obgyn', 'labour ward')) and core.department_uses(c, x.id, 'bedside')
+             and core.setting_at(c, 'department.screens', x.id) is null loop
+    v := (select coalesce(jsonb_agg(s.key order by s.layer <> 'base', s.key), '[]') from core.screens s
+      where s.layer <> 'core' and s.work = d.work and core.department_uses(c, d.id, s.layer) and s.key <> 'bedside.obs'
+        and not exists (select 1 from core.screens x where x.work = d.work and s.key = any (x.replaces) and core.department_uses(c, d.id, x.layer)));
+    perform demo.as(demo.base('owner'));
+    perform public.write_setting(jsonb_build_object('key', 'department.screens', 'owner_id', d.id, 'data', jsonb_build_object('screens', v, 'opens', v ->> 0)));
+  end loop;
+end $$;
