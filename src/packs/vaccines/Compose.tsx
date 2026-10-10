@@ -75,6 +75,6 @@ export function VaxNote({ items, ctx }: { items: Parsed[]; ctx: Ctx }) {
     {after.next && <div className="rounded-lg border border-line bg-surface px-2.5 py-2"><p className="text-11 font-semibold uppercase tracking-[0.08em] text-faint">Next, worked out</p>
       <span className="text-fg">{after.next.row.age} · {shortDate(after.next.dueOn)} · {nextRows.map((x) => x.row.name).join(', ')}</span>
       {after.next.row.interval_days ? <span className="text-12 text-faint"> · {after.next.row.name} not before {shortDate(addDays(today, after.next.row.interval_days))} ({Math.round(after.next.row.interval_days / 7)} weeks after the last)</span> : null}
-      {booksHere(ctx) && bookFor(today, after.next.dueOn) && <span className="block text-12 text-muted">Book it after ↵: <code className="rounded bg-sunken px-1 font-mono text-fg">{bookFor(today, after.next.dueOn)}</code></span>}</div>}
+      {booksHere(ctx) && bookFor(today, after.next.dueOn) && <span className="block text-12 text-muted">Book it after ↵: <code className="rounded-sm bg-sunken px-1 font-mono text-fg">{bookFor(today, after.next.dueOn)}</code></span>}</div>}
   </div>
 }

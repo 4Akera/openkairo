@@ -4,7 +4,7 @@
 // each tile says its stay's latest NEWS2, read once per board through the pack's own op (C1, by the tile line's read), or that a stay has
 // no obs yet. Its drug round (piece 3): the Drug round tab (DrugRound.tsx: Due now, Late, As needed, Given this round), each dose the base's
 // given as Ward nursing's own dose naming the time it is for; on each tile "1 dose late" and "times not set" from the same board read,
-// and a Give button that opens the round on that stay. 3b: the Treatment sheet in the record panel (Sheet.tsx, from the pack's op), the
+// and Give (the round on that stay) and Obs (the stay's chart with /v) on each tile (buttons.ts). 3b: the Treatment sheet in the record panel (Sheet.tsx, from the pack's op), the
 // banner's "1 dose late" (worked out in the client by the server's rule, twin.ts) and the note under /rx (rx.tsx).
 // Its own: the dose type (bedside.dose), its action, the ward's dose times (bedside.round), the round's screen and ops. No table or role.
 // Obs due, the ward's NEWS2 response and the Obs due tab are ward2.ts's (one setting, one screen, one op); no type, table, action or role
@@ -22,6 +22,7 @@ import { Sheet } from './Sheet'
 import './obs'
 import './rx'
 import { useWardRead, withWardWords } from './ward2'
+import { giveButton, obsButton } from './buttons'
 
 // the banner's word, only where the department uses the pack: the open stay's latest NEWS2, amber at 5–6, red at 7 or more
 registerBannerWords({ key: 'bedside.news2', types: ['score'], words: news2Words })
@@ -38,9 +39,9 @@ registerScreen('bedside.round', Round)
 // its words on each tile from the board's read (once per board: boardRead.ts, with ward2.ts's obs due and fluids beside it): the stay's
 // latest NEWS2, else no obs yet; when its obs are due right after NEWS2; then its doses; the balance last (wardline.ts's wardLine)
 registerTileLine('bedside', (row, ctx) => withWardWords(wardTile(row, ctx, Date.now()), row, ctx, ctx.read, Date.now()), useWardRead)
-// Give on every admitted stay: the Drug round on that stay only
-registerTileButton('bedside', { label: 'Give', show: (row, ctx) => row.kind === 'stay' && row.state === 'admitted' && ctx.can('write:bedside.dose'),
-  path: (row) => `/?tab=bedside.round&stay=${row.item}` })
+// Give and Obs on every admitted stay: the Drug round on that stay only; the stay's chart with /v on the line (buttons.ts)
+registerTileButton('bedside', giveButton)
+registerTileButton('bedside', obsButton)
 // the refusals' words: the ward's times, a dose, the sheet's day and stay
 registerWords({ wrong_count: 'That timing takes another number of times a day', not_every: 'Every n hours takes times n hours apart',
   not_a_medicine: 'That medicine is not on this patient\'s list', reason_on_given: 'A dose given has no reason for not giving',

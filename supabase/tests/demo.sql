@@ -27,11 +27,11 @@ create function pg_temp.journey_in_order() returns text language sql as $$
   select t.ok(bool_and(at is not null and (before is null or at > before)) and max(at) <= demo.now(),
     'the journey in order, each step after the last: ' || string_agg(step || ' ' || coalesce(to_char(at at time zone 'Africa/Cairo', 'DD HH24:MI:SS'), 'missing'), ' → ' order by n)) from s
 $$;
--- today's visits, the two base admissions this morning, Ward nursing's Tahany (admitted with no bed yet) and Emergency's five arrivals
--- are today's, however early
+-- today's visits, the two base admissions this morning, Ward nursing's Tahany (admitted with no bed yet), Emergency's five arrivals and
+-- Marwa's Medical Ward stay passed to Recovery (2026-10-10) are today's, however early
 -- it loads; the morning's done count as done today
 create function pg_temp.day_is_today() returns setof text language sql as $$
-  select t.ok(count(*) = 69 and bool_and(day = (demo.now() at time zone 'Africa/Cairo')::date), count(*) || ' visits and stays of the day, each on today''s date')
+  select t.ok(count(*) = 70 and bool_and(day = (demo.now() at time zone 'Africa/Cairo')::date), count(*) || ' visits and stays of the day, each on today''s date')
     from base.presence where organization_id = demo.base('clinic') and checked_in_at > demo.now() - interval '1 day'
      and department_id is distinct from demo.id('obgyn', 'labour ward')
      and patient_id not in (select id from core.patients where full_name ilike 'walk in%')   -- the app's own (the bed check below)
@@ -304,6 +304,20 @@ select t.ok(not exists (select 1 from base.presence p where p.organization_id = 
 \echo '── Critical care''s own patients (§5.6): the ICU''s hourly chart'
 select t.ok(core.setting_at(demo.base('clinic'), 'department.packs', demo.id('intensive', 'icu')) -> 'packs' = '["intensive", "bedside"]'::jsonb,
   'the ICU uses Critical care, then Ward nursing (the clinic''s choice)');
+\echo '── the Children''s ward, the day unit and Recovery use Ward nursing too (§5.8 Q27, Q40, Q48; 2026-10-10)'
+select t.ok(core.setting_at(demo.base('clinic'), 'department.packs', demo.id('paeds', 'ward')) -> 'packs' = '["bedside", "paeds"]'::jsonb
+  and core.setting_at(demo.base('clinic'), 'department.screens', demo.id('paeds', 'ward')) -> 'screens' = '["base.beds", "bedside.round", "bedside.handover"]'::jsonb,
+  'the Children''s ward: Ward nursing, then paediatrics; Beds · Drug round · Handover');
+select t.ok(core.setting_at(demo.base('clinic'), 'department.packs', demo.id('oncology', 'day_unit')) -> 'packs' = '["oncology", "bedside"]'::jsonb
+  and core.setting_at(demo.base('clinic'), 'department.screens', demo.id('oncology', 'day_unit')) -> 'screens' = '["base.beds", "bedside.round", "bedside.handover"]'::jsonb,
+  'the Chemotherapy day unit: oncology, then Ward nursing; Chairs · Drug round · Handover');
+select t.ok(core.setting_at(demo.base('clinic'), 'department.packs', demo.id('anaesthesia', 'recovery')) -> 'packs' = '["anaesthesia", "bedside"]'::jsonb
+  and core.setting_at(demo.base('clinic'), 'department.screens', demo.id('anaesthesia', 'recovery')) -> 'screens' = '["base.beds"]'::jsonb,
+  'Recovery: anaesthesia, then Ward nursing; its line Bays as drawn');
+select t.ok(count(*) = 1 and bool_and(w.department_id = demo.base('ward') and w.state = 'discharged' and w.place_id is null),
+  'Marwa came up to Recovery from the Medical Ward, her stay passed on (beds Q3): what /back presets')
+  from base.presence r join base.presence w on w.organization_id = r.organization_id and w.item = r.came_from
+ where r.organization_id = demo.base('clinic') and r.patient_id = demo.id('anaesthesia', 'patient:marwa') and r.department_id = demo.id('anaesthesia', 'recovery') and r.state = 'admitted';
 select t.ok(count(*) = 2 and count(distinct place_id) = 2 and bool_and(place_id is not null) and bool_and(checked_in_at between now() - interval '3 days' and now()),
   count(*) || ' stays admitted in the ICU, in two of its beds, in the last three days')
   from base.presence where organization_id = demo.base('clinic') and kind = 'stay' and state = 'admitted' and department_id = demo.id('intensive', 'icu');

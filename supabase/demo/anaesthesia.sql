@@ -1,13 +1,13 @@
 -- The anaesthesia pack's day (spec/openCare.md §5.1 rule 9, §5.8; the pictures #anaes-preop, #theatre-recovery). Its own patients: Hamed
 -- Sakr (70; a left inguinal hernia, its operation asked 11 weeks ago in the clinic's day; Hb 9.8 last week; in consult in the Pre-op clinic with Dr. Sherine now, the
--- assessment typed live), and in Recovery Marwa Shalaby (33; a laparoscopic ovarian cystectomy; in Bay 2 for 5 minutes, Aldrete 6,
--- oxygen on) and Yara Abdelsalam (7, 23 kg; K-wires to the left elbow; in Bay 3 for 45 minutes, Aldrete 7 → 9, pain 4). Times relative
+-- assessment typed live), and in Recovery Marwa Shalaby (33; a laparoscopic ovarian cystectomy; up from the Medical Ward, her stay
+-- passed to Recovery (beds Q3); in Bay 2 for 5 minutes, Aldrete 6, oxygen on) and Yara Abdelsalam (7, 23 kg; K-wires to the left elbow; in Bay 3 for 45 minutes, Aldrete 7 → 9, pain 4). Times relative
 -- to the load; ids in the pack's namespace; a reload erases these patients first.
 select demo.layer('anaesthesia');
 
 do $$
 declare pre uuid := demo.id('anaesthesia', 'preop'); rec uuid := demo.id('anaesthesia', 'recovery'); dr uuid := demo.id('anaesthesia', 'anaesthetist');
-  nurse uuid := demo.id('anaesthesia', 'nurse'); day int := 60 * 24; v uuid; s uuid; l uuid := gen_random_uuid();
+  nurse uuid := demo.id('anaesthesia', 'nurse'); day int := 60 * 24; v uuid; s uuid; w uuid; l uuid := gen_random_uuid();
 begin
   -- ── Hamed: pre-op today ──
   perform demo.patient(demo.id('anaesthesia', 'patient:hamed'), array['Hamed'], 'Sakr', 'male', demo.born(70, 50), '+201228840631');
@@ -24,11 +24,17 @@ begin
   -- ── Recovery: Marwa in Bay 2 for 5 minutes, Aldrete 6 ──
   perform demo.patient(demo.id('anaesthesia', 'patient:marwa'), array['Marwa'], 'Shalaby', 'female', demo.born(33, 210), '+201117745129');
   perform demo.w(dr, jsonb_build_array(demo.e('problem', rec, null, demo.ago(30 * day), demo.problem('N83.2', 'Right ovarian cyst'))));
-  s := gen_random_uuid();
-  perform demo.w(nurse, jsonb_build_array(demo.e('admitted', rec, s, demo.ago(5), jsonb_build_object('department_id', rec, 'admit_source', 'other',
-    'place_id', core.setup_id(rec, 'place', 'bay_2'), 'reason', 'laparoscopic ovarian cystectomy, right'), s)));
+  -- she came up from the Medical Ward (no bed free there: on its no-bed list), its stay passed to Recovery in one Done (beds Q3), so
+  -- /back's card presets the ward she goes back to (2026-10-10)
+  w := gen_random_uuid(); s := gen_random_uuid();
+  perform demo.w(demo.base('doctor'), jsonb_build_array(demo.e('admitted', demo.base('ward'), w, demo.ago(300), jsonb_build_object('admit_source', 'outp',
+    'reason', 'laparoscopic ovarian cystectomy, right'), w)));
+  perform demo.w(demo.base('doctor'), jsonb_build_array(demo.move('discharged', demo.base('ward'), w, demo.ago(5), w, '{"disposition":"oth","note":"to Recovery"}'),
+    demo.e('admitted', demo.base('ward'), s, demo.ago(5), jsonb_build_object('department_id', rec, 'admit_source', 'other',
+      'place_id', core.setup_id(rec, 'place', 'bay_2'), 'reason', 'laparoscopic ovarian cystectomy, right'), s, w, 'about')));
   perform demo.w(nurse, jsonb_build_array(
-    demo.e('vitals', rec, s, demo.ago(4), demo.vitals(112, 68, 92, 36.4, 95, 14) || jsonb_build_object('pain', demo.q(3, '/10', '{score}'), 'note', 'oxygen 4 L/min by mask; drowsy')),
+    demo.e('vitals', rec, s, demo.ago(4), demo.vitals(112, 68, 92, 36.4, 95, 14) || jsonb_build_object('pain', demo.q(3, '/10', '{score}'),
+      'oxygen', jsonb_build_object('on', 'oxygen', 'device', 'simple_mask', 'flow', demo.q(4, 'L/min', 'L/min')), 'note', 'drowsy')),
     demo.e('score', rec, s, demo.ago(4), demo.score('anaesthesia.aldrete', '{"activity":"1","breathing":"2","circulation":"2","conscious":"1","spo2":"0"}'))));
 
   -- ── Recovery: Yara in Bay 3 for 45 minutes, Aldrete 7 → 9, pain 4 ──

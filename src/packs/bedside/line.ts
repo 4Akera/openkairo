@@ -6,6 +6,9 @@
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
 import { current, draft, keyOf, offered, tableOf, type Inputs, type ScoreParams } from '@core/screens/visit/score'
 import { ruleNote, type Rules } from './response'
+import { fits, type Who } from '@core/screens/chart/sections'
+import { ymd } from '@core/ui/time'
+import { NEWS2_FIT } from './news2'
 export const NEWS2 = 'bedside.news2'
 export const NEWS2_S2 = 'bedside.news2_s2'
 export type Oxygen = 'air' | 'oxygen'
@@ -31,9 +34,12 @@ const isNews2 = (p: Parsed) => p.function === 'score' && (p.params.score === NEW
 
 /** the ward's /v (the owner's C3): NEWS2 from the vitals draft — rr, spo2 (or spo2_s2 by scale2Choice), oxygen, sbp, pulse,
  *  consciousness, temp, each as text; s2 said on the line, or kept from the NEWS2 before it, is scale 2 */
-export function news2From(drafts: Parsed[], ctx: Pick<Ctx, 'scores' | 'packs' | 'can'>, more: { said: string[]; prev: Parsed[] }): Parsed[] {
+export function news2From(drafts: Parsed[], ctx: Pick<Ctx, 'scores' | 'packs' | 'can'> & Partial<Pick<Ctx, 'record' | 'now'>>, more: { said: string[]; prev: Parsed[] }): Parsed[] {
   const v = drafts.find((x) => x.function === 'vitals')?.params
   if (!v || !SIGNS.every((k) => given(v[k]))) return []
+  // NEWS2 is for 16 and over: a child's /v (the children's ward ticks the pack, 2026-10-10) writes the vitals alone; an age not known fits
+  const p = ctx.record?.patient
+  if (p && !fits(NEWS2_FIT, { sex: p.sex as Who['sex'], birth: p.born_on ?? null, today: ymd((ctx.now ?? new Date()).toISOString()) })) return []
   if (ctx.can && !ctx.can('write:score')) return []
   const prev = more.prev.find(isNews2); const was = prev?.params as unknown as ScoreParams | undefined
   const s2 = more.said.some((w) => w === 's2' || w === 'scale2') || was?.score === NEWS2_S2

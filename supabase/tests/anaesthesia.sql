@@ -15,7 +15,9 @@ select public.write_setting(jsonb_build_object('key', 'organization.packs_used',
 select public.setup(jsonb_build_object('setup', 'anaesthesia.preop_clinic', 'department_id', :'pre', 'name', 'Pre-op clinic', 'apply', true)) is not null as preop;
 select public.setup(jsonb_build_object('setup', 'anaesthesia.recovery', 'department_id', :'rec', 'name', 'Recovery', 'apply', true)) is not null as recovery;
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000e5', 'name', 'Dr Sherine', 'login_id', :'an', 'holdings', jsonb_build_array(
-  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb01', 'department_id', :'pre'), jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb01', 'department_id', :'rec')))) ->> 'id' as anaesthetist;
+  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb01', 'department_id', :'pre'), jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb01', 'department_id', :'rec'),
+  -- a doctor on the Ward too, for /back's pass from the ward and back
+  jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000c002', 'department_id', '00000000-0000-0000-0000-0000000000d6')))) ->> 'id' as anaesthetist;
 select public.save('user', jsonb_build_object('id', '00000000-0000-0000-0000-0000000000e6', 'name', 'Rehab', 'login_id', :'rn', 'holdings', jsonb_build_array(
   jsonb_build_object('role_id', '00000000-0000-0000-0000-00000000eb02', 'department_id', :'rec')))) ->> 'id' as nurse;
 select core.setup_id(:'rec', 'place', 'bay_1') as bay1 \gset
@@ -48,6 +50,31 @@ select t.ok((select string_agg(r ->> 'kind' || ' ' || (r ->> 'value')::numeric::
   'recovery''s table: Aldrete 8, pain 2');
 select t.landed(t.w(t.move('discharged', '00000000-0000-0000-0000-00000000b611', :'rec', '{"disposition":"home"}')), 'home from recovery (a day case)');
 
+\echo '── /back (2026-10-10): from the ward to Recovery and back as the stay passing on (beds Q3), the set /back''s card signs'
+select t.as(:'an');
+select t.landed(t.w(t.e('admitted', :'pt', '00000000-0000-0000-0000-0000000000d6', '{"admit_source":"other","place_id":"00000000-0000-0000-0000-000000000001","reason":"lap chole"}',
+  '00000000-0000-0000-0000-00000000b621', '00000000-0000-0000-0000-00000000b621')), 'on the Ward in Bed 1');
+select t.landed(t.w(jsonb_build_array(
+  t.e('discharged', :'pt', '00000000-0000-0000-0000-0000000000d6', '{"disposition":"oth","note":"to Recovery"}', gen_random_uuid(), '00000000-0000-0000-0000-00000000b621',
+      t.latest('00000000-0000-0000-0000-00000000b621'), 'changes'),
+  t.e('admitted', :'pt', '00000000-0000-0000-0000-0000000000d6', jsonb_build_object('department_id', :'rec', 'place_id', :'bay1', 'admit_source', 'other', 'reason', 'lap chole'),
+      '00000000-0000-0000-0000-00000000b622', '00000000-0000-0000-0000-00000000b622', '00000000-0000-0000-0000-00000000b621', 'about'))), 'the ward''s stay passes to Recovery, Bay 1');
+select t.as(:'rn');
+select t.ok((select r ->> 'came_from' from t.rows('base.presence', :'rec', jsonb_build_object('item', '00000000-0000-0000-0000-00000000b622')) r) = '00000000-0000-0000-0000-00000000b621',
+  'Recovery''s stay came from the ward''s (what /back presets)');
+select t.ok((select r ->> 'department_id' || ' ' || (r ->> 'place_id') from t.rows('base.presence', :'rec', jsonb_build_object('item', '00000000-0000-0000-0000-00000000b621')) r)
+  = '00000000-0000-0000-0000-0000000000d6 00000000-0000-0000-0000-000000000001', 'the stay it came from: the Ward, Bed 1, read from Recovery');
+select t.landed(t.w(jsonb_build_array(
+  t.e('discharged', :'pt', :'rec', '{"disposition":"oth","note":"to Ward"}', gen_random_uuid(), '00000000-0000-0000-0000-00000000b622', t.latest('00000000-0000-0000-0000-00000000b622'), 'changes'),
+  t.e('admitted', :'pt', :'rec', '{"department_id":"00000000-0000-0000-0000-0000000000d6","place_id":"00000000-0000-0000-0000-000000000001","admit_source":"other","reason":"lap chole"}',
+      '00000000-0000-0000-0000-00000000b623', '00000000-0000-0000-0000-00000000b623', '00000000-0000-0000-0000-00000000b622', 'about'))),
+  'Recovery''s nurse: back to the Ward, Bed 1, in one Done');
+select t.ok((select string_agg(r ->> 'state', ',') from t.rows('base.presence', :'rec', jsonb_build_object('item', '00000000-0000-0000-0000-00000000b622')) r) = 'discharged'
+  and (select r ->> 'state' || ' ' || (r ->> 'department_id') || ' ' || (r ->> 'came_from') from t.rows('base.presence', :'rec', jsonb_build_object('item', '00000000-0000-0000-0000-00000000b623')) r)
+    = 'admitted 00000000-0000-0000-0000-0000000000d6 00000000-0000-0000-0000-00000000b622', 'Bay 1 frees; the ward''s stay goes on from Recovery''s');
+select t.as(:'an');
+select t.landed(t.w(t.move('discharged', '00000000-0000-0000-0000-00000000b623', '00000000-0000-0000-0000-0000000000d6', '{"disposition":"home"}')), 'home from the ward');
+
 \echo '── the record: a column (the base''s vitals extended), a dose given, the record about the operation'
 select t.as(:'an');
 select t.landed(t.w(jsonb_build_array(
@@ -56,6 +83,15 @@ select t.landed(t.w(jsonb_build_array(
   t.e('anaesthesia.record', :'pt', :'rec', '{"operation":"Laparoscopic cholecystectomy","technique":"general, tube","times":{"start":"08:38","knife":"08:55","end":"09:40"},"events":[{"at":"08:41","text":"induction"}]}'))),
   'one set: a column, a dose, the record');
 select t.refused(t.w(t.e('anaesthesia.column', :'pt', :'rec', '{"anaesthesia":{"etco2":"high"}}')), 'bad_shape', 'EtCO₂ a number');
+-- FiO₂ on the base's key since the beds' oxygen rows (Q5; chosen by Claude at the owner's request, 2026-10-10): a column's oxygen reaches
+-- base.values as oxygen.fio2, where the chart and the ward read every other FiO₂
+select t.landed(t.w(t.e('anaesthesia.column', :'pt', :'rec', '{"hr":{"value":"80","unit":"bpm","ucum":"/min"},"oxygen":{"on":"oxygen","fio2":{"value":"50","unit":"%","ucum":"%"}},"anaesthesia":{"etco2":36}}')),
+  'a column with FiO₂ 50 % as the base''s oxygen');
+reset role;
+select core.drain() as drained;
+select t.ok(exists (select 1 from base.values v where v.patient_id = :'pt' and v.key = 'oxygen.fio2' and v.value::numeric = 50), 'its FiO₂ is the base''s oxygen.fio2 value');
+set role authenticated;
+select t.as(:'an');
 
 \echo '── its people; off, no new pre-op'
 reset role;

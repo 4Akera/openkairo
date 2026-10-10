@@ -11,8 +11,9 @@ import { doseLine, doseMg, mgPerMl, ruleFor, type DoseRule } from '../src/packs/
 import { ageMonths, devLine, lateOf, listFor, newCheck, newbornOf, summaryOf, withSummary, type Milestone } from '../src/packs/paeds/develop'
 import { lmsAt, zOf, type Lms } from '../src/packs/paeds/lms'
 import { rxLine, vLine } from '../src/packs/paeds/lines'
+import { wardLine, weightsOf } from '../src/packs/paeds/ward'
 import { cardLinesOf, cardLineDefs, registerCardLine } from '../src/core/screens/visit/lines'
-import type { ServerEntry } from '../src/core/db/types'
+import type { PresenceRow, ServerEntry } from '../src/core/db/types'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -63,6 +64,17 @@ test('Holliday–Segar and the board\'s line: the picture\'s five children', () 
   assert.deepEqual(weightAge(12.4, ago(1), now), { text: '12.4 kg (1 d)', old: false }); assert.deepEqual(weightAge(20, ago(0), now), { text: '20.0 kg today', old: false })
   assert.deepEqual(lineOf(16, ago(4), now), { words: [{ text: '16.0 kg, 4 d ago', tone: 'warn' }, 'maint. 54 mL/h'] }, 'older than 3 days: amber')
   assert.deepEqual(lineOf(6.8, ago(2), now), { words: ['6.8 kg (2 d)', 'maint. 28 mL/h'] })
+})
+test('the board\'s line reads the weights once per board (C1 through the tile read, C7): the latest weighed row, nothing while it reads', () => {
+  const g = (patient_id: string, at: string, weight: number | null): GrowthRow => ({ item: `${patient_id}${at}`, patient_id, at, age_days: 400, sex: 'male', weight, length: null, head: null,
+    lying: false, z: {}, outside: [], version: '', source_entries: [] })
+  const read = weightsOf([g('ziad', ago(3), 12.0), g('ziad', ago(1), 12.4), g('ziad', ago(0.5), null), g('adam', ago(2), 6.8)], ['ziad', 'adam', 'never'])
+  assert.equal(read.get('ziad')?.weight, 12.4, 'the latest row with a weight; a length alone does not count'); assert.equal(read.get('never'), null)
+  const row = (patient_id: string) => ({ patient_id } as PresenceRow)
+  assert.deepEqual(wardLine(row('ziad'), { read }, now), { words: ['12.4 kg (1 d)', 'maint. 47 mL/h'] })
+  assert.deepEqual(wardLine(row('adam'), { read }, now), { words: ['6.8 kg (2 d)', 'maint. 28 mL/h'] })
+  assert.equal(wardLine(row('never'), { read }, now), null, 'a child never weighed: nothing')
+  assert.equal(wardLine(row('ziad'), {}, now), null, 'while it reads: nothing')
 })
 const RULES: DoseRule[] = [{ drug: 'Amoxicillin', route: 'oral', per: 'day', from: 40, to: 90, times_from: 2, times_to: 3, most: 1000 },
   { drug: 'Amoxicillin + clavulanic acid', route: 'oral', per: 'day', from: 40, to: 90, times_from: 2, times_to: 3, most: 875 },

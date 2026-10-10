@@ -5,7 +5,8 @@
 -- doors as the owner; run again, it adds only what is missing. Skipped while either pack is off. Emergency uses Ward nursing too, after
 -- its own pack, so Emergency's words lead each tile's line and its two buttons are the tile's (skipped while either is off). The ICU
 -- and the CCU use Ward nursing too, after Critical care in their pack order. The Labour ward uses Ward nursing too, after ObGyn in its
--- pack order. Its day is supabase/demo/clinic_packs.sql.
+-- pack order. The Children's ward (before paediatrics), the Chemotherapy day unit and Recovery use it too. Its day is
+-- supabase/demo/clinic_packs.sql.
 
 select demo.layer('clinic_packs');
 
@@ -112,6 +113,33 @@ do $$
 begin
   if not (core.packs_used(demo.base('clinic')) @> array['obgyn', 'bedside']) then return; end if;
   perform demo.tick(demo.id('obgyn', 'labour ward'), 'bedside');
+end $$;
+
+-- the Children's ward, the Chemotherapy day unit and Recovery use Ward nursing too (§5.8 Q27, Q40, Q48 and their pictures #paeds-ward,
+-- #onc-unit, #theatre-recovery; chosen by Claude at the owner's request, 2026-10-10, as drawn). The Children's ward ticks it before
+-- paediatrics (its words lead each tile, then the weight; Give and Obs are its buttons) and its line is Beds · Drug round · Handover; the
+-- day unit after oncology (the cycle's words lead; Give and Obs are Ward nursing's, oncology brings none), Chairs · Drug round · Handover;
+-- Recovery after anaesthesia (Aldrete and Record keep the tile's two buttons; doses and obs in the bay's stay), its line Bays as drawn.
+-- None lists Obs due (NEWS2's due times are an adult ward's). Skipped while a pack is off.
+do $$
+declare c uuid := demo.base('clinic'); w uuid := demo.id('paeds', 'ward'); v jsonb;
+begin
+  if core.packs_used(c) @> array['paeds', 'bedside'] then
+    v := coalesce(core.setting_at(c, 'department.packs', w) -> 'packs', '[]');
+    if not v ? 'bedside' then
+      perform demo.as(demo.base('owner'));
+      perform public.write_setting(jsonb_build_object('key', 'department.packs', 'owner_id', w, 'data',
+        coalesce(core.setting_at(c, 'department.packs', w), '{}') || jsonb_build_object('packs', '["bedside"]'::jsonb || v)));
+    end if;
+    perform demo.screen(w, 'bedside.round');
+    perform demo.screen(w, 'bedside.handover');
+  end if;
+  if core.packs_used(c) @> array['oncology', 'bedside'] then
+    perform demo.tick(demo.id('oncology', 'day_unit'), 'bedside');
+    perform demo.screen(demo.id('oncology', 'day_unit'), 'bedside.round');
+    perform demo.screen(demo.id('oncology', 'day_unit'), 'bedside.handover');
+  end if;
+  if core.packs_used(c) @> array['anaesthesia', 'bedside'] then perform demo.tick(demo.id('anaesthesia', 'recovery'), 'bedside'); end if;
 end $$;
 
 -- the ICU, the CCU, Emergency and the Labour ward tick Ward nursing for its words and its round, not for the ward's due times: each keeps

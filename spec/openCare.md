@@ -2281,7 +2281,8 @@ numbered as on its picture.
   setting `bedside.obs_score` (NEWS2 is the pack's only obs score; it comes back when a second is declared); no derived table fed by a
   listener (an op reads on demand: nothing to keep in step, the same answer, the server still decides the level); no banner word (the
   banner's words come from the record, which lacks the ward's rule); no inline obs card in the tab (a row opens the chart, where `/v`
-  writes the set); no tile button Obs yet (piece 3's Give is one of the two a tile allows). The tile's words come from the board's
+  writes the set); no tile button Obs yet (piece 3's Give is one of the two a tile allows; Obs built 2026-10-10, chosen by Claude at the owner's
+  request: the stay's chart with `/v` on the line, `buttons.ts`, for whoever may write vitals). The tile's words come from the board's
   one read through the core's tile read (C7): `bedside.board`'s answer with `bedside.obs_due`'s beside it, read again when the stays
   change and on the clinic's hints, never on a timer. *Chosen by Claude, awaiting the owner*: (1) NEWS2 1–4 defaults to 4 hours, the
   shorter end of RCP's 4–6; 7 or more to a 30-minute clock where RCP says continuous monitoring; each ward can change both. (2) The
@@ -2632,7 +2633,6 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   now or the next visit worked out (`src/packs/vaccines/printout.tsx`; `npm run test:print`). *Chosen by Claude at the owner's request:*
   the core's A5 sheet (the picture says A6, a paper the core does not have — asked below); the button in the chart's section, not on the
   room's screen as drawn; the vaccines' Arabic names are the pack's own words.
-- *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chroniccare`, migration 24, role block e1 unused; pictures #chronic-visit,
   *Built 2026-10-10 (the loose ends; chosen by Claude at the owner's request):* the room's word on the queue of every department that
   ticks the pack ("9-month vaccines due", "overdue 3 wk"), through bookings' approved core change (l) of §5.7 — the doses of the queue's
   patients (`vaccines.doses`) and who they are (the queue's presence rows, for the birth date of a child with no dose yet) read once a
@@ -2640,6 +2640,7 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   the booking is another pack's, so /vax's "Next, worked out" says "Book it after ↵: /book 21w" (to the next due day) only where /book is
   offered to the reader in that department (`book.ts`); the demo's Vaccination room ticks bookings with a Vaccines session by time
   (`seeds/clinic_packs.sql`).
+- *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chroniccare`, migration 24, role block e1 unused; pictures #chronic-visit,
   #chronic-list): the clinic's conditions, targets and checks as one setting `chroniccare.conditions` (its declared default the drawn table: diabetes,
   hypertension, CKD, heart failure, asthma, COPD; a condition's codes are the register, ICD-10 by its start; a target a measure, a sign
   and a value — a pressure's two; a check its codes and every how many months, sooner while off target; the list's window, 18 months).
@@ -2746,10 +2747,14 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   since a card cannot add drafts; the demo sample stops at 2 years, so Jana (3 years 2 months)
   shows her weight and length "beyond the table" rather than the picture's z −0.1; /dev's chips go into the check's plan, since a card
   cannot add drafts of its own (the order is typed on the line; a core question); the hearing test is a procedure, the other newborn
-  checks observations; PEWS on the tile is ward nursing's word (the picture), so it shows there once the ward ticks ward nursing — the
-  starter setup ticks only paeds (a setup may tick only its own pack); the tile line reads the weights once per board from the
-  pack's table through a small store, because the board hands a line only its row (beds' approved "a pack reads its data once per
-  board" replaces it at integration).
+  checks observations; PEWS on the tile is ward nursing's word (the picture), but Ward nursing's obs score is NEWS2 alone, for 16 and over (its
+  `bedside.obs_score` was deferred, §5.6 W1), so no tile says PEWS yet: a question for the owner (Ward nursing reading the clinic's
+  children's score, Q27). *Built at integration (2026-10-10, chosen by Claude at the owner's request):* the demo's Children's ward ticks
+  Ward nursing before paediatrics, as drawn (the clinic's choice in `seeds/clinic_packs.sql`: a setup may tick only its own pack), its
+  line Beds · Drug round · Handover, and each tile's buttons Give and Obs are Ward nursing's; Ward nursing's `/v` drafts NEWS2 only for
+  16 and over (its own rule, now kept by the composer too: a child's `/v` writes the vitals alone, no adult values on a child); the tile line reads the weights once per
+  board through the core's tile read (beds' C1 by C7: `wardRead.ts` reads `paeds.growth` for the board's children, again when the
+  stays change and on the clinic's hints, never on a timer), in place of the small store.
 - *Built 2026-10-08 (lane L2), ObGyn's clinic part* (`obgyn`, migration 27, role block d3; the pack created by this lane, agreed with
   the beds lane, which adds the labour ward's part to the same pack later — its types, MEOWS, Apgar and setup — with role ids d310–d31f
   kept for it; the bare pack is tagged `obgyn-pack-ready`): its types, each on the base's observation, `obgyn.anc` (the weeks and days,
@@ -2891,9 +2896,15 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (in consult for AC 3), Samir Tolba (FOLFOX 5, in Chair 2), Nesma Sabry (paclitaxel week 3 signed for today, not in a chair). Tests:
   `supabase/tests/oncology.sql`, `npm run test:oncology`. Since C6 (2026-10-09) `/cancer` on a recorded cancer changes its stage,
   intent or side ("IIIA (was IIB)", the next version of the same item); its site, plan and regimen are corrected on its entry. Since C7
-  the chairs' line reads today's cycles through its own read. *Not yet, and why:* the tile's two buttons (Give, Obs) and the cycle's ending at the drug round are
-  ward nursing's (`bedside`, beds lane), not in this base: the cycle is ended by the unit's note until then; the composer reads no
-  setting, so `/chemo` takes the regimens the chart last read (the Cancer section's).
+  the chairs' line reads today's cycles through its own read. *Built at integration (2026-10-10, chosen by Claude at the owner's request; Q40 drawn):* the
+  demo's day unit ticks Ward nursing after oncology (`seeds/clinic_packs.sql`), its line Chairs · Drug round · Handover; each chair's
+  two buttons are Ward nursing's Give (the Drug round on that stay) and Obs (the stay's chart with `/v` on the line; Obs added to Ward
+  nursing for every ward that ticks it, as the ward's picture draws it). *Not yet, and why:* the cycle's ending at the drug round:
+  the cycle's drugs are prescribed in the clinic and sent to the pharmacy, so the day unit's round lists them as "not prescribed in this
+  stay" (never timed), and a dose given cannot end the cycle's order, since Ward nursing may not name oncology and no door carries a
+  dose to the order its medicine was written for (a question for the owner: the cycle's drugs `about` the cycle, C6, and a base rule
+  that the last dose of an order's medicines ends it; or the unit's own End). The cycle is ended by the unit's note until then; the
+  composer reads no setting, so `/chemo` takes the regimens the chart last read (the Cancer section's).
 - *Built 2026-10-08 (lane `clinics-theatre`), theatre* (`theatre`, migration 35, role block ea): the operation `theatre.op` (the base's order
   to the Theatre plus `theatre` {side left · right · both · none, the anaesthetic wanted (`technique`: general · spinal · local · the
   anaesthetist decides), day case or admitted, surgeon, usual time, the risks told}; FHIR adds the side as bodySite and the rest as
@@ -2962,14 +2973,24 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   Recovery's tile line ("in 30 min · Aldrete 8 → 10 · pain 2 · ready for the ward") and its two buttons (Aldrete: the patient's chart with the
   /score card; Record: the anaesthetic record). Demo: the Pre-op clinic and Recovery, Dr. Sherine Rashad (anaesthesia@demo.com) and Rehab Seif
   (recovery@demo.com); Hamed Sakr (pre-op today, Hb 9.8), Marwa Shalaby (Bay 2, Aldrete 6), Yara Abdelsalam (7, Bay 3, Aldrete 7 → 9).
-  Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the base's Discharge and the
-  ward's admission (the stay passing back, beds Q3, is the beds lane's change, not in this base); the printed sheet is built 2026-10-10 (`anaesthesia.sheet`, Print the patient's sheet under /preop's card:
+  Tests: `supabase/tests/anaesthesia.sql`, `npm run test:anaesthesia`. *Differences:* back to the ward is the stay passing on (beds Q3,
+  built at integration 2026-10-10, chosen by Claude at the owner's request): `/back` in the bay's stay (`back.ts`, `BackCard.tsx`,
+  `backsave.ts`; the core's (k) save) — its card presets the ward and bed the Recovery stay came from (the presence row's `came_from`),
+  the ward's other free beds or "the ward chooses", home for a day case, the latest Aldrete under 9 a notice, never a stop; Sign writes
+  one set, the base's `discharged` on the Recovery stay ("to <ward>", `oth`) and the ward's `admitted` about it (admit source `other`).
+  The picture draws it inside the base's Discharge, which has no door for a pack's card, so it is the pack's command, as Emergency's
+  Where to is its own button (Recovery's two tile buttons stay Aldrete and Record); the demo's Marwa came up from the Medical Ward, her
+  stay passed to Recovery. The printed sheet is built 2026-10-10 (`anaesthesia.sheet`, Print the patient's sheet under /preop's card:
   in Arabic on the core's A5 sheet, the patient, the operation, the anaesthetic planned, what to take, leave out and stop — from the lines
   as the anaesthetist left them, so the sheet shown under the card now follows an edited line too — fasting, one instruction a line, and
   the anaesthetist; *chosen by Claude at the owner's request*);
-  recovery's ward nursing tick waits for the beds lane; Recovery's line reads through its own read (C7, 2026-10-09), so the bays'
-  words come as each Aldrete or pain lands; `/preop` is about the operation (C6); EtCO₂, the agent and FiO₂ stay the pack's own on each
-  column, as drawn: FiO₂ moves to the base's key at integration if the beds lane's FiO₂ and O₂ flow rows land.
+  the demo's Recovery ticks Ward nursing after anaesthesia (2026-10-10, `seeds/clinic_packs.sql`;
+  its line Bays as drawn, Aldrete and Record keep the tile's two buttons, Ward nursing's words follow anaesthesia's); Recovery's line reads through its own read (C7, 2026-10-09), so the bays'
+  words come as each Aldrete or pain lands; `/preop` is about the operation (C6); EtCO₂ and the agent stay the pack's own on each
+  column, as drawn; FiO₂ moved to the base's key at integration (2026-10-10, chosen by Claude at the owner's request, now that the
+  beds' oxygen rows landed, Q5): a column's FiO₂ is the base's `oxygen` {on oxygen, fio2 in %} on its vitals, so `base.values` holds it
+  as `oxygen.fio2` (LOINC 3150-0) beside every other FiO₂ (a fraction typed is read as its percentage; anything outside 21–100 is not
+  written); the pack's own `fio2` stays in its type's version 1 for what was written before.
 
 ---
 

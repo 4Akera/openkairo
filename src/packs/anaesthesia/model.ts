@@ -49,12 +49,20 @@ export function columns(start: string, now: string, n = 36): string[] {
 }
 export const ROWS: { key: string; label: string; unit?: string; group?: string; carry?: boolean }[] = [
   { key: 'hr', label: 'Heart rate', group: 'Vitals' }, { key: 'bp', label: 'BP', unit: 'mmHg' }, { key: 'spo2', label: 'SpO₂', unit: '%' }, { key: 'etco2', label: 'EtCO₂', unit: 'mmHg' },
-  { key: 'temp', label: 'Temperature', unit: '°C' }, { key: 'agent_pct', label: 'Sevoflurane', unit: '%', group: 'Gas', carry: true }, { key: 'fio2', label: 'FiO₂', carry: true }]
+  { key: 'temp', label: 'Temperature', unit: '°C' }, { key: 'agent_pct', label: 'Sevoflurane', unit: '%', group: 'Gas', carry: true }, { key: 'fio2', label: 'FiO₂', unit: '%', carry: true }]
 /** a blank keeps the last setting (the gas, FiO₂): the value carried from the column before, and whether it was typed here */
 export function carried(cells: Record<string, string>[], key: string, i: number): { v: string; typed: boolean } {
   if (cells[i]?.[key]) return { v: cells[i][key], typed: true }
   for (let j = i - 1; j >= 0; j--) if (cells[j]?.[key]) return { v: cells[j][key] === 'off' ? '' : cells[j][key], typed: false }
   return { v: '', typed: false }
+}
+/** FiO₂ typed on a column, as the base's oxygen on the column's vitals (its key oxygen.fio2, LOINC 3150-0, in %; beds' Q5 rows, so the
+ *  ward and the chart read it with every other FiO₂): a whole 21–100 %, a fraction 0.21–1 read as its percentage; anything else, or a
+ *  blank, writes none */
+export function oxygenOf(fio2: string | undefined): { on: 'oxygen'; fio2: { value: string; unit: '%'; ucum: '%' } } | null {
+  const t = (fio2 ?? '').trim(); if (!/^\d+(\.\d+)?$/.test(t)) return null
+  const n = Number(t); const pct = n >= 0.21 && n <= 1 ? Math.round(n * 100) : n
+  return Number.isInteger(pct) && pct >= 21 && pct <= 100 ? { on: 'oxygen', fio2: { value: String(pct), unit: '%', ucum: '%' } } : null
 }
 /** a dose per kg, shown beside it (never a stop) */
 export const perKg = (dose: number, kg: number | null | undefined) => kg ? Math.round(dose / kg * 10) / 10 : null
