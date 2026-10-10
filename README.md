@@ -1,4 +1,4 @@
-# openCare
+# openKairo
 
 A clinical record system built on one idea: the record is a list of entries that are written once and never changed; every department reads and writes that same record; packs add kinds, never core.
 

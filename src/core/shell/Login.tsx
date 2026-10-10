@@ -18,7 +18,7 @@ export function Login() {
   return (
     <div className="grid min-h-screen place-items-center bg-canvas px-4">
       <form onSubmit={submit} className="w-full max-w-sm rounded-lg border border-line bg-surface p-6 shadow-sm">
-        <h1 className="mb-1 text-18 font-semibold tracking-tight">openCare</h1>
+        <h1 className="mb-1 text-18 font-semibold tracking-tight">openKairo</h1>
         <p className="mb-5 text-14 text-faint">Sign in to your department</p>
         <div className="mb-3"><Field label="Email"><Input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required /></Field></div>
         <div className="mb-4"><Field label="Password"><Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field></div>

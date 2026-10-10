@@ -17,7 +17,7 @@ export function Mfa({ onDone }: { onDone?: () => void }) {
   }
   async function enroll() {
     setBusy(true); setErr(null)
-    const { data, error } = await db.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'openCare' })
+    const { data, error } = await db.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'openKairo' })
     setBusy(false); if (error) { setErr(error.message); return }
     setFactorId(data.id); setQr(data.totp.qr_code); setSecret(data.totp.secret)
   }
