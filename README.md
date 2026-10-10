@@ -1,97 +1,66 @@
 # openKairo
 
-A clinical record system built on one idea: the record is a list of entries that are written once and never changed; every department reads and writes that same record; packs add kinds, never core.
+A clinical record system built on one idea: the record is a list of entries that are written once and never changed. Every department reads and writes that same record. Packs add kinds of work, never core.
 
-The design is one document: [`spec/openCare.md`](spec/openCare.md) — the layers, the spine, the core (the writer and the reader are the only ways in and out), the base, packs, standards (ICD-10, ATC, LOINC, UCUM, FHIR R4), the decisions, the permanent tests and the build record. Earlier specs are in `spec/archive/`.
+Live demo: https://www.openkairo.com (one-click demo logins, made-up patients).
+
+## What it is
+
+- **The core**: an insert-only spine (`core.entries`), a writer (`public.write`, one set per Done) and a reader (`public.read`) are the only ways in and out. Identity comes from the login; every read of a patient is logged; a patient can be erased or redacted under rules.
+- **The base**: 34+ entry types (vitals, problems, medicines, allergies, orders, results, scores, notes, stays …), the queue, the bed board, the doctor's visit typed on one line (`/v`, `/rx`, `/dx`, `/order`, `#preset`), Reception, Settings, standards (ICD-10, ATC, LOINC, UCUM, FHIR R4).
+- **22 packs**, each its own schema, role and screens, switched on per department:
+  - Pharmacy and stock · Laboratory (with the blood bank) · Radiology · Billing and printing · Bookings
+  - Ward nursing (`bedside`: drug round, NEWS2 obs, fluids, handover, going home) · Emergency (`casualty`) · Critical care (`intensive`: ICU and CCU) · Haemodialysis · ObGyn (clinic and labour ward)
+  - Paediatrics · Vaccines · Chronic care · Family care · Cardiology · Nephrology · Chest · Haematology · Oncology (chemotherapy day unit) · Surgery · Theatre · Anaesthesia (with Recovery)
+- **Printing** through the browser's print dialog: specimen labels, receipts, prescriptions, vaccination card, action plans, consent forms, operating list (Arabic and English, logged like reads).
+
+The design is one document: [`spec/openCare.md`](spec/openCare.md) — layers, spine, core, base, packs (§5), standards, decisions, tests, build record. Earlier specs are in `spec/archive/`; the clinics build plan is `spec/build-clinics.md`.
 
 ## Run locally
 
-Prerequisites: Docker (Colima on this machine), the Supabase CLI, Node 22+.
+Prerequisites: Docker, the Supabase CLI, Node 22+.
 
 ```bash
-colima start                    # once per boot
 supabase start                  # Postgres 17, Auth, Realtime, Storage, Studio
-npm run db:reset                # migrations → codes, the demo kit, the base's clinic and staff, each pack's seed, the clinic's choices between packs (supabase/seeds/, in config.toml's order)
-npm run db:test                 # every SQL suite (22), each in its own rolled-back transaction
-npm run db:demo                 # a working day, times relative to now: the base's, each pack's, the shared journey (run again to reload)
-npm run test:composer           # the composer's typed lines and drafts → entries (no browser, no database)
-npm run gen:shapes              # the client's entry and setting types from the declared shapes (db:test fails when they are stale)
-npm install && npm run dev      # the client on http://localhost:3000 (copy .env.example to .env.local first)
+npm run db:reset                # migrations, then seeds in supabase/config.toml's order
+npm run db:demo                 # a working day relative to now (run again to reload)
+npm install && npm run dev      # http://localhost:3000 (copy .env.example to .env.local first)
+npm run db:test                 # every SQL suite, each in a rolled-back transaction
+npm run typecheck && npm run lint && npm run build
+npm run test:print              # …and the other test:* scripts: pure TypeScript, no browser or database
 ```
 
-Studio: http://127.0.0.1:54323 · API: http://127.0.0.1:54321 · DB: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+Demo logins (password `Demo123!`): with `VITE_DEMO_LOGINS=true` the sign-in page lists every demo person by department, one click each (`src/core/shell/logins.generated.ts`, `npm run gen:logins` after a seed changes).
 
-Demo people (password `Demo123!`, the kit's `demo.password()`), one for every built-in role: Amira Lotfy admin@demo.com (owner), Mai Samir reception@demo.com (Front desk), Dr. Ali Hassan dr.ali@demo.com and Sara Mahmoud nurse@demo.com (General Practice and the Medical Ward), Dr. Salma Adel psych@demo.com (Psychiatry, a private department), Karim Fawzy lab@demo.com (Laboratory), Dr. Reem Hamdy pharm@demo.com and Hesham Ragab store@demo.com (Pharmacy), Mona Saad cashier@demo.com (Cashier) and Wael Shawky accounts@demo.com (accountant, everywhere). With `VITE_DEMO_LOGINS=true` the login page lists them grouped by department, one click each, from `src/core/shell/logins.generated.ts` (`npm run gen:logins` after a seed changes; `db:test` fails when it is stale).
+## Deploy (Vercel + Supabase)
 
-Settings changes need a second factor. The dev seed turns that off locally (`core.server_settings`, `require_mfa = off`); when it is on, the Settings page enrols an authenticator app the first time a save is refused.
+The client is a static Vite build (`vercel.json`). It needs three variables on the Vercel project:
 
-## What is built
+| Variable | Value |
+|---|---|
+| `VITE_SUPABASE_URL` | the Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | its anon (publishable) key — never the service-role key |
+| `VITE_DEMO_LOGINS` | `true` only on a demo site |
 
-**The database** (`supabase/migrations/`, one baseline of 2026-09-26; the earlier migrations are in `supabase/archive/`):
-
-| # | Migration | Spec |
-|---|---|---|
-| 01 | the spine: `core.entries` (insert-only), sets, patients, users, roles and holdings, departments and places, settings, codes, files, the read log, the audit | §2, §3.1–3.7 |
-| 02 | the registry: `core.declare_*` for types, systems, tables, rules, actions, settings, screens, listeners, packs, roles — each checked when declared | §3.8 |
-| 03 | the writer `public.write(set)`: identity from the JWT, the set ledger, locks and claims, checks, live vs late, refreshes, the outbox | §3.9 |
-| 04 | the reader `public.read(query)`: me · patients · patient · record · item · table · file · fhir · log · audit · codes; masked, logged | §3.10 |
-| 05 | the other doors: `my_users`, `choose_user`, `save`, `remove`, `save_patient`, `merge_patients`, `write_setting`, `erase_patient`, `redact` | §3.11–3.12 |
-| 06 | the base's code systems and catalogs (ICD-10, ATC, allergens, reactions) and identifier checks | §4, §6 |
-| 07 | the base's derived tables: `base.orders`, `base.presence`, `base.review`, `base.lists`, `base.values`, `base.deceased` | §4.5 |
-| 08 | the base's 34 types, their checks and lines, the privacy rule, settings keys, actions, built-in roles, screens | §4.1–4.6 |
-| 09 | FHIR R4: one mapping per type version | §6.4 |
-| 10 | guards: the rebuild check, the cron jobs (outbox every 5 s, the file sweep), realtime | §8 |
-| 11 | the pharmacy pack on the pack contract: its role and schema, `pharmacy.dispense`, `pharmacy.queue`, its screen | §5 |
-| 12 | the laboratory pack (`lis`): Collect, Results, sample numbers, the large lab's switches | §5.3 |
-| 13 | the billing pack: charges, prices, payments, refunds, drawers, the cashier's reads | §5.4 |
-| 14 | privileges: every routine revoked from PUBLIC, then granted by name | §8 |
-| 16 | the bookings pack: sessions, bookings and what became of them, free places, the desk's and the clinic's reads | §5.7 |
-
-**The client** (`src/core/`, Vite · React · TanStack Query · zustand). Every read goes through `read`, every Done through `write` as one set; settings through `save`/`remove`/`write_setting`.
-
-- `db/rpc.ts` — the doors; `db/views.ts` — the screens' view models from server rows; `db/entries.ts` — drafts, moves, bench answers and reviews as entries (codings, UCUM quantities)
-- `shell/` — sign-in (demo one-click), choosing which clinic when a login has more than one user, the department switcher, ⌘K patient search
-- `screens/Reception.tsx` — the front desk: search-first, send to a clinic, urgent, undo a check-in, edit details, the clinics' lines
-- `screens/clinic/`, `Queue.tsx` — a clinic's queue in bands and its results to review (Reviewed writes a `reviewed` entry)
-- `screens/visit/` — the visit, built for typing. One composer line: **`/` starts a command, `#` a preset, anything else is the note**; Done writes one set and moves to the next patient
-
-  ```
-  /v 148/92 84 37 86                     vitals (by position, or p 84 t 37)
-  /rx metformin 500 bd 30d for dm        a medication (ATC), linked to a problem; … send → an order to the pharmacy
-  /dx hypertension                       a problem (ICD-10); /dx ? pneumonia = suspected
-  /al penicillin: rash severe            an allergy · /al none: no known allergies
-  /order hba1c, lipid · /order urgent cbc  orders; /order cardiology: chest pain is a consult
-  #dm · #soap · #hx                      presets (Settings → Presets)
-  hx: … · ex: … · plan: …                a note line under that heading
-  ```
-- `screens/bench/` — a bench (laboratory, imaging, pharmacy): open orders one row per patient, a scan box, one screen per patient where ⌘↵ releases every result in one set; ranges by sex and age; Correct replaces a released result
-- `screens/ward/BedBoard.tsx` — a ward: its beds, admit to a free bed, move, discharge
-- `screens/Request.tsx` — one order: the value grid, a report, not done, start · hold · decline
-- `screens/Settings.tsx`, `settings/` — organization (time zone, record view, recent changes), departments and their rules, services (fields, units, ranges by sex and age, LOINC codings), users and roles, presets, packs, record reads
-
-**The pharmacy pack** (`…000011_pharmacy.sql`, `src/packs/pharmacy`): a prescription reaches the pharmacy only when the doctor sends it; its bench (To give · Given today) gives with **Give all** or Given / Not given with a reason. Its `pharmacy.queue` table is filled by a listener after commit.
-
-**The billing pack** (`…000013_billing.sql`, `src/packs/billing`, spec §5.4): the Cashier (who owes, the payment card under the row, receipts, Give back…), Today (the day's totals, closing the drawer) and Billing → Prices. Charges come from entries and settings only and carry no amount; money is only ever added to, in billing's own tables, through its operations. On the rows of any department that uses billing it puts one button (Pay where the department takes payment, Send to cashier with the lines the row prices itself where it does not) and its soft check (Pay first: "Waiting for payment" per order, "…anyway" with a reason).
-
-**The bookings pack** (`…000016_bookings.sql`, `src/packs/bookings`, spec §5.7): one diary for the clinic. A department's sessions book by time or by number; the desk books beside Send, the doctor with `/book 3m` at Done, a bench on an order's row or a walk-in's Then · when. Booked today (Here is the ordinary check-in), Tomorrow's calls, Missed, the Diary. A booking is the pack's own row, never a record entry; a booked patient goes into the queue (or a bench's To do) at their time or number, walk-ins in the gaps.
-
-## Tests
-
-`supabase/tests/`, run by `scripts/db-test.sh`: spine · presence · clinic · review · lists · admin · privacy · pharmacy, and the eight permanent tests — rebuild (= live) · boundary · canary · concurrency · registry · fhir · tenancy · pack contract. `supabase/tests/ported.md` maps every check of the earlier suites to its new home.
+Database: `npm run db:deploy` pushes the migrations and seeds to a hosted project (`SUPABASE_DB_URL` = the session-pooler connection string); add `-- --demo` for the demo day. On a hosted project the CLI's temporary login cannot grant on the base's tables, so use the real `postgres` connection string, or apply each file with `supabase db query --linked --file`. The journey demo files (`supabase/demo/journey/`) must run in one request.
 
 ## Layout
 
 ```
-spec/openCare.md      the design (spec/archive/: the earlier specs)
-supabase/migrations/  the database, in order
-supabase/seeds/       codes, the demo kit, the base's clinic, each pack's seed and the clinic's choices between packs (local only)
-supabase/demo/        each layer's demo day, the clinic's day between packs, and the shared journey's steps (journey/), in load.sql's order
+spec/                 the design (openCare.md) and the clinics build plan
+supabase/migrations/  the database, in order (core 01–10, then one per pack, privileges last)
+supabase/seeds/       codes, the demo kit, each pack's seed, the clinic's choices between packs
+supabase/demo/        each layer's demo day and the shared journey
 supabase/tests/       SQL suites (lib/: assertions and the fixture)
-scripts/              db-test.sh, demo.sh, include.awk, gen-logins.ts, gen-shapes.ts, gen-codes.py, import-codes.sh, test-*.ts
-src/core/             the client: db, auth, hooks, shell, screens, renderers
-src/packs/            packs: pharmacy, lis (the laboratory), billing, bookings
+scripts/              db-test.sh, demo.sh, deploy-db.sh, generators, test-*.ts
+src/core/             the client: db, auth, hooks, shell, screens, renderers, print, ui
+src/packs/            one folder per pack
 ```
 
-## Next
+## Tests
 
-What the build record lists as open (spec §11): the Storage API sweep for erased files' bytes, and Settings editors for sites, beds, the kind of encounter and the Screens line. Packs wait for the owner's go.
+64 SQL suites (about 3,000 checks) including the permanent ones — rebuild equals live, boundary, canary, concurrency, registry, FHIR, tenancy, pack contract — and one TypeScript script per pack and per core area. Typecheck, lint (no errors) and build are clean.
+
+## Open
+
+Questions for the owner are in the spec: §5.6 (ward nursing and the beds), §5.8 (the clinics: the chemotherapy cycle ending at the drug round, A6/A4 paper, printing many patients at once). Deferred: MEOWS, dialysis monthly bloods, drug-round safety checks, insurance.
