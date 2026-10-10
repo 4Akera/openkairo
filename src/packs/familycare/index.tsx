@@ -6,6 +6,9 @@ import { registerCommand } from '@core/screens/visit/commands'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerScreen } from '@core/screens/registry'
+import { registerOrderWords } from '@core/screens/rows'
+import { checkWords, type CheckRows } from './rowWords'
+import { loadChecks } from './rowLoad'
 import { registerNewPatientStep } from '@core/shell/newPatientSteps'
 import { PACK, dueWords, stepMissing } from './checks'
 import { ChecksNote, parseChecks } from './Compose'
@@ -23,5 +26,7 @@ registerSection({ key: 'familycare.checks', title: 'Checks', types: [], fit: ANY
   word: (x) => { const w = dueWords(checkStates(x)); return w ? { word: w.replace(/ checks? due$/, ' due') } : null }, summary: (x) => dueWords(checkStates(x)) })
 registerBannerWords({ key: 'familycare.checks', types: [], words: (x) => { const w = dueWords(checkStates({ ...x, facts: undefined })); return w ? [{ word: w, rank: 2, tone: 'warn' }] : [] } })
 registerScreen('familycare.files', Families)
+// its word on a queue row (Q50: "2 checks due"): the core's (l), the patients' values read once a list
+registerOrderWords(PACK, { load: loadChecks, words: (row, ctx, data) => checkWords(row, ctx, data as CheckRows | null) })
 registerNewPatientStep(PACK, { show: showStep, Part: FamilyStep, missing: stepMissing, after: afterStep })
 export const key = PACK

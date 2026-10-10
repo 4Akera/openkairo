@@ -2625,9 +2625,7 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (`vaccines.vaccinator`, built on Nurse: also checks a walk-in in, registers a child, finishes the visit). Demo: the Vaccination room,
   Rokaya Ghoneim (vaccines@demo.com); Farida Bassem (13 months, OPV 5 and MMR 1 overdue, here), Talia Nassef (2 months, here), Layan
   Hegab (18 months and five weeks, to call), Seif Yehia (4 months, never here: the walk-in). Tests: `supabase/tests/vaccines.sql`,
-  `npm run test:vaccines`. *Not as drawn:* the booking of the next visit
-  (bookings') is left out; the room's marks on other departments' queues ("9-month vaccines due") wait for a mark that reads a pack's
-  data (a core door, asked below). *The child's card printout, built 2026-10-10 on the core's printing (§3.13):* `vaccines.card`, Print the
+  `npm run test:vaccines`. *The child's card printout, built 2026-10-10 on the core's printing (§3.13):* `vaccines.card`, Print the
   child's card in the Vaccines section (P too; the print logged like a read, a later copy marked Reprint): in Arabic, the clinic's header
   and the department, the child's name, birth date and record number, one row a day given named by the schedule's age of its national doses
   (else the child's age that day) with the vaccines' Arabic names and numbers and the date (* copied from the MOHP card), then what is due
@@ -2635,6 +2633,13 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   the core's A5 sheet (the picture says A6, a paper the core does not have — asked below); the button in the chart's section, not on the
   room's screen as drawn; the vaccines' Arabic names are the pack's own words.
 - *Built 2026-10-08 (lane `clinics-shared`), Chronic care* (`chroniccare`, migration 24, role block e1 unused; pictures #chronic-visit,
+  *Built 2026-10-10 (the loose ends; chosen by Claude at the owner's request):* the room's word on the queue of every department that
+  ticks the pack ("9-month vaccines due", "overdue 3 wk"), through bookings' approved core change (l) of §5.7 — the doses of the queue's
+  patients (`vaccines.doses`) and who they are (the queue's presence rows, for the birth date of a child with no dose yet) read once a
+  list, the word worked out as the banner's (`rowWords.ts`, `rowLoad.ts`); the booking of the next visit: a card cannot add drafts and
+  the booking is another pack's, so /vax's "Next, worked out" says "Book it after ↵: /book 21w" (to the next due day) only where /book is
+  offered to the reader in that department (`book.ts`); the demo's Vaccination room ticks bookings with a Vaccines session by time
+  (`seeds/clinic_packs.sql`).
   #chronic-list): the clinic's conditions, targets and checks as one setting `chroniccare.conditions` (its declared default the drawn table: diabetes,
   hypertension, CKD, heart failure, asthma, COPD; a condition's codes are the register, ICD-10 by its start; a target a measure, a sign
   and a value — a pressure's two; a check its codes and every how many months, sooner while off target; the list's window, 18 months).
@@ -2653,13 +2658,16 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   ACR due), Fawzia Darwish (81; her own target BP < 150/90, falls), Wafaa Abdelmoneim (diabetes and asthma; inhaler technique due).
   Tests: `supabase/tests/chroniccare.sql`, `npm run test:chroniccare`. *Not as drawn, and why:* the key is `chroniccare` (the core says
   "chronic" of a problem term, which the no-pack-names rule reads as naming the pack); the list's Next visit and "none booked first" are
-  bookings', left out; Print the list is built 2026-10-10 (`chroniccare.list`, the tab's Print the list and P: the
+  bookings' (not built 2026-10-10: bookings says a booking only on a row's visit or orders, and a patient's next booking for a list of
+  patients is no door of its — asked below); Print the list is built 2026-10-10 (`chroniccare.list`, the tab's Print the list and P: the
   view and condition as shown, a line a patient on the core's A5 sheet; each patient on the paper logged like a read first through the
   reader's shape `printed`, one call a patient, nothing printed if any cannot be logged — *chosen by Claude at the owner's request*, since a
   core print logs one patient: asked below); the flu vaccine check is the immunisation pack's data, which this pack may
   not read; a referral for the eyes is the doctor's /order (the review records "referred"); the review's card is registered for the base's
   observation where the department ticks chronic care; the chart banner counts checks without the facts page (feet and eyes reviewed show
-  in the section, the chip and the list); the queue's "3 due" mark waits for the core door asked below.
+  in the section, the chip and the list). *Built 2026-10-10 (the loose ends; chosen by Claude at the owner's request):* the queue's word
+  through the core's (l) of §5.7 — the problem lists, the values its measures and checks name, the pack's checks and own targets, read
+  once a list for the queue's patients as the tab reads them — the first measure off target ("HbA1c 8.2 ↑", amber), else "3 due" (amber).
 - *Built 2026-10-08 (lane `clinics-shared`), Family medicine* (`familycare`, migration 25, role block e2 unused; pictures
   #family-folder, #family-day, #family-checks): the household as the pack's own table (`familycare.households`: the file number by
   the unit, address, phone; `familycare.members`: who belongs and how, one file a patient, Erase reaching it), written through its
@@ -2678,12 +2686,28 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   (`seeds/clinic_packs.sql`): Family medicine ticks chronic care and the immunisation pack after its own, and its line is the queue, Families
   and the immunisation list; the desk ticks family medicine (its door checks the department uses it). Tests: `supabase/tests/familycare.sql`, `npm run
   test:familycare`. *Not as drawn, and why:* the key is `familycare` (the core's word "family" — a patient's family name, the
-  chart's families of types — would read as naming the pack); Book (bookings') and the Gynaecology section (ObGyn's) are left out; the
-  file number is not a banner word (it would need the pack's read on every chart); the queue's per-pack marks (Q50) wait for the core door
-  asked below.
-- *Asked by the lane, for the owner:* a row mark that reads a pack's own data (as row actions do, with a load) — today a mark sees only
-  the row (patient, visit, orders), so "9-month vaccines due", "3 due", "2 checks due" (and paediatrics' "weight z −2.3", ObGyn's
-  "32 w · BP 142/92") cannot be drawn on the queue without it.
+  chart's families of types — would read as naming the pack); the Gynaecology section (ObGyn's) is left out; the
+  file number is not a banner word (it would need the pack's read on every chart). *Built 2026-10-10 (the loose ends; chosen by Claude at
+  the owner's request):* the queue's per-pack marks (Q50, drawn: one word a pack, no limit) through the core's (l) of §5.7 — this pack's
+  "2 checks due" (the queue's presence rows for the sex and birth date, the base's values by the checks' codes, read once a list; met by
+  values, as the banner), beside chronic care's, the vaccines' and paediatrics' own; Book on each other member of the file: the Family
+  section draws each member as a patient card's row (core change (i) of §5.7, `usePackRows('card')`), so bookings' Book and its booking
+  card fold out under the member where the department keeps a diary, nothing written in the chart; the demo's Family medicine ticks
+  bookings with a Morning by number.
+- *Asked by the lane, for the owner:* a row mark that reads a pack's own data (as row actions do, with a load). *Answered 2026-10-10:*
+  bookings' approved core change (l) of §5.7 is that door (`registerOrderWords` with a load, a word on the row itself); vaccines, chronic
+  care, family medicine, paediatrics ("weight z −2.3", the banner's z-score beyond ±2, from `paeds.growth` read once a list) and ObGyn
+  use it on the clinic queue only (`supabase/tests/clinics_links.sql`, each pack's `npm run test:…`).
+- *The base's age, 2026-10-10 (a quirk fixed; chosen by Claude at the owner's request):* a baby's age read "0 y". The base now says it
+  as paediatrics does (`ageWords` in `core/db/views.ts`): days in the first month ("3 d"), months to two years ("8 mo", "18 mo"), then
+  years ("34" beside the sex on a list, "34 y" in the banner) — on the chart's banner, the glance, the prescription sheet, the queue, the
+  desk, the bench, the walk-in and the bed board; a birth known only to its year says years. Packs that print `age` themselves (billing's
+  cashier, oncology's rows, dialysis, the handover, the labour ward, casualty, bookings' lists) still say whole years.
+- *Asked 2026-10-10 (the loose ends), for the owner, each a new door:* (1) a patient's next booking on a pack's own list — chronic care's
+  Next visit and "none booked first" — would need bookings to say a word on a row with no visit or order (an op answering the next
+  booking of a list of patients); (2) the pre-op visit booked from the surgeon's consult as drawn (#surgery-clinic) would need /book, or
+  the booking card, to book another department than the one the reader is in — today a clinic books only itself and the desk books for
+  the departments it checks in for.
 - *The clinics' printouts, built 2026-10-10 (the loose ends) on the core's printing (§3.13), each registered by its pack under its own key
   and printed by a person (a button, P where a screen has one), logged like a read, a later copy marked Reprint:* the child's vaccination
   card (`vaccines.card`), the Chronic care list (`chroniccare.list`), the chest action plan (`lungs.plan`), her INR table (`haemato.table`),
@@ -2757,7 +2781,8 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   centile at 1 419 g and 32 weeks works out lower (worked out, never typed); EPDS is written through the base's score card (/epds),
   beside /pn rather than inside its card; `/periods` is a line of its own (the picture shows its draft, not its command); Eman's "P3"
   banner word waits for a booking (her parity is said only by an antenatal check's booking); the queue's word reads the pack's table
-  through a small store (a mark is handed only the row), drawn from the list's next redraw.
+  once a list through the core's (l) of §5.7 (2026-10-10, in place of the small store; the read hands each woman's identity, so her age
+  counts for the schedule's rows by age).
 - *Built 2026-10-08 (lane `clinics-medicine`; pack keys `cardio`, `nephrology`, `lungs`, `haemato`, words that collide with nothing the core
   says, the labels as drawn), cardiology* (`cardio`, migration 28, role block e4): no record type. `/ecg` writes the
   base's result with no order (LOINC 11524-6; rate 8867-4, PR 8625-6, QRS 8633-0, QTc 8636-3, axis 8632-2 as analytes with their ranges, a
@@ -2900,7 +2925,9 @@ Q2, for the day unit). Build plan: `spec/build-clinics.md`. Nothing else in core
   in Arabic, the operation, the side written out big, the surgeon, the anaesthetic wanted, the risks told as the Theatre's settings word
   them, the declaration, lines to sign for the patient or guardian, the doctor, a witness, the date; the signed paper scanned into
   Documents as before). *Chosen by Claude at the owner's request:* both on the core's A5 sheet (the core has no A4: asked below), the
-  declaration's Arabic words. *Differences:* the pre-op clinic's booking is the bookings pack's; the operating list's Pre-op
+  declaration's Arabic words. *Differences:* the pre-op clinic's booking is the bookings pack's (2026-10-10: the demo's Pre-op clinic ticks bookings with a session by time, so the
+  desk books it; booked from the surgeon's consult as drawn is not built — bookings lets a clinic book only itself, and /book only here:
+  a new door, asked below); the operating list's Pre-op
   column reads the pre-op about the operation (`/preop` is about it since C6, 2026-10-09), else the anaesthetic record's ASA; the step labels use "anaesthetic" (the rule that no pack names another keeps the word
   anaesthesia out of the theatre pack).
 - *Built 2026-10-08 (lane `clinics-theatre`), surgery* (`surgical`, migration 34, role block e9): the operation note `surgical.opnote`

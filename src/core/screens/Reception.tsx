@@ -102,7 +102,7 @@ export function ReceptionScreen({ dept }: ScreenProps) {
             {list.map((p, i) => <button key={p.id} type="button" tabIndex={-1} role="option" aria-selected={i === c} onClick={() => { setCursor(i); card.current?.focus() }}
               className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-13 ring-1 transition-colors',
                 i === c ? 'bg-accent-soft text-accent ring-accent' : cn('text-muted ring-line', !kbd && 'hover:ring-line-strong'))}>
-              {fullName(p)}<span className="text-faint">· {ageSex(p.age, p.sex)}</span>
+              {fullName(p)}<span className="text-faint">· {ageSex(p.age, p.sex, p.born_on)}</span>
               {p.open_visits.some((v) => v.present) && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="here now" />}
               {p.died_on && <span className="text-faint">†</span>}</button>)}
             {canCreate && !q.trim().startsWith('#') && <button type="button" tabIndex={-1} onClick={() => setCreating(true)}

@@ -95,7 +95,7 @@ export function QueueList({ departmentId, compact = false, keys = false, frame }
   if (compact && !all.length) return <Card><Empty>Nobody here yet.</Empty></Card>
   const row = (r: QueueRow, isNext: boolean) => { const n = at.get(r.id) ?? -1; const pr = packRowOf(r.id, visitMarkRow(r)); return <ListRow key={r.id} number={r.patient.record_number}
     name={<>{r.patient.given_name} {r.patient.family_name}{r.patient.has_allergies && <AlertTriangle className="ms-1.5 inline h-3.5 w-3.5 text-danger" aria-label="allergies" />}</>}
-    age={ageSex(r.patient.age, r.patient.sex)} status={<Status r={r} />} who={r.band === 'back' || r.band === 'consult' ? r.assignee_name : null}
+    age={ageSex(r.patient.age, r.patient.sex, r.patient.born_on)} status={<Status r={r} />} who={r.band === 'back' || r.band === 'consult' ? r.assignee_name : null}
     minutes={minutesSince(since(r))} marks={[...marks(visitMarkRow(r)), ...packs.marks(pr)]} extra={packs.buttons(pr)} below={packs.below(pr)} next={isNext} muted={r.band === 'pending'} onOpen={() => open(r)} selected={keys && n === c && arrows} enter={keys && n === c && !arrows && !!f} hover={!kbd}
     actions={r.band === 'pending' && can('write:not_here') ? <button type="button" disabled={visits.present.isPending} title="The patient left: results go to the doctor's review list"
       onClick={() => visits.present.mutate({ visit: r.visit, is_present: false })}
@@ -131,7 +131,7 @@ export function RequestList({ departmentId }: { departmentId: string }) {
   if (q.error) return <p className="text-14 text-danger">{q.error.message}</p>
   if (!rows.length) return <Card><Empty>No open requests.</Empty></Card>
   return <Card className="overflow-hidden"><ul>{rows.map((r, i) => { const p = r.request?.priority; const step = r.request?.step; const pr = packRows[i]; return <ListRow key={r.id}
-    number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(yearsOld(r.patient.born_on), r.patient.sex)}
+    number={r.patient.record_number} name={`${r.patient.given_name} ${r.patient.family_name}`} age={ageSex(yearsOld(r.patient.born_on), r.patient.sex, r.patient.born_on)}
     status={<>{p && p !== 'routine' && <Tag tone="danger">{p}</Tag>}<span className="truncate">{r.service_name ?? 'Consult'}{r.question_text && <span className="text-faint"> — “{r.question_text}”</span>}</span>
       {step && <span className="shrink-0 text-12 text-faint">{step}</span>}{r.patient.here && <Tag tone="ok">here</Tag>}</>}
     who={r.from_department_name} minutes={minutesSince(r.occurred_at)} marks={[...marks(benchMarkRow({ patient: r.patient, rows: [r] })), ...packs.marks(pr)]}

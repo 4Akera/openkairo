@@ -7,6 +7,7 @@ import { Plus, X } from 'lucide-react'
 import { usePatientSearch } from '../../hooks/reads'
 import { useWrite } from '../../hooks/writes'
 import { oneSet } from '../../db/entries'
+import { ageWords } from '../../db/views'
 import type { Department, PatientHit, Service } from '../../db/types'
 import { Card, Input, Kbd, cn, errorText } from '../../ui'
 import { NewPatient } from '../../shell/NewPatient'
@@ -51,7 +52,7 @@ export function WalkIn({ dept, onClose, onStarted }: { dept: Department; onClose
         <button type="button" onClick={onClose} aria-label="Close the walk-in" className="ms-auto inline-flex items-center gap-1 rounded-md px-1 text-faint hover:text-fg focus-ring"><Kbd>esc</Kbd><X className="size-3.5" /></button></div>
       {creating ? <NewPatient seed={q} orgId="" submitLabel="Register" onDone={choose} onCancel={() => { setCreating(false); box.current?.focus() }} />
         : who ? <p className="flex flex-wrap items-baseline gap-2 rounded-lg bg-accent-soft px-3 py-2 text-14"><span className="font-mono text-12 text-faint">#{who.record_number}</span>
-            <span className="font-medium text-fg">{fullName(who)}</span><span className="text-12 text-muted">{who.age} {who.sex?.[0]?.toUpperCase()}{who.phone_text ? ` · ${who.phone_text}` : ''}</span>
+            <span className="font-medium text-fg">{fullName(who)}</span><span className="text-12 text-muted">{ageWords(who.born_on) || who.age} {who.sex?.[0]?.toUpperCase()}{who.phone_text ? ` · ${who.phone_text}` : ''}</span>
             <button type="button" onClick={() => { setWho(null); requestAnimationFrame(() => box.current?.focus()) }} className="ms-auto rounded-sm text-12 text-accent hover:underline focus-ring">change</button></p>
         : <>
           <Input ref={box} autoFocus value={q} onChange={(e) => { setQ(e.target.value); setCursor(0) }} onKeyDown={onSearchKey} aria-label="Find the patient — ↑↓ choose · ↵ pick" className="h-11 text-16" />
@@ -59,7 +60,7 @@ export function WalkIn({ dept, onClose, onStarted }: { dept: Department; onClose
             {list.map((p, i) => <li key={p.id} role="option" aria-selected={i === c}>
               <button type="button" tabIndex={-1} onClick={() => choose(p)} className={cn('flex w-full items-center gap-3 rounded-md px-3 py-2 text-start focus-ring', i === c ? 'rail bg-hover' : 'hover:bg-hover')}>
                 <span className="font-mono text-12 text-faint">{p.record_number}</span><span className="text-14 font-medium text-fg">{fullName(p)}</span>
-                <span className="text-12 text-muted">{p.age} {p.sex?.[0]?.toUpperCase()}{p.phone_text ? ` · ${p.phone_text}` : ''}</span>
+                <span className="text-12 text-muted">{ageWords(p.born_on) || p.age} {p.sex?.[0]?.toUpperCase()}{p.phone_text ? ` · ${p.phone_text}` : ''}</span>
                 {i === c && <Kbd className="ms-auto text-accent">↵</Kbd>}</button></li>)}
             {d.trim().length >= 2 && <li><button type="button" tabIndex={-1} onClick={() => setCreating(true)} className={cn('flex w-full items-center gap-2 rounded-md px-3 py-2 text-13 text-accent focus-ring', nobody ? 'bg-accent-soft font-medium' : 'hover:bg-hover')}>
               <Plus className="size-4" />New patient “{q.trim()}”{nobody && <Kbd className="ms-auto">↵</Kbd>}</button></li>}

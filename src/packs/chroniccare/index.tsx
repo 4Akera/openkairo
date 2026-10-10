@@ -7,6 +7,9 @@ import { registerCard, registerCommand } from '@core/screens/visit/commands'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerScreen } from '@core/screens/registry'
+import { registerOrderWords } from '@core/screens/rows'
+import { careWords, type CareRows } from './rowWords'
+import { loadCare } from './rowLoad'
 import { PACK, TARGET_TYPE } from './model'
 import { parseReview, parseTarget } from './line'
 import { ReviewCard, ReviewNote, reviewCardLine } from './Review'
@@ -28,4 +31,6 @@ registerBannerWords({ key: 'chroniccare.care', types: [TARGET_TYPE], words: (x) 
 registerScreen('chroniccare.list', ChronicList)
 // Print the list, from the Chronic care tab (built 2026-10-10)
 registerPrintout<ListSheet>(LIST_KEY, { paper: 'a5', Component: ChronicListSheet })
+// its word on a queue row of a department that ticks it ("HbA1c 9.4 ↑", "3 due"): the core's (l), read once a list as the tab reads
+registerOrderWords(PACK, { load: loadCare, words: (row, ctx, data) => careWords(row, ctx, data as CareRows | null) })
 export const key = PACK

@@ -7,6 +7,9 @@ import { registerCard, registerCommand } from '@core/screens/visit/commands'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerScreen } from '@core/screens/registry'
+import { registerOrderWords } from '@core/screens/rows'
+import { vaxWords, type VaxRows } from './rowWords'
+import { loadVax } from './rowLoad'
 import { registerPrintout } from '@core/print/registry'
 import { CARD_KEY, VaxCardSheet, type VaxCard } from './printout'
 import { DoseCard, VaxNote, cardLine } from './Compose'
@@ -24,6 +27,8 @@ registerSection({ key: 'vaccines.doses', title: 'Vaccines', types: [DOSE_TYPE], 
   word: (x) => chipWord(x.ctx.org, x.own.shown, x.identity.birth_date, pregnantOf(x.facts)), summary: (x) => summaryLine(x.ctx.org, x.own.shown, x.identity.birth_date, pregnantOf(x.facts)) })
 registerBannerWords({ key: 'vaccines.due', types: [DOSE_TYPE], words: (x) => bannerWords(x.ctx.org, x.own.shown, x.identity.birth_date) })
 registerScreen('vaccines.room', VaccinesRoom)
+// its word on a queue row of a department that ticks it ("9-month vaccines due"): the core's (l), its own doses read once a list
+registerOrderWords(PACK, { load: loadVax, words: (row, ctx, data) => vaxWords(row, ctx, data as VaxRows | null) })
 // the child's card, printed from the Vaccines section (Q26 b; built 2026-10-10)
 registerPrintout<VaxCard>(CARD_KEY, { paper: 'a5', Component: VaxCardSheet })
 export const key = PACK

@@ -4,7 +4,7 @@
 // Arabic, and the doctor's name and department. No price: nothing of money is in the record. Pure (npm run test:chart).
 import type { EntryData } from '../../../db/shapes.generated'
 import type { Organization, ServerEntry } from '../../../db/types'
-import { nameOf } from '../../../db/views'
+import { ageWords, nameOf } from '../../../db/views'
 import { baseOf, type ChartItem } from './items'
 import { medLine, type MedLine } from './record'
 import { arabicSig } from './arabic'
@@ -24,14 +24,14 @@ export const printable = (items: ChartItem[]) => items.filter((i) => i.family ==
   && med(i)?.basis !== 'reported' && !!med(i)?.drug && !ENDED.has(med(i)?.status ?? ''))
 
 /** the sheet for a block's items, or null when it has nothing to take away */
-export function prescriptionOf(items: ChartItem[], ctx: { org?: Pick<Organization, 'users' | 'allDepartments'>; patient: { full_name: string; age: number; sex: string; number: number } }): RxSheet | null {
+export function prescriptionOf(items: ChartItem[], ctx: { org?: Pick<Organization, 'users' | 'allDepartments'>; patient: { full_name: string; age: number; born_on?: string; sex: string; number: number } }): RxSheet | null {
   const meds = printable(items)
   if (!meds.length) return null
   const first = [...meds].sort((a, b) => a.at.localeCompare(b.at))[0]
   const author = ctx.org?.users.find((u) => u.id === first.entry.author_id)
   return {
     set: first.set_id, at: first.at,
-    patient: { name: ctx.patient.full_name, age_sex: [`${ctx.patient.age} y`, SEX[ctx.patient.sex]].filter(Boolean).join(' · '), record: ctx.patient.number },
+    patient: { name: ctx.patient.full_name, age_sex: [ageWords(ctx.patient.born_on, new Date(), true) || `${ctx.patient.age} y`, SEX[ctx.patient.sex]].filter(Boolean).join(' · '), record: ctx.patient.number },
     doctor: author ? (author.title && !author.name.startsWith(author.title) ? `${author.title} ${author.name}` : author.name) : '', department: nameOf(ctx.org as Organization | undefined, first.entry.department_id) ?? '',
     lines: meds.map((m) => { const l = medLine(med(m))
       return { drug: [l.drug, l.strength].filter(Boolean).join(' '), sig: sigOf(l), quantity: l.quantity, instructions: l.instructions, arabic: arabicSig(l) } }),

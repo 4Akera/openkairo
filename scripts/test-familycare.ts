@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict'
 import { askAtNewPatient, checksFor, checksOf, dueWords, metOf, relationTo, stepMissing, type FamilyCheck } from '../src/packs/familycare/checks'
 import type { Organization } from '../src/core/db/types'
+import type { Identity } from '../src/core/db/types'
+import { checkRowsOf, checkWords } from '../src/packs/familycare/rowWords'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -45,4 +47,11 @@ test('the desk’s step: asked while the setting says so (on by default); what i
   assert.equal(stepMissing({ mode: 'none' }), null); assert.equal(stepMissing({ mode: 'start', address: '', dept: 'd' }), null)
 })
 
+test('the queue word through the core\'s (l), Q50: the checks due from the values read once a list', () => {
+  const data = checkRowsOf(['basma', 'yassin'], { basma: { gender: 'female', birth_date: '1992-06-01' } as Identity, yassin: { gender: 'male', birth_date: '2020-03-01' } as Identity },
+    [{ patient_id: 'basma', code: 'loinc:8480-6', value: 124, at: ago(0) }, { patient_id: 'basma', code: 'loinc:16128-1', value: 0.1, at: ago(2500) }])
+  assert.deepEqual(checkWords({ patient_id: 'basma' }, { list: 'queue', org: org() }, data, now), [{ word: '1 check due', tone: 'warn' }], 'cervical screening (34, no BMI read: sugar not yet)')
+  assert.deepEqual(checkWords({ patient_id: 'yassin' }, { list: 'queue', org: org() }, data, now), [], 'a child: none of the list')
+  assert.deepEqual(checkWords({ patient_id: 'basma' }, { list: 'desk', org: org() }, data, now), [], 'the queue only (the desk ticks the pack for its step)')
+})
 console.log(`✓ family: ${n} groups passed`)

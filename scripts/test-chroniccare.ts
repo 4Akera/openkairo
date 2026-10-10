@@ -7,6 +7,7 @@ import { careOf, checkOf, conditionsOf, measureOf, offWords, registersOf, summar
 import { parseReview, parseTarget, serviceFor } from '../src/packs/chroniccare/line'
 import type { Organization } from '../src/core/db/types'
 import type { Ctx } from '../src/core/screens/visit/parse'
+import { careRowsOf, careWords } from '../src/packs/chroniccare/rowWords'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -77,4 +78,13 @@ test('/target: a patient’s own target with its reason', () => {
   assert.equal(parseTarget('', ctx), null)
 })
 
+test('the queue word through the core\'s (l): off target first, else how many due; nothing off the register', () => {
+  const org = { settings: [{ key: 'chroniccare.conditions', thing_id: null, data: { window_months: 18, conditions: cs } }], settingKeys: [], datatypes: {} } as unknown as Organization
+  const data = careRowsOf(['ashraf', 'none'], ashraf.map((p) => ({ patient_id: 'ashraf', ...p })), values.map((v) => ({ patient_id: 'ashraf', ...v })), [], [])
+  assert.deepEqual(careWords({ patient_id: 'ashraf' }, { list: 'queue', org }, data, now), [{ word: 'HbA1c 8.2 ↑', tone: 'warn' }])
+  const onTarget = careRowsOf(['w'], [{ patient_id: 'w', code: 'icd10:E11', status: 'active' }], [{ patient_id: 'w', code: 'loinc:4548-4', value: 6.5, at: ago(10) }], [], [])
+  assert.match(careWords({ patient_id: 'w' }, { list: 'queue', org }, onTarget, now)[0].word, /^\d+ due$/, 'on target, checks due: "3 due"')
+  assert.deepEqual(careWords({ patient_id: 'none' }, { list: 'queue', org }, data, now), [], 'no condition of the list: nothing')
+  assert.deepEqual(careWords({ patient_id: 'ashraf' }, { list: 'bench', org }, data, now), [], 'the queue only')
+})
 console.log(`✓ chronic care: ${n} groups passed`)

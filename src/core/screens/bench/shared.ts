@@ -1,5 +1,6 @@
 import type { Organization, RequestQueueRow } from '../../db/types'
 import { ymd } from '../../ui'
+import { ageWords } from '../../db/views'
 import type { Tone } from '../../ui/tone'
 import { turnOf } from '../rows'
 // The bench works a department's request queue by patient: one sample, one person, many tests (spec 05, the request surface at volume).
@@ -31,8 +32,8 @@ export function groupByPatient(rows: RequestQueueRow[], today = todayYmd(), plac
     || (a.since && b.since ? at(a)[0] - at(b)[0] || at(a)[1] - at(b)[1] : a.oldest.localeCompare(b.oldest)))
 }
 export const ageOf = (born: string) => { const [y, m = 1, d = 1] = born.split('-').map(Number); const n = new Date(); return n.getFullYear() - y - (n.getMonth() + 1 < m || (n.getMonth() + 1 === m && n.getDate() < d) ? 1 : 0) }
-/** 34 F */
-export const ageSex = (p: { born_on: string; sex: string }) => `${ageOf(p.born_on)} ${p.sex?.[0]?.toUpperCase() ?? ''}`
+/** 34 F, a baby's 8 mo F */
+export const ageSex = (p: { born_on: string; sex: string }) => `${ageWords(p.born_on) || ageOf(p.born_on)} ${p.sex?.[0]?.toUpperCase() ?? ''}`
 /** a request step's tone: sent and reopened are warn (not started), started is info (in progress), replied accent (D3) */
 export const STEP_TONE: Record<string, Tone> = { sent: 'warn', started: 'info', held: 'neutral', replied: 'accent', reopened: 'warn' }
 /** a typed value's field by its flag: warn for low, high or abnormal, danger for critical (the glyph and the word stand beside it) */

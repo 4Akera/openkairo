@@ -9,6 +9,7 @@ import { refresh } from '../../hooks/writes'
 import { fitField } from '../../hooks/ranges'
 import { answerEntry, oneSet, resultEntry, stepEntry } from '../../db/entries'
 import { replyFormFor } from '../../renderers'
+import { ageWords } from '../../db/views'
 import type { RequestQueueRow, ServiceField } from '../../db/types'
 import { Badge, Button, Callout, Card, Centered, Heading, IconButton, Input, Kbd, Select, Spinner, Tag, Toolbar, cn, errorText, flagClass, hm } from '../../ui'
 import { ageOf, fieldTone, groupByPatient, nextSteps, phaseOf, STEP_TONE, stepLabel, stepName, todayYmd } from './shared'
@@ -111,7 +112,7 @@ export function BenchPatient() {
   return <div ref={root} onKeyDown={onKey} className="pb-24">
     <div className="sticky top-0 z-sticky border-b border-line bg-surface/95 backdrop-blur"><div className={cn('mx-auto flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5', width)}>
       <IconButton size="md" onClick={() => navigate('/')} className="-ms-1" title="Back to the bench" aria-label="Back to the bench"><ArrowLeft className="rtl:-scale-x-100" /></IconButton>
-      <div><p className="flex items-baseline gap-2"><span className="text-18 font-semibold tracking-tight">{g.patient.given_name} {g.patient.family_name}</span><span className="text-14 text-muted tnum">{ageOf(g.patient.born_on)} y · {g.patient.sex[0].toUpperCase()}</span></p>
+      <div><p className="flex items-baseline gap-2"><span className="text-18 font-semibold tracking-tight">{g.patient.given_name} {g.patient.family_name}</span><span className="text-14 text-muted tnum">{ageWords(g.patient.born_on, new Date(), true)} · {g.patient.sex[0].toUpperCase()}</span></p>
         <p className="text-12 text-faint tnum">#{g.patient.record_number} · {g.rows.length} open · from {g.from.join(', ')}</p></div>
       {g.priority !== 'routine' && <Badge tone="danger">{g.priority.toUpperCase()}</Badge>}
       <div className="ms-auto flex items-center gap-2">

@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import type { PatientBanner } from '../db/types'
+import { ageWords } from '../db/views'
 import { TONE, cn, flagMark, flagTone, flagWord, type Flag } from './tone'
 import { Card, Kbd, Tag } from './display'
 import { IconButton } from './controls'
@@ -112,11 +113,11 @@ export function ListSection({ title, count, children, folded, onToggle }: { titl
 
 const SEX: Record<string, string> = { male: 'M', female: 'F', other: 'X' }
 /** the patient in one line: record number, name, age and sex, phone, deceased */
-export function PatientLine({ p, className = '' }: { p: Pick<PatientBanner, 'record_number' | 'given_name' | 'family_name' | 'sex' | 'age' | 'died_on'> & { phone_text?: string | null }; className?: string }) {
+export function PatientLine({ p, className = '' }: { p: Pick<PatientBanner, 'record_number' | 'given_name' | 'family_name' | 'sex' | 'age' | 'died_on'> & { born_on?: string; phone_text?: string | null }; className?: string }) {
   return <span className={cn('flex items-baseline gap-2.5', className)}>
     <span className="font-mono text-11 text-faint">#{p.record_number}</span>
     <span className="font-medium text-fg">{p.given_name} {p.family_name}</span>
-    <span className="text-12 text-muted">{p.age}{SEX[p.sex] ?? ''}</span>
+    <span className="text-12 text-muted">{ageWords(p.born_on) || p.age}{SEX[p.sex] ?? ''}</span>
     {p.phone_text && <span className="text-12 text-faint">{p.phone_text}</span>}
     {p.died_on && <span className="text-11 font-semibold text-muted">deceased</span>}
   </span>

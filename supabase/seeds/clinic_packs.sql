@@ -50,6 +50,31 @@ begin
   end if;
 end $$;
 
+-- The clinics book their next visits (spec §5.8, the bookings links left out until bookings joined them, 2026-10-10; chosen by Claude at
+-- the owner's request): Family medicine (Book on each member of a family file; /book in the consult), the Vaccination room (/vax's
+-- next due day, then /book) and the Pre-op clinic (the desk books it for the surgeon's patients) tick bookings and keep a diary, with the
+-- Diary on their line; the desk checks in for every department, so it books them too. Each written once; skipped while a pack is off.
+do $$
+declare c uuid := demo.base('clinic'); d record;
+begin
+  if not (core.packs_used(c) @> array['bookings']) then return; end if;
+  for d in select * from (values
+      ('familycare', demo.id('familycare', 'department'), jsonb_build_object('id', demo.id('clinic_packs', 'session:family morning'), 'name', 'Morning',
+        'days', '["sat","sun","mon","tue","wed","thu","fri"]'::jsonb, 'from', '08:00', 'to', '14:00', 'how', 'number', 'places', 20, 'overbook', 2, 'walk_ins', 4)),
+      ('vaccines', demo.id('vaccines', 'room'), jsonb_build_object('id', demo.id('clinic_packs', 'session:vaccination'), 'name', 'Vaccines',
+        'days', '["sat","sun","mon","tue","wed","thu","fri"]'::jsonb, 'from', '09:00', 'to', '13:00', 'how', 'time', 'every', 15, 'overbook', 2, 'walk_ins', 0)),
+      ('anaesthesia', demo.id('anaesthesia', 'preop'), jsonb_build_object('id', demo.id('clinic_packs', 'session:preop'), 'name', 'Pre-op',
+        'days', '["sat","sun","mon","tue","wed","thu","fri"]'::jsonb, 'from', '10:00', 'to', '14:00', 'how', 'time', 'every', 20, 'overbook', 1, 'walk_ins', 0))) x(pack, dept, session) loop
+    if not (core.packs_used(c) @> array[d.pack]) or not exists (select 1 from core.departments x where x.organization_id = c and x.id = d.dept) then continue; end if;
+    perform demo.tick(d.dept, 'bookings');
+    if core.setting_at(c, 'bookings.sessions', d.dept) is null then
+      perform demo.as(demo.base('owner'));
+      perform public.write_setting(jsonb_build_object('key', 'bookings.sessions', 'owner_id', d.dept, 'data', jsonb_build_object('sessions', jsonb_build_array(d.session), 'leave', '[]'::jsonb)));
+    end if;
+    perform demo.screen(d.dept, 'bookings.diary');
+  end loop;
+end $$;
+
 -- The Theatre (spec §5.8, Q47 drawn: who ticks what): the surgeon's operation note and the anaesthetist's record are written there, so
 -- the Theatre ticks surgical and anaesthesia too, its line has the Anaesthetic record beside the theatre list, the surgeon and the
 -- anaesthetist hold their roles there; the Laboratory offers histopathology for the specimens sent at Sign out. Skipped while a pack is off.

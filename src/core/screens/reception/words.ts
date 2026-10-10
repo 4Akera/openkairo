@@ -3,12 +3,14 @@ import type { Department, PatientHit, QueueRow, VisitStatus } from '../../db/typ
 import { useDepartment } from '../../hooks/organization'
 import { visitQueueFn } from '../../hooks/reads'
 import { minutesSince } from '../../ui'
+import { ageWords } from '../../db/views'
 
 /** a queue row with the clinic it is in: the desk's lists run across every clinic it serves */
 export type ClinicRow = QueueRow & { clinic: Department }
 
 const SEX: Record<string, string> = { male: 'M', female: 'F', other: 'X' }
-export const ageSex = (age: number, sex: string) => `${age} ${SEX[sex] ?? ''}`.trim()
+/** "34 F", a baby's "8 mo F" (from the birth date when it is known) */
+export const ageSex = (age: number, sex: string, born?: string | null) => `${ageWords(born) || age} ${SEX[sex] ?? ''}`.trim()
 export const fullName = (p: { given_name: string; family_name: string }) => `${p.given_name} ${p.family_name}`
 
 const VISIT_WORDS: Record<VisitStatus, string> = { waiting: 'waiting', in_consult: 'with a doctor', pending: 'waiting for results', done: 'done', left: 'left', lapsed: 'lapsed', cancelled: 'cancelled', admitted: 'admitted', discharged: 'discharged' }

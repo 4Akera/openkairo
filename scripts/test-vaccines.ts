@@ -7,6 +7,9 @@ import { parseVax, doseLine, seriesOf, type DoseData } from '../src/packs/vaccin
 import { addDays, ageWords, byAge, dosesOf, scheduleOf, statusOf, summaryOf, whatFor, type Dose, type Row } from '../src/packs/vaccines/schedule'
 import { bannerWords, chipWord, markWord, pregnantOf, saidOf, summaryLine } from '../src/packs/vaccines/words'
 import type { Organization, ServerEntry } from '../src/core/db/types'
+import type { Identity } from '../src/core/db/types'
+import { vaxRowsOf, vaxWords } from '../src/packs/vaccines/rowWords'
+import { bookFor } from '../src/packs/vaccines/book'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -104,4 +107,16 @@ test('a dose’s line, as the record says it', () => {
     'Vaccine · OPV dose 1 · by mouth · from the card · 2025-11-09')
 })
 
+test('the queue word through the core\'s (l): read once a list, on the clinic queue only; the next visit to book', () => {
+  const rows = [{ item: 'd1', patient_id: 'farida', department_id: 'r', vaccine: 'opv', dose: 0, status: 'completed' as const, source: 'card' as const, given_at: addDays(today, -397), reason: null }]
+  const data = vaxRowsOf(['farida', 'talia', 'adult'], { farida: { birth_date: birth } as Identity, talia: { birth_date: addDays(today, -62) } as Identity, adult: { birth_date: '1958-01-01' } as Identity }, rows)
+  assert.equal(data.doses.farida.length, 1); assert.deepEqual(data.doses.talia, [], 'a child with no dose yet still has her birth date from the queue')
+  assert.equal(vaxWords({ patient_id: 'farida' }, { list: 'queue', org }, data, today)[0].tone, 'warn', 'overdue in amber')
+  assert.match(vaxWords({ patient_id: 'talia' }, { list: 'queue', org }, data, today)[0]?.word ?? '', /vaccines due|overdue/)
+  assert.deepEqual(vaxWords({ patient_id: 'adult' }, { list: 'queue', org }, data, today), [], 'a grown-up: no child row is due')
+  assert.deepEqual(vaxWords({ patient_id: 'farida' }, { list: 'desk', org }, data, today), [], 'the queue only')
+  assert.deepEqual(vaxWords({ patient_id: 'farida' }, { list: 'queue', org }, undefined, today), [], 'no read yet: nothing')
+  assert.equal(bookFor(today, addDays(today, 150)), '/book 21w'); assert.equal(bookFor(today, addDays(today, 10)), '/book 10d')
+  assert.equal(bookFor(today, today), null, 'due today: nothing to book'); assert.equal(bookFor(today, null), null)
+})
 console.log(`✓ vaccines: ${n} groups passed`)

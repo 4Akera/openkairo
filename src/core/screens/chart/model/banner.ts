@@ -3,6 +3,7 @@
 // waiting, pregnant or breastfeeding), then this department's pack words (words.ts). The phone and everything else live in the
 // Summary. Pure: the screen draws what this says.
 import type { ServerEntry } from '../../../db/types'
+import { ageWords } from '../../../db/views'
 import { alertWord, alertTone, breastfeedingOf, pregnancyOf, pregnancyWords } from './facts'
 import { alertsOf, allergiesOf, type ChartCtx, type Rec } from './record'
 
@@ -38,6 +39,6 @@ export function safetyOf(x: SafetyInput): SafetyItem[] {
 
 const SEX: Record<string, string> = { male: 'M', female: 'F', other: 'X' }
 /** who: the name, then age, sex and record number in one run (no phone: the Summary has it) */
-export function whoOf(p: { given_name: string; family_name: string; age: number; sex: string; record_number: number; died_on: string | null }) {
-  return { name: `${p.given_name} ${p.family_name}`.trim(), sub: [`${p.age} y`, SEX[p.sex], `#${p.record_number}`].filter(Boolean).join(' · '), deceased: !!p.died_on }
+export function whoOf(p: { given_name: string; family_name: string; age: number; born_on?: string; sex: string; record_number: number; died_on: string | null }) {
+  return { name: `${p.given_name} ${p.family_name}`.trim(), sub: [ageWords(p.born_on, new Date(), true) || `${p.age} y`, SEX[p.sex], `#${p.record_number}`].filter(Boolean).join(' · '), deceased: !!p.died_on }
 }

@@ -8,6 +8,8 @@ import { dueNow, dueWord, eddOf, efw, efwCentile, fitsWeeks, fundusFits, gestOf,
 import { ancLine, parseAnc, parseFp, parsePeriods, parsePn, parseScan, scanIn } from '../src/packs/obgyn/lines'
 import type { Parsed, Result } from '../src/core/screens/visit/parse'
 import { pregnancyWord } from '../src/packs/obgyn/words'
+import type { Identity } from '../src/core/db/types'
+import { obRowsOf, obWordsOf } from '../src/packs/obgyn/marks'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -99,5 +101,15 @@ test('the Pregnancy chip: the weeks, or not ended past 44 weeks (by the weeks th
   const preg = (lmpDays: number, overdue = false) => ({ item: 'p', entry: {} as never, pregnant: true, weeks: null, lmp: daysAgo(lmpDays), at, overdue, data: { status: 'current', pregnant: true } as never })
   assert.deepEqual(pregnancyWord(preg(199), [], now), { word: '28+3 w' })
   assert.deepEqual(pregnancyWord(preg(315), [], now), { word: 'not ended', tone: 'warn' }, 'Aya at 45 weeks, though the flag says not')
+})
+test('the queue word through the core\'s (l): her rows and her age from the table\'s read; the queue only', () => {
+  const now = new Date('2026-10-08T10:00:00Z')
+  const rows = [{ patient_id: 'rania', kind: 'pregnancy' as const, at: '2026-05-01T08:00:00Z', data: { status: 'current', pregnant: true, lmp: '2026-03-01' } },
+    { patient_id: 'rania', kind: 'bp' as const, at: '2026-10-08T09:30:00Z', data: { sys: 142, dia: 92 } }]
+  const data = obRowsOf(['rania', 'nobody'], rows, { rania: { birth_date: '1990-01-01' } as Identity }, now)
+  assert.equal(data.rania.age, 36); assert.equal(data.rania.marks.length, 2); assert.deepEqual(data.nobody.marks, [])
+  assert.deepEqual(obWordsOf({ patient_id: 'rania' }, { list: 'queue' }, data, now), [{ word: 'BP 142/92', tone: 'warn' }], 'today\'s BP from the notice')
+  assert.deepEqual(obWordsOf({ patient_id: 'nobody' }, { list: 'queue' }, data, now), [])
+  assert.deepEqual(obWordsOf({ patient_id: 'rania' }, { list: 'bench' }, data, now), [], 'the queue only')
 })
 console.log(`obgyn: ${n} groups passed`)

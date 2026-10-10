@@ -5,6 +5,7 @@ import { usePatientSearch } from '@core/hooks/reads'
 import { useDepartment } from '@core/hooks/organization'
 import type { ScreenProps } from '@core/screens/registry'
 import { Button, Card, Chip, Empty, Input, ScreenFrame, Spinner, errorText } from '@core/ui'
+import { ageWords } from '@core/db/views'
 import { RELATIONS, useFileWrites, useFiles, type File } from './data'
 import { MemberRow } from './Member'
 
@@ -43,7 +44,7 @@ function AddMember({ f, deptId }: { f: File; deptId: string }) {
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, phone or number" className="h-8 w-56" />
       {RELATIONS.filter((r) => r !== 'head').map((r) => <Chip key={r} on={rel === r} onClick={() => setRel(r)}>{r}</Chip>)}</div>
     {(hits.data ?? []).filter((p) => !f.members.some((m) => m.patient_id === p.id)).slice(0, 5).map((p) => <div key={p.id} className="flex items-center gap-2 text-13">
-      <span className="font-mono text-12 text-faint">{p.record_number}</span><span>{p.given_name} {p.family_name}</span><span className="text-12 text-faint">{p.age} {p.sex[0]?.toUpperCase()}</span>
+      <span className="font-mono text-12 text-faint">{p.record_number}</span><span>{p.given_name} {p.family_name}</span><span className="text-12 text-faint">{ageWords(p.born_on) || p.age} {p.sex[0]?.toUpperCase()}</span>
       <Button size="xs" variant="outline" className="ms-auto" loading={w.join.isPending} onClick={() => w.join.mutate({ dept: deptId, household_id: f.id, patient_id: p.id, relation: rel }, { onSuccess: () => setQ('') })}>Join as {rel}</Button></div>)}
     {w.join.error && <p className="text-12 text-danger">{errorText(w.join.error)}</p>}
   </div>

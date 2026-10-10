@@ -8,7 +8,7 @@ import { Lock } from 'lucide-react'
 import { useFacts, useGlance } from '../../../hooks/chart'
 import { useDepartment } from '../../../hooks/organization'
 import { useRecord } from '../../../hooks/reads'
-import { banner } from '../../../db/views'
+import { ageWords, banner } from '../../../db/views'
 import { Badge, Banner, Centered, Empty, Section, Skeleton, TONE, Tag, cn, errorText, flagTone, shortDate } from '../../../ui'
 import { doseText, visitsOf, type ChartCtx, type Rec, type VisitLine } from '../model/record'
 import { summaryOf } from '../model/summary'
@@ -27,7 +27,7 @@ export function ChartGlance({ patientId, page }: { patientId: string; page?: boo
   if (g.error || !g.data) return <Centered><p role="alert" className="text-14 text-danger">{g.error ? errorText(g.error) : 'No patient'}</p></Centered>
   const p = banner(g.data.patient, g.data.tables['base.deceased']?.rows[0] ?? null)
   return <div className="mx-auto grid max-w-3xl gap-4 px-4 py-4">
-    <Banner size="compact" name={`${p.given_name} ${p.family_name}`} sub={`${p.age} y · ${SEX[p.sex] ?? ''} · #${p.record_number}`} back={{ label: 'Back', onClick: () => navigate('/') }}
+    <Banner size="compact" name={`${p.given_name} ${p.family_name}`} sub={`${ageWords(p.born_on, new Date(), true) || `${p.age} y`} · ${SEX[p.sex] ?? ''} · #${p.record_number}`} back={{ label: 'Back', onClick: () => navigate('/') }}
       flags={p.died_on ? <Badge>deceased</Badge> : undefined} />
     {!reader && <p className="text-12 text-faint">Your role here does not read the record: who the patient is and where they have been, nothing clinical.</p>}
     {body}

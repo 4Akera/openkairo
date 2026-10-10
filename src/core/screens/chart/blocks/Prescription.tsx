@@ -31,7 +31,7 @@ export function Prescription({ items }: GroupProps) {
   const loose = orders.filter((o) => !meds.some((m) => orderFor(m) === o))
   const prescribed = meds.some((m) => med(m)?.basis !== 'reported')
   const env = useBlockEnv(); const chart = useContext(ChartContext)
-  const rx = chart && !env.sample && !env.compact ? prescriptionOf(meds, { org: env.org, patient: { full_name: chart.r.identity.full_name, age: chart.r.patient.age,
+  const rx = chart && !env.sample && !env.compact ? prescriptionOf(meds, { org: env.org, patient: { full_name: chart.r.identity.full_name, age: chart.r.patient.age, born_on: chart.r.patient.born_on,
     sex: chart.r.patient.sex, number: chart.r.patient.record_number } }) : null
   return <div className="flex gap-3">
     {prescribed && <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent-soft text-16 font-semibold text-accent">℞</span>}

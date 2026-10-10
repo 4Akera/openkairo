@@ -12,6 +12,20 @@ export function ageOf(born: string | null | undefined, now = new Date()) {
   const [y, m = 1, d = 1] = born.slice(0, 10).split('-').map(Number)
   return now.getFullYear() - y - (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d) ? 1 : 0)
 }
+/** an age as the clinics say it, the way paediatrics shows it: days in the first month ("3 d"), months to two years ("8 mo", "18 mo"),
+ *  then years ("34" beside the sex on a list, "34 y" with years) — never "0 y" for a baby. A birth known only to its year says years;
+ *  only to its month, months */
+export function ageWords(born: string | null | undefined, now = new Date(), years = false): string {
+  if (!born) return ''
+  const s = born.slice(0, 10); const y = ageOf(s, now)
+  if (y < 2 && s.length >= 7) {
+    const [by, bm, bd = 1] = s.split('-').map(Number)
+    const days = Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(by, bm - 1, bd)) / 86_400_000)
+    if (s.length === 10 && days < 31) return `${Math.max(0, days)} d`
+    return `${Math.max(0, (now.getFullYear() - by) * 12 + (now.getMonth() + 1 - bm) - (now.getDate() < bd ? 1 : 0))} mo`
+  }
+  return years ? `${y} y` : String(y)
+}
 const bornText = (i: Identity) => !i.birth_date ? '' : i.birth_precision === 'year' ? i.birth_date.slice(0, 4) : i.birth_precision === 'month' ? i.birth_date.slice(0, 7) : i.birth_date
 export const phoneOf = (i: Identity) => i.telecom.find((t) => t.system === 'phone')?.value ?? null
 export function banner(i: Identity, deceased?: DeceasedRow | null): PatientBanner {
@@ -149,7 +163,7 @@ export function queueRows(read: TableRead<PresenceRow>, o: Organization | undefi
   return read.rows.filter((p) => isOpen(p) && p.kind === 'visit').map((p) => {   // a stay is the bed board's, never a queue row
     const i = read.patients[p.patient_id]; const b = banner(i); const v = visitRow(p, history.get(`${p.patient_id}|${p.department_id}`) ?? 0)
     const reqs = orders.filter((x) => x.visit_id === p.item)
-    return { id: p.item, patient: { id: p.patient_id, record_number: b.record_number, given_name: b.given_name, family_name: b.family_name, sex: b.sex, age: b.age, has_allergies: allergic.has(p.patient_id) },
+    return { id: p.item, patient: { id: p.patient_id, record_number: b.record_number, given_name: b.given_name, family_name: b.family_name, sex: b.sex, age: b.age, born_on: b.born_on, has_allergies: allergic.has(p.patient_id) },
       status: v.status, band: bandOf(p), priority: v.priority, is_first: v.is_first, assignee_id: v.assignee_id, assignee_name: userName(o, v.assignee_id), arrived_at: p.checked_in_at,
       present_at: presentNow(p) ? (p.called_at ?? p.checked_in_at) : null, seen_at: p.seen_at, request_id: p.for_order, request_open: !!p.for_order, called_at: p.called_at, missed_calls: p.missed,
       has_vitals: p.has_vitals, present: presentNow(p), visit: v, orders: reqs,

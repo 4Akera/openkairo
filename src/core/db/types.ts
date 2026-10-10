@@ -120,7 +120,7 @@ export interface RecordView {
 }
 export interface RecordRead { read_at: string; user_name: string; user_kind: string; department_name: string | null; basis: string | null; reason_text: string | null; opened_department: string | null; purpose: string }
 export interface QueueRow {
-  id: string; patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; age: number; has_allergies: boolean }
+  id: string; patient: { id: string; record_number: number; given_name: string; family_name: string; sex: string; age: number; born_on?: string; has_allergies: boolean }
   status: VisitStatus; band: 'back' | 'waiting' | 'pending' | 'consult'; priority: Priority; is_first: boolean; assignee_id: string | null; assignee_name: string | null
   arrived_at: string; present_at: string | null; seen_at: string | null; request_id: string | null; request_open: boolean
   called_at: string | null; missed_calls: number; has_vitals: boolean; present: boolean

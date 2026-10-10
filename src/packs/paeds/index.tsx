@@ -16,6 +16,9 @@ import { DEV, devLine, hearingRefer, newbornOf, recordedOf, summaryOf, type DevD
 import { growthSummary, growthWord, childWords } from './words'
 import { rowsOf } from './growth'
 import { wardLine } from './ward'
+import { registerOrderWords } from '@core/screens/rows'
+import { growthWords, type GrowthRows } from './rowWords'
+import { loadGrowth } from './rowLoad'
 import { rxLine, vLine } from './lines'
 import { whoTables } from './who'
 
@@ -51,4 +54,6 @@ registerCardLine(KEY, 'medication', 'Paediatrics', rxLine)
 registerCardLine(KEY, 'vitals', 'Paediatrics', (q, ctx) => vLine(q, ctx, whoTables()))
 // the children's ward board: the weight and its age, maintenance by Holliday–Segar (no tile button: Give and Obs are ward nursing's)
 registerTileLine(KEY, (row, ctx) => wardLine(row, ctx))
+// its word on a queue row ("weight z −2.3"): the core's (l), the growth table read once a list (2026-10-10)
+registerOrderWords(KEY, { load: loadGrowth, words: (row, ctx, data) => growthWords(row, ctx, data as GrowthRows | null) })
 export const key = KEY

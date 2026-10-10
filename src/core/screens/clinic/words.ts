@@ -1,8 +1,10 @@
 import type { QueueRow } from '../../db/types'
+import { ageWords } from '../../db/views'
 
 /** The clinic list's words (spec 05, "who is next, and who needs me"): plain, sentence case, one line per patient. */
 const SEX: Record<string, string> = { male: 'M', female: 'F', other: 'X' }
-export const ageSex = (age: number | null, sex: string) => `${age ?? ''} ${SEX[sex] ?? ''}`.trim()
+/** "34 F", a baby's "8 mo F" (from the birth date when it is known) */
+export const ageSex = (age: number | null, sex: string, born?: string | null) => `${ageWords(born) || (age ?? '')} ${SEX[sex] ?? ''}`.trim()
 
 /** years from a birth date written YYYY-MM-DD, read as a calendar date (no time zone shift) */
 export function yearsOld(born: string | null | undefined) {

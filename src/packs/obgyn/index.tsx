@@ -6,14 +6,15 @@
 import { registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerCard, registerCommand } from '@core/screens/visit/commands'
-import { registerRowMark } from '@core/screens/marks'
+import { registerOrderWords } from '@core/screens/rows'
 import { pregnancyOf } from '@core/screens/chart/model/facts'
 import { ANC, PERIODS, PN, parseAnc, parseFp, parsePeriods, parsePn, parseScan, ancLine, pnLine, scanLine, scanIn, periodsLine, type AncO, type PeriodsO, type PnO } from './lines'
 import { AncCard, InsertCard, MethodCard, PnCard, ScanCard } from './Cards'
 import { GynaecologyBody, PregnancyBody } from './Sections'
 import { gynWord, obWords, pregnancyWord } from './words'
 import { gynOf } from './settings'
-import { obMark } from './marks'
+import { obWordsOf, type ObRows } from './marks'
+import { loadOb } from './marksLoad'
 import './labour'
 
 const KEY = 'obgyn'
@@ -28,8 +29,8 @@ registerSection({ key: 'obgyn.gynaecology', title: 'Gynaecology', types: [PERIOD
   word: (x) => gynWord(x.facts, gynOf(x.ctx.org).methods, new Date()) })
 // the banner: G and P, Rh negative while pregnant, a method's change due (the antenatal checks and the observations with the packs' types)
 registerBannerWords({ key: 'obgyn.mother', types: [ANC, 'observation', 'pregnancy'], words: (x) => obWords(pregnancyOf(x.own.shown, x.ctx.org?.types, day(x.ctx)), x.own.shown, gynOf(x.ctx.org).methods, new Date()) })
-// the queue: one word a row
-registerRowMark(KEY, (row, ctx) => obMark(row, ctx))
+// the queue: one word a row, from the pack's own table read once a list (the core's (l))
+registerOrderWords(KEY, { load: loadOb, words: (row, ctx, data) => obWordsOf(row, ctx, data as ObRows | null) })
 
 const cmd = { pack: KEY, group: 'record' as const, groupTitle: 'ObGyn' }
 registerCommand({ ...cmd, name: 'anc', title: 'Antenatal visit', label: 'Antenatal visit — BP and weight, the fundus, the baby\'s heart, the lie, urine', example: '/anc bp 118/74 wt 71 sfh 29 fhr 144 ceph nil',

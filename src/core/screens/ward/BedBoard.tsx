@@ -4,7 +4,7 @@ import { useDepartment } from '../../hooks/organization'
 import { usePatientSearch, useStays } from '../../hooks/reads'
 import { newId, useWrite } from '../../hooks/writes'
 import { move, oneSet } from '../../db/entries'
-import { banner, userName } from '../../db/views'
+import { ageWords, banner, userName } from '../../db/views'
 import type { Place, PresenceRow, TableRead } from '../../db/types'
 import type { ScreenProps } from '../registry'
 import { startOf, stayDay } from '../chart/model/encounter'
@@ -92,7 +92,7 @@ export function BedBoard({ dept }: ScreenProps) {
 /** who is in the bed, from the stay's row: the day counts from its clinical start (the admission as it happened, as the chart dates it) */
 function occupant(row: PresenceRow, read: TableRead<PresenceRow> | undefined, clinician: string | null, onOpen: () => void): Occupant {
   const i = read?.patients[row.patient_id]; const p = i ? banner(i) : null
-  return { name: p ? `${p.given_name} ${p.family_name}` : 'Patient', sexAge: p ? `${p.sex[0]?.toUpperCase() ?? ''} ${p.age}`.trim() : '', day: stayDay(startOf(row, read)),
+  return { name: p ? `${p.given_name} ${p.family_name}` : 'Patient', sexAge: p ? `${p.sex[0]?.toUpperCase() ?? ''} ${ageWords(p.born_on) || p.age}`.trim() : '', day: stayDay(startOf(row, read)),
     clinician, reason: row.reason, urgent: row.urgent, onOpen }
 }
 
@@ -103,7 +103,7 @@ function Admit({ bed, busy, onAdmit, onCancel }: { bed: Place; busy: boolean; on
     <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Who goes to ${bed.name}? Name, phone or number`} autoFocus className="h-8" />
     <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" className="h-8" />
     {q.trim().length >= 2 && <ul className="max-h-40 divide-y divide-line overflow-y-auto rounded-md ring-1 ring-line">
-      {(hits.data ?? []).map((p) => <li key={p.id}><button type="button" disabled={busy} onClick={() => onAdmit(p.id, reason.trim())} className="w-full px-2 py-1 text-left text-14 hover:bg-hover">#{p.record_number} {p.given_name} {p.family_name} <span className="text-12 text-faint">{p.sex[0]?.toUpperCase()} {p.age}</span></button></li>)}
+      {(hits.data ?? []).map((p) => <li key={p.id}><button type="button" disabled={busy} onClick={() => onAdmit(p.id, reason.trim())} className="w-full px-2 py-1 text-left text-14 hover:bg-hover">#{p.record_number} {p.given_name} {p.family_name} <span className="text-12 text-faint">{p.sex[0]?.toUpperCase()} {ageWords(p.born_on) || p.age}</span></button></li>)}
       {hits.data?.length === 0 && <li className="px-2 py-1 text-14 text-faint">No one matches.</li>}</ul>}
     <div><Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button></div>
   </div>

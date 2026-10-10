@@ -17,6 +17,9 @@ import { boardRowsDefs, boardRowsFor, minutesSince, registerBoardRows, rowButton
 import { registerTileLine, tileLineDefs, tileLineOf, tileReadsFor, type TileCtx } from '../src/core/screens/ward/tiles'
 import type { PresenceRow } from '../src/core/db/types'
 import type { Organization } from '../src/core/db/types'
+import { ageWords } from '../src/core/db/views'
+import type { TableRead } from '../src/core/db/types'
+import { growthRowsOf, growthWords } from '../src/packs/paeds/rowWords'
 
 let n = 0
 const test = (name: string, fn: () => void) => { try { fn(); n++ } catch (e) { console.error(`✗ ${name}`); throw e } }
@@ -188,6 +191,23 @@ test('C7: a tile line\'s read reaches its own line only, where the department us
   const row = { patient_id: 'p1' } as PresenceRow
   assert.deepEqual(tileLineOf(tileLineDefs(), row, ctx, { reader: ['p1'], other: 'x' }).map((s) => s.words[0].text), ['read', 'nothing'], 'each pack sees only its own read (none was asked for other)')
   assert.deepEqual(tileLineOf(tileLineDefs(), row, ctx).map((s) => s.words[0].text), ['not yet', 'nothing'], 'before the read lands')
+})
+
+test('a baby\'s age as the clinics say it (base, 2026-10-10): days, then months to two years, then years — never "0 y"', () => {
+  const now = new Date(2026, 9, 10)
+  assert.equal(ageWords('2026-10-07', now), '3 d'); assert.equal(ageWords('2026-09-12', now), '28 d'); assert.equal(ageWords('2026-02-01', now), '8 mo')
+  assert.equal(ageWords('2025-04-10', now), '18 mo'); assert.equal(ageWords('2024-10-10', now), '2'); assert.equal(ageWords('1990-01-01', now, true), '36 y')
+  assert.equal(ageWords('2026-03', now), '7 mo', 'a birth known to its month: months'); assert.equal(ageWords('2025', now, true), '1 y', 'known to its year: years')
+  assert.equal(ageWords(null, now), ''); assert.equal(ageWords('2026-10-10', now), '0 d')
+})
+test('paediatrics\' queue word through the core\'s (l): the banner\'s z-score beyond ±2, the queue only', () => {
+  const now = new Date('2026-10-08T10:00:00Z')
+  const t = { rows: [{ item: 'g1', patient_id: 'judy', at: '2026-10-08T09:00:00Z', age_days: 270, sex: 'female', weight: 6.4, length: null, head: null, lying: true,
+    z: { wfa: { z: -2.31, c: 1 } }, outside: [], version: 'demo', source_entries: [] }], entries: {}, patients: { judy: { birth_date: '2026-01-11' } }, withheld: 0 } as unknown as TableRead<Record<string, unknown>>
+  const data = growthRowsOf(['judy', 'adam'], t)
+  assert.deepEqual(growthWords({ patient_id: 'judy' }, { list: 'queue' }, data, now), [{ word: 'weight z −2.3', tone: 'warn' }])
+  assert.deepEqual(growthWords({ patient_id: 'adam' }, { list: 'queue' }, data, now), [], 'no growth row: nothing')
+  assert.deepEqual(growthWords({ patient_id: 'judy' }, { list: 'desk' }, data, now), [])
 })
 
 console.log(`✓ clinics core: ${n} checks passed`)
