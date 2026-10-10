@@ -373,6 +373,95 @@ export interface HaematoWeek {
   used_suggestion?: boolean
   was?: number
 }
+/** haemodialysis.prescription v1 (haemodialysis) */
+export interface HaemodialysisPrescription {
+  access?: {
+    kind: 'fistula' | 'graft' | 'catheter'
+    site?: string
+  }
+  bath?: {
+    ca?: number
+    hco3?: number
+    k?: number
+  }
+  blood_flow?: Quantity
+  dialysate_flow?: Quantity
+  dialyser?: string
+  dry_weight: Quantity
+  heparin?: {
+    bolus?: Quantity
+    none?: boolean
+    rate?: Quantity
+  }
+  hours: number
+  note?: string
+}
+/** haemodialysis.reading v1 (haemodialysis) */
+export type HaemodialysisReading = {
+  bp?: {
+    dia: Quantity
+    sys: Quantity
+  }
+  haemodialysis: {
+    arterial?: Quantity
+    blood_flow?: Quantity
+    heparin?: Quantity
+    tmp?: Quantity
+    uf?: Quantity
+    venous?: Quantity
+  }
+  hr?: Quantity
+  note?: string
+} & ({ bp: { dia: Quantity; sys: Quantity } } | { hr: Quantity })
+/** haemodialysis.session v1 (haemodialysis) */
+export interface HaemodialysisSession {
+  concept: Concept
+  haemodialysis: {
+    access?: {
+      kind: 'fistula' | 'graft' | 'catheter'
+      note?: string
+      ok?: boolean
+      site?: string
+    }
+    chair?: string
+    ended?: Datetime
+    hours?: number
+    missed?: 'not_came' | 'unwell' | 'admitted' | 'travelling' | 'refused' | 'other'
+    needles?: string
+    on: string
+    prescription?: {
+      access?: {
+        kind: 'fistula' | 'graft' | 'catheter'
+        site?: string
+      }
+      bath?: {
+        ca?: number
+        hco3?: number
+        k?: number
+      }
+      blood_flow?: Quantity
+      dialysate_flow?: Quantity
+      dialyser?: string
+      dry_weight?: Quantity
+      heparin?: {
+        bolus?: Quantity
+        none?: boolean
+        rate?: Quantity
+      }
+      hours?: number
+      note?: string
+    }
+    removed?: Quantity
+    shift?: number
+    slot?: string
+    target?: Quantity
+  }
+  note?: string
+  outcome?: string
+  performed?: PartialDate
+  reason?: string
+  status: 'in-progress' | 'completed' | 'stopped' | 'not-done'
+}
 /** here v1 (base) */
 export interface Here {
   note?: string
@@ -1298,6 +1387,13 @@ export interface HaematoInrSetting {
     reason: string
   }[]
 }
+/** setting haemodialysis.unit (haemodialysis; owner department) */
+export interface HaemodialysisUnitSetting {
+  hbv_chairs?: string[]
+  hcv_chairs?: string[]
+  hours: number
+  shifts: string[]
+}
 /** setting intensive.cardiac (intensive; owner department) */
 export interface IntensiveCardiacSetting {
   balloon_minutes?: number
@@ -1672,6 +1768,9 @@ export interface EntryData {
   'haemato.plan': HaematoPlan
   'haemato.programme': HaematoProgramme
   'haemato.week': HaematoWeek
+  'haemodialysis.prescription': HaemodialysisPrescription
+  'haemodialysis.reading': HaemodialysisReading
+  'haemodialysis.session': HaemodialysisSession
   'here': Here
   'intensive.goals': IntensiveGoals
   'intensive.infusion': IntensiveInfusion
@@ -1743,6 +1842,7 @@ export interface SettingData {
   'familycare.checks': FamilycareChecksSetting
   'familycare.files': FamilycareFilesSetting
   'haemato.inr': HaematoInrSetting
+  'haemodialysis.unit': HaemodialysisUnitSetting
   'intensive.cardiac': IntensiveCardiacSetting
   'intensive.heparin': IntensiveHeparinSetting
   'intensive.unit': IntensiveUnitSetting

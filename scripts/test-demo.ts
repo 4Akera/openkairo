@@ -129,11 +129,14 @@ test('the sign-in page lists the generated logins, grouped by department, and ty
 })
 test('a demo person per role the seeds grant, and each pack role on its pack\'s department', () => {
   const roles = new Set(DEMO_GROUPS.flatMap((g) => g.people.flatMap((p) => p.role.split(' · '))))
-  for (const r of ['Owner', 'Doctor', 'Nurse', 'Reception', 'Lab technician', 'Pharmacist', 'Store keeper', 'Cashier', 'Accountant', 'Booking desk', 'Books its rooms', 'Triage nurse']) assert.ok(roles.has(r), r)
+  for (const r of ['Owner', 'Doctor', 'Nurse', 'Reception', 'Lab technician', 'Pharmacist', 'Store keeper', 'Cashier', 'Accountant', 'Booking desk', 'Books its rooms', 'Triage nurse', 'Dialysis nurse', 'Dialysis doctor']) assert.ok(roles.has(r), r)
   const pharmacy = DEMO_GROUPS.find((g) => g.department === 'Pharmacy')
   assert.deepEqual(pharmacy?.people.map((p) => p.role).sort(), ['Cashier · Pharmacist', 'Store keeper'], 'the pharmacist takes payment at its counter too (the clinic\'s choice)')
   const er = DEMO_GROUPS.find((g) => g.department === 'Emergency')
   assert.deepEqual(er?.people.map((p) => `${p.name} · ${p.role}`).sort(), ['Dr. Tamer Ezz · Doctor', 'Heba Nabil · Triage nurse'],
     'Emergency: its doctor and its triage nurse')
+  const hd = DEMO_GROUPS.find((g) => g.department === 'Dialysis unit')
+  assert.deepEqual(hd?.people.map((p) => `${p.name} · ${p.role}`).sort(), ['Dr. Walid Hamza · Dialysis doctor', 'Rasha Mounir · Dialysis nurse'],
+    'the Dialysis unit: its doctor and its nurse')
 })
 console.log(`demo: ${n} groups passed`)

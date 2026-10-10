@@ -49,6 +49,8 @@
 -- include: supabase/demo/casualty.sql
 -- include: supabase/seeds/intensive.sql
 -- include: supabase/demo/intensive.sql
+-- include: supabase/seeds/haemodialysis.sql
+-- include: supabase/demo/haemodialysis.sql
 -- include: supabase/seeds/clinic_packs.sql
 -- include: supabase/demo/clinic_packs.sql
 -- include: supabase/demo/journey/1-base.sql

@@ -20,4 +20,5 @@ import * as anaesthesia from './anaesthesia'
 import * as bedside from './bedside'
 import * as casualty from './casualty'
 import * as intensive from './intensive'
-export const packs = { pharmacy, lis, billing, radiology, bookings, vaccines, chroniccare, familycare, paeds, obgyn, cardio, nephrology, lungs, haemato, oncology, theatre, surgical, anaesthesia, bedside, casualty, intensive }
+import * as haemodialysis from './haemodialysis'
+export const packs = { pharmacy, lis, billing, radiology, bookings, vaccines, chroniccare, familycare, paeds, obgyn, cardio, nephrology, lungs, haemato, oncology, theatre, surgical, anaesthesia, bedside, casualty, intensive, haemodialysis }

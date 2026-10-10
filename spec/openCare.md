@@ -1992,6 +1992,153 @@ numbered as on its picture.
   user and patient for 10 minutes): about 6 rows an hour per admitted patient per open screen; (16) the first dose's cover (q6h 4.5 h,
   TDS 6 h, BD 9 h, once a day 12 h): should a ward choose it, or a medicine? (17) a course counts doses from the first in this stay;
   (18) the demo has two Samiras and three Abdelmoneims after the merge: rename Ward nursing's two?
+- **Built 2026-10-09, D1a: Dialysis's schedule (chosen by Claude at the owner's request, awaiting the owner)**: migration 21 declares
+  the pack `haemodialysis` ("Dialysis"; the word dialysis is one core files use), role block d4, no requires. Its starter setup
+  `haemodialysis.unit` makes the Dialysis unit: eight chairs (Chair 1 … Chair 6, HCV chair 7, HBV chair 8, label chair), outpatient
+  stays (AMB), the Bed board and a Schedule tab. The unit's setting `haemodialysis.unit` holds its shifts (1–4 start times, in order;
+  07:00, 11:30, 16:00), a session's hours (4) and the chairs kept for HBV and for HCV, by name as on the board (a place has no key);
+  a patient in the wrong chair is shown, never stopped. The standing schedule is the pack's own two tables (the plan's Q13), not
+  entries: `haemodialysis.slots` (a patient, Sat · Mon · Wed or Sun · Tue · Thu, a shift, a chair, from and until; one live slot a
+  patient, one a chair, pattern and shift; a change ends the slot and adds the next; one ended the day before it starts blocks
+  nothing) and `haemodialysis.moves` (one session moved, taken off a day, or an extra one, with its reason; undone, never deleted).
+  Both are stores, so Erase removes a patient's rows. They are written only through the op `haemodialysis.plan` (add, end, move,
+  undo; action `write:haemodialysis.schedule`; the unit's changes take turns) and read through `haemodialysis.week` (Saturday …
+  Thursday, and the sessions moved to the Friday after, read:queue). A chair holds one patient a day and shift, whether by a slot or
+  a move (chair_taken, also when a move is undone back into it); a patient comes once a day (already_due; a session moved to
+  another chair or shift on its own day is not a second); ending a slot undoes its sessions moved off later days; the setting
+  cannot cut a shift a live slot or a coming move still uses (shift_in_use). The unit's
+  nurse (`haemodialysis.nurse`, built on Nurse, with admitted, discharged and the schedule) and doctor (`haemodialysis.doctor`, built on
+  Doctor, with the schedule); a base Nurse or Doctor there reads it. Seed: the clinic turns the pack on, the unit at position 12,
+  Rasha Mounir (nurse) and Dr. Walid Hamza (doctor). D1b adds the session (the pack's type on the base's procedure), who is due under
+  the board, the board's read and the demo's patients.
+- **Built 2026-10-09, D1b: Dialysis's session (chosen by Claude at the owner's request, awaiting the owner)**: a session is a short
+  stay in a chair. Start is the base's `admitted` into the chair (admit source outp, reason Haemodialysis) with the session begun, one
+  set; End (D2) is the session completed with the base's `discharged`, one set. The session is the pack's own type
+  `haemodialysis.session` on the base's `procedure` (so the procedure's check, the record's line rules, privacy and FHIR apply: a
+  Procedure in its Encounter): in progress, completed, stopped, or not done (missed), its fields under `haemodialysis` (the clinic's
+  day, the shift, the scheduled chair and slot, the hours, why it was missed, and D2's fields declared now). Its check: the pack's
+  concept; on, done or stopped it sits in a stay of this unit, admitted for a new session (or opened in the same set; a correction or
+  change of one may follow the discharge), one session a stay (a crossed-out one aside); missed it sits in no stay; one session a
+  patient a day (a crossed-out one aside). Lines: "Dialysis · on · 4 h", "Dialysis · done · 2.6 L
+  off", "Dialysis missed · Did not come". Action `write:haemodialysis.session`, everyday (the base's Doctors and Nurses where the unit
+  uses the pack). Who is due now (`haemodialysis.due`, read:queue, the clinics' C5 rows under the board): today's slots less the
+  sessions moved away, plus those moved here, for the shift on now and every earlier one today and the next within the hour (before
+  the first shift, the first); left out whoever has a session today (on, done or missed) or a stay here now; each row with the
+  patient's isolation (the base's active isolation alerts, HBV or HCV), their last session's day and the department they are
+  admitted in elsewhere. The board's read (`haemodialysis.board`, read:record, purpose TREAT, read-logged): each stay here, its
+  session, the stay's latest blood pressure (each as it stands now: a crossed-out one is passed over), the patient's isolation.
+  Demo: six of the pack's own patients: Said, Nadia and Mohamed (HCV, in the HCV chair) on dialysis, Hassan (who missed a session a
+  week ago, on one of his days: on a Friday the Saturday six days back) and Shaimaa due, Magdy (HBV) in the HBV chair on the
+  other days; each of the five had a session on their last pattern day; on a Friday the five come a day early by one-off moves.
+- **Built 2026-10-09, D1c: Dialysis on the board (chosen by Claude at the owner's request, awaiting the owner)**: under the chairs,
+  "Due now · from the schedule" (the clinics' C5 rows, the toolbar's view "Due, not started"), read from `haemodialysis.due` each
+  minute and on the clinic's hints, by shift then the chair's place. Each row says the scheduled chair, "due 11:30" (amber from 30
+  minutes past the shift's start, its minutes counted from there), HBV or HCV, a chair that does not fit the patient's isolation
+  ("HCV: Chair 3 is not kept for HCV", in amber; shown, never a stop), "moved here for today", "last session Wed" (within six days),
+  "last session 9 days ago" or "first session here", and "in Medical Ward" in amber for a stay elsewhere. Start is C5's: the base's
+  admission into a free chair chosen inline ("Into"), with the session begun in the same Done (in progress, now, the clinic's day,
+  the shift, the scheduled chair and slot, the hours). Missed, for whoever may write the session, once the row's shift has begun (the
+  next shift is listed up to an hour early, and nobody misses a session not yet due): the session not done, in no stay, "Did not
+  come" (one click; its reason can be changed later). Each chair's tile reads the board once (C7's read, `haemodialysis.board` for
+  treatment, again when the stays change and on the clinic's hints, never on a timer; the tile's clock moves each minute, so the time
+  left moves without a new read): "on · 1:30 left" ("over by 0:10" in amber past the hours; "on · 2:30" with none), "ended · not
+  discharged" or "no session" in amber, "BP 146/84" (amber under 100 systolic, red under 90), and the chair's mismatch in amber;
+  nothing while it reads, or for a visit. A patient with both HBV and HCV fits the HBV chair (HBV is the one that needs its own
+  chair): no warning there. The refusals have the pack's words. No tile button yet (D2 adds Readings and End).
+- **Built 2026-10-09, D1d: Dialysis's Schedule tab (chosen by Claude at the owner's request, awaiting the owner)**: the week from
+  its Saturday (`haemodialysis.week`, read:queue; on a Friday the week to come), one shift at a time (chips "Shift 1 · 07:00" …, the
+  shift on now first), this week or next: a row a chair, a column a day Sat … Thu (today's in the accent); each cell the patient, a
+  session moved away struck through ("moved to Thu", or "off this day"), one moved in with "this week only", "kept for HBV" (or HCV)
+  for a kept chair, or "free"; a patient in a chair that does not fit their isolation shows the amber glyph (its words for a screen
+  reader), never a stop. The view "The week" counts the week's sessions over every shift. For whoever may change the schedule
+  (`write:haemodialysis.schedule`), cards fold out under the table, never over it, each through `haemodialysis.plan` with the
+  refusal's words under it: Add a patient (from the toolbar, or a free cell preset to its chair, pattern and shift: who by one
+  search, Sat · Mon · Wed or Sun · Tue · Thu, the shift, the chair, a chair the server would refuse as taken from that day off and
+  saying "taken", from when, a note; the patient's HBV or HCV isolation against the chair in amber once read, Add still on, and a
+  failed isolation read said in amber); a patient's cell: move this one session to a day up to two weeks ahead (Fridays included),
+  another shift or chair (a chair taken then off, the new chair's isolation mismatch in amber), with a reason, or take it off that
+  day, or end the slot from a day (a slot already ending says when); a moved session's cell: its reason and "Undo the move", off with
+  the refusal's words when another session was moved into the chair that day or the patient comes that day by another move. Another
+  week is read afresh: its columns and cells are always one week's.
+- **Built 2026-10-09, D2a: Dialysis's session server (chosen by Claude at the owner's request, awaiting the owner)**: the patient's
+  standing prescription is the pack's own type `haemodialysis.prescription` (the base has none; no FHIR mapping yet): hours and dry
+  weight required, blood flow and dialysate flow (mL/min), the dialyser, the bath (K, Ca, HCO₃), heparin (a bolus in units and a rate in
+  units/h with no UCUM code, or none: never none beside a dose, `heparin_none_with_dose`), the access (fistula, graft or catheter, and
+  its site), a note. One a patient, one the writer may not see counted too: the first is new, each change continues it
+  (`prescription_exists`, `not_a_prescription`); written by the dialysis doctor only
+  (`write:haemodialysis.prescription`, not everyday, on the Dialysis doctor role). Its line: "Dialysis prescription · 4 h · BF 300 ·
+  DF 500 · FX80 · K 2 Ca 1.5 HCO₃ 32 · 2000 units then 1000 units/h · dry 72.0 kg". A machine reading is the pack's own type
+  `haemodialysis.reading` on the base's vitals (an Observation): BP and pulse as the base's (so the values, the vitals block, the stay's
+  has_vitals and the export have them; a BP or a pulse on each, since the export's vital-signs panel needs a member), the machine's
+  numbers under `haemodialysis` (blood flow, arterial, venous and transmembrane pressures, the fluid taken off so far in mL, the heparin
+  rate); a new one only in a stay whose session is in progress (`reading_not_in_session`); corrections free, of a reading only (the
+  base's vitals are never turned into one: `not_a_reading`); `write:haemodialysis.reading`, everyday. Its line: "Reading · BP 128/76 · P 84 · BF 300 ·
+  AP -190 · VP 150 · TMP 80 · off 0.9 L · heparin 1000 units/h". Before is one set: the base's vitals (the weight before is the stay's
+  first weight, never copied into the session) and the session changed with the prescription copied as given, the fluid to take off
+  (the weight above dry + 300 mL given back − 400 mL left above dry, to 100 mL; the nurse may type it) and the access checked. The
+  board's read gains the fluid to take off and the dry weight copied by Before, the latest fluid taken off, the weight before, the
+  patient's last weight in the 30 days before the stay (the last session's weight after) and the stay's dialysis event of the last hour (the base's
+  note of kind `dialysis_event`, its heading); who is due takes the hours and the access from the prescription. The Session tab
+  (`haemodialysis.session`, stays, read:record) is declared and sits second in the setup's line (its client is D2b): the chart's centre
+  cannot hold a pack's view, so the session is a tab beside the board, as Critical care's ICU chart is. Demo: the six prescriptions
+  (Shaimaa's 3.5 h), the past sessions' fluid and needles (each as long as its prescription's hours), Before for today's three (2.8, 2.5 and 2.7 L), a reading every 30 minutes
+  (Nadia's last with her event: low BP and cramps, saline 200 mL), Said's Epoetin alfa (IV, twice a week) given today. Noted, not built:
+  the prescription and the machine's numbers do not reach FHIR (BP and pulse do); the base's Discharge alone leaves a session in
+  progress (End, D2c, is the way); only the dialysis doctor writes the prescription; the 13 mL/kg/h and 4 % notices, the BP
+  thresholds and the 300 and 400 mL are Claude's choices; a reading every 30 minutes is not reminded; a reading of the machine's
+  numbers alone (no BP or pulse) is not taken, since its export would be an empty panel.
+- **Built 2026-10-09, D2b: Dialysis's Session tab (chosen by Claude at the owner's request, awaiting the owner)**: the tab
+  `haemodialysis.session` beside the board, opened at a chair by the tile's **Readings** (`?stay=…`, for whoever may write a reading;
+  the tile's second button, End, comes with D2c): the unit's stays as chips in chair order ("Chair 1 · Said Abdelaziz"; a stay that has
+  ended moves the tab on to the next, and says so), "Open the chart", and the patient line (name, age, sex, number, the chair, "2:30 of
+  4:00"). On the left, Before for the nurse while the session is on and Before is not signed: the weight (with "dry 72.0 · 2.9 above dry
+  · after the last session 72.4, gained 2.5", or "lost 0.6"; once the stay has a weight it is shown, not typed again: the weight before
+  is the stay's first, corrected from the chart), BP (the composer's /v words: "146/84", or "146/84 82 36.8"), pulse, temperature, the
+  access (fistula, graft or catheter, preset from the prescription, with "thrill and bruit ✓" or "dressing clean ✓", its site and a
+  note), and the fluid to take off with its parts ("2.9 above dry + 0.3 given back − 0.4 left above dry", or "0.4 under dry: nothing to take off") and its hourly rate, or the
+  nurse's own figure in litres; no prescription, a rate over 13 mL/kg/h and a gain over 4 % of the dry weight are notices, never a stop.
+  Sign Before (⌘↵) writes one set: the base's vitals (with the weight only when the stay had none; left out when the stay's first vitals are the ones
+  shown and nothing changed) and the
+  session changed with the prescription copied, the fluid in mL and the access. Once signed, its summary ("Before · 11:35"; the BP, pulse and temperature Before wrote, else the
+  first vitals'). Under it the
+  prescription card: the session's copy once Before is signed (saying when the standing one has changed since), else the patient's
+  current one, with who wrote it and when (not named over a copy the standing one has moved on from); for the dialysis doctor "Change" (or "Write the prescription") folds the editor out under its
+  lines (the numbers with their usual ranges as notices: time 2–5.5 h, blood flow 200–450, dialysate 300–800 mL/min, K 1–4, Ca 1–1.75,
+  HCO₃ 28–38 mmol/L, heparin bolus 0–5000 units and rate 0–2000 units/h or none — a dose or None must be said —, dry weight 25–200 kg; the dialyser, the access and its
+  site, a note). The Schedule's slot card draws the same card for its patient, so the doctor writes or changes a prescription for a
+  patient not on dialysis today. On the right the readings: a grid by time (BP and pulse, then the machine's blood flow, arterial,
+  venous, TMP, the fluid taken off in litres and the heparin rate; a BP under 100 systolic amber and under 90 red, with ↓ and words for a
+  screen reader), then, while the session is on, the reading card: one row of fields in the grid's order with the last reading's
+  numbers as placeholders (a blank machine field keeps the last one; the fluid typed in litres, kept in mL, over 10 L taken for the machine's mL and
+  refused; the pulse, blood flow, fluid and heparin never under 0; the arterial field takes a minus on a tablet; a BP or a pulse needed,
+  and on the first reading a machine number, each said as what is missing),
+  ⌘↵ signs. A BP under 90, a fall of 30 or more since the start, a venous pressure over 250, an arterial under −250 or over 0 (the minus left off?), or less taken off than the
+  last reading is a notice; the nurse decides. An entry crossed out (a reading, a weight, the session, the prescription) is left out
+  of the tab. A write that comes back with warnings shows them with Sign anyway; a refusal shows its words above the button. The
+  tile now reads "off 1.4 of 2.8 L" after the time once Before set a target ("off 0 of 2.8 L" before the first reading), then the BP,
+  then "gained 2.3 kg" in amber over 4 % of the dry weight; Start's stay takes the access as its reason ("Haemodialysis · AV fistula").
+- **Built 2026-10-09, D2c: Dialysis's events, the unit's drugs and End (chosen by Claude at the owner's request, awaiting the
+  owner)**: on the Session tab, under Before and the prescription while the session is on, **an event**: what happened (several: Low
+  BP, Cramps, Nausea or vomiting, Chest pain, Headache, Clotting in the circuit, Bleeding at the needles, Fever or rigors, Other), what
+  was done (Saline 200 mL or 100 mL, one at a time; Taking off paused; Blood flow lowered; Doctor called) and words (Other needs words), with a BP or pulse
+  taken then; Sign writes one set: the base's note (kind `dialysis_event`, its heading the events joined by " · ", its text what was
+  done and the words), the base's given for the saline ("Sodium chloride 0.9 %", 200 or 100 mL IV, no code: none in the ATC subset)
+  and a reading with the BP or pulse (the machine's numbers carried from the last reading; with no reading yet, the base's vitals).
+  The stay's events show under the readings, the newest first. **The unit's drugs today**: the patient's current medicines given IV or
+  SC (the base's medication list, active), "Epoetin alfa 4000 IU IV" with the doctor's timing words and "last given today 10:20" (the
+  newest completed base given linked to it, of any stay, as each given stands now: one crossed out or corrected to not done is not
+  counted); nothing is due by a rule; the nurse ticks and Sign writes the base's given for each,
+  linked to its medicine. **End** (the patient line's "End session", or the tile's **End**, `&card=end`, for whoever may discharge):
+  the weight after (required; "72.6 kg: 0.6 above dry", under dry in amber), BP and pulse, the fluid taken off (the last reading's figure as written,
+  editable; litres from 0 to 10, as the reading card), the needle sites (Dry, no bleeding · Bled, pressure held · Haematoma, and words), ended early with a reason, an outcome
+  and the time it came off the machine (blank: now; a time typed when signing late, the last such minute); one Done writes the base's
+  vitals, the session changed to completed (or stopped, with the reason) with the fluid taken off, the needles, the outcome and the
+  time, and the base's Discharge (home) changing the stay's latest entry; a stay whose session is not on is discharged with the vitals
+  alone. After it the tab says "Ended · Said Abdelaziz · 13:05" and moves on to the next chair. The tile shows the event of the last
+  hour after the fluid words and before the BP ("low BP, cramps" in red when it has Low BP, else amber), so Nadia's reads "low BP,
+  cramps · BP 88/54", both red. The banner's word, where the department uses the pack: the open stay here with its session on, "off
+  1.4 of 2.8 L", or "on dialysis" before Before. Noted, not built: the base's Discharge alone (a patient leaving mid-session) leaves the
+  session on, End is the way; the unit's drugs are not worked out as due from their timing.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -3243,6 +3390,10 @@ types, parked pack calls with per-call Retry, Postgres enums.
   useIcu, words, index). As run: `db:test` every suite green (`intensive_ccu` 33 ok, `demo` 102 ok), the gen:shapes and gen:logins
   checks clean; `db:demo` twice (38 patients, 18 open visits and stays, 442 entries); `test:intensive` 7, 8 and 8 groups, and the other
   fifteen node suites green; lint no error; typecheck and build clean but for `src/pictures/bookings.tsx` (another session's).
+- 2026-10-09: **Dialysis, piece D1a** (§5.6; lane `beds-dialysis`): migration 21 (the pack, the unit's setup and setting, the
+  standing schedule's two tables, `haemodialysis.plan` and `haemodialysis.week`, the unit's nurse and doctor), its seed (Rasha Mounir,
+  Dr. Walid Hamza), suite `haemodialysis` 58 checks, `demo` 84 (`registry` 16, `boundary` 10); `test:demo` with the unit's two people; shapes and logins
+  regenerated.
 - 2026-10-09: **Ward nursing, piece 3a: the drug round** (§5.6; lane `beds`; no core or base change): migration 17 edited in place
   (`bedside.dose`, `write:bedside.dose`, `bedside.round` setting and screen, `bedside.stay_doses`, the ops `bedside.round` and
   `bedside.sheet`, `bedside.board`'s doses), the base demo's three admission doses, Ward nursing's demo (medicines and rounds),
@@ -3253,4 +3404,30 @@ types, parked pack calls with per-call Retry, Postgres enums.
   core or base change): `src/packs/bedside` (twin.ts, Sheet.tsx, rx.tsx; firstCover and firstDoseWords, the chart's words, byDay).
   Node `test:drug-round` 12 groups (the shared case through the twin, the first dose's cover, matching, the banner and the sheet's
   words, the /rx note), bedside 12, banner 13, sections 19, composer 19, chart 24 + 16, registries 9; typecheck clean; lint 0 errors.
+- 2026-10-09: **Dialysis, piece D1b** (§5.6; lane `beds-dialysis`): migration 21 gains the session (`haemodialysis.session` on the
+  base's procedure, its line and check, `write:haemodialysis.session`), `haemodialysis.due` and `haemodialysis.board`; the demo's six
+  patients (`supabase/demo/haemodialysis.sql`); suite `haemodialysis` 108 checks, `demo` 95 (`registry` 16, `boundary` 10); shapes
+  regenerated (HaemodialysisSession).
+- 2026-10-09: **Dialysis, piece D1c** (§5.6; lane `beds-dialysis`): the pack's client, part 1 (`src/packs/haemodialysis`: days, unit,
+  due, board, words, hooks, index): who is due under the board with Start and Missed (the clinics' C5) and the tile's words (C7's
+  read); `test:haemodialysis` 7 groups; `test:board`, `test:clinics-core`, `test:bedside` and `test:oncology` unchanged; no core file.
+- 2026-10-09: **Dialysis, piece D1d** (§5.6; lane `beds-dialysis`): the pack's client, part 2 (`src/packs/haemodialysis`: week,
+  Schedule, PlanCards, hooks' useWeek and usePlan, the screen registered): the Schedule tab (the week by shift, Add a patient, move one
+  session, take it off a day, end a slot, undo a move); `test:haemodialysis` 8 groups; no server change; no core file.
+- 2026-10-09: **Dialysis, piece D2a** (§5.6; lane `beds-dialysis`): migration 21 gains the standing prescription
+  (`haemodialysis.prescription`, its line and check, `write:haemodialysis.prescription` on the Dialysis doctor), the reading
+  (`haemodialysis.reading` on the base's vitals, its line and check, `write:haemodialysis.reading`), the Session screen, the board's fluid
+  words and due's hours and access from the prescription; the demo's prescriptions, Before, readings, Nadia's event, Said's EPO and the
+  past sessions' fluid; suite `haemodialysis` 145 checks, `demo` 106; shapes regenerated (HaemodialysisPrescription,
+  HaemodialysisReading); no file under src/packs; no core file.
+- 2026-10-09: **Dialysis, piece D2b** (§5.6; lane `beds-dialysis`): the pack's client, the session part 1 (`src/packs/haemodialysis`:
+  session, rx, reading, useSession, parts, SessionTab, BeforeCard, RxCard, Readings; board's fluid and gain words, due's access reason,
+  the Schedule's slot card with the prescription, the tile's Readings button, the screen registered, the D2a refusals' words): the
+  Session tab (Before and the fluid to take off, the prescription and its editor, the readings grid and card); `test:haemodialysis` 15
+  groups (the session's in `scripts/test-haemodialysis-session.ts`); no server change; no core file. The screen's file is
+  `SessionTab.tsx`, since `Session.tsx` and the pure `session.ts` collide on a case-insensitive disk.
+- 2026-10-09: **Dialysis, piece D2c** (§5.6; lane `beds-dialysis`): the pack's client, the session part 2 (`src/packs/haemodialysis`:
+  event, drugs, end, banner, EventCard, DrugsCard, EndCard; SessionTab, board's event words, useSession's drugs read, the tile's End
+  button and the banner word registered): events as the base's note and given, the unit's drugs as the base's given, End with the
+  base's Discharge; `test:haemodialysis` 20 groups (the end's in `scripts/test-haemodialysis-end.ts`); no server change; no core file.
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
