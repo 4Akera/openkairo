@@ -1014,6 +1014,13 @@ export interface AnaesthesiaStopListSetting {
     what: string
   }[]
 }
+/** setting bedside.home_words (bedside; owner department) */
+export interface BedsideHomeWordsSetting {
+  phrases: {
+    ar: string
+    label: string
+  }[]
+}
 /** setting bedside.response (bedside; owner department) */
 export interface BedsideResponseSetting {
   high: {
@@ -1587,6 +1594,7 @@ export interface EntryData {
 /** each setting's data, by its key */
 export interface SettingData {
   'anaesthesia.stop_list': AnaesthesiaStopListSetting
+  'bedside.home_words': BedsideHomeWordsSetting
   'bedside.response': BedsideResponseSetting
   'bedside.shifts': BedsideShiftsSetting
   'billing.desk': BillingDeskSetting

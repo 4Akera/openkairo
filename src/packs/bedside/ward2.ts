@@ -6,18 +6,24 @@
 // beside obs due in the tile's one read (useWardRead, wardread.ts); one type (the fluid chart), one setting (the shifts) and one op
 // (bedside.fluids) of its own.
 // W3a: the Handover tab (HandoverTab.tsx, handover.ts; one screen, one op); the tile's read and line live in wardline.ts.
+// W3b: Going home (/home, its card, its save and its draft's block: home.ts, homesave.ts, GoingHome.tsx); one setting,
+// bedside.home_words; the set itself is the base's.
 import { createElement } from 'react'
 import type { Organization } from '@core/db/types'
 import { useDepartment } from '@core/hooks/organization'
+import { registerRenderer } from '@core/renderers'
 import { ANYONE, registerSection } from '@core/screens/chart/sections'
 import { registerBannerWords } from '@core/screens/chart/words'
 import { registerScreen } from '@core/screens/registry'
-import { registerCommand } from '@core/screens/visit/commands'
+import { registerCard, registerCommand, registerDraftSave } from '@core/screens/visit/commands'
 import type { Ctx, Parsed } from '@core/screens/visit/parse'
 import { fluidChip, fluidHas, fluidNotes, fluidSummary, fluidWords, wardHere } from './balance'
 import { FluidBalance, FluidNote } from './FluidBalance'
 import { CHART_TYPE, parseChart, parseIn, parseOut } from './fluids'
+import { HomeBlock, HomeCard } from './GoingHome'
 import { HandoverTab } from './HandoverTab'
+import { emptyHome, HOME, homeLine, parseHome, type HomeParams } from './home'
+import { saveHome } from './homesave'
 import { ObsDueTab } from './ObsDueTab'
 import { rulesIn, setRulesHook, type Rules } from './response'
 
@@ -50,3 +56,10 @@ registerBannerWords({ key: 'bedside.fluids', types: [CHART_TYPE], words: (x) => 
 
 // the Handover tab beside the board (bedside.handover)
 registerScreen('bedside.handover', HandoverTab)
+
+// Going home: the letter, the medicines and the discharge in one set, for whoever may discharge
+registerCommand({ name: 'home', pack: 'bedside', groupTitle: 'Ward nursing', title: 'Going home', label: 'Going home: the letter, the medicines and the discharge, in one set',
+  example: '/home · /home facility', action: 'write:discharged', writes: [HOME], parse: (rest, ctx) => parseHome(rest, ctx), empty: (ctx) => emptyHome(ctx) })
+registerCard({ function: HOME, pack: 'bedside', Editor: HomeCard, line: (q) => homeLine(q as Partial<HomeParams>) })
+registerDraftSave({ function: HOME, pack: 'bedside', save: saveHome })
+registerRenderer(HOME, { Block: HomeBlock })

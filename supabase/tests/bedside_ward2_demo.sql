@@ -90,3 +90,16 @@ select t.ok(s -> 'alerts' = '["Fall risk"]'::jsonb and s ? 'last', 'Abdelmoneim:
 select t.ok(s = '{"alerts":[]}'::jsonb, 'Tahany: no handover yet, no alert') from (select pg_temp.ho_of(demo.id('bedside', 'patient:tahany')) s) x;
 select t.ok(d -> 'patient_ids' @> jsonb_build_array(demo.id('bedside', 'patient:tahany'), demo.id('bedside', 'patient:samira'), demo.id('bedside', 'patient:abdelmoneim')),
   'the three are named for the read log') from ho;
+
+-- W3b · going home in the demo: Abdelmoneim's own two inhalers (reported) and his problem, in his stay; the Medical Ward keeps the
+-- default words for the patient. Never a count of all his medicines: the drug round's merge changes it.
+select set_config('request.jwt.claim.sub', '', false);
+select t.ok(count(*) = 2 and bool_and(l.status = 'active' and e.data ->> 'basis' = 'reported' and l.visit_id = pg_temp.admitted(l.patient_id))
+  and array_agg(e.data -> 'drug' ->> 'text' order by e.data -> 'drug' ->> 'text') = array['Salbutamol inhaler', 'Tiotropium'],
+  'Abdelmoneim''s own two inhalers, reported and active, in his stay')
+  from base.lists l join core.entries e on e.id = l.entry_id
+ where l.organization_id = demo.base('clinic') and l.patient_id = demo.id('bedside', 'patient:abdelmoneim') and l.list = 'medications' and e.data ->> 'basis' = 'reported';
+select t.ok(count(*) = 1 and bool_and(e.author_id = demo.base('doctor') and e.data -> 'concept' -> 'codings' -> 0 ->> 'code' = 'J44.1' and e.data ->> 'clinical_status' = 'active'
+  and e.visit_id = pg_temp.admitted(e.patient_id)), 'Abdelmoneim''s problem: COPD with acute exacerbation (J44.1), active, by Dr. Ali Hassan, in his stay')
+  from core.entries e where e.organization_id = demo.base('clinic') and e.patient_id = demo.id('bedside', 'patient:abdelmoneim') and e.type = 'problem';
+select t.ok(core.setting_at(demo.base('clinic'), 'bedside.home_words', demo.base('ward')) is null, 'the Medical Ward keeps the default words for the patient');

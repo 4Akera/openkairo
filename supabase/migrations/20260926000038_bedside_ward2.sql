@@ -8,6 +8,8 @@
 -- per stay (bedside.fluid_chart, with the day's target); the ward's shifts (bedside.shifts) give the chart's columns and the fluid day;
 -- the op bedside.fluids gives the board each charted stay's measures. W3a: the handover. A Handover tab beside the board; each bed's
 -- handover is the base's note, kind handover, in its stay; the op bedside.handover gives the tab each stay's alerts and its last handover.
+-- W3b: going home. The letter is the base's note, kind discharge, written with the medicine changes and the base's discharge in one set
+-- from the composer's /home; a department setting, bedside.home_words, holds the Arabic words for the patient the card offers.
 -- Proposed by Claude, awaiting the owner.
 
 set client_min_messages = warning;
@@ -216,5 +218,23 @@ begin
 end $$;
 reset role;
 select core.declare_op('bedside.handover', 'bedside', 'bedside.handover(uuid,uuid,uuid,jsonb)', 'read:record', patients => true);
+
+-- ── W3b · going home (plan Q12, proposed by Claude, awaiting the owner: the letter is the base's note, kind discharge; printing
+-- later): the ward's words for the patient, offered as chips on the Going home card; Egyptian Arabic, each ward edits its own ──
+select core.declare_setting('bedside.home_words', 'bedside', 'department',
+  $j${"type":"object","additionalProperties":false,"required":["phrases"],"properties":{
+    "phrases":{"type":"array","maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["label","ar"],"properties":{
+      "label":{"type":"string","minLength":1,"maxLength":40},"ar":{"type":"string","minLength":1,"maxLength":400}}},
+      "default":[
+        {"label":"Come back if","ar":"ارجع المستشفى على طول لو حصل ضيق في النفس، أو سخونية عالية، أو ألم في الصدر، أو دوخة شديدة، أو ترجيع مستمر."},
+        {"label":"Medicines","ar":"خد الأدوية في مواعيدها زي ما هي مكتوبة، وماتوقفش أي دوا ولا تغيّر جرعته من غير ما تسأل الدكتور."},
+        {"label":"Follow-up","ar":"احضر ميعاد المتابعة ومعاك الورقة دي وكل الأدوية اللي بتاخدها."},
+        {"label":"Rest and food","ar":"ارتاح كام يوم، وكُل أكل خفيف، واشرب مية كفاية إلا لو الدكتور قال غير كده."},
+        {"label":"Sugar","ar":"قيس السكر قبل الفطار وقبل العشا. لو مش قادر تاكل ماتوقفش الأنسولين طويل المفعول وكلّم الدكتور عن جرعة الأكل. ارجع لو السكر نزل تحت ٧٠ أو عدّى ٣٠٠."}]}}}$j$,
+  labels => '{"en":"Going home · words for the patient","ar":"كلمات للمريض عند الخروج"}', form => 'department',
+  fields => $j$[
+    {"key":"phrases","labels":{"en":"Phrases"},"help":{"en":"Each a short name and its Arabic words. The Going home card offers them as chips; a chip adds its words to the part of the letter for the patient."}},
+    {"key":"phrases.label","labels":{"en":"Name"}},
+    {"key":"phrases.ar","labels":{"en":"Arabic"}}]$j$);
 
 select core.lock_pack('bedside');

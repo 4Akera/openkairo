@@ -107,12 +107,14 @@ begin
   perform pg_temp.fl(st, demo.ago(25), '9187-6', 'Urine', 200);
 end $$;
 
--- W3 · handover (spec/openCare.md §5.6): the last shift's handover for Samira and Abdelmoneim, signed by Nour Adel ten minutes before this
--- shift began (the ward's default shifts, 08:00 14:00 20:00), so the Handover tab shows what it asked and, from 30 minutes into the shift
--- (the handover's grace), both wait to be handed over; Tahany has none yet. Abdelmoneim has a fall-risk alert. The notes carry the two
--- boxes only; the app adds the facts line when it signs. Each stay is found from its admission.
+-- W3 · handover and going home (spec/openCare.md §5.6): the last shift's handover for Samira and Abdelmoneim, signed by Nour Adel ten
+-- minutes before this shift began (the ward's default shifts, 08:00 14:00 20:00), so the Handover tab shows what it asked and, from 30
+-- minutes into the shift (the handover's grace), both wait to be handed over; Tahany has none yet. Abdelmoneim, nearly ready for home,
+-- has a fall-risk alert (W3a); his problem, COPD with acute exacerbation, and his own two inhalers (reported) by Dr. Ali Hassan (W3b).
+-- The ward's three medicines for him are the drug round's: until it merges they are written here with its ids and data (marked).
+-- The notes carry the two boxes only; the app adds the facts line when it signs. Each stay is found from its admission.
 do $$
-declare ward uuid := demo.base('ward'); nurse uuid := demo.id('bedside', 'nurse'); d2 timestamptz := demo.midnight() - interval '2 days';
+declare ward uuid := demo.base('ward'); doctor uuid := demo.base('doctor'); nurse uuid := demo.id('bedside', 'nurse'); d2 timestamptz := demo.midnight() - interval '2 days';
   -- the shift now began at the latest of yesterday 20:00 and today's 08:00, 14:00, 20:00 not after the load
   v_start timestamptz := (select max(t) from unnest(array[demo.midnight() - interval '4 hours', demo.midnight() + interval '8 hours',
     demo.midnight() + interval '14 hours', demo.midnight() + interval '20 hours']) t where t <= demo.now());
@@ -131,4 +133,23 @@ begin
   perform demo.w(nurse, jsonb_build_array(demo.e('alert', ward, sa, d2 + interval '22 hours', jsonb_build_object('concept', demo.concept('local.alert', 'fall_risk', 'Fall risk'), 'status', 'active'))));
   perform demo.w(nurse, jsonb_build_array(demo.e('note', ward, sa, v_start - interval '10 minutes', jsonb_build_object('kind', 'handover', 'heading', v_head,
     'text', E'This shift: oxygen being weaned, SpO₂ within his 88–92 % target; comfortable; on steroids\nFor the next shift: keep SpO₂ 88–92 %, no higher; wean the oxygen further if he stays in range; physio to walk him; Dr. Ali may send him home tomorrow'))));
+  -- W3b: his problem, and his own two inhalers (reported: the drug round leaves them out)
+  perform demo.w(doctor, jsonb_build_array(demo.e('problem', ward, sa, d2 + interval '21 hours 15 minutes', demo.problem('J44.1', 'COPD with acute exacerbation'))));
+  perform demo.w(doctor, jsonb_build_array(
+    demo.e('medication', ward, sa, d2 + interval '21 hours 20 minutes', demo.med('Tiotropium', 'R03BB04', 18, 'mcg', 'OD',
+      '{"basis":"reported","dosage":{"dose":{"value":"18","unit":"mcg","ucum":"ug"},"timing":{"code":"OD"},"route":"inhaled"}}')),
+    demo.e('medication', ward, sa, d2 + interval '21 hours 20 minutes', demo.med('Salbutamol inhaler', 'R03AC02', 200, 'mcg', 'PRN',
+      '{"basis":"reported","dosage":{"dose":{"value":"200","unit":"mcg","ucum":"ug"},"as_needed":true,"as_needed_for":"wheeze","route":"inhaled"}}'))));
+  -- MERGE: the drug round's three ward medicines (beds piece 3's demo: its ids, and data equal to its pg_temp.rx's); delete these lines
+  -- when it lands (the same ids make a missed delete fail loudly: an id written twice)
+  perform demo.w(doctor, jsonb_build_array(
+    demo.e('medication', ward, sa, d2 + interval '21 hours 20 minutes', demo.med('Salbutamol (nebulised)', 'R03AC02', 5, 'mg', 'q6h',
+      jsonb_build_object('dosage', jsonb_build_object('dose', demo.q(5, 'mg', 'mg'), 'timing', '{"code":"q6h","frequency":1,"period":6,"period_unit":"h"}'::jsonb, 'route', 'inhaled'))),
+      demo.id('bedside', 'med:abdelmoneim salbutamol')),
+    demo.e('medication', ward, sa, d2 + interval '21 hours 20 minutes', demo.med('Prednisolone', 'H02AB06', 40, 'mg', 'OD',
+      jsonb_build_object('dosage', jsonb_build_object('dose', demo.q(40, 'mg', 'mg'), 'timing', '{"code":"OD","frequency":1,"period":1,"period_unit":"d"}'::jsonb, 'route', 'oral'), 'duration_days', 5)),
+      demo.id('bedside', 'med:abdelmoneim prednisolone')),
+    demo.e('medication', ward, sa, d2 + interval '21 hours 20 minutes', demo.med('Amoxicillin + clavulanic acid', 'J01CR02', 1, 'g', 'BD',
+      jsonb_build_object('dosage', jsonb_build_object('dose', demo.q(1, 'g', 'g'), 'timing', '{"code":"BD","frequency":2,"period":1,"period_unit":"d"}'::jsonb, 'route', 'oral'), 'duration_days', 7)),
+      demo.id('bedside', 'med:abdelmoneim amoxicillin'))));
 end $$;

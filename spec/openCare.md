@@ -1807,6 +1807,41 @@ numbered as on its picture.
   handover belongs to the shift it ends with a 30-minute grace — is 30 minutes right?; (6) words typed and not signed stay while the
   app is open, never in the browser's storage; (7) the handover is words only: should the incoming nurse acknowledge it ("received
   by")?; (8) beds with both boxes empty are not signed.
+- **Built, W3b (Ward nursing: going home; 2026-10-09; lane beds-ward2)**: `/home` (under Ward nursing in the / list, for whoever may
+  discharge: the Doctor) opens the **Going home** card under the line, drafted from the stay: To (Home · Another facility · Left
+  against advice · Other; `/home facility`, `/home lama`, `/home other` start on one; `/home died` or `hospice` says that is the base's
+  Discharge → Died or Hospice); Diagnoses this stay (the problem list's names, editable); What was done; Medicines for home — each
+  active medicine on the list as it stood when /home was typed, with Continue · Stop (a reason, optional) · Change (the new dose as /rx
+  reads it; it stays "to decide" until a new dose is read, and typing a different dose undoes the one read), the patient's own
+  (reported) starting on Continue and those prescribed in this stay undecided ("3 to decide" in amber, a fact, never a stop), a course
+  prescribed here showing its days left ("7 days · 5 days left", counted from the list item's start on the clinic's calendar), then
+  new medicines as /rx reads them with the catalog's allergy and duplicate words beside each; Follow-up; For the patient, right-to-left, filled from the ward's Arabic phrases as chips. Enter adds it as a draft ("Going home · Home · 3 kept ·
+  1 stopped · 1 changed"); Sign saves the composer's other drafts first, then Going home through the core's own draft save (k) as one
+  set: the letter (the base's note, kind `discharge`: "Diagnoses: … / What was done: … / Medicines for home: continue … · stop … (reason) ·
+  changed … · new … · not decided: … / Follow-up: … / For the patient: …"; a ward course kept reads "continue … (1 g · BD · oral · 7
+  days; 5 days left)"), each ward medicine kept signed again in this visit for its days left only (a repeat, so the prescription
+  printout lists it and never gives the whole course again; a medicine whose data is not at hand is not signed again, as it would lose
+  its dose), each stop and change (the base's medication, changing the list item), each new one (sent as /rx sends from this ward when `send` is typed: the card resolves the service once), and, while the stay is admitted, the
+  base's `discharged` with the chosen disposition — the bed is free at once. If Discharge is pressed instead, its own set closes the stay
+  first and the letter and the medicines then land in the closed stay. A writer's warning (an allergy, a duplicate) is never confirmed
+  for the doctor: Going home is not signed, says why, and the draft stays. A new department setting, `bedside.home_words` ("Going home ·
+  words for the patient": a small table of Name and Arabic on the department's card, at most 20, each under 400 characters), holds five
+  Egyptian Arabic defaults: Come back if, Medicines, Follow-up, Rest and food, Sugar (the long-acting insulin goes on, the meal dose is
+  the doctor's call, back under 70 or over 300). No printout of the letter yet (Q12). The demo: Abdelmoneim's problem, COPD with acute
+  exacerbation (J44.1), and his own two inhalers (reported) by Dr. Ali Hassan; until the drug round merges, its three ward medicines
+  for him are written in W3's demo block with the round's ids (marked MERGE). Where W3b differs from plan piece 12 and the picture:
+  Going home opens with /home, not from the Discharge button (the chooser is the core's); printing waits. *Chosen by Claude, awaiting
+  the owner*: (9) /home in the stay, not the Discharge button — should the Discharge button offer Going home where the department uses
+  Ward nursing (a small core change)?; (10) for whoever may discharge (the Doctor), a nurse does not see /home; (11) Home, Another
+  facility, Left against advice, Other; a death and hospice stay with the base's Discharge; (12) the letter is plain text in the record,
+  the chart's "Discharge summary" (plan Q12); its printout waits for the print facility and your go; (13) the medicines Continue, Stop
+  or Change, new ones as /rx reads them (a change keeps the medicine's name as written, its ATC code and its route when none is typed);
+  the patient's own start on Continue, the stay's undecided; a ward medicine kept is signed again in this visit for the days left of
+  its course, the patient's own kept are written nowhere but the letter names them; new and changed ones sent as /rx sends from this
+  ward; (14) a warning stops Going home with its words — should the card let the doctor confirm a warning in place?; (15) Sign saves
+  Going home as one set after the composer's other drafts; Discharge first, the letter and the medicines go into the closed stay; (16)
+  the card's medicines are the list when /home was typed; (17) five phrases in Egyptian Arabic, addressed in the masculine, each ward
+  editing its own — should each phrase carry both forms?; (18) follow-up is words; Going home does not book.
 
 ### 5.7 Bookings (the owner's decisions, 2026-10-08)
 The owner chose bookings after billing ("lets start thinking on imaging and Booking", then "Let think booking first"), answered the
@@ -3044,4 +3079,20 @@ types, parked pack calls with per-call Retry, Postgres enums.
   `test:handover` 6 groups and the brief's other node runs green; typecheck clean; lint 0 errors; build green; shapes and logins
   unchanged. `index.tsx` is untouched: its
   tile line becomes `wardLine` at the merge with the drug round. Browser pass by the lead (`spec/shots/2026-10-09/ward2-w3a/`).
+- 2026-10-09: **Ward nursing W3b, going home** (§5.6; lane beds-ward2): migration `20260926000038_bedside_ward2.sql` gains the
+  setting `bedside.home_words` (five Egyptian Arabic phrases); `src/packs/bedside/` `home.ts` (/home, the card's data drafted from the
+  stay, the line, the letter, the one set through the core's `draftEntries` and `move`, the phrases), `homesave.ts` (the draft's save:
+  the stay read, one set written, a warning never confirmed), `GoingHome.tsx` (the card and the draft's block) and `ward2.ts` (/home,
+  its card, its save, its block); Abdelmoneim's problem and his two reported inhalers in W3's demo block, with the drug round's three
+  ward medicines for him (its ids, marked MERGE). After review: Change stays "to decide" until its new dose is read (never "changed"
+  with nothing written), a ward course kept is signed again for its days left only, a change keeps the medicine's name, ATC code and
+  route, a medicine whose data is not at hand is not signed again, and the card's words keep a PRN medicine's schedule and a dose
+  given in words. Suites `bedside_ward2_home` (20: the going-home set lands with nothing to confirm, a ward medicine kept as a repeat,
+  the letter and a stop land in a stay Discharge closed first, a second discharge is `visit_closed`) and `bedside_ward2_demo` (26);
+  the full `db:test` green: 55 suites, 2 185 checks (`bedside_ward2_handover` 31, `bedside_ward2` 46, `bedside_ward2_fluids` 66,
+  `bedside` 55, `demo` 84, `registry` 16, `boundary` 10, `pack_contract` 35); `db:demo` twice (941 entries); node `test:home` 7 groups,
+  handover 6, ward2 10, fluids 7 and balance 9, bedside 12, board 27, settings 12, composer 19, chart 24 and 16, screens 11, sections
+  19, banner 13, scores 7, demo 8, setups 11, registries 9, pharmacy 10, lis 19, billing 22 and 2, bookings 13; typecheck clean; lint
+  0 errors; build green; shapes regenerated (`BedsideHomeWordsSetting`), logins unchanged. Browser pass by the lead
+  (`spec/shots/2026-10-09/ward2-w3b/`).
 - **Open**: erase and redact remove the storage rows of files, not their bytes, until a Storage API sweep is built.
